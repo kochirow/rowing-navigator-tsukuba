@@ -12,7 +12,7 @@ class HomeMapScreen extends StatefulWidget {
 }
 
 class _HomeMapScreenState extends State<HomeMapScreen> {
-  late GoogleMapController mapController;
+  late GoogleMapController _mapController;
   late StreamSubscription<Position> positionStream;
   Set<Marker> markers = {};
   bool _trackCurrentLocation = true;
@@ -59,11 +59,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       });
 
       // 現在地にカメラを移動
-      await mapController.animateCamera(
+      await _mapController.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(position.latitude, position.longitude),
-            zoom: await mapController.getZoomLevel(),
+            zoom: await _mapController.getZoomLevel(),
           ),
         ),
       );
@@ -90,11 +90,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       if (_trackCurrentLocation) {
         setProgrammaticMove(true);
         // 現在地にカメラを移動
-        await mapController.animateCamera(
+        await _mapController.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: LatLng(position.latitude, position.longitude),
-              zoom: await mapController.getZoomLevel(),
+              zoom: await _mapController.getZoomLevel(),
             ),
           ),
         );
@@ -116,13 +116,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
 
   @override
   void initState() {
-    // some code
     super.initState();
   }
 
   @override
   void dispose() {
-    mapController.dispose();
+    _mapController.dispose();
     positionStream.cancel();
     super.dispose();
   }
@@ -139,7 +138,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
           myLocationButtonEnabled: false,
           initialCameraPosition: initialCameraPosition,
           onMapCreated: (GoogleMapController controller) async {
-            mapController = controller;
+            _mapController = controller;
             await _requestPermission();
             await _moveToCurrentLocation();
             _watchCurrentLocation();
