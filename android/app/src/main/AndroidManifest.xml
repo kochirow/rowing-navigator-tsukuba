@@ -3,7 +3,16 @@
         android:label="rowing_navigator"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- Custom Settings -->
+        
+        <!-- For GoogleMaps -->
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${googleMapApiKey}" />
+        <!-- For Location -->
+        <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+        
+        <!-- =============== -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
