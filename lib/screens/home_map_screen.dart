@@ -14,9 +14,12 @@ class HomeMapScreen extends StatefulWidget {
 class _HomeMapScreenState extends State<HomeMapScreen> {
   late GoogleMapController _mapController;
   late StreamSubscription<Position> positionStream;
+  late Timer _timer;
+  late Position _currentPosition;
   Set<Marker> markers = {};
-  bool _trackCurrentLocation = true;
-  bool _isProgrammaticMove = false;
+
+  static const LOCATION_ACCURACY = LocationAccuracy.high;
+  static const POSITION_UPDATE_INTERVAL = 2;
 
   final CameraPosition initialCameraPosition = const CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
@@ -49,7 +52,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
         permission == LocationPermission.whileInUse) {
       // 現在地を取得
       final Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LOCATION_ACCURACY,
       );
 
       setState(() {
@@ -77,52 +80,64 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   }
 
   // =============================================
-  // Streamで現在地を監視して位置情報とカメラを更新
+  // 現在地を取得
   // =============================================
-  void _watchCurrentLocation() {
-    // 現在地を監視
-    positionStream =
-        Geolocator.getPositionStream(locationSettings: locationSettings)
-            .listen((position) async {
-      // マーカーの位置を更新
-      setState(() {
-        markers.removeWhere(
-            (marker) => marker.markerId == const MarkerId('current_location'));
-        markers.add(Marker(
-          markerId: const MarkerId('current_location'),
-          position: LatLng(
-            position.latitude,
-            position.longitude,
-          ),
-        ));
-      });
-      if (_trackCurrentLocation) {
-        setProgrammaticMove(true);
-        // 現在地にカメラを移動
-        await _mapController.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: LatLng(position.latitude, position.longitude),
-              zoom: await _mapController.getZoomLevel(),
-            ),
-          ),
-        );
-      }
+  Future<Position> _getCurrentPosition() async {
+    // 現在地を取得
+    final Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LOCATION_ACCURACY,
+    );
+    return position;
+  }
+
+  // =============================================
+  // マーカーを更新
+  // =============================================
+  void _updateMarkers() {
+    markers.add(
+      Marker(
+        markerId: const MarkerId("current_location"),
+        position: LatLng(
+          _currentPosition.latitude,
+          _currentPosition.longitude,
+        ),
+      ),
+    );
+  }
+
+  // =============================================
+  // 現在地にカメラを移動
+  // =============================================
+  void _focusCurrentPosition() async {
+    await _mapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(_currentPosition.latitude, _currentPosition.longitude),
+          zoom: await _mapController.getZoomLevel(),
+        ),
+      ),
+    );
+  }
+
+  // =============================================
+  // 現在地を更新
+  // =============================================
+  void _updateCurrentPosition() async {
+    final Position position = await _getCurrentPosition();
+    setState(() {
+      _currentPosition = position;
+      _updateMarkers();
+      _focusCurrentPosition();
     });
   }
 
   // =============================================
-  // Stateの更新
+  // 位置情報の定期更新を開始
   // =============================================
-  void setTrackCurrentLocation(bool value) {
-    setState(() {
-      _trackCurrentLocation = value;
-    });
-  }
-
-  void setProgrammaticMove(bool value) {
-    setState(() {
-      _isProgrammaticMove = value;
+  void _startPeriodicPositionUpdate() {
+    _timer = Timer.periodic(const Duration(seconds: POSITION_UPDATE_INTERVAL),
+        (timer) {
+      _updateCurrentPosition();
     });
   }
 
@@ -138,6 +153,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   void dispose() {
     _mapController.dispose();
     positionStream.cancel();
+    _timer.cancel();
     super.dispose();
   }
 
@@ -157,26 +173,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
           initialCameraPosition: initialCameraPosition,
           onMapCreated: (GoogleMapController controller) async {
             _mapController = controller;
-            await _requestPermission();
-            await _moveToCurrentLocation();
-            _watchCurrentLocation();
+            await _requestPermission(); // 位置情報の許可を求める
+            _updateCurrentPosition(); // 現在地を取得
+            _startPeriodicPositionUpdate(); // 位置情報の定期更新を開始
           },
           markers: markers,
-          onCameraMoveStarted: () {
-            if (!_isProgrammaticMove) {
-              setTrackCurrentLocation(false);
-            }
-          },
-          onCameraIdle: () {
-            if (_isProgrammaticMove) {
-              setProgrammaticMove(false);
-            }
-          },
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
-            setTrackCurrentLocation(true);
-            _moveToCurrentLocation();
+            _focusCurrentPosition(); // 現在地にカメラを移動
           },
           child: const Icon(Icons.my_location),
         ));
