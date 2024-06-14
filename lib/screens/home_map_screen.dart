@@ -28,6 +28,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     distanceFilter: 0,
   );
 
+  // =============================================
+  // 位置情報取得の許可
+  // =============================================
   Future<void> _requestPermission() async {
     // 位置情報の許可を求める
     LocationPermission permission = await Geolocator.checkPermission();
@@ -36,6 +39,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     }
   }
 
+  // =============================================
+  // 現在地を取得してマーカーとカメラを移動
+  // =============================================
   Future<void> _moveToCurrentLocation() async {
     // 位置情報の許可を求める
     LocationPermission permission = await Geolocator.checkPermission();
@@ -70,6 +76,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     }
   }
 
+  // =============================================
+  // Streamで現在地を監視して位置情報とカメラを更新
+  // =============================================
   void _watchCurrentLocation() {
     // 現在地を監視
     positionStream =
@@ -102,6 +111,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     });
   }
 
+  // =============================================
+  // Stateの更新
+  // =============================================
   void setTrackCurrentLocation(bool value) {
     setState(() {
       _trackCurrentLocation = value;
@@ -114,6 +126,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     });
   }
 
+  // =============================================
+  // LifeCycles
+  // =============================================
   @override
   void initState() {
     super.initState();
@@ -126,6 +141,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     super.dispose();
   }
 
+  // =============================================
+  // build
+  // =============================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
