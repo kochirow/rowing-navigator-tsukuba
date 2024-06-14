@@ -13,13 +13,14 @@ class HomeMapScreen extends StatefulWidget {
 
 class _HomeMapScreenState extends State<HomeMapScreen> {
   late GoogleMapController _mapController;
-  late StreamSubscription<Position> positionStream;
-  late Timer _timer;
   late Position _currentPosition;
   Set<Marker> markers = {};
+  late Timer _timer;
+  DateTime _preProcessTime = DateTime.now();
+  DateTime _postProcessTime = DateTime.now();
 
-  static const LOCATION_ACCURACY = LocationAccuracy.high;
-  static const POSITION_UPDATE_INTERVAL = 2;
+  var LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
+  var POSITION_UPDATE_INTERVAL = 1;
 
   final CameraPosition initialCameraPosition = const CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
@@ -39,43 +40,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       await Geolocator.requestPermission();
-    }
-  }
-
-  // =============================================
-  // 現在地を取得してマーカーとカメラを移動
-  // =============================================
-  Future<void> _moveToCurrentLocation() async {
-    // 位置情報の許可を求める
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse) {
-      // 現在地を取得
-      final Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LOCATION_ACCURACY,
-      );
-
-      setState(() {
-        markers.add(
-          Marker(
-            markerId: const MarkerId("current_location"),
-            position: LatLng(
-              position.latitude,
-              position.longitude,
-            ),
-          ),
-        );
-      });
-
-      // 現在地にカメラを移動
-      await _mapController.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(position.latitude, position.longitude),
-            zoom: await _mapController.getZoomLevel(),
-          ),
-        ),
-      );
     }
   }
 
@@ -123,11 +87,14 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   // 現在地を更新
   // =============================================
   void _updateCurrentPosition() async {
+    final preProcessTime = DateTime.now();
     final Position position = await _getCurrentPosition();
     setState(() {
       _currentPosition = position;
       _updateMarkers();
       _focusCurrentPosition();
+      _preProcessTime = preProcessTime;
+      _postProcessTime = DateTime.now();
     });
   }
 
@@ -135,8 +102,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   // 位置情報の定期更新を開始
   // =============================================
   void _startPeriodicPositionUpdate() {
-    _timer = Timer.periodic(const Duration(seconds: POSITION_UPDATE_INTERVAL),
-        (timer) {
+    _timer =
+        Timer.periodic(Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) {
       _updateCurrentPosition();
     });
   }
@@ -147,12 +114,23 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   @override
   void initState() {
     super.initState();
+    _currentPosition = Position(
+      latitude: 35.681236,
+      longitude: 139.767125,
+      accuracy: 0,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      timestamp: DateTime.now(),
+    );
   }
 
   @override
   void dispose() {
     _mapController.dispose();
-    positionStream.cancel();
     _timer.cancel();
     super.dispose();
   }
@@ -167,18 +145,42 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
           title: null,
         ),
-        body: GoogleMap(
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
-          initialCameraPosition: initialCameraPosition,
-          onMapCreated: (GoogleMapController controller) async {
-            _mapController = controller;
-            await _requestPermission(); // 位置情報の許可を求める
-            _updateCurrentPosition(); // 現在地を取得
-            _startPeriodicPositionUpdate(); // 位置情報の定期更新を開始
-          },
-          markers: markers,
-        ),
+        body: Stack(alignment: Alignment.topCenter, children: <Widget>[
+          GoogleMap(
+            myLocationEnabled: false,
+            myLocationButtonEnabled: false,
+            initialCameraPosition: initialCameraPosition,
+            onMapCreated: (GoogleMapController controller) async {
+              _mapController = controller;
+              await _requestPermission(); // 位置情報の許可を求める
+              _updateCurrentPosition(); // 現在地を取得
+              _startPeriodicPositionUpdate(); // 位置情報の定期更新を開始
+            },
+            markers: markers,
+          ),
+          // 画面上部に現在位置と時刻を表示
+          SizedBox(
+              width: double.infinity,
+              child: Card(
+                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                color: Colors.white.withOpacity(0.9),
+                elevation: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    "緯度: ${_currentPosition.latitude.toStringAsFixed(6)}\n"
+                    "経度: ${_currentPosition.longitude.toStringAsFixed(6)}\n"
+                    "精度: ${LOCATION_ACCURACY.name.toString()} ${_currentPosition.accuracy.toString()}m\n"
+                    "開始時刻: ${_preProcessTime.toLocal().toString()}\n"
+                    "確定時刻: ${_currentPosition.timestamp.toLocal().toString()}\n"
+                    "終了時刻: ${_postProcessTime.toLocal().toString()}\n"
+                    "表示時刻: ${DateTime.now().toLocal().toString()}\n"
+                    "確定-開始: ${(_currentPosition.timestamp.difference(_preProcessTime)).toString()}秒",
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+              )),
+        ]),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
             _focusCurrentPosition(); // 現在地にカメラを移動
