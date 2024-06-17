@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../utils/image2icon.dart';
+import '../utils/heading.dart';
 
 class HomeMapScreen extends StatefulWidget {
   const HomeMapScreen({super.key});
@@ -16,6 +17,7 @@ class HomeMapScreen extends StatefulWidget {
 class _HomeMapScreenState extends State<HomeMapScreen> {
   late GoogleMapController _mapController;
   late Position _currentPosition;
+  double _currentHeading = 0;
   Set<Marker> markers = {};
   late Timer _timer;
   DateTime _preProcessTime = DateTime.now();
@@ -75,7 +77,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
         infoWindow: const InfoWindow(title: "タイトル", snippet: "詳細情報"),
         anchor: const Offset(0.5, 0.5), // 回転軸をアイコンの中央に設定
         // MEMO: 向き情報の取得方法は要検討
-        rotation: _currentPosition.heading, // 向きを設定
+        rotation: _currentHeading, // 向きを設定
       ),
     );
   }
@@ -99,9 +101,14 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   // =============================================
   void _updateCurrentPosition() async {
     final preProcessTime = DateTime.now();
+    final prePosition = _currentPosition;
     final Position position = await _getCurrentPosition();
     setState(() {
       _currentPosition = position;
+      _currentHeading = getHeading(
+        prePosition,
+        position,
+      );
       _updateMarkers();
       _focusCurrentPosition();
       _preProcessTime = preProcessTime;
@@ -186,7 +193,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     "確定時刻: ${_currentPosition.timestamp.toLocal().toString()}\n"
                     "終了時刻: ${_postProcessTime.toLocal().toString()}\n"
                     "表示時刻: ${DateTime.now().toLocal().toString()}\n"
-                    "確定-開始: ${(_currentPosition.timestamp.difference(_preProcessTime)).toString()}秒",
+                    "確定-開始: ${(_currentPosition.timestamp.difference(_preProcessTime)).toString()}秒\n"
+                    "方位角: ${_currentHeading.toStringAsFixed(1)}",
                     style: const TextStyle(fontSize: 16),
                   ),
                 ),
