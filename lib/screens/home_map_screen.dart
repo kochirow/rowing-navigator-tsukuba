@@ -4,6 +4,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 /* spellchecker: disable */
 import 'package:geolocator/geolocator.dart';
 
+import '../utils/image2icon.dart';
+
 class HomeMapScreen extends StatefulWidget {
   const HomeMapScreen({super.key});
 
@@ -57,7 +59,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   // =============================================
   // マーカーを更新
   // =============================================
-  void _updateMarkers() {
+  void _updateMarkers() async {
+    final zoomLevel = await _mapController.getZoomLevel();
+    final iconSize = (zoomLevel * 4).toInt(); // ZoomLevelに応じてiconSizeを変更
+    final icon = await getBitmapDescriptorFromAssetBytes(
+        'assets/icons/ship.png', iconSize);
     markers.add(
       Marker(
         markerId: const MarkerId("current_location"),
@@ -65,6 +71,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
           _currentPosition.latitude,
           _currentPosition.longitude,
         ),
+        icon: icon,
+        infoWindow: const InfoWindow(title: "タイトル", snippet: "詳細情報"),
+        anchor: const Offset(0.5, 0.5), // 回転軸をアイコンの中央に設定
+        // MEMO: 向き情報の取得方法は要検討
+        rotation: _currentPosition.heading, // 向きを設定
       ),
     );
   }
