@@ -30,11 +30,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     target: LatLng(35.681236, 139.767125), // 東京駅
     zoom: 16.0,
   );
-  // 現在地通知の設定
-  final LocationSettings locationSettings = const LocationSettings(
-    accuracy: LocationAccuracy.bestForNavigation,
-    distanceFilter: 0,
-  );
 
   // =============================================
   // 位置情報取得の許可
@@ -169,6 +164,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
             myLocationButtonEnabled: false,
             initialCameraPosition: initialCameraPosition,
             onMapCreated: (GoogleMapController controller) async {
+              await Future.delayed(
+                  const Duration(microseconds: 1)); // 中心座標がずれるバグを防ぐため1ms待機
               _mapController = controller;
               await _requestPermission(); // 位置情報の許可を求める
               _updateCurrentPosition(); // 現在地を取得
