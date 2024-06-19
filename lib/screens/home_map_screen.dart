@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 /* spellchecker: disable */
 import 'package:geolocator/geolocator.dart';
 
+import '../services/auth_service.dart';
 import '../utils/image2icon.dart';
 import '../utils/heading.dart';
 
@@ -22,6 +23,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   late Timer _timer;
   DateTime _preProcessTime = DateTime.now();
   DateTime _postProcessTime = DateTime.now();
+  AuthService _auth = AuthService();
 
   var LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
   var POSITION_UPDATE_INTERVAL = 1;
@@ -64,6 +66,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     markers.add(
       Marker(
         markerId: const MarkerId("current_location"),
+        // markerId: MarkerId(DateTime.now().toString()),
         position: LatLng(
           _currentPosition.latitude,
           _currentPosition.longitude,
@@ -139,6 +142,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       headingAccuracy: 0,
       timestamp: DateTime.now(),
     );
+    Future(() async {
+      if (!_auth.isSignedIn) {
+        await _auth.signInAnonymously();
+        print("Signed in with temporary account.");
+        print("UID: ${_auth.currentUser?.uid}");
+      } else {
+        print("Already signed in.");
+        print("UID: ${_auth.currentUser?.uid}");
+      }
+    });
   }
 
   @override

@@ -3,14 +3,11 @@ import 'package:rowing_navigator/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:rowing_navigator/screens/home_map_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Future<void> main() async {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  }
-
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const App());
 }
 
