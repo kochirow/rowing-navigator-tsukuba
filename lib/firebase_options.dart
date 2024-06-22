@@ -72,4 +72,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'rowing-navigator.appspot.com',
     iosBundleId: 'com.obashun.rowing-navigator',
   );
+
 }

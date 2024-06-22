@@ -3,7 +3,7 @@ import 'package:rowing_navigator/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:rowing_navigator/screens/home_map_screen.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

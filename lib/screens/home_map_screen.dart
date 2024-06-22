@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../services/auth_service.dart';
+import '../services/navigation_service.dart';
 import '../utils/image2icon.dart';
 import '../utils/heading.dart';
 
@@ -24,9 +25,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   DateTime _preProcessTime = DateTime.now();
   DateTime _postProcessTime = DateTime.now();
   AuthService _auth = AuthService();
+  NavigationService _nav = NavigationService();
 
   var LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
-  var POSITION_UPDATE_INTERVAL = 1;
+  var POSITION_UPDATE_INTERVAL = 5;
 
   final CameraPosition initialCameraPosition = const CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
@@ -112,6 +114,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       _preProcessTime = preProcessTime;
       _postProcessTime = DateTime.now();
     });
+    await _nav.updateNavigation(
+      _auth.currentUser!.uid,
+      _currentPosition.latitude,
+      _currentPosition.longitude,
+    );
   }
 
   // =============================================
