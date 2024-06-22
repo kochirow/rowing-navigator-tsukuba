@@ -28,7 +28,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   NavigationService _nav = NavigationService();
 
   var LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
-  var POSITION_UPDATE_INTERVAL = 5;
+  var POSITION_UPDATE_INTERVAL = 3;
 
   final CameraPosition initialCameraPosition = const CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
@@ -116,8 +116,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     });
     await _nav.updateNavigation(
       _auth.currentUser!.uid,
-      _currentPosition.latitude,
-      _currentPosition.longitude,
+      position.latitude,
+      position.longitude,
     );
   }
 
@@ -203,8 +203,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    "緯度: ${_currentPosition.latitude.toStringAsFixed(6)}\n"
-                    "経度: ${_currentPosition.longitude.toStringAsFixed(6)}\n"
+                    "緯度: ${_currentPosition.latitude.toStringAsFixed(14)}\n"
+                    "経度: ${_currentPosition.longitude.toStringAsFixed(14)}\n"
                     "精度: ${LOCATION_ACCURACY.name.toString()} ${_currentPosition.accuracy.toString()}m\n"
                     "開始時刻: ${_preProcessTime.toLocal().toString()}\n"
                     "確定時刻: ${_currentPosition.timestamp.toLocal().toString()}\n"
