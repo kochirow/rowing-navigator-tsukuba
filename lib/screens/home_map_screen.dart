@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../services/auth_service.dart';
+import '../services/permission_service.dart';
 import '../services/navigation_service.dart';
 import '../utils/image2icon.dart';
 import '../utils/heading.dart';
@@ -24,6 +25,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   late Timer _timer;
   DateTime _preProcessTime = DateTime.now();
   DateTime _postProcessTime = DateTime.now();
+  PermissionService _permission = PermissionService();
   AuthService _auth = AuthService();
   NavigationService _nav = NavigationService();
 
@@ -34,17 +36,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     target: LatLng(35.681236, 139.767125), // 東京駅
     zoom: 16.0,
   );
-
-  // =============================================
-  // 位置情報取得の許可
-  // =============================================
-  Future<void> _requestPermission() async {
-    // 位置情報の許可を求める
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      await Geolocator.requestPermission();
-    }
-  }
 
   // =============================================
   // 現在地を取得
@@ -187,7 +178,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               await Future.delayed(
                   const Duration(microseconds: 1)); // 中心座標がずれるバグを防ぐため1ms待機
               _mapController = controller;
-              await _requestPermission(); // 位置情報の許可を求める
+              await _permission.requestPermission(); // 位置情報の許可取得
               _updateCurrentPosition(); // 現在地を取得
               _startPeriodicPositionUpdate(); // 位置情報の定期更新を開始
             },

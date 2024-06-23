@@ -7,6 +7,9 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  // =============================================
+  // 匿名ログイン
+  // =============================================
   Future<void> signInAnonymously() async {
     try {
       await FirebaseAuth.instance.signInAnonymously();
@@ -22,11 +25,17 @@ class AuthService {
     }
   }
 
+  // =============================================
+  // サインアウト
+  // =============================================
   Future<void> signOut() async {
     await _auth.signOut();
     print("Signed out.");
   }
 
+  // =============================================
+  // ユーザー削除
+  // =============================================
   Future<void> deleteUser() async {
     await _auth.currentUser?.delete();
     print("Deleted user.");
