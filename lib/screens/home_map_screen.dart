@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../services/navigation_service.dart';
+import '../services/geo_service.dart';
 import '../utils/image2icon.dart';
 import '../utils/heading.dart';
 
@@ -28,6 +29,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   PermissionService _permission = PermissionService();
   AuthService _auth = AuthService();
   NavigationService _nav = NavigationService();
+  GeoService _geo = GeoService();
 
   var LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
   var POSITION_UPDATE_INTERVAL = 3;
@@ -36,17 +38,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     target: LatLng(35.681236, 139.767125), // 東京駅
     zoom: 16.0,
   );
-
-  // =============================================
-  // 現在地を取得
-  // =============================================
-  Future<Position> _getCurrentPosition() async {
-    // 現在地を取得
-    final Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LOCATION_ACCURACY,
-    );
-    return position;
-  }
 
   // =============================================
   // マーカーを更新
@@ -93,7 +84,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   void _updateCurrentPosition() async {
     final preProcessTime = DateTime.now();
     final prePosition = _currentPosition;
-    final Position position = await _getCurrentPosition();
+    final Position position = await _geo.getCurrentPosition(LOCATION_ACCURACY);
     setState(() {
       _currentPosition = position;
       _currentHeading = getHeading(
