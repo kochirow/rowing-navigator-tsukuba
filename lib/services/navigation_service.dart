@@ -12,13 +12,14 @@ class NavigationService {
   Future<void> updateNavigation(String userId, double lat, double lng) async {
     print("updateNavigation: $userId, $lat, $lng");
     // navigationsコレクションのドキュメントを更新
-    await _db.collection(collectionName).doc(userId).set({
-      "location": {
-        "lat": lat,
-        "lng": lng,
-        "timestamp": FieldValue.serverTimestamp(),
-      },
-    });
+    // await _db.collection(collectionName).doc(userId).set({
+    //   "location": {
+    //     "lat": lat,
+    //     "lng": lng,
+    //     "timestamp": FieldValue.serverTimestamp(),
+    //   },
+    // });
+    print("Dammy updateNavigation executed");
     print("Completed updateNavigation");
   }
 
