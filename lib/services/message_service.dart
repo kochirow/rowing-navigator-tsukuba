@@ -8,6 +8,7 @@ class MessageService {
 
   Future<void> sendMessage(Message message) async {
     await messageRef.doc(message.boatId).set(message.toJson());
+    print("Completed sendMessage");
   }
 
   Stream<List<dynamic>> getMessagesStream() {

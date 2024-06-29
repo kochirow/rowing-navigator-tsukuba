@@ -15,7 +15,7 @@ Map<String, dynamic> useNavigator() {
 
   startNavigation() {
     final message = Message(
-        boatId: "1234",
+        boatId: "around-user-xxxx",
         boatType: 1,
         seatPos: 2,
         lat: 0.1234,
@@ -23,7 +23,7 @@ Map<String, dynamic> useNavigator() {
         heading: 0.1234,
         timestamp: DateTime.now());
     final messageService = MessageService();
-    // messageService.sendMessage(message);
+    messageService.sendMessage(message);
   }
 
   stopNavigation() {}
@@ -37,6 +37,7 @@ Map<String, dynamic> useNavigator() {
   }
 
   useEffect(() {
+    startNavigation();
     watchEnv();
     return () {
       envStreamSubscription.value?.cancel();

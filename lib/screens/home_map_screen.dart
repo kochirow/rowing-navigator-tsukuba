@@ -32,6 +32,7 @@ class HomeMapScreen extends HookConsumerWidget {
     final geo = GeoService();
     final navigator = useNavigator();
     final myBoat = navigator['myBoat'];
+    final aroundBoats = navigator['aroundBoats'];
 
     final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
     final POSITION_UPDATE_INTERVAL = 3;
