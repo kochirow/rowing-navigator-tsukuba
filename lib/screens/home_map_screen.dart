@@ -7,11 +7,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../hooks/useNavigator.dart';
+import '../hooks/useNavMap.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../services/navigation_service.dart';
 import '../services/geo_service.dart';
-import '../utils/image2icon.dart';
+import '../types/marker_type.dart';
 import '../utils/heading.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
@@ -19,10 +20,8 @@ class HomeMapScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mapController = useState<GoogleMapController?>(null);
     final currentPosition = useState<Position?>(null);
     final currentHeading = useState<double>(0);
-    final markers = useState<Set<Marker>>({});
     final timer = useState<Timer?>(null);
     final preProcessTime = useState<DateTime>(DateTime.now());
     final postProcessTime = useState<DateTime>(DateTime.now());
@@ -33,54 +32,10 @@ class HomeMapScreen extends HookConsumerWidget {
     final navigator = useNavigator();
     final myBoat = navigator['myBoat'];
     final aroundBoats = navigator['aroundBoats'];
+    final navMap = useNavMap();
 
     final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
     final POSITION_UPDATE_INTERVAL = 3;
-
-    final initialCameraPosition = const CameraPosition(
-      target: LatLng(35.681236, 139.767125), // 東京駅
-      zoom: 16.0,
-    );
-
-    // =============================================
-    // マーカーを更新
-    // =============================================
-    void updateMarkers() async {
-      final zoomLevel = await mapController.value!.getZoomLevel();
-      final iconSize = (zoomLevel * 4).toInt(); // ZoomLevelに応じてiconSizeを変更
-      final icon = await getBitmapDescriptorFromAssetBytes(
-          'assets/icons/ship.png', iconSize);
-      markers.value.add(
-        Marker(
-          markerId: const MarkerId("current_location"),
-          // markerId: MarkerId(DateTime.now().toString()),
-          position: LatLng(
-            currentPosition.value!.latitude,
-            currentPosition.value!.longitude,
-          ),
-          icon: icon,
-          infoWindow: const InfoWindow(title: "タイトル", snippet: "詳細情報"),
-          anchor: const Offset(0.5, 0.5), // 回転軸をアイコンの中央に設定
-          // MEMO: 向き情報の取得方法は要検討
-          rotation: currentHeading.value, // 向きを設定
-        ),
-      );
-    }
-
-    // =============================================
-    // 現在地にカメラを移
-    // =============================================
-    void focusCurrentPosition() async {
-      await mapController.value!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(currentPosition.value!.latitude,
-                currentPosition.value!.longitude),
-            zoom: await mapController.value!.getZoomLevel(),
-          ),
-        ),
-      );
-    }
 
     // =============================================
     // 現在地を更新
@@ -94,8 +49,18 @@ class HomeMapScreen extends HookConsumerWidget {
         prePosition,
         position,
       );
-      updateMarkers();
-      focusCurrentPosition();
+      navMap.setMarker(
+        await navMap.createMarker(
+          "current_location",
+          MarkerType.myBoat,
+          position.latitude,
+          position.longitude,
+          currentHeading.value,
+          "タイトル",
+          "詳細情報",
+        ),
+      );
+      navMap.focus(position.latitude, position.longitude);
       preProcessTime.value = _preProcessTime;
       postProcessTime.value = DateTime.now();
       await nav.updateNavigation(
@@ -142,7 +107,6 @@ class HomeMapScreen extends HookConsumerWidget {
         }
       });
       return () {
-        mapController.value?.dispose();
         timer.value?.cancel();
       };
     }, []);
@@ -156,16 +120,16 @@ class HomeMapScreen extends HookConsumerWidget {
           GoogleMap(
             myLocationEnabled: false,
             myLocationButtonEnabled: false,
-            initialCameraPosition: initialCameraPosition,
+            initialCameraPosition: navMap.initCamPos,
             onMapCreated: (GoogleMapController controller) async {
               await Future.delayed(
                   const Duration(microseconds: 1)); // 中心座標がずれるバグを防ぐため1ms待機
-              mapController.value = controller;
+              navMap.setController(controller);
               await permission.requestPermission(); // 位置情報の許可取得
               updateCurrentPosition(); // 現在地を取得
               startPeriodicPositionUpdate(); // 位置情報の定期更新を開始
             },
-            markers: markers.value,
+            markers: navMap.markers,
           ),
           // 画面上部に現在位置と時刻を表示
           SizedBox(
@@ -194,7 +158,10 @@ class HomeMapScreen extends HookConsumerWidget {
         ]),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
-            focusCurrentPosition(); // 現在地にカメラを移動
+            navMap.focus(
+              currentPosition.value!.latitude,
+              currentPosition.value!.longitude,
+            );
           },
           child: const Icon(Icons.my_location),
         ));

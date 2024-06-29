@@ -10,16 +10,22 @@ import '../services/env_service.dart';
 import '../services/message_service.dart';
 import '../utils/image2icon.dart';
 
-Map<String, dynamic> useNavMap() {
+UseNavMap useNavMap() {
   final mapController = useState<GoogleMapController?>(null);
   final markers = useState<Set<Marker>>({});
   const SHIP_ICON_PATH = 'assets/icons/ship.png';
+  const initCamPos = CameraPosition(
+    target: LatLng(35.681236, 139.767125), // 東京駅
+    zoom: 16.0,
+  );
 
   void setController(GoogleMapController controller) {
     mapController.value = controller;
   }
 
   void setMarker(Marker marker) async {
+    markers.value.removeWhere(
+        (marker) => marker.markerId == marker.markerId); // 既存のマーカーを削除
     markers.value.add(marker);
   }
 
@@ -36,6 +42,7 @@ Map<String, dynamic> useNavMap() {
       icon: icon,
       infoWindow: InfoWindow(title: title, snippet: snippet),
       anchor: const Offset(0.5, 0.5),
+      rotation: heading,
     );
   }
 
@@ -51,10 +58,39 @@ Map<String, dynamic> useNavMap() {
     );
   }
 
-  return {
-    "setController": setController,
-    "createMarker": createMarker,
-    "setMarker": setMarker,
-    "focus": focus,
-  };
+  useEffect(() {
+    return () {
+      mapController.value?.dispose();
+      // timer.value?.cancel();
+    };
+  }, []);
+
+  return UseNavMap(
+      mapController: mapController.value,
+      markers: markers.value,
+      setController: setController,
+      createMarker: createMarker,
+      setMarker: setMarker,
+      focus: focus,
+      initCamPos: initCamPos);
+}
+
+class UseNavMap {
+  final GoogleMapController? mapController;
+  final Set<Marker> markers;
+  final Function setController;
+  final Function createMarker;
+  final Function setMarker;
+  final Function focus;
+  final CameraPosition initCamPos;
+
+  UseNavMap({
+    required this.mapController,
+    required this.markers,
+    required this.setController,
+    required this.createMarker,
+    required this.setMarker,
+    required this.focus,
+    required this.initCamPos,
+  });
 }
