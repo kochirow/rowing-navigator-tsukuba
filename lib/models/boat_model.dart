@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class Boat {
   String _boatId;
   int _boatType;
@@ -8,6 +6,15 @@ class Boat {
   double _lng;
   double _heading;
   DateTime _timestamp;
+  static final init = Boat(
+    boatId: 'init',
+    boatType: 0,
+    seatPos: 0,
+    lat: 35.681236,
+    lng: 139.767125,
+    heading: 0,
+    timestamp: DateTime.now(),
+  );
 
   String get boatId => _boatId;
   int get boatType => _boatType;

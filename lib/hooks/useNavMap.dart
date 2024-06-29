@@ -1,13 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:rowing_navigator/models/message_model.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/types/marker_type.dart';
 
-import '../models/boat_model.dart';
-import '../services/env_service.dart';
-import '../services/message_service.dart';
+import '../types/marker_type.dart';
 import '../utils/image2icon.dart';
 
 UseNavMap useNavMap() {
@@ -61,7 +57,6 @@ UseNavMap useNavMap() {
   useEffect(() {
     return () {
       mapController.value?.dispose();
-      // timer.value?.cancel();
     };
   }, []);
 
