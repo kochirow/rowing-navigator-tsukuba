@@ -30,6 +30,8 @@ class HomeMapScreen extends HookConsumerWidget {
     final auth = AuthService();
     final nav = NavigationService();
     final geo = GeoService();
+    final navigator = useNavigator();
+    final myBoat = navigator['myBoat'];
 
     final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
     final POSITION_UPDATE_INTERVAL = 3;
@@ -174,6 +176,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
+                    "ボート: ${myBoat.value}\n"
                     "緯度: ${currentPosition.value!.latitude.toStringAsFixed(14)}\n"
                     "経度: ${currentPosition.value!.longitude.toStringAsFixed(14)}\n"
                     "精度: ${LOCATION_ACCURACY.name.toString()} ${currentPosition.value!.accuracy.toString()}m\n"

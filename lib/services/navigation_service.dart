@@ -10,7 +10,7 @@ class NavigationService {
   // ナビゲーション情報更新
   // =============================================
   Future<void> updateNavigation(String userId, double lat, double lng) async {
-    print("updateNavigation: $userId, $lat, $lng");
+    // print("updateNavigation: $userId, $lat, $lng");
     // navigationsコレクションのドキュメントを更新
     // await _db.collection(collectionName).doc(userId).set({
     //   "location": {
@@ -19,8 +19,7 @@ class NavigationService {
     //     "timestamp": FieldValue.serverTimestamp(),
     //   },
     // });
-    print("Dammy updateNavigation executed");
-    print("Completed updateNavigation");
+    // print("Completed updateNavigation");
   }
 
   // =============================================
