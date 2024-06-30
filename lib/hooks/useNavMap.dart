@@ -9,6 +9,7 @@ import '../utils/image2icon.dart';
 UseNavMap useNavMap() {
   final mapController = useState<GoogleMapController?>(null);
   final markers = useState<Set<Marker>>({});
+  final isReady = useState(false);
   const SHIP_ICON_PATH = 'assets/icons/ship.png';
   const initCamPos = CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
@@ -17,6 +18,7 @@ UseNavMap useNavMap() {
 
   void setController(GoogleMapController controller) {
     mapController.value = controller;
+    isReady.value = true;
   }
 
   Future<void> setMarker(Marker marker) async {
@@ -65,6 +67,7 @@ UseNavMap useNavMap() {
   return UseNavMap(
       mapController: mapController.value,
       markers: markers.value,
+      isReady: isReady.value,
       setController: setController,
       createMarker: createMarker,
       setMarker: setMarker,
@@ -75,6 +78,7 @@ UseNavMap useNavMap() {
 class UseNavMap {
   final GoogleMapController? mapController;
   final Set<Marker> markers;
+  final bool isReady;
   final Function setController;
   final Function createMarker;
   final Function setMarker;
@@ -84,6 +88,7 @@ class UseNavMap {
   UseNavMap({
     required this.mapController,
     required this.markers,
+    required this.isReady,
     required this.setController,
     required this.createMarker,
     required this.setMarker,

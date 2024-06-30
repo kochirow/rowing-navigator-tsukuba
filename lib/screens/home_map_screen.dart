@@ -23,21 +23,6 @@ class HomeMapScreen extends HookConsumerWidget {
     final permission = PermissionService();
     final auth = AuthService();
 
-    void handleUpdateNavMap(Boat myBoat) async {
-      await navMap.setMarker(
-        await navMap.createMarker(
-          "my_boat",
-          MarkerType.myBoat,
-          myBoat.lat,
-          myBoat.lng,
-          myBoat.heading,
-          "ボート",
-          "ボートの位置情報",
-        ),
-      );
-      await navMap.focus(myBoat.lat, myBoat.lng);
-    }
-
     useEffect(() {
       Future(() async {
         if (!auth.isSignedIn) {
@@ -52,6 +37,29 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, []);
 
+    // 自艇の状態を監視し、変更があればマーカーを再描画
+    useEffect(() {
+      if (!navMap.isReady) return;
+      Future(() async {
+        final myBoat = navigator.myBoat;
+        await navMap.setMarker(
+          await navMap.createMarker(
+            "my_boat",
+            MarkerType.myBoat,
+            myBoat.lat,
+            myBoat.lng,
+            myBoat.heading,
+            "ボート",
+            "ボートの位置情報",
+          ),
+        );
+        await navMap.focus(myBoat.lat, myBoat.lng);
+      });
+      return null;
+    }, [navigator.myBoat]);
+
+    // 他艇の状態を監視し、変更があればマーカーを再描画
+
     return Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -65,7 +73,7 @@ class HomeMapScreen extends HookConsumerWidget {
             onMapCreated: (GoogleMapController controller) async {
               navMap.setController(controller);
               await permission.requestPermission(); // 位置情報の許可取得
-              navigator.startNavigation(handleUpdateNavMap); // ボートの位置情報を監視
+              navigator.startNavigation(); // ボートの位置情報を監視
             },
             markers: navMap.markers,
           ),

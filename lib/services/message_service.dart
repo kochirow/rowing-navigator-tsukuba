@@ -28,4 +28,9 @@ class MessageService {
     }));
     return messageStream;
   }
+
+  Future<void> clearMessage(String boatId) async {
+    await messageRef.doc(boatId).delete();
+    print("Completed deleteMessage");
+  }
 }

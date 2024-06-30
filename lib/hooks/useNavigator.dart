@@ -50,7 +50,7 @@ UseNavigator useNavigator() {
     );
   }
 
-  startNavigation(Function onUpdate) {
+  startNavigation() {
     watchTimer.value = Timer.periodic(
         Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) async {
       // ======== Update MyBoat Status ========
@@ -61,12 +61,18 @@ UseNavigator useNavigator() {
       // final messageService = MessageService();
       // messageService.sendMessage(message);
       // ======== Collision Detection ========
-      // ======== Alert ========
-      await onUpdate(latestMyBoat);
+      const flag = true;
+      if (flag) {
+        // ======== Alert ========
+      }
     });
   }
 
-  stopNavigation() {}
+  stopNavigation() {
+    watchTimer.value?.cancel();
+    final messageService = MessageService();
+    messageService.clearMessage("my-boat");
+  }
 
   useEffect(() {
     watchEnv();
