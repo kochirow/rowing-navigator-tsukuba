@@ -23,7 +23,7 @@ UseNavMap useNavMap() {
   }
 
   void setMarkers(Set<Marker> newMarkers) {
-    markers.value = {...newMarkers};
+    markers.value = newMarkers;
   }
 
   Future<Marker> createMarker(String markerId, MarkerType type, double lat,

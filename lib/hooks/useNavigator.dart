@@ -73,6 +73,7 @@ UseNavigator useNavigator() {
     watchTimer.value?.cancel();
     final messageService = MessageService();
     messageService.clearMessage("my-boat");
+    // myBoat.value = null; // TODO: Optional対応後に追加
   }
 
   useEffect(() {
