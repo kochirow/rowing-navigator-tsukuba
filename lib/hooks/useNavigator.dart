@@ -11,7 +11,7 @@ import '../utils/heading.dart';
 
 UseNavigator useNavigator() {
   final myBoat = useState<Boat>(Boat.init);
-  final aroundBoats = useState<List<Boat>>([]);
+  final otherBoats = useState<List<Boat>>([]);
   final envStreamSubscription = useState<StreamSubscription?>(null);
   final watchTimer = useState<Timer?>(null);
   final preProcessTime = useState<DateTime>(DateTime.now());
@@ -25,7 +25,7 @@ UseNavigator useNavigator() {
     final envService = EnvService();
     envStreamSubscription.value = envService.getEnvStream().listen((env) {
       final List<Boat> boats = env['boats'];
-      aroundBoats.value =
+      otherBoats.value =
           boats.where((boat) => boat.boatId != "my-boat").toList();
     });
   }
@@ -85,7 +85,7 @@ UseNavigator useNavigator() {
 
   return UseNavigator(
     myBoat: myBoat.value,
-    aroundBoats: aroundBoats.value,
+    otherBoats: otherBoats.value,
     accuracy: LOCATION_ACCURACY,
     preProcessTime: preProcessTime.value,
     postProcessTime: postProcessTime.value,
@@ -96,7 +96,7 @@ UseNavigator useNavigator() {
 
 class UseNavigator {
   final Boat myBoat;
-  final List<Boat> aroundBoats;
+  final List<Boat> otherBoats;
   final LocationAccuracy accuracy;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
@@ -105,7 +105,7 @@ class UseNavigator {
 
   UseNavigator({
     required this.myBoat,
-    required this.aroundBoats,
+    required this.otherBoats,
     required this.accuracy,
     required this.preProcessTime,
     required this.postProcessTime,

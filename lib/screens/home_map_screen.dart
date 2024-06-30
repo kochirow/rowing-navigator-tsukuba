@@ -53,11 +53,11 @@ class HomeMapScreen extends HookConsumerWidget {
           "自艇の位置情報\n${myBoat.boatId}",
         ));
         // 他艇のマーカーを作成
-        final aroundBoats = navigator.aroundBoats;
-        for (final boat in aroundBoats) {
+        final otherBoats = navigator.otherBoats;
+        for (final boat in otherBoats) {
           newMarkers.add(await navMap.createMarker(
             boat.boatId,
-            MarkerType.aroundBoat,
+            MarkerType.otherBoat,
             boat.lat,
             boat.lng,
             boat.heading,
@@ -71,7 +71,7 @@ class HomeMapScreen extends HookConsumerWidget {
         await navMap.focus(myBoat.lat, myBoat.lng);
       });
       return null;
-    }, [navigator.myBoat, navigator.aroundBoats]);
+    }, [navigator.myBoat, navigator.otherBoats]);
 
     return Scaffold(
         appBar: AppBar(

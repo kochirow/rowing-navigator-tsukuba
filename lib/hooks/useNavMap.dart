@@ -37,7 +37,7 @@ UseNavMap useNavMap() {
         icon = await getBitmapDescriptorFromAssetBytes(
             RED_BOAT_ICON_PATH, iconSize);
         break;
-      case MarkerType.aroundBoat:
+      case MarkerType.otherBoat:
         icon = await getBitmapDescriptorFromAssetBytes(
             BLUE_BOAT_ICON_PATH, iconSize);
         break;

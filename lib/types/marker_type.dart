@@ -1,4 +1,4 @@
 enum MarkerType {
   myBoat,
-  aroundBoat,
+  otherBoat,
 }
