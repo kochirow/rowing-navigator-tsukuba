@@ -25,7 +25,8 @@ UseNavigator useNavigator() {
     final envService = EnvService();
     envStreamSubscription.value = envService.getEnvStream().listen((env) {
       final List<Boat> boats = env['boats'];
-      aroundBoats.value = boats;
+      aroundBoats.value =
+          boats.where((boat) => boat.boatId != "my-boat").toList();
     });
   }
 

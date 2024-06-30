@@ -10,7 +10,8 @@ UseNavMap useNavMap() {
   final mapController = useState<GoogleMapController?>(null);
   final markers = useState<Set<Marker>>({});
   final isReady = useState(false);
-  const SHIP_ICON_PATH = 'assets/icons/ship.png';
+  const BLUE_BOAT_ICON_PATH = 'assets/icons/blue_boat.png';
+  const RED_BOAT_ICON_PATH = 'assets/icons/red_boat.png';
   const initCamPos = CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
     zoom: 16.0,
@@ -21,12 +22,8 @@ UseNavMap useNavMap() {
     isReady.value = true;
   }
 
-  Future<void> setMarker(Marker marker) async {
-    final newMarkers = {...markers.value};
-    newMarkers.removeWhere(
-        (marker) => marker.markerId == marker.markerId); // 既存のマーカーを削除
-    newMarkers.add(marker);
-    markers.value = newMarkers;
+  void setMarkers(Set<Marker> newMarkers) {
+    markers.value = {...newMarkers};
   }
 
   Future<Marker> createMarker(String markerId, MarkerType type, double lat,
@@ -34,8 +31,17 @@ UseNavMap useNavMap() {
     final zoomLevel = await mapController.value!.getZoomLevel();
     final iconSize = (zoomLevel * 4).toInt(); // ZoomLevelに応じてiconSizeを変更
     // TODO: MarkerType次第でアイコンの種類を変更
-    final icon =
-        await getBitmapDescriptorFromAssetBytes(SHIP_ICON_PATH, iconSize);
+    BitmapDescriptor icon;
+    switch (type) {
+      case MarkerType.myBoat:
+        icon = await getBitmapDescriptorFromAssetBytes(
+            RED_BOAT_ICON_PATH, iconSize);
+        break;
+      case MarkerType.aroundBoat:
+        icon = await getBitmapDescriptorFromAssetBytes(
+            BLUE_BOAT_ICON_PATH, iconSize);
+        break;
+    }
     return Marker(
       markerId: MarkerId(markerId),
       position: LatLng(lat, lng),
@@ -70,7 +76,7 @@ UseNavMap useNavMap() {
       isReady: isReady.value,
       setController: setController,
       createMarker: createMarker,
-      setMarker: setMarker,
+      setMarkers: setMarkers,
       focus: focus,
       initCamPos: initCamPos);
 }
@@ -81,7 +87,7 @@ class UseNavMap {
   final bool isReady;
   final Function setController;
   final Function createMarker;
-  final Function setMarker;
+  final Function setMarkers;
   final Function focus;
   final CameraPosition initCamPos;
 
@@ -91,7 +97,7 @@ class UseNavMap {
     required this.isReady,
     required this.setController,
     required this.createMarker,
-    required this.setMarker,
+    required this.setMarkers,
     required this.focus,
     required this.initCamPos,
   });

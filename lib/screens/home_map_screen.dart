@@ -8,7 +8,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
 import '../hooks/useNavMap.dart';
-import '../models/boat_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
@@ -37,28 +36,42 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, []);
 
-    // 自艇の状態を監視し、変更があればマーカーを再描画
+    // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
     useEffect(() {
       if (!navMap.isReady) return;
       Future(() async {
+        final newMarkers = <Marker>{};
+        // 自艇のマーカーを作成
         final myBoat = navigator.myBoat;
-        await navMap.setMarker(
-          await navMap.createMarker(
-            "my_boat",
-            MarkerType.myBoat,
-            myBoat.lat,
-            myBoat.lng,
-            myBoat.heading,
-            "ボート",
-            "ボートの位置情報",
-          ),
-        );
+        newMarkers.add(await navMap.createMarker(
+          myBoat.boatId,
+          MarkerType.myBoat,
+          myBoat.lat,
+          myBoat.lng,
+          myBoat.heading,
+          "自艇",
+          "自艇の位置情報\n${myBoat.boatId}",
+        ));
+        // 他艇のマーカーを作成
+        final aroundBoats = navigator.aroundBoats;
+        for (final boat in aroundBoats) {
+          newMarkers.add(await navMap.createMarker(
+            boat.boatId,
+            MarkerType.aroundBoat,
+            boat.lat,
+            boat.lng,
+            boat.heading,
+            "他艇",
+            "他艇の位置情報\n${boat.boatId}",
+          ));
+        }
+        // マーカーを更新
+        await navMap.setMarkers(newMarkers);
+        // 自艇の位置にフォーカス
         await navMap.focus(myBoat.lat, myBoat.lng);
       });
       return null;
-    }, [navigator.myBoat]);
-
-    // 他艇の状態を監視し、変更があればマーカーを再描画
+    }, [navigator.myBoat, navigator.aroundBoats]);
 
     return Scaffold(
         appBar: AppBar(
