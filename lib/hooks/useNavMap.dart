@@ -19,8 +19,8 @@ UseNavMap useNavMap() {
     mapController.value = controller;
   }
 
-  void setMarker(Marker marker) async {
-    final newMarkers = markers.value;
+  Future<void> setMarker(Marker marker) async {
+    final newMarkers = {...markers.value};
     newMarkers.removeWhere(
         (marker) => marker.markerId == marker.markerId); // 既存のマーカーを削除
     newMarkers.add(marker);
@@ -44,7 +44,7 @@ UseNavMap useNavMap() {
     );
   }
 
-  void focus(double lat, double lng) async {
+  Future<void> focus(double lat, double lng) async {
     final zoomLevel = await mapController.value!.getZoomLevel();
     await mapController.value!.animateCamera(
       CameraUpdate.newCameraPosition(
