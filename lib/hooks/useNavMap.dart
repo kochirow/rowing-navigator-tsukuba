@@ -20,9 +20,11 @@ UseNavMap useNavMap() {
   }
 
   void setMarker(Marker marker) async {
-    markers.value.removeWhere(
+    final newMarkers = markers.value;
+    newMarkers.removeWhere(
         (marker) => marker.markerId == marker.markerId); // 既存のマーカーを削除
-    markers.value.add(marker);
+    newMarkers.add(marker);
+    markers.value = newMarkers;
   }
 
   Future<Marker> createMarker(String markerId, MarkerType type, double lat,

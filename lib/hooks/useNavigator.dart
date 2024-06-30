@@ -13,28 +13,13 @@ UseNavigator useNavigator() {
   final myBoat = useState<Boat>(Boat.init);
   final aroundBoats = useState<List<Boat>>([]);
   final envStreamSubscription = useState<StreamSubscription?>(null);
-  final timer = useState<Timer?>(null);
+  final watchTimer = useState<Timer?>(null);
   final preProcessTime = useState<DateTime>(DateTime.now());
   final postProcessTime = useState<DateTime>(DateTime.now());
   final geoService = GeoService();
 
   final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
   final POSITION_UPDATE_INTERVAL = 3;
-
-  startNavigation() {
-    final message = Message(
-        boatId: "around-user-xxxx",
-        boatType: 1,
-        seatPos: 2,
-        lat: 0.1234,
-        lng: 0.1234,
-        heading: 0.1234,
-        timestamp: DateTime.now());
-    final messageService = MessageService();
-    messageService.sendMessage(message);
-  }
-
-  stopNavigation() {}
 
   watchEnv() {
     final envService = EnvService();
@@ -44,18 +29,20 @@ UseNavigator useNavigator() {
     });
   }
 
-  updateMyBoat() async {
+  getLatestMyBoat() async {
     final preMyBoat = myBoat.value;
+    preProcessTime.value = DateTime.now(); // Pre-Process Time
     final Position position =
         await geoService.getCurrentPosition(LOCATION_ACCURACY);
+    postProcessTime.value = DateTime.now(); // Post-Process Time
     final double heading = getHeading(
       {"latitude": preMyBoat.lat, "longitude": preMyBoat.lng},
       {"latitude": position.latitude, "longitude": position.longitude},
     );
-    myBoat.value = Boat(
-      boatId: "my-boat-xxxx",
-      boatType: 1,
-      seatPos: 2,
+    return Boat(
+      boatId: "my-boat",
+      boatType: 0,
+      seatPos: 0,
       lat: position.latitude,
       lng: position.longitude,
       heading: heading,
@@ -63,23 +50,29 @@ UseNavigator useNavigator() {
     );
   }
 
-  watchMyBoat(Function callback) {
-    timer.value = Timer.periodic(Duration(seconds: POSITION_UPDATE_INTERVAL),
-        (timer) async {
-      preProcessTime.value = DateTime.now();
-      await updateMyBoat();
-      postProcessTime.value = DateTime.now();
-      await callback(myBoat.value);
-      // TODO: sendMessage
+  startNavigation(Function onUpdate) {
+    watchTimer.value = Timer.periodic(
+        Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) async {
+      // ======== Update MyBoat Status ========
+      final latestMyBoat = await getLatestMyBoat();
+      myBoat.value = latestMyBoat;
+      // ======== Send Message ========
+      // final message = Message.fromBoat(myBoat.value);
+      // final messageService = MessageService();
+      // messageService.sendMessage(message);
+      // ======== Collision Detection ========
+      // ======== Alert ========
+      await onUpdate(latestMyBoat);
     });
   }
 
+  stopNavigation() {}
+
   useEffect(() {
-    startNavigation();
     watchEnv();
     return () {
       envStreamSubscription.value?.cancel();
-      timer.value?.cancel();
+      watchTimer.value?.cancel();
     };
   }, []);
 
@@ -91,7 +84,6 @@ UseNavigator useNavigator() {
     postProcessTime: postProcessTime.value,
     startNavigation: startNavigation,
     stopNavigation: stopNavigation,
-    watchMyBoat: watchMyBoat,
   );
 }
 
@@ -103,7 +95,6 @@ class UseNavigator {
   final DateTime postProcessTime;
   final Function startNavigation;
   final Function stopNavigation;
-  final Function watchMyBoat;
 
   UseNavigator({
     required this.myBoat,
@@ -113,6 +104,5 @@ class UseNavigator {
     required this.postProcessTime,
     required this.startNavigation,
     required this.stopNavigation,
-    required this.watchMyBoat,
   });
 }

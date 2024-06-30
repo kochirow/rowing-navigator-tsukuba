@@ -1,3 +1,5 @@
+import '../models/boat_model.dart';
+
 class Message {
   String _boatId;
   int _boatType;
@@ -44,7 +46,6 @@ class Message {
   }
 
   factory Message.fromJson(Map<String, dynamic> json) {
-    final timestamp = json['timestamp'];
     return Message(
       boatId: json['boatId'],
       boatType: json['boatType'],
@@ -52,7 +53,19 @@ class Message {
       lat: json['lat'],
       lng: json['lng'],
       heading: json['heading'],
-      timestamp: timestamp.toDate(),
+      timestamp: json['timestamp'].toDate(),
+    );
+  }
+
+  factory Message.fromBoat(Boat boat) {
+    return Message(
+      boatId: boat.boatId,
+      boatType: boat.boatType,
+      seatPos: boat.seatPos,
+      lat: boat.lat,
+      lng: boat.lng,
+      heading: boat.heading,
+      timestamp: boat.timestamp,
     );
   }
 }

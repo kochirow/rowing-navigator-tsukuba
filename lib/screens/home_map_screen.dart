@@ -23,8 +23,8 @@ class HomeMapScreen extends HookConsumerWidget {
     final permission = PermissionService();
     final auth = AuthService();
 
-    void updateNavMapHandler(Boat myBoat) async {
-      navMap.setMarker(
+    void handleUpdateNavMap(Boat myBoat) async {
+      await navMap.setMarker(
         await navMap.createMarker(
           "my_boat",
           MarkerType.myBoat,
@@ -35,7 +35,7 @@ class HomeMapScreen extends HookConsumerWidget {
           "ボートの位置情報",
         ),
       );
-      navMap.focus(myBoat.lat, myBoat.lng);
+      await navMap.focus(myBoat.lat, myBoat.lng);
     }
 
     useEffect(() {
@@ -65,7 +65,7 @@ class HomeMapScreen extends HookConsumerWidget {
             onMapCreated: (GoogleMapController controller) async {
               navMap.setController(controller);
               await permission.requestPermission(); // 位置情報の許可取得
-              navigator.watchMyBoat(updateNavMapHandler); // ボートの位置情報を監視
+              navigator.startNavigation(handleUpdateNavMap); // ボートの位置情報を監視
             },
             markers: navMap.markers,
           ),
