@@ -1,4 +1,5 @@
-enum AlertType {
+enum SafetyLevel {
+  safe,
   caution,
   warning,
   danger,

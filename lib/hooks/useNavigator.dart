@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:rowing_navigator/models/message_model.dart';
+import 'package:rowing_navigator/types/safety_level.dart';
 
+import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
+import '../services/collision_risk_evaluator_service.dart';
 import '../services/env_service.dart';
 import '../services/geo_service.dart';
 import '../services/message_service.dart';
+import '../types/alert_type.dart';
+import '../types/collision_risk_level.dart';
 import '../utils/heading.dart';
 
 UseNavigator useNavigator() {
+  final alert = useAlert();
+  final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
   final myBoat = useState<Boat>(Boat.init);
   final otherBoats = useState<List<Boat>>([]);
   final envStreamSubscription = useState<StreamSubscription?>(null);
@@ -51,21 +57,67 @@ UseNavigator useNavigator() {
     );
   }
 
+  getSafetyLevelFrom(CollisionRiskLevel riskLevel) {
+    SafetyLevel safetyLevel = SafetyLevel.safe;
+    switch (riskLevel) {
+      case CollisionRiskLevel.lv1:
+        safetyLevel = SafetyLevel.safe;
+        break;
+      case CollisionRiskLevel.lv2:
+        safetyLevel = SafetyLevel.caution;
+        break;
+      case CollisionRiskLevel.lv3:
+        safetyLevel = SafetyLevel.warning;
+        break;
+      case CollisionRiskLevel.lv4:
+        safetyLevel = SafetyLevel.danger;
+        break;
+      case CollisionRiskLevel.lv5:
+        safetyLevel = SafetyLevel.emergency;
+    }
+    return safetyLevel;
+  }
+
+  getAlertTypeFrom(SafetyLevel safetyLevel) {
+    switch (safetyLevel) {
+      case SafetyLevel.caution:
+        return AlertType.caution;
+      case SafetyLevel.warning:
+        return AlertType.warning;
+      case SafetyLevel.danger:
+        return AlertType.danger;
+      case SafetyLevel.critical:
+        return AlertType.critical;
+      case SafetyLevel.emergency:
+        return AlertType.emergency;
+      default:
+        return AlertType.emergency;
+    }
+  }
+
   startNavigation() {
     watchTimer.value = Timer.periodic(
         Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) async {
       // ======== Update MyBoat Status ========
       final latestMyBoat = await getLatestMyBoat();
       myBoat.value = latestMyBoat;
+
       // ======== Send Message ========
       // final message = Message.fromBoat(myBoat.value);
       // final messageService = MessageService();
       // messageService.sendMessage(message);
-      // ======== Collision Detection ========
-      const flag = true;
-      if (flag) {
-        // ======== Alert ========
-      }
+
+      // ======== Evaluate Collision Risk ========
+      final evaluator = CollisionRiskEvaluatorService();
+      final riskLevel = evaluator.evaluateRisk(
+        myBoat.value,
+        otherBoats.value,
+      );
+      final safetyLevel_ = getSafetyLevelFrom(riskLevel);
+      safetyLevel.value = safetyLevel_;
+
+      // ======== Alert ========
+      // useEffectにて実装
     });
   }
 
@@ -83,6 +135,22 @@ UseNavigator useNavigator() {
       watchTimer.value?.cancel();
     };
   }, []);
+
+  useEffect(() {
+    // safetyLevelが変更されたらLevelに応じたAlertを再生
+    // ======== Alert ========
+    final safetyLevel_ = safetyLevel.value;
+    if (safetyLevel_ == SafetyLevel.safe) {
+      // Alertを停止
+      alert.stop();
+    } else {
+      // SafetyLevelに応じたAlertを再生
+      final alertType = getAlertTypeFrom(safetyLevel_);
+      alert.play(alertType);
+    }
+    print("Safety Level Changed: $safetyLevel_");
+    return null;
+  }, [safetyLevel.value]);
 
   return UseNavigator(
     myBoat: myBoat.value,

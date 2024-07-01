@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'package:rxdart/rxdart.dart';
 /* spellchecker: disable */
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/boat_model.dart';
-import '../services/dynamic_obstacle.dart';
+import 'dynamic_obstacle_service.dart';
 
 class EnvService {
   final dynamicObstacleService = DynamicObstacle();

@@ -1,6 +1,8 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
+import '../types/alert_type.dart';
+
 UseAlert useAlert() {
   final player = useState(AudioPlayer());
   final state = useState<PlayerState>(PlayerState.stopped);
@@ -20,9 +22,27 @@ UseAlert useAlert() {
     };
   }, []);
 
-  Future<void> play() async {
-    await player.value.setVolume(0.5);
-    await player.value.setSource(AssetSource('audio/alert_lv1.mp3'));
+  Future<void> play(AlertType type) async {
+    AssetSource source;
+    switch (type) {
+      case AlertType.caution:
+        source = AssetSource('audio/alert_lv1.mp3');
+        break;
+      case AlertType.warning:
+        source = AssetSource('audio/alert_lv1.mp3');
+        break;
+      case AlertType.danger:
+        source = AssetSource('audio/alert_lv2.mp3');
+        break;
+      case AlertType.critical:
+        source = AssetSource('audio/alert_lv3.mp3');
+        break;
+      case AlertType.emergency:
+        source = AssetSource('audio/alert_lv3.mp3'); // TODO: LvNを追加する
+        break;
+    }
+    await player.value.setVolume(0.5); // for dev
+    await player.value.setSource(source);
     await player.value.setReleaseMode(ReleaseMode.loop);
     await player.value.resume();
     state.value = PlayerState.playing;
@@ -48,9 +68,9 @@ UseAlert useAlert() {
 
 class UseAlert {
   final bool isPlaying;
-  final Function play;
-  final Function stop;
-  final Function dispose;
+  final Future<void> Function(AlertType type) play;
+  final Future<void> Function() stop;
+  final Future<void> Function() dispose;
 
   UseAlert({
     required this.isPlaying,

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/hooks/useAlert.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
@@ -21,7 +19,6 @@ class HomeMapScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final navigator = useNavigator();
     final navMap = useNavMap();
-    final alert = useAlert();
     final permission = PermissionService();
     final auth = AuthService();
 
@@ -36,11 +33,7 @@ class HomeMapScreen extends HookConsumerWidget {
           print("UID: ${auth.currentUser?.uid}");
         }
       });
-      alert.play();
-      return () {
-        alert.stop();
-        alert.dispose();
-      };
+      return null;
     }, []);
 
     // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
@@ -110,11 +103,6 @@ class HomeMapScreen extends HookConsumerWidget {
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
             navMap.focus(navigator.myBoat.lat, navigator.myBoat.lng);
-            if (alert.isPlaying) {
-              await alert.stop();
-            } else {
-              await alert.play();
-            }
           },
           child: const Icon(Icons.my_location),
         ));
