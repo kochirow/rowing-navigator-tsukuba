@@ -5,6 +5,7 @@ import 'package:rowing_navigator/types/safety_level.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
+import '../models/nav_config_model.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/env_service.dart';
 import '../services/geo_service.dart';
@@ -15,6 +16,7 @@ import '../utils/heading.dart';
 
 UseNavigator useNavigator() {
   final alert = useAlert();
+  final config = useState<NavConfig>(NavConfig.init);
   final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
   final myBoat = useState<Boat>(Boat.init);
   final otherBoats = useState<List<Boat>>([]);
@@ -32,7 +34,7 @@ UseNavigator useNavigator() {
     envStreamSubscription.value = envService.getEnvStream().listen((env) {
       final List<Boat> boats = env['boats'];
       otherBoats.value =
-          boats.where((boat) => boat.boatId != "my-boat").toList();
+          boats.where((boat) => boat.boatId != config.value.boatId).toList();
     });
   }
 
@@ -47,7 +49,7 @@ UseNavigator useNavigator() {
       {"latitude": position.latitude, "longitude": position.longitude},
     );
     return Boat(
-      boatId: "my-boat",
+      boatId: config.value.boatId, // 自艇のID
       boatType: 0,
       seatPos: 0,
       lat: position.latitude,
@@ -58,24 +60,20 @@ UseNavigator useNavigator() {
   }
 
   getSafetyLevelFrom(CollisionRiskLevel riskLevel) {
-    SafetyLevel safetyLevel = SafetyLevel.safe;
     switch (riskLevel) {
       case CollisionRiskLevel.lv1:
-        safetyLevel = SafetyLevel.safe;
-        break;
+        return SafetyLevel.safe;
       case CollisionRiskLevel.lv2:
-        safetyLevel = SafetyLevel.caution;
-        break;
+        return SafetyLevel.caution;
       case CollisionRiskLevel.lv3:
-        safetyLevel = SafetyLevel.warning;
-        break;
+        return SafetyLevel.warning;
       case CollisionRiskLevel.lv4:
-        safetyLevel = SafetyLevel.danger;
-        break;
+        return SafetyLevel.critical;
       case CollisionRiskLevel.lv5:
-        safetyLevel = SafetyLevel.emergency;
+        return SafetyLevel.emergency;
+      default:
+        return SafetyLevel.emergency;
     }
-    return safetyLevel;
   }
 
   getAlertTypeFrom(SafetyLevel safetyLevel) {
@@ -84,8 +82,6 @@ UseNavigator useNavigator() {
         return AlertType.caution;
       case SafetyLevel.warning:
         return AlertType.warning;
-      case SafetyLevel.danger:
-        return AlertType.danger;
       case SafetyLevel.critical:
         return AlertType.critical;
       case SafetyLevel.emergency:
@@ -95,7 +91,8 @@ UseNavigator useNavigator() {
     }
   }
 
-  startNavigation() {
+  startNavigation(NavConfig config_) {
+    config.value = config_; // 自艇のIDを設定
     watchTimer.value = Timer.periodic(
         Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) async {
       // ======== Update MyBoat Status ========
@@ -124,7 +121,7 @@ UseNavigator useNavigator() {
   stopNavigation() {
     watchTimer.value?.cancel();
     final messageService = MessageService();
-    messageService.clearMessage("my-boat");
+    messageService.clearMessage(config.value.boatId);
     // myBoat.value = null; // TODO: Optional対応後に追加
   }
 
@@ -166,8 +163,8 @@ class UseNavigator {
   final LocationAccuracy accuracy;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
-  final Function startNavigation;
-  final Function stopNavigation;
+  final void Function(NavConfig config) startNavigation;
+  final void Function() stopNavigation;
 
   UseNavigator({
     required this.myBoat,

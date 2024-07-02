@@ -29,16 +29,13 @@ UseAlert useAlert() {
         source = AssetSource('audio/alert_lv1.mp3');
         break;
       case AlertType.warning:
-        source = AssetSource('audio/alert_lv1.mp3');
-        break;
-      case AlertType.danger:
         source = AssetSource('audio/alert_lv2.mp3');
         break;
       case AlertType.critical:
         source = AssetSource('audio/alert_lv3.mp3');
         break;
       case AlertType.emergency:
-        source = AssetSource('audio/alert_lv3.mp3'); // TODO: LvNを追加する
+        source = AssetSource('audio/alert_lv4.mp3');
         break;
     }
     await player.value.setVolume(0.5); // for dev

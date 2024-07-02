@@ -1,7 +1,6 @@
 enum AlertType {
   caution,
   warning,
-  danger,
   critical,
   emergency,
 }

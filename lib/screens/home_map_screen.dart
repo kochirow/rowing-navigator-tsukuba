@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
 import '../hooks/useNavMap.dart';
+import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
@@ -86,7 +87,9 @@ class HomeMapScreen extends HookConsumerWidget {
             onMapCreated: (GoogleMapController controller) async {
               navMap.setController(controller);
               await permission.requestPermission(); // 位置情報の許可取得
-              navigator.startNavigation(); // ボートの位置情報を監視
+              final config =
+                  NavConfig(boatId: "my-boat", boatType: 0, seatPos: 0);
+              navigator.startNavigation(config); // ボートの位置情報を監視
             },
             markers: navMap.markers,
           ),
