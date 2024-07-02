@@ -44,7 +44,7 @@ class CollisionRiskEvaluatorService {
       }
     }
     print(
-        "NearestBoatId: ${closestBoatId}, Distance: ${nearestDistance.toStringAsFixed(1)}m");
+        "NearestBoatId: ${closestBoatId}, lat: ${myBoat.lat}, lng: ${myBoat.lng}, Distance: ${nearestDistance.toStringAsFixed(1)}m");
     return level;
   }
 }
