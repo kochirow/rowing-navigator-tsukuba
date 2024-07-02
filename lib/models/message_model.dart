@@ -50,9 +50,9 @@ class Message {
       boatId: json['boatId'],
       boatType: json['boatType'],
       seatPos: json['seatPos'],
-      lat: json['lat'],
-      lng: json['lng'],
-      heading: json['heading'],
+      lat: json['lat'].toDouble(),
+      lng: json['lng'].toDouble(),
+      heading: json['heading'].toDouble(),
       timestamp: json['timestamp'].toDate(),
     );
   }

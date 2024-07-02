@@ -137,16 +137,13 @@ UseNavigator useNavigator() {
   }, []);
 
   useEffect(() {
-    // safetyLevelが変更されたらLevelに応じたAlertを再生
     // ======== Alert ========
     final safetyLevel_ = safetyLevel.value;
     if (safetyLevel_ == SafetyLevel.safe) {
-      // Alertを停止
       alert.stop();
     } else {
-      // SafetyLevelに応じたAlertを再生
       final alertType = getAlertTypeFrom(safetyLevel_);
-      alert.play(alertType);
+      alert.play(alertType); // SafetyLevelに応じたAlertを再生
     }
     print("Safety Level Changed: $safetyLevel_");
     return null;
