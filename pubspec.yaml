@@ -43,6 +43,7 @@ dependencies:
   rxdart: ^0.28.0
   audioplayers: ^6.0.0
   flutter_map_math: ^0.1.7
+  flutter_compass: ^0.8.0
 
 dev_dependencies:
   flutter_test:

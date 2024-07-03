@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_compass/flutter_compass.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
@@ -23,7 +25,9 @@ UseNavigator useNavigator() {
   final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
   final myBoat = useState<Boat?>(null);
   final otherBoats = useState<List<Boat>>([]);
+  final heading = useState<double?>(null);
   // Streams
+  final headingStreamSubscription = useState<StreamSubscription?>(null);
   final envStreamSubscription = useState<StreamSubscription?>(null);
   final watchTimer = useState<Timer?>(null);
   // Time
@@ -39,6 +43,12 @@ UseNavigator useNavigator() {
 
   Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
     return await geoService.getCurrentPosition(accuracy);
+  }
+
+  watchHeading() {
+    headingStreamSubscription.value = FlutterCompass.events?.listen((snapshot) {
+      heading.value = snapshot.heading;
+    });
   }
 
   watchEnv() {
@@ -58,14 +68,20 @@ UseNavigator useNavigator() {
     preProcessTime.value = DateTime.now(); // Pre-Process Time
     final position = await getCurrentPosition(config.value!.accuracy);
     postProcessTime.value = DateTime.now(); // Post-Process Time
-    double heading;
-    if (preMyBoat == null) {
-      heading = 0.0;
+    double heading_;
+    if (heading.value != null) {
+      // Compassで方位角を取れている場合はその値を使用
+      heading_ = heading.value!;
     } else {
-      heading = getHeading(
-        {"latitude": preMyBoat.lat, "longitude": preMyBoat.lng},
-        {"latitude": position.latitude, "longitude": position.longitude},
-      );
+      // Compassで方位角を取れていない場合は前回の位置情報から算出
+      if (preMyBoat != null) {
+        heading_ = getHeading(
+          LatLng(preMyBoat.lat, preMyBoat.lng),
+          LatLng(position.latitude, position.longitude),
+        );
+      } else {
+        heading_ = 0.0;
+      }
     }
     return Boat(
       boatId: config.value!.boatId, // 自艇のID
@@ -73,7 +89,7 @@ UseNavigator useNavigator() {
       seatPos: 0,
       lat: position.latitude,
       lng: position.longitude,
-      heading: heading,
+      heading: heading_,
       timestamp: position.timestamp,
     );
   }
@@ -163,8 +179,10 @@ UseNavigator useNavigator() {
   }
 
   useEffect(() {
+    watchHeading();
     watchEnv();
     return () {
+      headingStreamSubscription.value?.cancel();
       envStreamSubscription.value?.cancel();
       watchTimer.value?.cancel();
     };

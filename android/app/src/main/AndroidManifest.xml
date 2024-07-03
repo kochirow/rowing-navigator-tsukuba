@@ -6,11 +6,13 @@
 
         <!-- Custom Settings -->
         
-        <!-- For GoogleMaps -->
+        <!-- for GoogleMaps -->
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${googleMapApiKey}" />
-        <!-- For Location -->
+        <!-- for GeoLocator / Flutter Compass -->
+        <uses-permission android:name="android.permission.INTERNET"/>
+        <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
         <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-        
+
         <!-- =============== -->
 
         <activity
