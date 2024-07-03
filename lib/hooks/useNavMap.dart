@@ -53,21 +53,14 @@ UseNavMap useNavMap() {
     );
   }
 
-  Future<void> focus(double lat, double lng, double? heading) async {
+  Future<void> focus(double lat, double lng, double heading) async {
     final zoomLevel = await mapController.value!.getZoomLevel();
     CameraPosition camPos;
-    if (heading == null) {
-      camPos = CameraPosition(
-        target: LatLng(lat, lng),
-        zoom: zoomLevel,
-      );
-    } else {
-      camPos = CameraPosition(
-        target: LatLng(lat, lng),
-        zoom: zoomLevel,
-        bearing: heading,
-      );
-    }
+    camPos = CameraPosition(
+      target: LatLng(lat, lng),
+      zoom: zoomLevel,
+      bearing: heading,
+    );
     await mapController.value!.animateCamera(
       CameraUpdate.newCameraPosition(camPos),
     );
