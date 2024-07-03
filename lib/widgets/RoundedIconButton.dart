@@ -8,7 +8,7 @@ class RoundedIconButton extends StatelessWidget {
   const RoundedIconButton(
       {super.key,
       required this.icon,
-      this.iconSize = 36,
+      this.iconSize = 48,
       required this.onPressed});
 
   @override

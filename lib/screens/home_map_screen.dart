@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/features/home_map/widgets/CurrentPositionButton.dart';
-import 'package:rowing_navigator/services/geo_service.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
@@ -15,18 +14,20 @@ import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
-import '../types/nav_mode_type.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Hooks
     final navigator = useNavigator();
     final navMap = useNavMap();
+    // Services
     final permission = PermissionService();
-    final geo = GeoService();
     final auth = AuthService();
+    // Constants
+    const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
 
     useEffect(() {
       Future(() async {
@@ -42,17 +43,6 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, []);
 
-    useEffect(() {
-      if (!navMap.isReady) return;
-      if (navigator.mode == NavMode.observer) {
-        final pos = navigator.currentPosition;
-        final lat = pos?.latitude ?? 35.681236;
-        final lng = pos?.longitude ?? 139.767125;
-        navMap.focus(lat, lng, null);
-      }
-      return null;
-    }, [navigator.currentPosition]);
-
     // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
     useEffect(() {
       if (!navMap.isReady) return;
@@ -66,7 +56,7 @@ class HomeMapScreen extends HookConsumerWidget {
             MarkerType.myBoat,
             myBoat.lat,
             myBoat.lng,
-            0.0, // 北向き固定の場合はmyBoat.headingを使用
+            myBoat.heading, // 北向き固定の場合はmyBoat.headingを使用
             "自艇",
             "自艇の位置情報\n${myBoat.boatId}",
           ));
@@ -107,8 +97,7 @@ class HomeMapScreen extends HookConsumerWidget {
           onMapCreated: (GoogleMapController controller) async {
             navMap.setController(controller);
             await permission.requestPermission(); // 位置情報の許可取得
-            final pos = await geo
-                .getCurrentPosition(LocationAccuracy.bestForNavigation);
+            final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
             navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
           },
           markers: navMap.markers,
@@ -144,9 +133,8 @@ class HomeMapScreen extends HookConsumerWidget {
                       margin: const EdgeInsets.only(top: 16),
                       child: CurrentPositionButton(
                         onPressed: () async {
-                          final pos = navigator.currentPosition;
-                          print(pos);
-                          if (pos == null) return;
+                          final pos = await navigator
+                              .getCurrentPosition(LOCATION_ACCURACY);
                           navMap.focus(pos.latitude, pos.longitude, 0.0);
                         },
                       ),

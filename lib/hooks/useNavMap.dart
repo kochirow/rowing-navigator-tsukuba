@@ -49,6 +49,7 @@ UseNavMap useNavMap() {
       infoWindow: InfoWindow(title: title, snippet: snippet),
       anchor: const Offset(0.5, 0.5),
       rotation: heading,
+      flat: true,
     );
   }
 

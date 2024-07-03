@@ -21,11 +21,9 @@ UseNavigator useNavigator() {
   final config = useState<NavConfig?>(null);
   final mode = useState<NavMode>(NavMode.observer);
   final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
-  final currentPosition = useState<Position?>(null);
   final myBoat = useState<Boat?>(null);
   final otherBoats = useState<List<Boat>>([]);
   // Streams
-  final posStreamSubscription = useState<StreamSubscription?>(null);
   final envStreamSubscription = useState<StreamSubscription?>(null);
   final watchTimer = useState<Timer?>(null);
   // Time
@@ -37,15 +35,10 @@ UseNavigator useNavigator() {
   final geoService = GeoService();
 
   // Constants
-  final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
   final POSITION_UPDATE_INTERVAL = 3;
 
-  watchPosition() {
-    posStreamSubscription.value = geoService
-        .getPositionStream(LOCATION_ACCURACY)
-        .listen((Position position) {
-      currentPosition.value = position;
-    });
+  Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
+    return await geoService.getCurrentPosition(accuracy);
   }
 
   watchEnv() {
@@ -63,8 +56,7 @@ UseNavigator useNavigator() {
   getLatestMyBoat() async {
     final preMyBoat = myBoat.value;
     preProcessTime.value = DateTime.now(); // Pre-Process Time
-    // final position = currentPosition.value!;
-    final position = await geoService.getCurrentPosition(LOCATION_ACCURACY);
+    final position = await getCurrentPosition(config.value!.accuracy);
     postProcessTime.value = DateTime.now(); // Post-Process Time
     double heading;
     if (preMyBoat == null) {
@@ -171,7 +163,6 @@ UseNavigator useNavigator() {
   }
 
   useEffect(() {
-    watchPosition();
     watchEnv();
     return () {
       envStreamSubscription.value?.cancel();
@@ -196,11 +187,11 @@ UseNavigator useNavigator() {
     config: config.value,
     mode: mode.value,
     safetyLevel: safetyLevel.value,
-    currentPosition: currentPosition.value,
     myBoat: myBoat.value,
     otherBoats: otherBoats.value,
     preProcessTime: preProcessTime.value,
     postProcessTime: postProcessTime.value,
+    getCurrentPosition: getCurrentPosition,
     startNavigation: startNavigation,
     stopNavigation: stopNavigation,
   );
@@ -210,11 +201,11 @@ class UseNavigator {
   final NavConfig? config;
   final NavMode mode;
   final SafetyLevel safetyLevel;
-  final Position? currentPosition;
   final Boat? myBoat;
   final List<Boat> otherBoats;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
+  final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
   final Future<void> Function(NavConfig config) startNavigation;
   final Future<void> Function() stopNavigation;
 
@@ -222,11 +213,11 @@ class UseNavigator {
     required this.config,
     required this.mode,
     required this.safetyLevel,
-    required this.currentPosition,
     required this.myBoat,
     required this.otherBoats,
     required this.preProcessTime,
     required this.postProcessTime,
+    required this.getCurrentPosition,
     required this.startNavigation,
     required this.stopNavigation,
   });
