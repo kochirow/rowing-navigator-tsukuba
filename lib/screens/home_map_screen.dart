@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
@@ -16,6 +15,7 @@ import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
+import '../types/nav_mode_type.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
@@ -41,6 +41,17 @@ class HomeMapScreen extends HookConsumerWidget {
       });
       return null;
     }, []);
+
+    useEffect(() {
+      if (!navMap.isReady) return;
+      if (navigator.mode == NavMode.observer) {
+        final pos = navigator.currentPosition;
+        final lat = pos?.latitude ?? 35.681236;
+        final lng = pos?.longitude ?? 139.767125;
+        navMap.focus(lat, lng, null);
+      }
+      return null;
+    }, [navigator.currentPosition]);
 
     // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
     useEffect(() {
@@ -109,7 +120,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 width: double.infinity,
                 child: BoatStatusCard(
                   myBoat: navigator.myBoat,
-                  accuracy: navigator.accuracy,
+                  config: navigator.config,
                   preProcessTime: navigator.preProcessTime,
                   postProcessTime: navigator.postProcessTime,
                 ))
@@ -133,8 +144,9 @@ class HomeMapScreen extends HookConsumerWidget {
                       margin: const EdgeInsets.only(top: 16),
                       child: CurrentPositionButton(
                         onPressed: () async {
-                          final pos = await geo.getCurrentPosition(
-                              LocationAccuracy.bestForNavigation);
+                          final pos = navigator.currentPosition;
+                          print(pos);
+                          if (pos == null) return;
                           navMap.focus(pos.latitude, pos.longitude, 0.0);
                         },
                       ),
@@ -158,8 +170,11 @@ class HomeMapScreen extends HookConsumerWidget {
                     if (!navMap.isReady || !auth.isSignedIn) return;
                     if (navigator.myBoat == null) {
                       final userId = auth.currentUser!.uid;
-                      final config =
-                          NavConfig(boatId: userId, boatType: 0, seatPos: 0);
+                      final config = NavConfig(
+                          boatId: userId,
+                          boatType: 0,
+                          seatPos: 0,
+                          accuracy: LocationAccuracy.bestForNavigation);
                       await navigator.startNavigation(config); // ボートの位置情報を監視
                       print("Navigation started.");
                     } else {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:rowing_navigator/types/safety_level.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
@@ -13,22 +12,41 @@ import '../services/geo_service.dart';
 import '../services/message_service.dart';
 import '../types/alert_type.dart';
 import '../types/collision_risk_level.dart';
+import '../types/nav_mode_type.dart';
+import '../types/safety_level.dart';
 import '../utils/heading.dart';
 
 UseNavigator useNavigator() {
-  final alert = useAlert();
+  // Navigator
   final config = useState<NavConfig?>(null);
+  final mode = useState<NavMode>(NavMode.observer);
   final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
+  final currentPosition = useState<Position?>(null);
   final myBoat = useState<Boat?>(null);
   final otherBoats = useState<List<Boat>>([]);
+  // Streams
+  final posStreamSubscription = useState<StreamSubscription?>(null);
   final envStreamSubscription = useState<StreamSubscription?>(null);
   final watchTimer = useState<Timer?>(null);
+  // Time
   final preProcessTime = useState<DateTime>(DateTime.now());
   final postProcessTime = useState<DateTime>(DateTime.now());
+  // Hooks
+  final alert = useAlert();
+  // Services
   final geoService = GeoService();
 
+  // Constants
   final LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
   final POSITION_UPDATE_INTERVAL = 3;
+
+  watchPosition() {
+    posStreamSubscription.value = geoService
+        .getPositionStream(LOCATION_ACCURACY)
+        .listen((Position position) {
+      currentPosition.value = position;
+    });
+  }
 
   watchEnv() {
     final envService = EnvService();
@@ -45,8 +63,8 @@ UseNavigator useNavigator() {
   getLatestMyBoat() async {
     final preMyBoat = myBoat.value;
     preProcessTime.value = DateTime.now(); // Pre-Process Time
-    final Position position =
-        await geoService.getCurrentPosition(LOCATION_ACCURACY);
+    // final position = currentPosition.value!;
+    final position = await geoService.getCurrentPosition(LOCATION_ACCURACY);
     postProcessTime.value = DateTime.now(); // Post-Process Time
     double heading;
     if (preMyBoat == null) {
@@ -101,16 +119,16 @@ UseNavigator useNavigator() {
   }
 
   navigate() async {
-    // ======== Update MyBoat Status ========
+    // ######## Update MyBoat Status ########
     final latestMyBoat = await getLatestMyBoat();
     myBoat.value = latestMyBoat;
 
-    // ======== Send Message ========
+    // ######## Send Message ########
     final message = Message.fromBoat(latestMyBoat);
     final messageService = MessageService();
-    messageService.sendMessage(message);
+    // messageService.sendMessage(message);
 
-    // ======== Evaluate Collision Risk ========
+    // ######## Evaluate Collision Risk ########
     final evaluator = CollisionRiskEvaluatorService();
     final riskLevel = evaluator.evaluateRisk(
       latestMyBoat,
@@ -119,15 +137,18 @@ UseNavigator useNavigator() {
     final safetyLevel_ = getSafetyLevelFrom(riskLevel);
     safetyLevel.value = safetyLevel_;
 
-    // ======== Alert ========
+    // ######## Alert ########
     // useEffectにて実装
   }
 
   startNavigation(NavConfig config_) async {
-    // メッセージを初期化
+    // モードを変更
+    mode.value = NavMode.navigator;
+    // 初期化
+    safetyLevel.value = SafetyLevel.safe;
     final messageService = MessageService();
     await messageService.clearMessage(config_.boatId);
-    // ナビゲーションの設定を保存
+    // 設定を保存
     config.value = config_;
     // ナビゲーションを開始
     await navigate();
@@ -138,6 +159,9 @@ UseNavigator useNavigator() {
   }
 
   stopNavigation() async {
+    // モードを変更
+    mode.value = NavMode.observer;
+    // 終了処理
     watchTimer.value?.cancel();
     final messageService = MessageService();
     await messageService.clearMessage(config.value!.boatId);
@@ -147,6 +171,7 @@ UseNavigator useNavigator() {
   }
 
   useEffect(() {
+    watchPosition();
     watchEnv();
     return () {
       envStreamSubscription.value?.cancel();
@@ -155,7 +180,7 @@ UseNavigator useNavigator() {
   }, []);
 
   useEffect(() {
-    // ======== Alert ========
+    // ######## Alert ########
     final safetyLevel_ = safetyLevel.value;
     if (safetyLevel_ == SafetyLevel.safe) {
       alert.stop();
@@ -168,9 +193,12 @@ UseNavigator useNavigator() {
   }, [safetyLevel.value]);
 
   return UseNavigator(
+    config: config.value,
+    mode: mode.value,
+    safetyLevel: safetyLevel.value,
+    currentPosition: currentPosition.value,
     myBoat: myBoat.value,
     otherBoats: otherBoats.value,
-    accuracy: LOCATION_ACCURACY,
     preProcessTime: preProcessTime.value,
     postProcessTime: postProcessTime.value,
     startNavigation: startNavigation,
@@ -179,18 +207,24 @@ UseNavigator useNavigator() {
 }
 
 class UseNavigator {
+  final NavConfig? config;
+  final NavMode mode;
+  final SafetyLevel safetyLevel;
+  final Position? currentPosition;
   final Boat? myBoat;
   final List<Boat> otherBoats;
-  final LocationAccuracy accuracy;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
   final Future<void> Function(NavConfig config) startNavigation;
   final Future<void> Function() stopNavigation;
 
   UseNavigator({
+    required this.config,
+    required this.mode,
+    required this.safetyLevel,
+    required this.currentPosition,
     required this.myBoat,
     required this.otherBoats,
-    required this.accuracy,
     required this.preProcessTime,
     required this.postProcessTime,
     required this.startNavigation,

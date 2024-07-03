@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 
 import 'package:rowing_navigator/models/boat_model.dart';
+import 'package:rowing_navigator/models/nav_config_model.dart';
 
 class BoatStatusCard extends StatelessWidget {
   final Boat? myBoat;
-  final LocationAccuracy accuracy;
+  final NavConfig? config;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
 
   const BoatStatusCard(
       {super.key,
       required this.myBoat,
-      required this.accuracy,
+      required this.config,
       required this.preProcessTime,
       required this.postProcessTime});
 
@@ -28,7 +28,7 @@ class BoatStatusCard extends StatelessWidget {
           "ボートID: ${myBoat?.boatId}\n"
           "緯度: ${myBoat?.lat.toStringAsFixed(14)}\n"
           "経度: ${myBoat?.lng.toStringAsFixed(14)}\n"
-          "精度: ${accuracy.name.toString()}\n"
+          "精度: ${config?.accuracy.name.toString()}\n"
           "開始時刻: ${preProcessTime.toLocal().toString()}\n"
           "確定時刻: ${myBoat?.timestamp.toLocal().toString()}\n"
           "終了時刻: ${postProcessTime.toLocal().toString()}\n"

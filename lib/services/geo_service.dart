@@ -12,4 +12,12 @@ class GeoService {
     );
     return position;
   }
+
+  Stream<Position> getPositionStream(LocationAccuracy accuracy) {
+    return Geolocator.getPositionStream(
+        locationSettings: LocationSettings(
+      accuracy: accuracy,
+      distanceFilter: 0,
+    ));
+  }
 }

@@ -1,0 +1,4 @@
+enum NavMode {
+  observer,
+  navigator,
+}
