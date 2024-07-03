@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:rowing_navigator/models/boat_model.dart';
 
-class BoatStatusCard extends HookConsumerWidget {
+class BoatStatusCard extends StatelessWidget {
   final Boat? myBoat;
   final LocationAccuracy accuracy;
   final DateTime preProcessTime;
@@ -18,7 +17,7 @@ class BoatStatusCard extends HookConsumerWidget {
       required this.postProcessTime});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       color: Colors.white.withOpacity(0.9),

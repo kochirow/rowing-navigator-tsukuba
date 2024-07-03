@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/features/home_map/widgets/CurrentPositionButton.dart';
 import 'package:rowing_navigator/services/geo_service.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
@@ -82,48 +84,96 @@ class HomeMapScreen extends HookConsumerWidget {
     }, [navigator.myBoat, navigator.otherBoats]);
 
     return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          title: null,
-        ),
-        body: Stack(alignment: Alignment.topCenter, children: <Widget>[
-          GoogleMap(
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            initialCameraPosition: navMap.initCamPos,
-            onMapCreated: (GoogleMapController controller) async {
-              navMap.setController(controller);
-              await permission.requestPermission(); // 位置情報の許可取得
-              final pos = await geo
-                  .getCurrentPosition(LocationAccuracy.bestForNavigation);
-              navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
-            },
-            markers: navMap.markers,
-          ),
-          // 画面上部に現在位置と時刻を表示
-          SizedBox(
-              width: double.infinity,
-              child: BoatStatusCard(
-                myBoat: navigator.myBoat,
-                accuracy: navigator.accuracy,
-                preProcessTime: navigator.preProcessTime,
-                postProcessTime: navigator.postProcessTime,
-              )),
-        ]),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () async {
-            if (!navMap.isReady || !auth.isSignedIn) return;
-            if (navigator.myBoat == null) {
-              final userId = auth.currentUser!.uid;
-              final config = NavConfig(boatId: userId, boatType: 0, seatPos: 0);
-              await navigator.startNavigation(config); // ボートの位置情報を監視
-              print("Navigation started.");
-            } else {
-              await navigator.stopNavigation();
-              print("Navigation stopped.");
-            }
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: null,
+      ),
+      body: Stack(alignment: Alignment.center, children: <Widget>[
+        GoogleMap(
+          myLocationEnabled: navigator.myBoat == null,
+          myLocationButtonEnabled: false,
+          initialCameraPosition: navMap.initCamPos,
+          onMapCreated: (GoogleMapController controller) async {
+            navMap.setController(controller);
+            await permission.requestPermission(); // 位置情報の許可取得
+            final pos = await geo
+                .getCurrentPosition(LocationAccuracy.bestForNavigation);
+            navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
           },
-          child: const Icon(Icons.my_location),
-        ));
+          markers: navMap.markers,
+        ),
+        // 画面上部に現在位置と時刻を表示
+        Column(
+          children: [
+            SizedBox(
+                width: double.infinity,
+                child: BoatStatusCard(
+                  myBoat: navigator.myBoat,
+                  accuracy: navigator.accuracy,
+                  preProcessTime: navigator.preProcessTime,
+                  postProcessTime: navigator.postProcessTime,
+                ))
+          ],
+        ),
+        Container(
+          alignment: Alignment.center,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [],
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 16),
+                      child: CurrentPositionButton(
+                        onPressed: () async {
+                          final pos = await geo.getCurrentPosition(
+                              LocationAccuracy.bestForNavigation);
+                          navMap.focus(pos.latitude, pos.longitude, 0.0);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        Container(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!navMap.isReady || !auth.isSignedIn) return;
+                    if (navigator.myBoat == null) {
+                      final userId = auth.currentUser!.uid;
+                      final config =
+                          NavConfig(boatId: userId, boatType: 0, seatPos: 0);
+                      await navigator.startNavigation(config); // ボートの位置情報を監視
+                      print("Navigation started.");
+                    } else {
+                      await navigator.stopNavigation();
+                      print("Navigation stopped.");
+                    }
+                  },
+                  child: const Text("Start Nav"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 }
