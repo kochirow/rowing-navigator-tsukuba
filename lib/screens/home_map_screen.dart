@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/services/geo_service.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
@@ -21,6 +23,7 @@ class HomeMapScreen extends HookConsumerWidget {
     final navigator = useNavigator();
     final navMap = useNavMap();
     final permission = PermissionService();
+    final geo = GeoService();
     final auth = AuthService();
 
     useEffect(() {
@@ -44,15 +47,17 @@ class HomeMapScreen extends HookConsumerWidget {
         final newMarkers = <Marker>{};
         // 自艇のマーカーを作成
         final myBoat = navigator.myBoat;
-        newMarkers.add(await navMap.createMarker(
-          myBoat.boatId,
-          MarkerType.myBoat,
-          myBoat.lat,
-          myBoat.lng,
-          myBoat.heading,
-          "自艇",
-          "自艇の位置情報\n${myBoat.boatId}",
-        ));
+        if (myBoat != null) {
+          newMarkers.add(await navMap.createMarker(
+            myBoat.boatId,
+            MarkerType.myBoat,
+            myBoat.lat,
+            myBoat.lng,
+            myBoat.heading,
+            "自艇",
+            "自艇の位置情報\n${myBoat.boatId}",
+          ));
+        }
         // 他艇のマーカーを作成
         final otherBoats = navigator.otherBoats;
         for (final boat in otherBoats) {
@@ -69,7 +74,9 @@ class HomeMapScreen extends HookConsumerWidget {
         // マーカーを更新
         await navMap.setMarkers(newMarkers);
         // 自艇の位置にフォーカス
-        await navMap.focus(myBoat.lat, myBoat.lng);
+        if (myBoat != null) {
+          await navMap.focus(myBoat.lat, myBoat.lng);
+        }
       });
       return null;
     }, [navigator.myBoat, navigator.otherBoats]);
@@ -87,9 +94,9 @@ class HomeMapScreen extends HookConsumerWidget {
             onMapCreated: (GoogleMapController controller) async {
               navMap.setController(controller);
               await permission.requestPermission(); // 位置情報の許可取得
-              final config =
-                  NavConfig(boatId: "my-boat", boatType: 0, seatPos: 0);
-              navigator.startNavigation(config); // ボートの位置情報を監視
+              final pos = await geo
+                  .getCurrentPosition(LocationAccuracy.bestForNavigation);
+              navMap.focus(pos.latitude, pos.longitude); // 現在地を中心に表示
             },
             markers: navMap.markers,
           ),
@@ -105,7 +112,17 @@ class HomeMapScreen extends HookConsumerWidget {
         ]),
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
-            navMap.focus(navigator.myBoat.lat, navigator.myBoat.lng);
+            if (!navMap.isReady || !auth.isSignedIn) return;
+            if (navigator.myBoat == null) {
+              final userId = auth.currentUser!.uid;
+              final config = NavConfig(boatId: userId, boatType: 0, seatPos: 0);
+              await navigator.startNavigation(config); // ボートの位置情報を監視
+              print("Navigation started.");
+            } else {
+              await navigator.stopNavigation();
+              print("Navigation stopped.");
+            }
+            // navMap.focus(navigator.myBoat.lat, navigator.myBoat.lng);
           },
           child: const Icon(Icons.my_location),
         ));

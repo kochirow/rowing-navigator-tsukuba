@@ -21,7 +21,7 @@ class CollisionRiskEvaluatorService {
         nearestDistance = distance;
         closestBoatId = targetBoat.boatId;
       }
-      if (distance < 25) {
+      if (distance < 10) {
         level = CollisionRiskLevel.lv5.index > level.index
             ? CollisionRiskLevel.lv5
             : level;

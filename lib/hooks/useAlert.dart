@@ -38,7 +38,7 @@ UseAlert useAlert() {
         source = AssetSource('audio/alert_lv4.mp3');
         break;
     }
-    await player.value.setVolume(0.5); // for dev
+    await player.value.setVolume(0.5);
     await player.value.setSource(source);
     await player.value.setReleaseMode(ReleaseMode.loop);
     await player.value.resume();

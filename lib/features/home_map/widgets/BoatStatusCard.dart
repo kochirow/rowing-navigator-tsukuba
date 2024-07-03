@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/models/boat_model.dart';
 
 class BoatStatusCard extends HookConsumerWidget {
-  final Boat myBoat;
+  final Boat? myBoat;
   final LocationAccuracy accuracy;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
@@ -26,15 +26,16 @@ class BoatStatusCard extends HookConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Text(
-          "緯度: ${myBoat.lat.toStringAsFixed(14)}\n"
-          "経度: ${myBoat.lng.toStringAsFixed(14)}\n"
+          "ボートID: ${myBoat?.boatId}\n"
+          "緯度: ${myBoat?.lat.toStringAsFixed(14)}\n"
+          "経度: ${myBoat?.lng.toStringAsFixed(14)}\n"
           "精度: ${accuracy.name.toString()}\n"
           "開始時刻: ${preProcessTime.toLocal().toString()}\n"
-          "確定時刻: ${myBoat.timestamp.toLocal().toString()}\n"
+          "確定時刻: ${myBoat?.timestamp.toLocal().toString()}\n"
           "終了時刻: ${postProcessTime.toLocal().toString()}\n"
           "表示時刻: ${DateTime.now().toLocal().toString()}\n"
-          "確定-開始: ${(myBoat.timestamp.difference(preProcessTime)).toString()}秒\n"
-          "方位角: ${myBoat.heading.toStringAsFixed(1)}",
+          "確定-開始: ${(myBoat?.timestamp.difference(preProcessTime)).toString()}秒\n"
+          "方位角: ${myBoat?.heading.toStringAsFixed(1)}",
           style: const TextStyle(fontSize: 16),
         ),
       ),
