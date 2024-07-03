@@ -14,7 +14,7 @@ UseNavMap useNavMap() {
   const RED_BOAT_ICON_PATH = 'assets/icons/red_boat.png';
   const initCamPos = CameraPosition(
     target: LatLng(35.681236, 139.767125), // 東京駅
-    zoom: 16.0,
+    zoom: 18.0,
   );
 
   void setController(GoogleMapController controller) {
@@ -52,13 +52,14 @@ UseNavMap useNavMap() {
     );
   }
 
-  Future<void> focus(double lat, double lng) async {
+  Future<void> focus(double lat, double lng, double heading) async {
     final zoomLevel = await mapController.value!.getZoomLevel();
     await mapController.value!.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: LatLng(lat, lng),
           zoom: zoomLevel,
+          bearing: heading,
         ),
       ),
     );

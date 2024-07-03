@@ -53,7 +53,7 @@ class HomeMapScreen extends HookConsumerWidget {
             MarkerType.myBoat,
             myBoat.lat,
             myBoat.lng,
-            myBoat.heading,
+            0.0, // 北向き固定の場合はmyBoat.headingを使用
             "自艇",
             "自艇の位置情報\n${myBoat.boatId}",
           ));
@@ -75,7 +75,7 @@ class HomeMapScreen extends HookConsumerWidget {
         await navMap.setMarkers(newMarkers);
         // 自艇の位置にフォーカス
         if (myBoat != null) {
-          await navMap.focus(myBoat.lat, myBoat.lng);
+          await navMap.focus(myBoat.lat, myBoat.lng, myBoat.heading);
         }
       });
       return null;
@@ -96,7 +96,7 @@ class HomeMapScreen extends HookConsumerWidget {
               await permission.requestPermission(); // 位置情報の許可取得
               final pos = await geo
                   .getCurrentPosition(LocationAccuracy.bestForNavigation);
-              navMap.focus(pos.latitude, pos.longitude); // 現在地を中心に表示
+              navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
             },
             markers: navMap.markers,
           ),
@@ -122,7 +122,6 @@ class HomeMapScreen extends HookConsumerWidget {
               await navigator.stopNavigation();
               print("Navigation stopped.");
             }
-            // navMap.focus(navigator.myBoat.lat, navigator.myBoat.lng);
           },
           child: const Icon(Icons.my_location),
         ));
