@@ -91,6 +91,7 @@ class HomeMapScreen extends HookConsumerWidget {
     return Scaffold(
       appBar: AppBar(),
       body: Stack(alignment: Alignment.center, children: <Widget>[
+        // ################ マップ ################
         GoogleMap(
           myLocationEnabled: navigator.myBoat == null,
           myLocationButtonEnabled: false,
@@ -103,7 +104,7 @@ class HomeMapScreen extends HookConsumerWidget {
           },
           markers: navMap.markers,
         ),
-        // 画面上部に現在位置と時刻を表示
+        // ################ 艇情報カード ################
         Column(
           children: [
             if (showInfo.value)
@@ -117,6 +118,7 @@ class HomeMapScreen extends HookConsumerWidget {
                   ))
           ],
         ),
+        // ################ 操作ボタン類 ################
         Container(
           alignment: Alignment.center,
           child: Padding(
@@ -131,29 +133,47 @@ class HomeMapScreen extends HookConsumerWidget {
                 Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    RoundedIconButton(
-                      icon: Icons.article,
-                      onPressed: () {
-                        showInfo.value = !showInfo.value;
-                      },
-                    ),
                     Container(
                       margin: const EdgeInsets.only(top: 16),
                       child: RoundedIconButton(
-                        icon: Icons.gps_fixed,
-                        onPressed: () async {
-                          final pos = await navigator
-                              .getCurrentPosition(LOCATION_ACCURACY);
-                          navMap.focus(pos.latitude, pos.longitude, 0.0);
+                        icon: Icons.article,
+                        onPressed: () {
+                          showInfo.value = !showInfo.value;
                         },
                       ),
                     ),
+                    if (navigator.mode == NavMode.observer)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        child: RoundedIconButton(
+                          icon: Icons.gps_fixed,
+                          onPressed: () async {
+                            final pos = await navigator
+                                .getCurrentPosition(LOCATION_ACCURACY);
+                            navMap.focus(pos.latitude, pos.longitude, 0.0);
+                          },
+                        ),
+                      ),
+                    if (navigator.mode == NavMode.navigator)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        child: RoundedIconButton(
+                          icon: Icons.gps_fixed,
+                          onPressed: () async {
+                            final pos = await navigator
+                                .getCurrentPosition(LOCATION_ACCURACY);
+                            navMap.focus(pos.latitude, pos.longitude,
+                                navigator.myBoat?.heading ?? 0.0);
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ],
             ),
           ),
         ),
+        // ################ ナビゲーションボタン ################
         Container(
           alignment: Alignment.bottomCenter,
           child: Padding(
