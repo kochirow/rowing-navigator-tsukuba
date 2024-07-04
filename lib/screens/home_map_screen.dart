@@ -5,7 +5,8 @@ import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/features/home_map/widgets/CurrentPositionButton.dart';
+import 'package:rowing_navigator/widgets/RoundedIconButton.dart';
+import 'package:rowing_navigator/features/home_map/widgets/NavButton.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../hooks/useNavigator.dart';
@@ -14,6 +15,7 @@ import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
+import '../types/nav_mode_type.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
@@ -23,6 +25,8 @@ class HomeMapScreen extends HookConsumerWidget {
     // Hooks
     final navigator = useNavigator();
     final navMap = useNavMap();
+    // State
+    final showInfo = useState(false);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -85,10 +89,7 @@ class HomeMapScreen extends HookConsumerWidget {
     }, [navigator.myBoat, navigator.otherBoats]);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: null,
-      ),
+      appBar: AppBar(),
       body: Stack(alignment: Alignment.center, children: <Widget>[
         GoogleMap(
           myLocationEnabled: navigator.myBoat == null,
@@ -105,14 +106,15 @@ class HomeMapScreen extends HookConsumerWidget {
         // 画面上部に現在位置と時刻を表示
         Column(
           children: [
-            SizedBox(
-                width: double.infinity,
-                child: BoatStatusCard(
-                  myBoat: navigator.myBoat,
-                  config: navigator.config,
-                  preProcessTime: navigator.preProcessTime,
-                  postProcessTime: navigator.postProcessTime,
-                ))
+            if (showInfo.value)
+              SizedBox(
+                  width: double.infinity,
+                  child: BoatStatusCard(
+                    myBoat: navigator.myBoat,
+                    config: navigator.config,
+                    preProcessTime: navigator.preProcessTime,
+                    postProcessTime: navigator.postProcessTime,
+                  ))
           ],
         ),
         Container(
@@ -129,9 +131,16 @@ class HomeMapScreen extends HookConsumerWidget {
                 Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    RoundedIconButton(
+                      icon: Icons.article,
+                      onPressed: () {
+                        showInfo.value = !showInfo.value;
+                      },
+                    ),
                     Container(
                       margin: const EdgeInsets.only(top: 16),
-                      child: CurrentPositionButton(
+                      child: RoundedIconButton(
+                        icon: Icons.gps_fixed,
                         onPressed: () async {
                           final pos = await navigator
                               .getCurrentPosition(LOCATION_ACCURACY);
@@ -150,30 +159,33 @@ class HomeMapScreen extends HookConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: () async {
-                    if (!navMap.isReady || !auth.isSignedIn) return;
-                    if (navigator.myBoat == null) {
-                      final userId = auth.currentUser!.uid;
-                      final config = NavConfig(
-                          boatId: userId,
-                          boatType: 0,
-                          seatPos: 0,
-                          accuracy: LocationAccuracy.bestForNavigation);
-                      await navigator.startNavigation(config); // ボートの位置情報を監視
-                      print("Navigation started.");
-                    } else {
-                      await navigator.stopNavigation();
-                      print("Navigation stopped.");
-                    }
-                  },
-                  child: const Text("Start Nav"),
-                ),
-              ],
-            ),
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (navigator.mode == NavMode.observer)
+                    NavButton(
+                      label: "Start Nav",
+                      onPressed: () async {
+                        if (!navMap.isReady || !auth.isSignedIn) return;
+                        final userId = auth.currentUser!.uid;
+                        final config = NavConfig(
+                            boatId: userId,
+                            boatType: 0,
+                            seatPos: 0,
+                            accuracy: LocationAccuracy.bestForNavigation);
+                        await navigator.startNavigation(config); // ボートの位置情報を監視
+                        print("Navigation started.");
+                      },
+                    ),
+                  if (navigator.mode == NavMode.navigator)
+                    NavButton(
+                        label: "Stop Nav",
+                        onPressed: () async {
+                          if (!navMap.isReady || !auth.isSignedIn) return;
+                          await navigator.stopNavigation();
+                          print("Navigation stopped.");
+                        }),
+                ]),
           ),
         ),
       ]),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,8 +21,17 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'Rowing Navigator',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+        useMaterial3: false,
+        // ======== Custom Color Scheme ========
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), // ベースを青に設定
+        primaryColor: const Color(0xFF095372),
+        primaryColorLight: const Color(0xFF4D9CBF),
+        primaryColorDark: const Color(0xFF002E4D),
+        scaffoldBackgroundColor: const Color(0xFFE0E0E0),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF095372),
+        ),
+        // =====================================
       ),
       home: const HomeMapScreen(),
     );
