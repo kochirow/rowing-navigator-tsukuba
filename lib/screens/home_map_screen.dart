@@ -5,10 +5,11 @@ import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/widgets/RoundedIconButton.dart';
-import 'package:rowing_navigator/features/home_map/widgets/NavButton.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
+import '../features/home_map/widgets/MapTypeSwitcher.dart';
+import '../features/home_map/widgets/NavButton.dart';
+import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavigator.dart';
 import '../hooks/useNavMap.dart';
 import '../models/nav_config_model.dart';
@@ -27,6 +28,7 @@ class HomeMapScreen extends HookConsumerWidget {
     final navMap = useNavMap();
     // State
     final showInfo = useState(false);
+    final mapType = useState(MapType.terrain);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -96,6 +98,7 @@ class HomeMapScreen extends HookConsumerWidget {
           myLocationEnabled: navigator.myBoat == null,
           myLocationButtonEnabled: false,
           initialCameraPosition: navMap.initCamPos,
+          mapType: mapType.value,
           onMapCreated: (GoogleMapController controller) async {
             navMap.setController(controller);
             await permission.requestPermission(); // 位置情報の許可取得
@@ -118,7 +121,7 @@ class HomeMapScreen extends HookConsumerWidget {
                   ))
           ],
         ),
-        // ################ 操作ボタン類 ################
+        // ################ 左右操作ボタン類 ################
         Container(
           alignment: Alignment.center,
           child: Padding(
@@ -126,10 +129,21 @@ class HomeMapScreen extends HookConsumerWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Column(
+                // ################ 左側 ################
+                Column(
                   mainAxisAlignment: MainAxisAlignment.end,
-                  children: [],
+                  children: [
+                    MapTypeSwitcher(
+                      mapType: mapType.value,
+                      onTap: () {
+                        mapType.value = mapType.value == MapType.terrain
+                            ? MapType.satellite
+                            : MapType.terrain;
+                      },
+                    ),
+                  ],
                 ),
+                // ################ 右側 ################
                 Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
