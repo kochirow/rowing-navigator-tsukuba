@@ -28,7 +28,9 @@ class HomeMapScreen extends HookConsumerWidget {
     final navMap = useNavMap();
     // State
     final showInfo = useState(false);
-    final mapType = useState(MapType.terrain);
+    final mapType = useState(MapType.normal);
+    final trackingMode = useState(true);
+    final progTracking = useState(false);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -81,10 +83,14 @@ class HomeMapScreen extends HookConsumerWidget {
           ));
         }
         // マーカーを更新
-        await navMap.setMarkers(newMarkers);
-        // 自艇の位置にフォーカス
+        navMap.setMarkers(newMarkers);
+        // 自艇を追跡
         if (myBoat != null) {
-          await navMap.focus(myBoat.lat, myBoat.lng, myBoat.heading);
+          // トラッキングモードなら追跡
+          if (trackingMode.value) {
+            progTracking.value = true; // プログラムによる追跡フラグを立てる
+            await navMap.focus(myBoat.lat, myBoat.lng, myBoat.heading);
+          }
         }
       });
       return null;
@@ -104,6 +110,13 @@ class HomeMapScreen extends HookConsumerWidget {
             await permission.requestPermission(); // 位置情報の許可取得
             final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
             navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
+          },
+          onCameraMoveStarted: () {
+            // ユーザーがマップを操作した場合はトラッキングモードを解除
+            if (!progTracking.value) {
+              trackingMode.value = false;
+            }
+            progTracking.value = false; // プログラムによる追跡フラグを解除
           },
           markers: navMap.markers,
         ),
@@ -136,9 +149,9 @@ class HomeMapScreen extends HookConsumerWidget {
                     MapTypeSwitcher(
                       mapType: mapType.value,
                       onTap: () {
-                        mapType.value = mapType.value == MapType.terrain
-                            ? MapType.satellite
-                            : MapType.terrain;
+                        mapType.value = mapType.value == MapType.normal
+                            ? MapType.hybrid
+                            : MapType.normal;
                       },
                     ),
                   ],
@@ -176,6 +189,8 @@ class HomeMapScreen extends HookConsumerWidget {
                           onPressed: () async {
                             final pos = await navigator
                                 .getCurrentPosition(LOCATION_ACCURACY);
+                            trackingMode.value = true;
+                            progTracking.value = true;
                             navMap.focus(pos.latitude, pos.longitude,
                                 navigator.myBoat?.heading ?? 0.0);
                           },

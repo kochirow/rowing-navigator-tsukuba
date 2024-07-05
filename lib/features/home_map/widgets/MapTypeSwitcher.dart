@@ -18,7 +18,7 @@ class MapTypeSwitcher extends StatelessWidget {
         side: const BorderSide(color: Colors.white, width: 3),
       ),
       child: Ink.image(
-        image: mapType == MapType.terrain
+        image: mapType == MapType.normal
             ? const AssetImage(SATELLITE_MAP_IMG_PATH)
             : const AssetImage(NORMAL_MAP_IMG_PATH),
         fit: BoxFit.cover,

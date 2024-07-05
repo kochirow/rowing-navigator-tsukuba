@@ -87,10 +87,11 @@ class UseNavMap {
   final GoogleMapController? mapController;
   final Set<Marker> markers;
   final bool isReady;
-  final Function setController;
-  final Function createMarker;
-  final Function setMarkers;
-  final Function focus;
+  final void Function(GoogleMapController controller) setController;
+  final Future<Marker> Function(String markerId, MarkerType type, double lat,
+      double lng, double heading, String title, String snippet) createMarker;
+  final void Function(Set<Marker> newMarkers) setMarkers;
+  final Future<void> Function(double lat, double lng, double heading) focus;
   final CameraPosition initCamPos;
 
   UseNavMap({
