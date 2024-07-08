@@ -9,6 +9,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/NavButton.dart';
+import '../hooks/useTracking.dart';
+import '../types/tracking_mode.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavigator.dart';
 import '../hooks/useNavMap.dart';
@@ -16,7 +18,7 @@ import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../types/marker_type.dart';
-import '../types/nav_mode_type.dart';
+import '../types/nav_mode.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
@@ -26,26 +28,29 @@ class HomeMapScreen extends HookConsumerWidget {
     // Hooks
     final navigator = useNavigator();
     final navMap = useNavMap();
+    final tracking = useTracking();
     // State
     final showInfo = useState(false);
     final mapType = useState(MapType.normal);
-    final trackingMode = useState(true);
-    final progTracking = useState(false);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
+    const LEAST_ZOOM_LEVEL = 17.0;
 
     focusP14y(double lat, double lng, double heading) async {
       // Focus programatically
-      progTracking.value = true; // プログラムによる追跡フラグを立てる
+      tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
       final currentZoomLevel = await navMap.getZoomLevel();
-      final zoomLevel = currentZoomLevel > 17.0 ? currentZoomLevel : 17.0;
+      final zoomLevel = currentZoomLevel > LEAST_ZOOM_LEVEL
+          ? currentZoomLevel
+          : LEAST_ZOOM_LEVEL;
       await navMap.focus(lat, lng, heading, zoomLevel);
     }
 
     useEffect(() {
+      // ログイン処理
       Future(() async {
         if (!auth.isSignedIn) {
           await auth.signInAnonymously();
@@ -72,7 +77,7 @@ class HomeMapScreen extends HookConsumerWidget {
             MarkerType.myBoat,
             myBoat.lat,
             myBoat.lng,
-            myBoat.heading, // 北向き固定の場合はmyBoat.headingを使用
+            myBoat.heading,
             "自艇",
             "自艇の位置情報\n${myBoat.boatId}",
           ));
@@ -92,12 +97,9 @@ class HomeMapScreen extends HookConsumerWidget {
         }
         // マーカーを更新
         navMap.setMarkers(newMarkers);
-        // 自艇を追跡
-        if (myBoat != null) {
-          // トラッキングモードなら追跡
-          if (trackingMode.value) {
-            focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
-          }
+        // ナビゲーションモードかつトラッキングモードなら自艇を追跡
+        if (myBoat != null && tracking.mode == TrackingMode.track) {
+          focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
         }
       });
       return null;
@@ -119,11 +121,12 @@ class HomeMapScreen extends HookConsumerWidget {
             focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
           },
           onCameraMoveStarted: () {
-            // ユーザーがマップを操作した場合はトラッキングモードを解除
-            if (!progTracking.value) {
-              trackingMode.value = false;
+            // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
+            if (!tracking.progFlag) {
+              tracking.setMode(TrackingMode.untrack);
             }
-            progTracking.value = false; // プログラムによる追跡フラグを解除
+            // プログラムによる操作フラグを解除
+            tracking.setProgFlag(false);
           },
           markers: navMap.markers,
         ),
@@ -182,6 +185,7 @@ class HomeMapScreen extends HookConsumerWidget {
                         child: RoundedIconButton(
                           icon: Icons.gps_fixed,
                           onPressed: () async {
+                            // 現在地をフォーカス
                             final pos = await navigator
                                 .getCurrentPosition(LOCATION_ACCURACY);
                             focusP14y(pos.latitude, pos.longitude, 0.0);
@@ -194,12 +198,14 @@ class HomeMapScreen extends HookConsumerWidget {
                         child: RoundedIconButton(
                           icon: Icons.gps_fixed,
                           onPressed: () async {
-                            final pos = await navigator
-                                .getCurrentPosition(LOCATION_ACCURACY);
-                            trackingMode.value = true;
-                            progTracking.value = true;
-                            focusP14y(pos.latitude, pos.longitude,
-                                navigator.myBoat?.heading ?? 0.0);
+                            // トラッキングモードに切り替え
+                            tracking.setMode(TrackingMode.track);
+                            // 現在位置をフォーカス
+                            final myBoat = navigator.myBoat;
+                            if (myBoat != null) {
+                              focusP14y(myBoat.lat, myBoat.lng,
+                                  navigator.myBoat?.heading ?? 0.0);
+                            }
                           },
                         ),
                       ),
@@ -223,14 +229,17 @@ class HomeMapScreen extends HookConsumerWidget {
                       label: "Start Nav",
                       onPressed: () async {
                         if (!navMap.isReady || !auth.isSignedIn) return;
+                        // ナビゲーションを開始
                         final userId = auth.currentUser!.uid;
                         final config = NavConfig(
                             boatId: userId,
                             boatType: 0,
                             seatPos: 0,
                             accuracy: LocationAccuracy.bestForNavigation);
-                        await navigator.startNavigation(config); // ボートの位置情報を監視
-                        trackingMode.value = true;
+                        await navigator.startNavigation(config);
+                        // トラッキングモードに切り替え
+                        tracking.setMode(TrackingMode.track);
+                        // 現在位置をフォーカス
                         final myBoat = navigator.myBoat;
                         if (myBoat != null) {
                           focusP14y(myBoat.lat, myBoat.lng,
@@ -244,10 +253,12 @@ class HomeMapScreen extends HookConsumerWidget {
                         label: "Stop Nav",
                         onPressed: () async {
                           if (!navMap.isReady || !auth.isSignedIn) return;
+                          // 現在位置をフォーカス
                           final myBoat = navigator.myBoat;
                           if (myBoat != null) {
                             focusP14y(myBoat.lat, myBoat.lng, 0.0);
                           }
+                          // ナビゲーションを停止
                           await navigator.stopNavigation();
                           print("Navigation stopped.");
                         }),

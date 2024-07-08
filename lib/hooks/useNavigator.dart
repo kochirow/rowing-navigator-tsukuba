@@ -14,7 +14,7 @@ import '../services/geo_service.dart';
 import '../services/message_service.dart';
 import '../types/alert_type.dart';
 import '../types/collision_risk_level.dart';
-import '../types/nav_mode_type.dart';
+import '../types/nav_mode.dart';
 import '../types/safety_level.dart';
 import '../utils/heading.dart';
 
