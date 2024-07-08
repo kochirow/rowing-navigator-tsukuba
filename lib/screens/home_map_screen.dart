@@ -8,7 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
-import '../features/home_map/widgets/NavButton.dart';
+import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useTracking.dart';
 import '../types/tracking_mode.dart';
 import '../widgets/RoundedIconButton.dart';
@@ -196,7 +196,8 @@ class HomeMapScreen extends HookConsumerWidget {
                       Container(
                         margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
-                          icon: Icons.gps_fixed,
+                          icon: Icons.navigation,
+                          angle: 45,
                           onPressed: () async {
                             // トラッキングモードに切り替え
                             tracking.setMode(TrackingMode.track);
@@ -225,7 +226,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (navigator.mode == NavMode.observer)
-                    NavButton(
+                    RoundedButton(
                       label: "Start Nav",
                       onPressed: () async {
                         if (!navMap.isReady || !auth.isSignedIn) return;
@@ -249,7 +250,7 @@ class HomeMapScreen extends HookConsumerWidget {
                       },
                     ),
                   if (navigator.mode == NavMode.navigator)
-                    NavButton(
+                    RoundedButton(
                         label: "Stop Nav",
                         onPressed: () async {
                           if (!navMap.isReady || !auth.isSignedIn) return;

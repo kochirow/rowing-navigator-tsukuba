@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-class NavButton extends StatelessWidget {
+class RoundedButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
 
-  const NavButton({
+  const RoundedButton({
     super.key,
     required this.label,
     required this.onPressed,
