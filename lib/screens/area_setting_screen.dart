@@ -16,16 +16,8 @@ import '../hooks/useNavMap.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 
-final drawPolygonEnabledProvider = StateProvider<bool>((ref) => false);
-final clearDrawingProvider = StateProvider<bool>((ref) => false);
-final polygonSetProvider = StateProvider<Set<Polygon>>((ref) => {});
-final getUserLocationProvider =
-    StateProvider<LatLng>((ref) => const LatLng(0, 0));
-
 class AreaSettingScreen extends HookConsumerWidget {
   const AreaSettingScreen({super.key});
-
-  // get math => null;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,11 +57,12 @@ class AreaSettingScreen extends HookConsumerWidget {
       ),
     };
 
-    final drawPolygonEnabled = ref.watch(drawPolygonEnabledProvider);
-    final currentPosition = ref.watch(getUserLocationProvider);
+    final drawPolygonEnabled = useState(false);
+    final currentPosition = useState(const LatLng(0, 0));
+    final clearDrawing = useState(false);
     final _controller = useMemoized(() => Completer<GoogleMapController>(), []);
 
-    final _polygonSet = ref.watch(polygonSetProvider);
+    final _polygonSet = useState(HashSet<Polygon>());
     final _polylineSet = useState<HashSet<Polyline>>(HashSet<Polyline>());
     final _latLngList = useState<List<LatLng>>([]);
 
@@ -81,12 +74,12 @@ class AreaSettingScreen extends HookConsumerWidget {
     void _clearPolygons() {
       _latLngList.value.clear();
       _polylineSet.value.clear();
-      _polygonSet.clear();
+      _polygonSet.value.clear();
     }
 
     void _onPanUpdate(DragUpdateDetails details) async {
-      if (ref.read(clearDrawingProvider.state).state) {
-        ref.read(clearDrawingProvider.state).state = false;
+      if (clearDrawing.value) {
+        clearDrawing.value = false;
         _clearPolygons();
       }
 
@@ -99,8 +92,6 @@ class AreaSettingScreen extends HookConsumerWidget {
         x = details.localPosition.dx;
         y = details.localPosition.dy;
       }
-      // x = details.localPosition.dx;
-      // y = details.localPosition.dy;
 
       if (x != null && y != null) {
         int xCoordinate = x.round();
@@ -138,7 +129,7 @@ class AreaSettingScreen extends HookConsumerWidget {
         } catch (e) {
           print(e);
         }
-        ref.read(polygonSetProvider.state).state = {..._polygonSet};
+        _polygonSet.value = HashSet<Polygon>.from(_polygonSet.value);
       }
     }
 
@@ -146,9 +137,9 @@ class AreaSettingScreen extends HookConsumerWidget {
       _lastXCoordinate = null;
       _lastYCoordinate = null;
 
-      _polygonSet
+      _polygonSet.value
           .removeWhere((polygon) => polygon.polygonId.value == 'user_polygon');
-      _polygonSet.add(
+      _polygonSet.value.add(
         Polygon(
           polygonId: const PolygonId('user_polygon'),
           points: _latLngList.value,
@@ -157,8 +148,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           fillColor: Colors.blue.withOpacity(0.4),
         ),
       );
-
-      ref.read(drawPolygonEnabledProvider.state).update((state) => !state);
+      drawPolygonEnabled.value = !drawPolygonEnabled.value;
     }
 
     Future<Position> _determinePosition(WidgetRef ref) async {
@@ -185,14 +175,13 @@ class AreaSettingScreen extends HookConsumerWidget {
       Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high);
       loading.value = false;
-      ref.read(getUserLocationProvider.state).state =
-          LatLng(position.latitude, position.longitude);
+      currentPosition.value = LatLng(position.latitude, position.longitude);
       return position;
     }
 
     void _toggleDrawing() {
       _clearPolygons();
-      ref.read(drawPolygonEnabledProvider.state).update((state) => !state);
+      drawPolygonEnabled.value = !drawPolygonEnabled.value;
     }
 
     useEffect(() {
@@ -220,15 +209,15 @@ class AreaSettingScreen extends HookConsumerWidget {
       body: loading.value
           ? const CircularProgressIndicator()
           : GestureDetector(
-              onPanUpdate: (drawPolygonEnabled) ? _onPanUpdate : null,
-              onPanEnd: (drawPolygonEnabled) ? _onPanEnd : null,
+              onPanUpdate: (drawPolygonEnabled.value) ? _onPanUpdate : null,
+              onPanEnd: (drawPolygonEnabled.value) ? _onPanEnd : null,
               child: GoogleMap(
                 mapType: MapType.normal,
                 initialCameraPosition: CameraPosition(
-                  target: currentPosition,
+                  target: currentPosition.value,
                   zoom: 14.4746,
                 ),
-                polygons: _polygonSet,
+                polygons: _polygonSet.value,
                 polylines: _polylineSet.value,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false,
@@ -240,7 +229,7 @@ class AreaSettingScreen extends HookConsumerWidget {
       floatingActionButton: FloatingActionButton(
         onPressed: _toggleDrawing,
         backgroundColor: Theme.of(context).primaryColor,
-        child: Icon(drawPolygonEnabled ? Icons.cancel : Icons.edit),
+        child: Icon(drawPolygonEnabled.value ? Icons.cancel : Icons.edit),
       ),
     );
     return Scaffold(
