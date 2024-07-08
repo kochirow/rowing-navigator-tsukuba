@@ -37,6 +37,14 @@ class HomeMapScreen extends HookConsumerWidget {
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
 
+    focusP14y(double lat, double lng, double heading) async {
+      // Focus programatically
+      progTracking.value = true; // プログラムによる追跡フラグを立てる
+      final currentZoomLevel = await navMap.getZoomLevel();
+      final zoomLevel = currentZoomLevel > 17.0 ? currentZoomLevel : 17.0;
+      await navMap.focus(lat, lng, heading, zoomLevel);
+    }
+
     useEffect(() {
       Future(() async {
         if (!auth.isSignedIn) {
@@ -88,8 +96,7 @@ class HomeMapScreen extends HookConsumerWidget {
         if (myBoat != null) {
           // トラッキングモードなら追跡
           if (trackingMode.value) {
-            progTracking.value = true; // プログラムによる追跡フラグを立てる
-            await navMap.focus(myBoat.lat, myBoat.lng, myBoat.heading);
+            focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
           }
         }
       });
@@ -109,7 +116,7 @@ class HomeMapScreen extends HookConsumerWidget {
             navMap.setController(controller);
             await permission.requestPermission(); // 位置情報の許可取得
             final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
-            navMap.focus(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
+            focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
           },
           onCameraMoveStarted: () {
             // ユーザーがマップを操作した場合はトラッキングモードを解除
@@ -138,7 +145,7 @@ class HomeMapScreen extends HookConsumerWidget {
         Container(
           alignment: Alignment.center,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -161,7 +168,7 @@ class HomeMapScreen extends HookConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Container(
-                      margin: const EdgeInsets.only(top: 16),
+                      margin: const EdgeInsets.only(top: 17),
                       child: RoundedIconButton(
                         icon: Icons.article,
                         onPressed: () {
@@ -171,19 +178,19 @@ class HomeMapScreen extends HookConsumerWidget {
                     ),
                     if (navigator.mode == NavMode.observer)
                       Container(
-                        margin: const EdgeInsets.only(top: 16),
+                        margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
                           icon: Icons.gps_fixed,
                           onPressed: () async {
                             final pos = await navigator
                                 .getCurrentPosition(LOCATION_ACCURACY);
-                            navMap.focus(pos.latitude, pos.longitude, 0.0);
+                            focusP14y(pos.latitude, pos.longitude, 0.0);
                           },
                         ),
                       ),
                     if (navigator.mode == NavMode.navigator)
                       Container(
-                        margin: const EdgeInsets.only(top: 16),
+                        margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
                           icon: Icons.gps_fixed,
                           onPressed: () async {
@@ -191,7 +198,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                 .getCurrentPosition(LOCATION_ACCURACY);
                             trackingMode.value = true;
                             progTracking.value = true;
-                            navMap.focus(pos.latitude, pos.longitude,
+                            focusP14y(pos.latitude, pos.longitude,
                                 navigator.myBoat?.heading ?? 0.0);
                           },
                         ),
@@ -206,7 +213,7 @@ class HomeMapScreen extends HookConsumerWidget {
         Container(
           alignment: Alignment.bottomCenter,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
             child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -223,6 +230,12 @@ class HomeMapScreen extends HookConsumerWidget {
                             seatPos: 0,
                             accuracy: LocationAccuracy.bestForNavigation);
                         await navigator.startNavigation(config); // ボートの位置情報を監視
+                        trackingMode.value = true;
+                        final myBoat = navigator.myBoat;
+                        if (myBoat != null) {
+                          focusP14y(myBoat.lat, myBoat.lng,
+                              navigator.myBoat?.heading ?? 0.0);
+                        }
                         print("Navigation started.");
                       },
                     ),
@@ -231,6 +244,10 @@ class HomeMapScreen extends HookConsumerWidget {
                         label: "Stop Nav",
                         onPressed: () async {
                           if (!navMap.isReady || !auth.isSignedIn) return;
+                          final myBoat = navigator.myBoat;
+                          if (myBoat != null) {
+                            focusP14y(myBoat.lat, myBoat.lng, 0.0);
+                          }
                           await navigator.stopNavigation();
                           print("Navigation stopped.");
                         }),

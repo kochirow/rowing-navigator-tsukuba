@@ -22,6 +22,10 @@ UseNavMap useNavMap() {
     isReady.value = true;
   }
 
+  Future<double> getZoomLevel() {
+    return mapController.value!.getZoomLevel();
+  }
+
   void setMarkers(Set<Marker> newMarkers) {
     markers.value = newMarkers;
   }
@@ -53,13 +57,13 @@ UseNavMap useNavMap() {
     );
   }
 
-  Future<void> focus(double lat, double lng, double heading) async {
-    final zoomLevel = await mapController.value!.getZoomLevel();
+  Future<void> focus(
+      double lat, double lng, double heading, double zoomLevel) async {
     CameraPosition camPos;
     camPos = CameraPosition(
       target: LatLng(lat, lng),
-      zoom: zoomLevel,
       bearing: heading,
+      zoom: zoomLevel,
     );
     await mapController.value!.animateCamera(
       CameraUpdate.newCameraPosition(camPos),
@@ -74,6 +78,7 @@ UseNavMap useNavMap() {
 
   return UseNavMap(
       mapController: mapController.value,
+      getZoomLevel: getZoomLevel,
       markers: markers.value,
       isReady: isReady.value,
       setController: setController,
@@ -85,17 +90,20 @@ UseNavMap useNavMap() {
 
 class UseNavMap {
   final GoogleMapController? mapController;
+  final Future<double> Function() getZoomLevel;
   final Set<Marker> markers;
   final bool isReady;
   final void Function(GoogleMapController controller) setController;
   final Future<Marker> Function(String markerId, MarkerType type, double lat,
       double lng, double heading, String title, String snippet) createMarker;
   final void Function(Set<Marker> newMarkers) setMarkers;
-  final Future<void> Function(double lat, double lng, double heading) focus;
+  final Future<void> Function(
+      double lat, double lng, double heading, double zoomLevel) focus;
   final CameraPosition initCamPos;
 
   UseNavMap({
     required this.mapController,
+    required this.getZoomLevel,
     required this.markers,
     required this.isReady,
     required this.setController,
