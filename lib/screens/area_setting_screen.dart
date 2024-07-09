@@ -31,50 +31,25 @@ class AreaSettingScreen extends HookConsumerWidget {
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
 
-    final polylines = <Polyline>{
-      const Polyline(
-        polylineId: PolylineId("test"),
-        points: [
-          LatLng(35.133, 136.8373),
-          LatLng(35.1334, 136.8374),
-          LatLng(35.1335, 136.8372),
-        ],
-        color: Colors.red,
-        width: 2,
-      ),
-    };
-    final polygons = <Polygon>{
-      Polygon(
-        polygonId: const PolygonId("test"),
-        points: const [
-          LatLng(35.130, 136.837),
-          LatLng(35.1295, 136.838),
-          LatLng(35.131, 136.838),
-        ],
-        fillColor: Colors.red.withOpacity(0.5),
-        strokeColor: Colors.red,
-        strokeWidth: 2,
-      ),
-    };
-
     final drawPolygonEnabled = useState(false);
     final currentPosition = useState(const LatLng(0, 0));
     final clearDrawing = useState(false);
     final _controller = useMemoized(() => Completer<GoogleMapController>(), []);
 
-    final _polygonSet = useState(HashSet<Polygon>());
-    final _polylineSet = useState<HashSet<Polyline>>(HashSet<Polyline>());
-    final _latLngList = useState<List<LatLng>>([]);
+    final polygonSet = useState(HashSet<Polygon>());
+    final polylineSet = useState<HashSet<Polyline>>(HashSet<Polyline>());
+    final latLngList = useState<List<LatLng>>([]);
 
     final loading = useState(true);
 
-    int? _lastXCoordinate;
-    int? _lastYCoordinate;
+    final lastXCoordinate = useState<int?>(null);
+    final lastYCoordinate = useState<int?>(null);
+    final lastLatLng = useState<LatLng?>(null);
 
     void _clearPolygons() {
-      _latLngList.value.clear();
-      _polylineSet.value.clear();
-      _polygonSet.value.clear();
+      latLngList.value.clear();
+      polylineSet.value.clear();
+      polygonSet.value.clear();
     }
 
     void _onPanUpdate(DragUpdateDetails details) async {
@@ -97,61 +72,70 @@ class AreaSettingScreen extends HookConsumerWidget {
         int xCoordinate = x.round();
         int yCoordinate = y.round();
 
-        if (_lastXCoordinate != null && _lastYCoordinate != null) {
+        if (lastXCoordinate.value != null && lastYCoordinate.value != null) {
           var distance = math.sqrt(
-              math.pow(xCoordinate - _lastXCoordinate!, 2) +
-                  math.pow(yCoordinate - _lastYCoordinate!, 2));
-          if (distance > 80.0) return;
+              math.pow(xCoordinate - lastXCoordinate.value!, 2) +
+                  math.pow(yCoordinate - lastYCoordinate.value!, 2));
+          if (distance > 80) return;
         }
 
-        _lastXCoordinate = xCoordinate;
-        _lastYCoordinate = yCoordinate;
-
+        final GoogleMapController controller = await _controller.future;
         ScreenCoordinate screenCoordinate =
             ScreenCoordinate(x: xCoordinate, y: yCoordinate);
-
-        final GoogleMapController controller = await _controller.future;
         LatLng latLng = await controller.getLatLng(screenCoordinate);
 
-        try {
-          _latLngList.value.add(latLng);
+        if (lastLatLng.value != null) {
+          final distance = Geolocator.distanceBetween(
+              lastLatLng.value!.latitude,
+              lastLatLng.value!.longitude,
+              latLng.latitude,
+              latLng.longitude);
+          if (distance < 1) return;
+        }
 
-          _polylineSet.value.removeWhere(
+        lastXCoordinate.value = xCoordinate;
+        lastYCoordinate.value = yCoordinate;
+        lastLatLng.value = latLng;
+
+        try {
+          latLngList.value.add(latLng);
+
+          polylineSet.value.removeWhere(
               (polyline) => polyline.polylineId.value == 'user_polyline');
-          _polylineSet.value.add(
+          polylineSet.value.add(
             Polyline(
               polylineId: const PolylineId('user_polyline'),
-              points: _latLngList.value,
+              points: latLngList.value,
               width: 2,
-              color: Colors.blue,
+              color: Colors.red,
             ),
           );
         } catch (e) {
           print(e);
         }
-        _polygonSet.value = HashSet<Polygon>.from(_polygonSet.value);
+        polygonSet.value = HashSet<Polygon>.from(polygonSet.value);
       }
     }
 
     void _onPanEnd(DragEndDetails details) async {
-      _lastXCoordinate = null;
-      _lastYCoordinate = null;
+      lastXCoordinate.value = null;
+      lastYCoordinate.value = null;
 
-      _polygonSet.value
+      polygonSet.value
           .removeWhere((polygon) => polygon.polygonId.value == 'user_polygon');
-      _polygonSet.value.add(
+      polygonSet.value.add(
         Polygon(
           polygonId: const PolygonId('user_polygon'),
-          points: _latLngList.value,
+          points: latLngList.value,
           strokeWidth: 2,
-          strokeColor: Colors.blue,
-          fillColor: Colors.blue.withOpacity(0.4),
+          strokeColor: Colors.red,
+          fillColor: Colors.red.withOpacity(0.4),
         ),
       );
       drawPolygonEnabled.value = !drawPolygonEnabled.value;
     }
 
-    Future<Position> _determinePosition(WidgetRef ref) async {
+    Future<Position> _determinePosition() async {
       bool serviceEnabled;
       LocationPermission permission;
 
@@ -186,7 +170,7 @@ class AreaSettingScreen extends HookConsumerWidget {
 
     useEffect(() {
       loading.value = true;
-      _determinePosition(ref);
+      _determinePosition();
       return null;
     }, []);
 
@@ -212,18 +196,53 @@ class AreaSettingScreen extends HookConsumerWidget {
               onPanUpdate: (drawPolygonEnabled.value) ? _onPanUpdate : null,
               onPanEnd: (drawPolygonEnabled.value) ? _onPanEnd : null,
               child: GoogleMap(
-                mapType: MapType.normal,
+                mapType: MapType.hybrid,
                 initialCameraPosition: CameraPosition(
                   target: currentPosition.value,
                   zoom: 14.4746,
                 ),
-                polygons: _polygonSet.value,
-                polylines: _polylineSet.value,
+                polygons: polygonSet.value,
+                polylines: polylineSet.value,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false,
                 onMapCreated: (GoogleMapController controller) {
                   _controller.complete(controller);
                 },
+                circles: {
+                  Circle(
+                    circleId: const CircleId('lv2'),
+                    center: currentPosition.value,
+                    radius: 200,
+                    fillColor: Colors.green.withOpacity(0.3),
+                    strokeWidth: 0,
+                    zIndex: -12,
+                  ),
+                  Circle(
+                    circleId: const CircleId('lv3'),
+                    center: currentPosition.value,
+                    radius: 100,
+                    fillColor: Colors.yellow.withOpacity(0.3),
+                    strokeWidth: 0,
+                    zIndex: -12,
+                  ),
+                  Circle(
+                    circleId: const CircleId('lv4'),
+                    center: currentPosition.value,
+                    radius: 50,
+                    fillColor: Colors.pink.withOpacity(0.3),
+                    strokeWidth: 0,
+                    zIndex: -11,
+                  ),
+                  Circle(
+                    circleId: const CircleId('lv5'),
+                    center: currentPosition.value,
+                    radius: 10,
+                    fillColor: Colors.red.withOpacity(0.5),
+                    strokeWidth: 0,
+                    zIndex: -10,
+                  ),
+                },
+                buildingsEnabled: false,
               ),
             ),
       floatingActionButton: FloatingActionButton(
@@ -250,8 +269,8 @@ class AreaSettingScreen extends HookConsumerWidget {
           },
           onCameraMoveStarted: () {},
           // markers: navMap.markers,
-          polylines: polylines,
-          polygons: polygons,
+          // polylines: polylines,
+          // polygons: polygons,
         ),
         // ################ 左右操作ボタン類 ################
         Container(
