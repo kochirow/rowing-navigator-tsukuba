@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/utils/ship_area.dart';
 
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
@@ -110,26 +111,28 @@ class HomeMapScreen extends HookConsumerWidget {
       body: Stack(alignment: Alignment.center, children: <Widget>[
         // ################ マップ ################
         GoogleMap(
-          myLocationEnabled: navigator.myBoat == null,
-          myLocationButtonEnabled: false,
-          initialCameraPosition: navMap.initCamPos,
-          mapType: mapType.value,
-          onMapCreated: (GoogleMapController controller) async {
-            navMap.setController(controller);
-            await permission.requestPermission(); // 位置情報の許可取得
-            final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
-            focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
-          },
-          onCameraMoveStarted: () {
-            // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
-            if (!tracking.progFlag) {
-              tracking.setMode(TrackingMode.untrack);
-            }
-            // プログラムによる操作フラグを解除
-            tracking.setProgFlag(false);
-          },
-          markers: navMap.markers,
-        ),
+            myLocationEnabled: navigator.myBoat == null,
+            myLocationButtonEnabled: false,
+            initialCameraPosition: navMap.initCamPos,
+            mapType: mapType.value,
+            onMapCreated: (GoogleMapController controller) async {
+              navMap.setController(controller);
+              await permission.requestPermission(); // 位置情報の許可取得
+              final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
+              focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
+            },
+            onCameraMoveStarted: () {
+              // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
+              if (!tracking.progFlag) {
+                tracking.setMode(TrackingMode.untrack);
+              }
+              // プログラムによる操作フラグを解除
+              tracking.setProgFlag(false);
+            },
+            markers: navMap.markers,
+            circles: navigator.myBoat != null
+                ? getShipArea(navigator.myBoat!.lat, navigator.myBoat!.lng)
+                : {}),
         // ################ 艇情報カード ################
         Column(
           children: [

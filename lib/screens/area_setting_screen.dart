@@ -34,7 +34,6 @@ class AreaSettingScreen extends HookConsumerWidget {
     final drawPolygonEnabled = useState(false);
     final currentPosition = useState(const LatLng(0, 0));
     final clearDrawing = useState(false);
-    final _controller = useMemoized(() => Completer<GoogleMapController>(), []);
 
     final polygonSet = useState(HashSet<Polygon>());
     final polylineSet = useState<HashSet<Polyline>>(HashSet<Polyline>());
@@ -79,7 +78,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           if (distance > 80) return;
         }
 
-        final GoogleMapController controller = await _controller.future;
+        final GoogleMapController controller = navMap.mapController!;
         ScreenCoordinate screenCoordinate =
             ScreenCoordinate(x: xCoordinate, y: yCoordinate);
         LatLng latLng = await controller.getLatLng(screenCoordinate);
@@ -205,7 +204,6 @@ class AreaSettingScreen extends HookConsumerWidget {
                   mapType: mapType.value,
                   onMapCreated: (GoogleMapController controller) async {
                     navMap.setController(controller);
-                    _controller.complete(controller);
                     await permission.requestPermission(); // 位置情報の許可取得
                     final pos = await Geolocator.getCurrentPosition(
                         desiredAccuracy: LOCATION_ACCURACY);
