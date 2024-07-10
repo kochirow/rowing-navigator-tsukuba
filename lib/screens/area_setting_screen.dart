@@ -190,153 +190,139 @@ class AreaSettingScreen extends HookConsumerWidget {
     }, []);
 
     return Scaffold(
+      appBar: AppBar(),
       body: loading.value
           ? const CircularProgressIndicator()
           : GestureDetector(
               onPanUpdate: (drawPolygonEnabled.value) ? _onPanUpdate : null,
               onPanEnd: (drawPolygonEnabled.value) ? _onPanEnd : null,
-              child: GoogleMap(
-                mapType: MapType.hybrid,
-                initialCameraPosition: CameraPosition(
-                  target: currentPosition.value,
-                  zoom: 14.4746,
+              child: Stack(alignment: Alignment.center, children: <Widget>[
+                // ################ マップ ################
+                GoogleMap(
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: false,
+                  initialCameraPosition: navMap.initCamPos,
+                  mapType: mapType.value,
+                  onMapCreated: (GoogleMapController controller) async {
+                    navMap.setController(controller);
+                    _controller.complete(controller);
+                    await permission.requestPermission(); // 位置情報の許可取得
+                    final pos = await Geolocator.getCurrentPosition(
+                        desiredAccuracy: LOCATION_ACCURACY);
+                    await navMap.focus(pos.latitude, pos.longitude, 0, 17.0);
+                  },
+                  onCameraMoveStarted: () {},
+                  // markers: navMap.markers,
+                  polylines: polylineSet.value,
+                  polygons: polygonSet.value,
+                  circles: {
+                    Circle(
+                      circleId: const CircleId('lv2'),
+                      center: currentPosition.value,
+                      radius: 200,
+                      fillColor: Colors.green.withOpacity(0.3),
+                      strokeWidth: 0,
+                      zIndex: -12,
+                    ),
+                    Circle(
+                      circleId: const CircleId('lv3'),
+                      center: currentPosition.value,
+                      radius: 100,
+                      fillColor: Colors.yellow.withOpacity(0.3),
+                      strokeWidth: 0,
+                      zIndex: -12,
+                    ),
+                    Circle(
+                      circleId: const CircleId('lv4'),
+                      center: currentPosition.value,
+                      radius: 50,
+                      fillColor: Colors.pink.withOpacity(0.3),
+                      strokeWidth: 0,
+                      zIndex: -11,
+                    ),
+                    Circle(
+                      circleId: const CircleId('lv5'),
+                      center: currentPosition.value,
+                      radius: 10,
+                      fillColor: Colors.red.withOpacity(0.5),
+                      strokeWidth: 0,
+                      zIndex: -10,
+                    ),
+                  },
                 ),
-                polygons: polygonSet.value,
-                polylines: polylineSet.value,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                onMapCreated: (GoogleMapController controller) {
-                  _controller.complete(controller);
-                },
-                circles: {
-                  Circle(
-                    circleId: const CircleId('lv2'),
-                    center: currentPosition.value,
-                    radius: 200,
-                    fillColor: Colors.green.withOpacity(0.3),
-                    strokeWidth: 0,
-                    zIndex: -12,
+                // ################ 左右操作ボタン類 ################
+                Container(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 48, horizontal: 17),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // ################ 左側 ################
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                                margin: const EdgeInsets.only(top: 17),
+                                child: MapTypeSwitcher(
+                                  mapType: mapType.value,
+                                  onTap: () {
+                                    mapType.value =
+                                        mapType.value == MapType.normal
+                                            ? MapType.hybrid
+                                            : MapType.normal;
+                                  },
+                                ))
+                          ],
+                        ),
+                        // ################ 右側 ################
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.edit,
+                                onPressed: () {},
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.delete,
+                                onPressed: () async {},
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  Circle(
-                    circleId: const CircleId('lv3'),
-                    center: currentPosition.value,
-                    radius: 100,
-                    fillColor: Colors.yellow.withOpacity(0.3),
-                    strokeWidth: 0,
-                    zIndex: -12,
+                ),
+                // ################ ナビゲーションボタン ################
+                Container(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 48, horizontal: 17),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          RoundedButton(
+                            label: "Save",
+                            onPressed: () async {},
+                          ),
+                        ]),
                   ),
-                  Circle(
-                    circleId: const CircleId('lv4'),
-                    center: currentPosition.value,
-                    radius: 50,
-                    fillColor: Colors.pink.withOpacity(0.3),
-                    strokeWidth: 0,
-                    zIndex: -11,
-                  ),
-                  Circle(
-                    circleId: const CircleId('lv5'),
-                    center: currentPosition.value,
-                    radius: 10,
-                    fillColor: Colors.red.withOpacity(0.5),
-                    strokeWidth: 0,
-                    zIndex: -10,
-                  ),
-                },
-                buildingsEnabled: false,
-              ),
-            ),
+                ),
+              ])),
       floatingActionButton: FloatingActionButton(
         onPressed: _toggleDrawing,
         backgroundColor: Theme.of(context).primaryColor,
         child: Icon(drawPolygonEnabled.value ? Icons.cancel : Icons.edit),
       ),
-    );
-    return Scaffold(
-      appBar: AppBar(),
-      body: Stack(alignment: Alignment.center, children: <Widget>[
-        // ################ マップ ################
-        GoogleMap(
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
-          initialCameraPosition: navMap.initCamPos,
-          mapType: mapType.value,
-          onMapCreated: (GoogleMapController controller) async {
-            navMap.setController(controller);
-            await permission.requestPermission(); // 位置情報の許可取得
-            final pos = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LOCATION_ACCURACY);
-            await navMap.focus(pos.latitude, pos.longitude, 0, 17.0);
-          },
-          onCameraMoveStarted: () {},
-          // markers: navMap.markers,
-          // polylines: polylines,
-          // polygons: polygons,
-        ),
-        // ################ 左右操作ボタン類 ################
-        Container(
-          alignment: Alignment.center,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // ################ 左側 ################
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                        margin: const EdgeInsets.only(top: 17),
-                        child: MapTypeSwitcher(
-                          mapType: mapType.value,
-                          onTap: () {
-                            mapType.value = mapType.value == MapType.normal
-                                ? MapType.hybrid
-                                : MapType.normal;
-                          },
-                        ))
-                  ],
-                ),
-                // ################ 右側 ################
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 17),
-                      child: RoundedIconButton(
-                        icon: Icons.edit,
-                        onPressed: () {},
-                      ),
-                    ),
-                    Container(
-                      margin: const EdgeInsets.only(top: 17),
-                      child: RoundedIconButton(
-                        icon: Icons.delete,
-                        onPressed: () async {},
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        // ################ ナビゲーションボタン ################
-        Container(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  RoundedButton(
-                    label: "Save",
-                    onPressed: () async {},
-                  ),
-                ]),
-          ),
-        ),
-      ]),
     );
   }
 }
