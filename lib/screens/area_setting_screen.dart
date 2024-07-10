@@ -25,6 +25,7 @@ class AreaSettingScreen extends HookConsumerWidget {
     final navMap = useNavMap();
     // State
     final mapType = useState(MapType.normal);
+    final loading = useState(true);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -32,31 +33,22 @@ class AreaSettingScreen extends HookConsumerWidget {
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
 
     final drawPolygonEnabled = useState(false);
-    final currentPosition = useState(const LatLng(0, 0));
-    final clearDrawing = useState(false);
 
     final polygonSet = useState(HashSet<Polygon>());
     final polylineSet = useState<HashSet<Polyline>>(HashSet<Polyline>());
     final latLngList = useState<List<LatLng>>([]);
-
-    final loading = useState(true);
 
     final lastXCoordinate = useState<int?>(null);
     final lastYCoordinate = useState<int?>(null);
     final lastLatLng = useState<LatLng?>(null);
 
     void _clearPolygons() {
-      latLngList.value.clear();
-      polylineSet.value.clear();
-      polygonSet.value.clear();
+      latLngList.value = [];
+      polylineSet.value = HashSet.from({});
+      polygonSet.value = HashSet.from({});
     }
 
     void _onPanUpdate(DragUpdateDetails details) async {
-      if (clearDrawing.value) {
-        clearDrawing.value = false;
-        _clearPolygons();
-      }
-
       double? x, y;
 
       if (Platform.isAndroid) {
@@ -75,6 +67,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           var distance = math.sqrt(
               math.pow(xCoordinate - lastXCoordinate.value!, 2) +
                   math.pow(yCoordinate - lastYCoordinate.value!, 2));
+          print(distance);
           if (distance > 80) return;
         }
 
@@ -131,51 +124,13 @@ class AreaSettingScreen extends HookConsumerWidget {
           fillColor: Colors.red.withOpacity(0.4),
         ),
       );
-      drawPolygonEnabled.value = !drawPolygonEnabled.value;
-    }
-
-    Future<Position> _determinePosition() async {
-      bool serviceEnabled;
-      LocationPermission permission;
-
-      serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        return Future.error('位置情報サービスが無効です。');
-      }
-
-      permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          return Future.error('位置情報を取得する権限がありません。');
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        return Future.error('位置情報サービスの権限が永久に拒否されています。権限を要求することができません。');
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
-      loading.value = false;
-      currentPosition.value = LatLng(position.latitude, position.longitude);
-      return position;
-    }
-
-    void _toggleDrawing() {
-      _clearPolygons();
-      drawPolygonEnabled.value = !drawPolygonEnabled.value;
+      // drawPolygonEnabled.value = !drawPolygonEnabled.value;
     }
 
     useEffect(() {
-      loading.value = true;
-      _determinePosition();
-      return null;
-    }, []);
-
-    useEffect(() {
-      // ログイン処理
       Future(() async {
+        loading.value = true;
+        // ログイン処理
         if (!auth.isSignedIn) {
           await auth.signInAnonymously();
           print("Signed in with temporary account.");
@@ -184,6 +139,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           print("Already signed in.");
           print("UID: ${auth.currentUser?.uid}");
         }
+        loading.value = false;
       });
       return null;
     }, []);
@@ -191,10 +147,22 @@ class AreaSettingScreen extends HookConsumerWidget {
     return Scaffold(
       appBar: AppBar(),
       body: loading.value
-          ? const CircularProgressIndicator()
+          ? Center(
+              child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    child: const CircularProgressIndicator()),
+                const Text("Loading...")
+              ],
+            ))
           : GestureDetector(
               onPanUpdate: (drawPolygonEnabled.value) ? _onPanUpdate : null,
               onPanEnd: (drawPolygonEnabled.value) ? _onPanEnd : null,
+              onScaleUpdate: (_) {
+                print("onScaleUpdate");
+              },
               child: Stack(alignment: Alignment.center, children: <Widget>[
                 // ################ マップ ################
                 GoogleMap(
@@ -204,49 +172,15 @@ class AreaSettingScreen extends HookConsumerWidget {
                   mapType: mapType.value,
                   onMapCreated: (GoogleMapController controller) async {
                     navMap.setController(controller);
-                    await permission.requestPermission(); // 位置情報の許可取得
+                    await permission
+                        .requestLocationServicePermission(); // 位置情報の許可取得
                     final pos = await Geolocator.getCurrentPosition(
                         desiredAccuracy: LOCATION_ACCURACY);
                     await navMap.focus(pos.latitude, pos.longitude, 0, 17.0);
                   },
                   onCameraMoveStarted: () {},
-                  // markers: navMap.markers,
                   polylines: polylineSet.value,
                   polygons: polygonSet.value,
-                  circles: {
-                    Circle(
-                      circleId: const CircleId('lv2'),
-                      center: currentPosition.value,
-                      radius: 200,
-                      fillColor: Colors.green.withOpacity(0.3),
-                      strokeWidth: 0,
-                      zIndex: -12,
-                    ),
-                    Circle(
-                      circleId: const CircleId('lv3'),
-                      center: currentPosition.value,
-                      radius: 100,
-                      fillColor: Colors.yellow.withOpacity(0.3),
-                      strokeWidth: 0,
-                      zIndex: -12,
-                    ),
-                    Circle(
-                      circleId: const CircleId('lv4'),
-                      center: currentPosition.value,
-                      radius: 50,
-                      fillColor: Colors.pink.withOpacity(0.3),
-                      strokeWidth: 0,
-                      zIndex: -11,
-                    ),
-                    Circle(
-                      circleId: const CircleId('lv5'),
-                      center: currentPosition.value,
-                      radius: 10,
-                      fillColor: Colors.red.withOpacity(0.5),
-                      strokeWidth: 0,
-                      zIndex: -10,
-                    ),
-                  },
                 ),
                 // ################ 左右操作ボタン類 ################
                 Container(
@@ -282,14 +216,18 @@ class AreaSettingScreen extends HookConsumerWidget {
                               margin: const EdgeInsets.only(top: 17),
                               child: RoundedIconButton(
                                 icon: Icons.edit,
-                                onPressed: () {},
+                                onPressed: () {
+                                  drawPolygonEnabled.value = true;
+                                },
                               ),
                             ),
                             Container(
                               margin: const EdgeInsets.only(top: 17),
                               child: RoundedIconButton(
                                 icon: Icons.delete,
-                                onPressed: () async {},
+                                onPressed: () async {
+                                  _clearPolygons();
+                                },
                               ),
                             ),
                           ],
@@ -316,11 +254,6 @@ class AreaSettingScreen extends HookConsumerWidget {
                   ),
                 ),
               ])),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _toggleDrawing,
-        backgroundColor: Theme.of(context).primaryColor,
-        child: Icon(drawPolygonEnabled.value ? Icons.cancel : Icons.edit),
-      ),
     );
   }
 }

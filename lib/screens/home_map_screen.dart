@@ -117,7 +117,7 @@ class HomeMapScreen extends HookConsumerWidget {
             mapType: mapType.value,
             onMapCreated: (GoogleMapController controller) async {
               navMap.setController(controller);
-              await permission.requestPermission(); // 位置情報の許可取得
+              await permission.requestLocationServicePermission(); // 位置情報の許可取得
               final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
               focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
             },
