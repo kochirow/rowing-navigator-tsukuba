@@ -1,0 +1,1 @@
+enum MapEditorMode { select, edit }
