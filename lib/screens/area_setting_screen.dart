@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'package:rowing_navigator/types/map_editor_mode.dart';
 
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../hooks/useMapEditor.dart';
+import '../utils/mean_lat_lng.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavMap.dart';
 import '../services/auth_service.dart';
@@ -25,6 +27,9 @@ class AreaSettingScreen extends HookConsumerWidget {
     // State
     final mapType = useState(MapType.hybrid);
     final loading = useState(true);
+    // navMapのstateが更新されないため当Widgetで状態管理
+    final polygons_ = useState<Set<Polygon>>({});
+    final markers_ = useState<Set<Marker>>({});
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -48,6 +53,54 @@ class AreaSettingScreen extends HookConsumerWidget {
       return null;
     }, []);
 
+    useEffect(() {
+      if (!navMap.isReady) return;
+      // obastaclesに合わせてポリゴンを再描画
+      final polygons = HashSet<Polygon>.from({}); // 新しいPolygonを作成
+      final markers = HashSet<Marker>.from({}); // 新しいMarkerを作成
+
+      for (final obstacle in mapEditor.obstacles) {
+        // 障害物領域を作成
+        final polygon = navMap.createPolygon(
+          obstacle.id,
+          obstacle.points,
+          () => navMap.mapController!
+              .showMarkerInfoWindow(MarkerId(obstacle.id)) // InfoWindowを表示
+          ,
+        );
+        polygons.add(polygon);
+        // 領域の中心にInfoWindowを配置
+        final centerLatLng = getMeanLatLng(obstacle.points);
+        final marker = navMap.createHiddenMarker(
+          obstacle.id,
+          centerLatLng,
+          () async {
+            mapEditor.deleteObastacle(obstacle.id); // 障害物を削除
+          },
+        );
+        markers.add(marker);
+      }
+      // 描画を更新
+      polygons_.value = polygons;
+      markers_.value = markers;
+      return null;
+    }, [mapEditor.obstacles, navMap.isReady]);
+
+    useEffect(() {
+      final drawingLinePoints = mapEditor.drawingLinePoints;
+      if (drawingLinePoints.isEmpty) {
+        navMap.setPolylines({}); // 描画中の線を削除
+      } else {
+        // 描画中の線を描画
+        final newPolyline = navMap.createPolyline(
+          drawingLinePoints,
+        );
+        final polyline = HashSet<Polyline>.from({newPolyline});
+        navMap.setPolylines(polyline); // 描画を更新
+      }
+      return null;
+    }, [mapEditor.drawingLinePoints]);
+
     return Scaffold(
       appBar: AppBar(),
       body: loading.value
@@ -62,10 +115,10 @@ class AreaSettingScreen extends HookConsumerWidget {
               ],
             ))
           : GestureDetector(
-              onPanUpdate: (mapEditor.mode.value == MapEditorMode.edit)
+              onPanUpdate: (mapEditor.mode == MapEditorMode.edit)
                   ? mapEditor.draw
                   : null,
-              onPanEnd: (mapEditor.mode.value == MapEditorMode.edit)
+              onPanEnd: (mapEditor.mode == MapEditorMode.edit)
                   ? mapEditor.finishDraw
                   : null,
               child: Stack(alignment: Alignment.center, children: <Widget>[
@@ -84,9 +137,9 @@ class AreaSettingScreen extends HookConsumerWidget {
                     await navMap.focus(pos.latitude, pos.longitude, 0, 17.0);
                   },
                   onCameraMoveStarted: () {},
-                  polylines: mapEditor.polylineSet.value,
-                  polygons: mapEditor.polygonSet.value,
-                  markers: mapEditor.markerSet.value,
+                  polylines: navMap.polylines,
+                  polygons: polygons_.value,
+                  markers: markers_.value,
                 ),
                 // ################ 左右操作ボタン類 ################
                 Container(
@@ -121,16 +174,16 @@ class AreaSettingScreen extends HookConsumerWidget {
                             Container(
                               margin: const EdgeInsets.only(top: 17),
                               child: RoundedIconButton(
-                                icon: mapEditor.mode.value == MapEditorMode.edit
+                                icon: mapEditor.mode == MapEditorMode.edit
                                     ? Icons.close
                                     : Icons.add,
                                 onPressed: () {
-                                  mapEditor.mode.value = mapEditor.mode.value ==
-                                          MapEditorMode.select
-                                      ? MapEditorMode.edit
-                                      : MapEditorMode.select;
-                                  mapEditor.lastPoint.value = null;
-                                  mapEditor.drawingLinePoints.value = [];
+                                  mapEditor.setMode(
+                                      mapEditor.mode == MapEditorMode.select
+                                          ? MapEditorMode.edit
+                                          : MapEditorMode.select);
+                                  mapEditor.setLastPoint(null);
+                                  mapEditor.setDrawingLinePoints([]);
                                 },
                               ),
                             ),

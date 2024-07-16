@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -9,7 +8,6 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/env_service.dart';
 
 import '../types/map_editor_mode.dart';
-import '../utils/mean_lat_lng.dart';
 
 UseMapEditor useMapEditor(GoogleMapController? mapController) {
   final mode = useState(MapEditorMode.select); // エディタのモード
@@ -17,9 +15,6 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
   final obstaclesSubscription =
       useState<StreamSubscription?>(null); // 障害物リストのStream
   /* spellchecker: disable */
-  final polylineSet = useState(HashSet<Polyline>()); // Polyline
-  final polygonSet = useState(HashSet<Polygon>()); // Polygon
-  final markerSet = useState(HashSet<Marker>()); // Marker
   final drawingLinePoints = useState<List<LatLng>>([]); // 描画中の線の座標リスト
   final lastPoint = useState<LatLng?>(null); // 直前の描画座標
   // Services
@@ -31,40 +26,12 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     mode.value = newMode;
   }
 
-  Polygon createPolygon(
-      String polygonId, List<LatLng> points, void Function()? onTap) {
-    return Polygon(
-      polygonId: PolygonId(polygonId),
-      points: points,
-      strokeWidth: 2,
-      strokeColor: Colors.red,
-      fillColor: Colors.red.withOpacity(0.4),
-      consumeTapEvents: true, // タップイベントを受け取る
-      onTap: onTap,
-    );
+  void setLastPoint(LatLng? newPoint) {
+    lastPoint.value = newPoint;
   }
 
-  Polyline createPolyline(List<LatLng> points) {
-    return Polyline(
-      polylineId: const PolylineId("drawing_line"),
-      points: points,
-      width: 2,
-      color: Colors.red,
-    );
-  }
-
-  Marker createMarker(
-    String markerId,
-    LatLng position,
-    void Function()? onTap,
-  ) {
-    return Marker(
-      markerId: MarkerId(markerId),
-      position: position,
-      infoWindow: InfoWindow(title: "削除", onTap: onTap),
-      anchor: const Offset(0.5, 0), // 表示位置を調整
-      alpha: 0, // Markerを非表示
-    );
+  void setDrawingLinePoints(List<LatLng> newPoints) {
+    drawingLinePoints.value = newPoints;
   }
 
   Future<LatLng> convertScreenCoordinateToLatLng(double x, double y) async {
@@ -121,93 +88,63 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     erasePolyline();
   }
 
-  useEffect(() {
-    // obastaclesに合わせてポリゴンを再描画
-    final polygons = HashSet<Polygon>.from({}); // 新しいPolygonを作成
-    final markers = HashSet<Marker>.from({}); // 新しいMarkerを作成
+  void deleteObstacle(String id) async {
+    await env.deleteStaticObstacle(id); // 障害物をDBから削除
+    obstacles.value.removeWhere((o) => o.id == id);
+    obstacles.value = List<StaticObstacle>.from(obstacles.value);
+  }
 
-    for (final obstacle in obstacles.value) {
-      // 障害物領域を作成
-      final polygon = createPolygon(
-        obstacle.id,
-        obstacle.points,
-        () => mapController!
-            .showMarkerInfoWindow(MarkerId(obstacle.id)) // InfoWindowを表示
-        ,
-      );
-      polygons.add(polygon);
-      // 領域の中心にInfoWindowを配置
-      final centerLatLng = getMeanLatLng(obstacle.points);
-      final marker = createMarker(
-        obstacle.id,
-        centerLatLng,
-        () async {
-          await env.deleteStaticObstacle(obstacle.id); // DBから障害物を削除
-          obstacles.value.removeWhere((o) => o.id == obstacle.id);
-          obstacles.value = List<StaticObstacle>.from(obstacles.value);
-        },
-      );
-      markers.add(marker);
-    }
-    // 描画を更新
-    polygonSet.value = polygons;
-    markerSet.value = markers;
-    return null;
-  }, [obstacles.value]);
-
-  useEffect(() {
-    if (drawingLinePoints.value.isEmpty) {
-      polylineSet.value = HashSet<Polyline>.from({}); // 描画中の線を削除
-    } else {
-      // 描画中の線を描画
-      final newPolyline = createPolyline(
-        drawingLinePoints.value,
-      );
-      final polyline = HashSet<Polyline>.from({newPolyline});
-      polylineSet.value = polyline; // 描画を更新
-    }
-    return null;
-  }, [drawingLinePoints.value]);
-
-  useEffect(() {
+  void watchObstacles() {
     obstaclesSubscription.value =
         env.getStaticObstaclesStream().listen((staticObs) {
       List<StaticObstacle> obstacles_ = staticObs["obstacles"];
       obstacles.value = obstacles_;
     });
-    return null;
+  }
+
+  useEffect(() {
+    watchObstacles();
+    return () {
+      obstaclesSubscription.value?.cancel();
+    };
   }, []);
 
   return UseMapEditor(
-    mode: mode,
-    polylineSet: polylineSet,
-    drawingLinePoints: drawingLinePoints,
-    polygonSet: polygonSet,
-    markerSet: markerSet,
-    lastPoint: lastPoint,
+    mode: mode.value,
+    obstacles: obstacles.value,
+    drawingLinePoints: drawingLinePoints.value,
+    lastPoint: lastPoint.value,
     draw: draw,
     finishDraw: finishDraw,
+    deleteObastacle: deleteObstacle,
+    setMode: setMode,
+    setLastPoint: setLastPoint,
+    setDrawingLinePoints: setDrawingLinePoints,
   );
 }
 
 class UseMapEditor {
-  final ValueNotifier<MapEditorMode> mode;
-  final ValueNotifier<HashSet<Polyline>> polylineSet;
-  final ValueNotifier<List<LatLng>> drawingLinePoints;
-  final ValueNotifier<HashSet<Polygon>> polygonSet;
-  final ValueNotifier<HashSet<Marker>> markerSet;
-  final ValueNotifier<LatLng?> lastPoint;
+  final MapEditorMode mode;
+  final List<StaticObstacle> obstacles;
+  final List<LatLng> drawingLinePoints;
+  final LatLng? lastPoint;
   final void Function(DragUpdateDetails details) draw;
   final void Function(DragEndDetails details) finishDraw;
+  final void Function(String id) deleteObastacle;
+  final void Function(MapEditorMode newMode) setMode;
+  final void Function(LatLng? newPoint) setLastPoint;
+  final void Function(List<LatLng> newPoints) setDrawingLinePoints;
 
   UseMapEditor({
     required this.mode,
-    required this.polylineSet,
+    required this.obstacles,
     required this.drawingLinePoints,
-    required this.polygonSet,
-    required this.markerSet,
     required this.lastPoint,
     required this.draw,
     required this.finishDraw,
+    required this.deleteObastacle,
+    required this.setMode,
+    required this.setLastPoint,
+    required this.setDrawingLinePoints,
   });
 }
