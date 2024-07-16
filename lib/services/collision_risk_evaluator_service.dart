@@ -1,4 +1,6 @@
 import 'package:flutter_map_math/flutter_geo_math.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/utils/winding_algorithm.dart';
 
 import '../models/boat_model.dart';
 import '../models/static_obstacle_model.dart';
@@ -47,6 +49,13 @@ class CollisionRiskEvaluatorService {
       }
     }
     for (final obstacle in obstacles) {
+      final myBoatPos = LatLng(myBoat.lat, myBoat.lng);
+      final isInside = isPointInPolygon(myBoatPos, obstacle.points);
+      if (isInside) {
+        level = CollisionRiskLevel.lv5.index > level.index
+            ? CollisionRiskLevel.lv5
+            : level;
+      }
       for (final point in obstacle.points) {
         final distance = mapMath.distanceBetween(
           myBoat.lat,
