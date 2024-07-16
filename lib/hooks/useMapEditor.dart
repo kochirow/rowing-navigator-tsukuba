@@ -115,11 +115,9 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     if (drawingLinePoints.value.length < 3) return;
 
     // 障害物を作成
-    final areaId = DateTime.now().toString();
     final points = drawingLinePoints.value;
-    final newObstacle = StaticObstacle(id: areaId, points: points); // 障害物を作成
-    obstacles.value.add(newObstacle); // 障害物リストに追加
-    obstacles.value = List<StaticObstacle>.from(obstacles.value);
+    final newObstacle = StaticObstacle(id: "dummy", points: points); // 障害物を作成
+    await env.addStaticObstacle(newObstacle); // 障害物をDBに登録
     erasePolyline();
   }
 
@@ -143,7 +141,8 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
       final marker = createMarker(
         obstacle.id,
         centerLatLng,
-        () {
+        () async {
+          await env.deleteStaticObstacle(obstacle.id); // DBから障害物を削除
           obstacles.value.removeWhere((o) => o.id == obstacle.id);
           obstacles.value = List<StaticObstacle>.from(obstacles.value);
         },

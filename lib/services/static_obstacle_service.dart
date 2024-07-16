@@ -5,6 +5,7 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 
 class StaticObstacleService {
   final staticObstacleRef = StaticObstacleAPI();
+
   Stream<Map<String, dynamic>> getStaticObstaclesStream() {
     final staticObstaclesStream_ = staticObstacleRef.collection.snapshots();
     final staticObstaclesStream =
@@ -13,11 +14,12 @@ class StaticObstacleService {
       stream.listen((snapshot) {
         List<StaticObstacle> obstacles = [];
         for (final doc in snapshot.docs) {
+          final id = doc.id;
           final obstacle_ = doc.data();
           List<LatLng> points = (obstacle_["points"] as List<dynamic>)
               .map<LatLng>((point) => LatLng(point.latitude, point.longitude))
               .toList();
-          final obstacle = StaticObstacle(id: obstacle_["id"], points: points);
+          final obstacle = StaticObstacle(id: id, points: points);
           obstacles.add(obstacle);
         }
         controller.add({"obstacles": obstacles} as Map<String, dynamic>);
@@ -25,5 +27,15 @@ class StaticObstacleService {
       return controller.stream;
     }));
     return staticObstaclesStream;
+  }
+
+  Future<void> addStaticObstacle(StaticObstacle obstacle) async {
+    await staticObstacleRef.collection.doc().set(obstacle.toJson());
+    print("Completed addStaticObstacle");
+  }
+
+  Future<void> deleteStaticObstacle(String obstacleId) async {
+    await staticObstacleRef.collection.doc(obstacleId).delete();
+    print("Completed deleteStaticObstacle");
   }
 }
