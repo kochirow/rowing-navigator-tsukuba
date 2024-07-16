@@ -4,7 +4,7 @@ import 'package:rowing_navigator/models/boat_model.dart';
 import '../services/message_service.dart';
 
 class DynamicObstacleService {
-  Stream<Map<String, dynamic>> getDynamicObstacleStream() {
+  Stream<Map<String, dynamic>> getDynamicObstaclesStream() {
     final boatsStream = getBoatsStream();
     final dynamicObstacleStream =
         boatsStream.transform(StreamTransformer.fromBind((stream) {

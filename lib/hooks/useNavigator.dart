@@ -53,8 +53,9 @@ UseNavigator useNavigator() {
 
   watchEnv() {
     final envService = EnvService();
-    envStreamSubscription.value = envService.getEnvStream().listen((env) {
-      final List<Boat> boats = env['boats'];
+    envStreamSubscription.value =
+        envService.getDynamicObstaclesStream().listen((obstacles) {
+      final List<Boat> boats = obstacles['boats'];
       otherBoats.value = boats
           .where((boat) => config.value != null
               ? (boat.boatId != config.value!.boatId)

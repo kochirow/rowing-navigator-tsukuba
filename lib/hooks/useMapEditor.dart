@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -5,19 +6,24 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
+import 'package:rowing_navigator/services/env_service.dart';
 
 import '../types/map_editor_mode.dart';
 import '../utils/mean_lat_lng.dart';
 
 UseMapEditor useMapEditor(GoogleMapController? mapController) {
   final mode = useState(MapEditorMode.select); // エディタのモード
-  final obstacles = useState<List<StaticObstacleModel>>([]); // 障害物リスト
+  final obstacles = useState<List<StaticObstacle>>([]); // 障害物リスト
+  final obstaclesSubscription =
+      useState<StreamSubscription?>(null); // 障害物リストのStream
   /* spellchecker: disable */
   final polylineSet = useState(HashSet<Polyline>()); // Polyline
   final polygonSet = useState(HashSet<Polygon>()); // Polygon
   final markerSet = useState(HashSet<Marker>()); // Marker
   final drawingLinePoints = useState<List<LatLng>>([]); // 描画中の線の座標リスト
   final lastPoint = useState<LatLng?>(null); // 直前の描画座標
+  // Services
+  final env = EnvService();
   // Constants
   final MIN_EDGE_LENGTH = 1.0; // ポリゴンの最小辺長
 
@@ -111,10 +117,9 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     // 障害物を作成
     final areaId = DateTime.now().toString();
     final points = drawingLinePoints.value;
-    final newObstacle =
-        StaticObstacleModel(id: areaId, points: points); // 障害物を作成
+    final newObstacle = StaticObstacle(id: areaId, points: points); // 障害物を作成
     obstacles.value.add(newObstacle); // 障害物リストに追加
-    obstacles.value = List<StaticObstacleModel>.from(obstacles.value);
+    obstacles.value = List<StaticObstacle>.from(obstacles.value);
     erasePolyline();
   }
 
@@ -140,7 +145,7 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
         centerLatLng,
         () {
           obstacles.value.removeWhere((o) => o.id == obstacle.id);
-          obstacles.value = List<StaticObstacleModel>.from(obstacles.value);
+          obstacles.value = List<StaticObstacle>.from(obstacles.value);
         },
       );
       markers.add(marker);
@@ -164,6 +169,15 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     }
     return null;
   }, [drawingLinePoints.value]);
+
+  useEffect(() {
+    obstaclesSubscription.value =
+        env.getStaticObstaclesStream().listen((staticObs) {
+      List<StaticObstacle> obstacles_ = staticObs["obstacles"];
+      obstacles.value = obstacles_;
+    });
+    return null;
+  }, []);
 
   return UseMapEditor(
     mode: mode,
