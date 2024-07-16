@@ -150,6 +150,7 @@ UseNavigator useNavigator() {
     final riskLevel = evaluator.evaluateRisk(
       latestMyBoat,
       otherBoats.value,
+      obstacles.value,
     );
     final safetyLevel_ = getSafetyLevelFrom(riskLevel);
     safetyLevel.value = safetyLevel_;
