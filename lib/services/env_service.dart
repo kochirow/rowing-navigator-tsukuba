@@ -4,16 +4,17 @@ import '../models/boat_model.dart';
 import 'dynamic_obstacle_service.dart';
 
 class EnvService {
-  final dynamicObstacleService = DynamicObstacle();
+  final dynamicObstacleService = DynamicObstacleService();
 
   Stream<dynamic> getEnvStream() {
     // 将来的にStaticObstacleを含めてenvStreamに変換するして返す
-    final boatsStream = dynamicObstacleService.getBoatsStream();
+    final dynamicObstacleStream =
+        dynamicObstacleService.getDynamicObstacleStream();
     final envStream =
-        boatsStream.transform(StreamTransformer.fromBind((stream) {
+        dynamicObstacleStream.transform(StreamTransformer.fromBind((stream) {
       final controller = StreamController<Map<String, dynamic>>();
-      stream.listen((boats) {
-        controller.add({"boats": boats as List<Boat>});
+      stream.listen((dynamicObstacle) {
+        controller.add({"boats": dynamicObstacle["boats"] as List<Boat>});
       });
       return controller.stream;
     }));
