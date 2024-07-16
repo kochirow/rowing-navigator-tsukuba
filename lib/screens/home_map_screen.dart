@@ -34,6 +34,7 @@ class HomeMapScreen extends HookConsumerWidget {
     // State
     final showInfo = useState(false);
     final mapType = useState(MapType.normal);
+    final polygons_ = useState<Set<Polygon>>({}); // navMapに持たせると再描画されない
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -107,6 +108,24 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, [navigator.myBoat, navigator.otherBoats]);
 
+    useEffect(() {
+      // 障害物のポリゴンを描画
+      final newPolygons = <Polygon>{};
+      for (final obstacle in navigator.obstacles) {
+        final points = obstacle.points
+            .map((point) => LatLng(point.latitude, point.longitude))
+            .toList();
+        newPolygons.add(Polygon(
+          polygonId: PolygonId(obstacle.id),
+          points: points,
+          strokeWidth: 0,
+          fillColor: Colors.red.withOpacity(0.5),
+        ));
+      }
+      polygons_.value = newPolygons;
+      return null;
+    }, [navigator.obstacles]);
+
     return Scaffold(
       appBar: AppBar(),
       body: Stack(alignment: Alignment.center, children: <Widget>[
@@ -131,6 +150,7 @@ class HomeMapScreen extends HookConsumerWidget {
               tracking.setProgFlag(false);
             },
             markers: navMap.markers,
+            polygons: polygons_.value,
             circles: navigator.myBoat != null
                 ? getShipArea(navigator.myBoat!.lat, navigator.myBoat!.lng)
                 : {}),

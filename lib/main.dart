@@ -34,8 +34,8 @@ class App extends StatelessWidget {
         ),
         // =====================================
       ),
-      // home: const HomeMapScreen(),
-      home: const AreaSettingScreen(),
+      home: const HomeMapScreen(),
+      // home: const AreaSettingScreen(),
     );
   }
 }

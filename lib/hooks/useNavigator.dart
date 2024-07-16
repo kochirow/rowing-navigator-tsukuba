@@ -8,6 +8,7 @@ import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
 import '../models/message_model.dart';
 import '../models/nav_config_model.dart';
+import '../models/static_obstacle_model.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/env_service.dart';
 import '../services/geo_service.dart';
@@ -25,10 +26,12 @@ UseNavigator useNavigator() {
   final safetyLevel = useState<SafetyLevel>(SafetyLevel.safe);
   final myBoat = useState<Boat?>(null);
   final otherBoats = useState<List<Boat>>([]);
+  final obstacles = useState<List<StaticObstacle>>([]);
   final heading = useState<double?>(null);
   // Streams
   final headingStreamSubscription = useState<StreamSubscription?>(null);
-  final envStreamSubscription = useState<StreamSubscription?>(null);
+  final dynamicObsStreamSubscription = useState<StreamSubscription?>(null);
+  final staticObsStreamSubscription = useState<StreamSubscription?>(null);
   final watchTimer = useState<Timer?>(null);
   // Time
   final preProcessTime = useState<DateTime>(DateTime.now());
@@ -53,7 +56,7 @@ UseNavigator useNavigator() {
 
   watchEnv() {
     final envService = EnvService();
-    envStreamSubscription.value =
+    dynamicObsStreamSubscription.value =
         envService.getDynamicObstaclesStream().listen((obstacles) {
       final List<Boat> boats = obstacles['boats'];
       otherBoats.value = boats
@@ -61,6 +64,11 @@ UseNavigator useNavigator() {
               ? (boat.boatId != config.value!.boatId)
               : true)
           .toList();
+    });
+    staticObsStreamSubscription.value =
+        envService.getStaticObstaclesStream().listen((obstacles_) {
+      final List<StaticObstacle> staticObs = obstacles_['obstacles'] ?? [];
+      obstacles.value = staticObs;
     });
   }
 
@@ -184,7 +192,8 @@ UseNavigator useNavigator() {
     watchEnv();
     return () {
       headingStreamSubscription.value?.cancel();
-      envStreamSubscription.value?.cancel();
+      dynamicObsStreamSubscription.value?.cancel();
+      staticObsStreamSubscription.value?.cancel();
       watchTimer.value?.cancel();
     };
   }, []);
@@ -208,6 +217,7 @@ UseNavigator useNavigator() {
     safetyLevel: safetyLevel.value,
     myBoat: myBoat.value,
     otherBoats: otherBoats.value,
+    obstacles: obstacles.value,
     preProcessTime: preProcessTime.value,
     postProcessTime: postProcessTime.value,
     getCurrentPosition: getCurrentPosition,
@@ -222,6 +232,7 @@ class UseNavigator {
   final SafetyLevel safetyLevel;
   final Boat? myBoat;
   final List<Boat> otherBoats;
+  final List<StaticObstacle> obstacles;
   final DateTime preProcessTime;
   final DateTime postProcessTime;
   final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
@@ -234,6 +245,7 @@ class UseNavigator {
     required this.safetyLevel,
     required this.myBoat,
     required this.otherBoats,
+    required this.obstacles,
     required this.preProcessTime,
     required this.postProcessTime,
     required this.getCurrentPosition,
