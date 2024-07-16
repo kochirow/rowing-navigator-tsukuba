@@ -8,7 +8,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/types/map_editor_mode.dart';
 
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
-import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useMapEditor.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavMap.dart';
@@ -63,11 +62,11 @@ class AreaSettingScreen extends HookConsumerWidget {
               ],
             ))
           : GestureDetector(
-              onPanUpdate: (mapEditor.editorMode.value == MapEditorMode.edit)
-                  ? mapEditor.onPanUpdate
+              onPanUpdate: (mapEditor.mode.value == MapEditorMode.edit)
+                  ? mapEditor.draw
                   : null,
-              onPanEnd: (mapEditor.editorMode.value == MapEditorMode.edit)
-                  ? mapEditor.onPanEnd
+              onPanEnd: (mapEditor.mode.value == MapEditorMode.edit)
+                  ? mapEditor.finishDraw
                   : null,
               child: Stack(alignment: Alignment.center, children: <Widget>[
                 // ################ マップ ################
@@ -122,18 +121,16 @@ class AreaSettingScreen extends HookConsumerWidget {
                             Container(
                               margin: const EdgeInsets.only(top: 17),
                               child: RoundedIconButton(
-                                icon: mapEditor.editorMode.value ==
-                                        MapEditorMode.edit
+                                icon: mapEditor.mode.value == MapEditorMode.edit
                                     ? Icons.close
                                     : Icons.add,
                                 onPressed: () {
-                                  mapEditor.editorMode.value =
-                                      mapEditor.editorMode.value ==
-                                              MapEditorMode.select
-                                          ? MapEditorMode.edit
-                                          : MapEditorMode.select;
+                                  mapEditor.mode.value = mapEditor.mode.value ==
+                                          MapEditorMode.select
+                                      ? MapEditorMode.edit
+                                      : MapEditorMode.select;
                                   mapEditor.lastPoint.value = null;
-                                  mapEditor.drawingLinePointsList.value = [];
+                                  mapEditor.drawingLinePoints.value = [];
                                 },
                               ),
                             ),
@@ -144,22 +141,22 @@ class AreaSettingScreen extends HookConsumerWidget {
                   ),
                 ),
                 // ################ ナビゲーションボタン ################
-                Container(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 48, horizontal: 17),
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          RoundedButton(
-                            label: "Save",
-                            onPressed: () async {},
-                          ),
-                        ]),
-                  ),
-                ),
+                // Container(
+                //   alignment: Alignment.bottomCenter,
+                //   child: Padding(
+                //     padding: const EdgeInsets.symmetric(
+                //         vertical: 48, horizontal: 17),
+                //     child: Column(
+                //         mainAxisAlignment: MainAxisAlignment.end,
+                //         crossAxisAlignment: CrossAxisAlignment.center,
+                //         children: [
+                //           RoundedButton(
+                //             label: "Save",
+                //             onPressed: () async {},
+                //           ),
+                //         ]),
+                //   ),
+                // ),
               ])),
     );
   }
