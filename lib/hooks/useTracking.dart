@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 import '../types/tracking_mode.dart';
@@ -15,16 +16,16 @@ UseTracking useTracking() {
   }
 
   return UseTracking(
-    mode: mode.value,
-    progFlag: progFlag.value,
+    mode: mode,
+    progFlag: progFlag,
     setMode: setMode,
     setProgFlag: setProgFlag,
   );
 }
 
 class UseTracking {
-  final TrackingMode mode;
-  final bool progFlag;
+  final ValueNotifier<TrackingMode> mode;
+  final ValueNotifier<bool> progFlag;
   final void Function(TrackingMode) setMode;
   final void Function(bool) setProgFlag;
 

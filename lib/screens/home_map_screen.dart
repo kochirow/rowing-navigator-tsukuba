@@ -101,7 +101,7 @@ class HomeMapScreen extends HookConsumerWidget {
         // マーカーを更新
         navMap.setMarkers(newMarkers);
         // ナビゲーションモードかつトラッキングモードなら自艇を追跡
-        if (myBoat != null && tracking.mode == TrackingMode.track) {
+        if (myBoat != null && tracking.mode.value == TrackingMode.track) {
           focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
         }
       });
@@ -143,7 +143,7 @@ class HomeMapScreen extends HookConsumerWidget {
             },
             onCameraMoveStarted: () {
               // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
-              if (!tracking.progFlag) {
+              if (!tracking.progFlag.value) {
                 tracking.setMode(TrackingMode.untrack);
               }
               // プログラムによる操作フラグを解除
