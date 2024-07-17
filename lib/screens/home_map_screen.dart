@@ -34,7 +34,6 @@ class HomeMapScreen extends HookConsumerWidget {
     // State
     final showInfo = useState(false);
     final mapType = useState(MapType.normal);
-    final polygons_ = useState<Set<Polygon>>({}); // navMapに持たせると再描画されない
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -69,7 +68,7 @@ class HomeMapScreen extends HookConsumerWidget {
 
     // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
     useEffect(() {
-      if (!navMap.isReady) return;
+      if (!navMap.isReady.value) return;
       Future(() async {
         final newMarkers = <Marker>{};
         // 自艇のマーカーを作成
@@ -122,7 +121,7 @@ class HomeMapScreen extends HookConsumerWidget {
           fillColor: Colors.red.withOpacity(0.5),
         ));
       }
-      polygons_.value = newPolygons;
+      navMap.setPolygons(newPolygons);
       return null;
     }, [navigator.obstacles]);
 
@@ -149,8 +148,8 @@ class HomeMapScreen extends HookConsumerWidget {
               // プログラムによる操作フラグを解除
               tracking.setProgFlag(false);
             },
-            markers: navMap.markers,
-            polygons: polygons_.value,
+            markers: navMap.markers.value,
+            polygons: navMap.polygons.value,
             circles: navigator.myBoat != null
                 ? getShipArea(navigator.myBoat!.lat, navigator.myBoat!.lng)
                 : {}),
@@ -266,7 +265,7 @@ class HomeMapScreen extends HookConsumerWidget {
                     RoundedButton(
                       label: "Start Nav",
                       onPressed: () async {
-                        if (!navMap.isReady || !auth.isSignedIn) return;
+                        if (!navMap.isReady.value || !auth.isSignedIn) return;
                         // ナビゲーションを開始
                         final userId = auth.currentUser!.uid;
                         final config = NavConfig(
@@ -290,7 +289,7 @@ class HomeMapScreen extends HookConsumerWidget {
                     RoundedButton(
                         label: "Stop Nav",
                         onPressed: () async {
-                          if (!navMap.isReady || !auth.isSignedIn) return;
+                          if (!navMap.isReady.value || !auth.isSignedIn) return;
                           // 現在位置をフォーカス
                           final myBoat = navigator.myBoat;
                           if (myBoat != null) {

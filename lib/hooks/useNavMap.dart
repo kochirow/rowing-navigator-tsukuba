@@ -122,12 +122,12 @@ UseNavMap useNavMap() {
   }, []);
 
   return UseNavMap(
-      mapController: mapController.value,
+      mapController: mapController,
       getZoomLevel: getZoomLevel,
-      markers: markers.value,
-      polylines: polylines.value,
-      polygons: polygons.value,
-      isReady: isReady.value,
+      markers: markers,
+      polylines: polylines,
+      polygons: polygons,
+      isReady: isReady,
       setController: setController,
       createMarker: createMarker,
       createHiddenMarker: createHiddenMarker,
@@ -141,12 +141,12 @@ UseNavMap useNavMap() {
 }
 
 class UseNavMap {
-  final GoogleMapController? mapController;
+  final ValueNotifier<GoogleMapController?> mapController;
   final Future<double> Function() getZoomLevel;
-  final Set<Marker> markers;
-  final Set<Polyline> polylines;
-  final Set<Polygon> polygons;
-  final bool isReady;
+  final ValueNotifier<Set<Marker>> markers;
+  final ValueNotifier<Set<Polyline>> polylines;
+  final ValueNotifier<Set<Polygon>> polygons;
+  final ValueNotifier<bool> isReady;
   final void Function(GoogleMapController controller) setController;
   final Future<Marker> Function(String markerId, MarkerType type, double lat,
       double lng, double heading, String title, String snippet) createMarker;

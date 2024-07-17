@@ -23,13 +23,10 @@ class AreaSettingScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Hooks
     final navMap = useNavMap();
-    final mapEditor = useMapEditor(navMap.mapController);
+    final mapEditor = useMapEditor(navMap.mapController.value);
     // State
     final mapType = useState(MapType.hybrid);
     final loading = useState(true);
-    // navMapのstateが更新されないため当Widgetで状態管理
-    final polygons_ = useState<Set<Polygon>>({});
-    final markers_ = useState<Set<Marker>>({});
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -54,7 +51,7 @@ class AreaSettingScreen extends HookConsumerWidget {
     }, []);
 
     useEffect(() {
-      if (!navMap.isReady) return;
+      if (!navMap.isReady.value) return;
       // obastaclesに合わせてポリゴンを再描画
       final polygons = HashSet<Polygon>.from({}); // 新しいPolygonを作成
       final markers = HashSet<Marker>.from({}); // 新しいMarkerを作成
@@ -64,7 +61,7 @@ class AreaSettingScreen extends HookConsumerWidget {
         final polygon = navMap.createPolygon(
           obstacle.id,
           obstacle.points,
-          () => navMap.mapController!
+          () => navMap.mapController.value!
               .showMarkerInfoWindow(MarkerId(obstacle.id)) // InfoWindowを表示
           ,
         );
@@ -81,8 +78,8 @@ class AreaSettingScreen extends HookConsumerWidget {
         markers.add(marker);
       }
       // 描画を更新
-      polygons_.value = polygons;
-      markers_.value = markers;
+      navMap.setPolygons(polygons);
+      navMap.setMarkers(markers);
       return null;
     }, [mapEditor.obstacles, navMap.isReady]);
 
@@ -137,9 +134,9 @@ class AreaSettingScreen extends HookConsumerWidget {
                     await navMap.focus(pos.latitude, pos.longitude, 0, 17.0);
                   },
                   onCameraMoveStarted: () {},
-                  polylines: navMap.polylines,
-                  polygons: polygons_.value,
-                  markers: markers_.value,
+                  polylines: navMap.polylines.value,
+                  polygons: navMap.polygons.value,
+                  markers: navMap.markers.value,
                 ),
                 // ################ 左右操作ボタン類 ################
                 Container(
