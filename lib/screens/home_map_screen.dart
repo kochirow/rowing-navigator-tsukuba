@@ -72,7 +72,7 @@ class HomeMapScreen extends HookConsumerWidget {
       Future(() async {
         final newMarkers = <Marker>{};
         // 自艇のマーカーを作成
-        final myBoat = navigator.myBoat;
+        final myBoat = navigator.myBoat.value;
         if (myBoat != null) {
           newMarkers.add(await navMap.createMarker(
             myBoat.boatId,
@@ -85,7 +85,7 @@ class HomeMapScreen extends HookConsumerWidget {
           ));
         }
         // 他艇のマーカーを作成
-        final otherBoats = navigator.otherBoats;
+        final otherBoats = navigator.otherBoats.value;
         for (final boat in otherBoats) {
           newMarkers.add(await navMap.createMarker(
             boat.boatId,
@@ -105,12 +105,12 @@ class HomeMapScreen extends HookConsumerWidget {
         }
       });
       return null;
-    }, [navigator.myBoat, navigator.otherBoats]);
+    }, [navigator.myBoat.value, navigator.otherBoats.value]);
 
     useEffect(() {
       // 障害物のポリゴンを描画
       final newPolygons = <Polygon>{};
-      for (final obstacle in navigator.obstacles) {
+      for (final obstacle in navigator.obstacles.value) {
         final points = obstacle.points
             .map((point) => LatLng(point.latitude, point.longitude))
             .toList();
@@ -123,14 +123,14 @@ class HomeMapScreen extends HookConsumerWidget {
       }
       navMap.setPolygons(newPolygons);
       return null;
-    }, [navigator.obstacles]);
+    }, [navigator.obstacles.value]);
 
     return Scaffold(
       appBar: AppBar(),
       body: Stack(alignment: Alignment.center, children: <Widget>[
         // ################ マップ ################
         GoogleMap(
-            myLocationEnabled: navigator.myBoat == null,
+            myLocationEnabled: navigator.myBoat.value == null,
             myLocationButtonEnabled: false,
             initialCameraPosition: navMap.initCamPos,
             mapType: mapType.value,
@@ -150,8 +150,9 @@ class HomeMapScreen extends HookConsumerWidget {
             },
             markers: navMap.markers.value,
             polygons: navMap.polygons.value,
-            circles: navigator.myBoat != null
-                ? getShipArea(navigator.myBoat!.lat, navigator.myBoat!.lng)
+            circles: navigator.myBoat.value != null
+                ? getShipArea(
+                    navigator.myBoat.value!.lat, navigator.myBoat.value!.lng)
                 : {}),
         // ################ 艇情報カード ################
         Column(
@@ -160,10 +161,10 @@ class HomeMapScreen extends HookConsumerWidget {
               SizedBox(
                   width: double.infinity,
                   child: BoatStatusCard(
-                    myBoat: navigator.myBoat,
-                    config: navigator.config,
-                    preProcessTime: navigator.preProcessTime,
-                    postProcessTime: navigator.postProcessTime,
+                    myBoat: navigator.myBoat.value,
+                    config: navigator.config.value,
+                    preProcessTime: navigator.preProcessTime.value,
+                    postProcessTime: navigator.postProcessTime.value,
                   ))
           ],
         ),
@@ -202,7 +203,7 @@ class HomeMapScreen extends HookConsumerWidget {
                         },
                       ),
                     ),
-                    if (navigator.mode == NavMode.observer)
+                    if (navigator.mode.value == NavMode.observer)
                       Container(
                         margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
@@ -215,7 +216,7 @@ class HomeMapScreen extends HookConsumerWidget {
                           },
                         ),
                       ),
-                    if (navigator.mode == NavMode.observer)
+                    if (navigator.mode.value == NavMode.observer)
                       Container(
                         margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
@@ -228,7 +229,7 @@ class HomeMapScreen extends HookConsumerWidget {
                           },
                         ),
                       ),
-                    if (navigator.mode == NavMode.navigator)
+                    if (navigator.mode.value == NavMode.navigator)
                       Container(
                         margin: const EdgeInsets.only(top: 17),
                         child: RoundedIconButton(
@@ -238,10 +239,10 @@ class HomeMapScreen extends HookConsumerWidget {
                             // トラッキングモードに切り替え
                             tracking.setMode(TrackingMode.track);
                             // 現在位置をフォーカス
-                            final myBoat = navigator.myBoat;
+                            final myBoat = navigator.myBoat.value;
                             if (myBoat != null) {
                               focusP14y(myBoat.lat, myBoat.lng,
-                                  navigator.myBoat?.heading ?? 0.0);
+                                  navigator.myBoat.value?.heading ?? 0.0);
                             }
                           },
                         ),
@@ -261,7 +262,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (navigator.mode == NavMode.observer)
+                  if (navigator.mode.value == NavMode.observer)
                     RoundedButton(
                       label: "Start Nav",
                       onPressed: () async {
@@ -277,21 +278,21 @@ class HomeMapScreen extends HookConsumerWidget {
                         // トラッキングモードに切り替え
                         tracking.setMode(TrackingMode.track);
                         // 現在位置をフォーカス
-                        final myBoat = navigator.myBoat;
+                        final myBoat = navigator.myBoat.value;
                         if (myBoat != null) {
                           focusP14y(myBoat.lat, myBoat.lng,
-                              navigator.myBoat?.heading ?? 0.0);
+                              navigator.myBoat.value?.heading ?? 0.0);
                         }
                         print("Navigation started.");
                       },
                     ),
-                  if (navigator.mode == NavMode.navigator)
+                  if (navigator.mode.value == NavMode.navigator)
                     RoundedButton(
                         label: "Stop Nav",
                         onPressed: () async {
                           if (!navMap.isReady.value || !auth.isSignedIn) return;
                           // 現在位置をフォーカス
-                          final myBoat = navigator.myBoat;
+                          final myBoat = navigator.myBoat.value;
                           if (myBoat != null) {
                             focusP14y(myBoat.lat, myBoat.lng, 0.0);
                           }

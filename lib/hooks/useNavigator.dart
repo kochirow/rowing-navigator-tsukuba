@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -213,14 +214,14 @@ UseNavigator useNavigator() {
   }, [safetyLevel.value]);
 
   return UseNavigator(
-    config: config.value,
-    mode: mode.value,
-    safetyLevel: safetyLevel.value,
-    myBoat: myBoat.value,
-    otherBoats: otherBoats.value,
-    obstacles: obstacles.value,
-    preProcessTime: preProcessTime.value,
-    postProcessTime: postProcessTime.value,
+    config: config,
+    mode: mode,
+    safetyLevel: safetyLevel,
+    myBoat: myBoat,
+    otherBoats: otherBoats,
+    obstacles: obstacles,
+    preProcessTime: preProcessTime,
+    postProcessTime: postProcessTime,
     getCurrentPosition: getCurrentPosition,
     startNavigation: startNavigation,
     stopNavigation: stopNavigation,
@@ -228,14 +229,14 @@ UseNavigator useNavigator() {
 }
 
 class UseNavigator {
-  final NavConfig? config;
-  final NavMode mode;
-  final SafetyLevel safetyLevel;
-  final Boat? myBoat;
-  final List<Boat> otherBoats;
-  final List<StaticObstacle> obstacles;
-  final DateTime preProcessTime;
-  final DateTime postProcessTime;
+  final ValueNotifier<NavConfig?> config;
+  final ValueNotifier<NavMode> mode;
+  final ValueNotifier<SafetyLevel> safetyLevel;
+  final ValueNotifier<Boat?> myBoat;
+  final ValueNotifier<List<Boat>> otherBoats;
+  final ValueNotifier<List<StaticObstacle>> obstacles;
+  final ValueNotifier<DateTime> preProcessTime;
+  final ValueNotifier<DateTime> postProcessTime;
   final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
   final Future<void> Function(NavConfig config) startNavigation;
   final Future<void> Function() stopNavigation;

@@ -110,10 +110,10 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
   }, []);
 
   return UseMapEditor(
-    mode: mode.value,
-    obstacles: obstacles.value,
-    drawingLinePoints: drawingLinePoints.value,
-    lastPoint: lastPoint.value,
+    mode: mode,
+    obstacles: obstacles,
+    drawingLinePoints: drawingLinePoints,
+    lastPoint: lastPoint,
     draw: draw,
     finishDraw: finishDraw,
     deleteObastacle: deleteObstacle,
@@ -124,10 +124,10 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
 }
 
 class UseMapEditor {
-  final MapEditorMode mode;
-  final List<StaticObstacle> obstacles;
-  final List<LatLng> drawingLinePoints;
-  final LatLng? lastPoint;
+  final ValueNotifier<MapEditorMode> mode;
+  final ValueNotifier<List<StaticObstacle>> obstacles;
+  final ValueNotifier<List<LatLng>> drawingLinePoints;
+  final ValueNotifier<LatLng?> lastPoint;
   final void Function(DragUpdateDetails details) draw;
   final void Function(DragEndDetails details) finishDraw;
   final void Function(String id) deleteObastacle;

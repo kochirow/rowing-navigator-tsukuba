@@ -56,7 +56,7 @@ class AreaSettingScreen extends HookConsumerWidget {
       final polygons = HashSet<Polygon>.from({}); // 新しいPolygonを作成
       final markers = HashSet<Marker>.from({}); // 新しいMarkerを作成
 
-      for (final obstacle in mapEditor.obstacles) {
+      for (final obstacle in mapEditor.obstacles.value) {
         // 障害物領域を作成
         final polygon = navMap.createPolygon(
           obstacle.id,
@@ -81,10 +81,10 @@ class AreaSettingScreen extends HookConsumerWidget {
       navMap.setPolygons(polygons);
       navMap.setMarkers(markers);
       return null;
-    }, [mapEditor.obstacles, navMap.isReady]);
+    }, [mapEditor.obstacles.value, navMap.isReady.value]);
 
     useEffect(() {
-      final drawingLinePoints = mapEditor.drawingLinePoints;
+      final drawingLinePoints = mapEditor.drawingLinePoints.value;
       if (drawingLinePoints.isEmpty) {
         navMap.setPolylines({}); // 描画中の線を削除
       } else {
@@ -96,7 +96,7 @@ class AreaSettingScreen extends HookConsumerWidget {
         navMap.setPolylines(polyline); // 描画を更新
       }
       return null;
-    }, [mapEditor.drawingLinePoints]);
+    }, [mapEditor.drawingLinePoints.value]);
 
     return Scaffold(
       appBar: AppBar(),
@@ -112,10 +112,10 @@ class AreaSettingScreen extends HookConsumerWidget {
               ],
             ))
           : GestureDetector(
-              onPanUpdate: (mapEditor.mode == MapEditorMode.edit)
+              onPanUpdate: (mapEditor.mode.value == MapEditorMode.edit)
                   ? mapEditor.draw
                   : null,
-              onPanEnd: (mapEditor.mode == MapEditorMode.edit)
+              onPanEnd: (mapEditor.mode.value == MapEditorMode.edit)
                   ? mapEditor.finishDraw
                   : null,
               child: Stack(alignment: Alignment.center, children: <Widget>[
@@ -171,14 +171,14 @@ class AreaSettingScreen extends HookConsumerWidget {
                             Container(
                               margin: const EdgeInsets.only(top: 17),
                               child: RoundedIconButton(
-                                icon: mapEditor.mode == MapEditorMode.edit
+                                icon: mapEditor.mode.value == MapEditorMode.edit
                                     ? Icons.close
                                     : Icons.add,
                                 onPressed: () {
-                                  mapEditor.setMode(
-                                      mapEditor.mode == MapEditorMode.select
-                                          ? MapEditorMode.edit
-                                          : MapEditorMode.select);
+                                  mapEditor.setMode(mapEditor.mode.value ==
+                                          MapEditorMode.select
+                                      ? MapEditorMode.edit
+                                      : MapEditorMode.select);
                                   mapEditor.setLastPoint(null);
                                   mapEditor.setDrawingLinePoints([]);
                                 },
