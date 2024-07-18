@@ -32,28 +32,32 @@ class HomeMapScreen extends HookConsumerWidget {
     final navMap = useNavMap();
     final tracking = useTracking();
     // State
+    final loading = useState(true);
+    final initLatLng = useState<LatLng?>(null);
     final showInfo = useState(false);
-    final mapType = useState(MapType.normal);
     // Services
     final permission = PermissionService();
     final auth = AuthService();
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
-    const LEAST_ZOOM_LEVEL = 17.0;
+    const DEFAULT_ZOOM_LEVEL = 17.0;
 
     focusP14y(double lat, double lng, double heading) async {
       // Focus programatically
       tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
       final currentZoomLevel = await navMap.getZoomLevel();
-      final zoomLevel = currentZoomLevel > LEAST_ZOOM_LEVEL
+      final zoomLevel = currentZoomLevel > DEFAULT_ZOOM_LEVEL
           ? currentZoomLevel
-          : LEAST_ZOOM_LEVEL;
+          : DEFAULT_ZOOM_LEVEL;
       await navMap.focus(lat, lng, heading, zoomLevel);
     }
 
+    // ##########################
+    // ログイン処理／初期位置の取得
+    // ##########################
     useEffect(() {
-      // ログイン処理
       Future(() async {
+        loading.value = true;
         if (!auth.isSignedIn) {
           await auth.signInAnonymously();
           print("Signed in with temporary account.");
@@ -62,11 +66,21 @@ class HomeMapScreen extends HookConsumerWidget {
           print("Already signed in.");
           print("UID: ${auth.currentUser?.uid}");
         }
+        // 初期位置の取得
+        navMap.setMapType(MapType.normal);
+        await permission.requestLocationServicePermission(); // 位置情報の許可取得
+        final currentPosition = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LOCATION_ACCURACY);
+        initLatLng.value =
+            LatLng(currentPosition.latitude, currentPosition.longitude);
+        loading.value = false;
       });
       return null;
     }, []);
 
-    // 自艇および他艇の状態を監視し、変更があればマーカーを再描画
+    // ##########################
+    // 自艇および他艇を描画
+    // ##########################
     useEffect(() {
       if (!navMap.isReady.value) return;
       Future(() async {
@@ -107,6 +121,9 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, [navigator.myBoat.value, navigator.otherBoats.value]);
 
+    // ##########################
+    // 障害物を描画
+    // ##########################
     useEffect(() {
       // 障害物のポリゴンを描画
       final newPolygons = <Polygon>{};
@@ -127,183 +144,199 @@ class HomeMapScreen extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(),
-      body: Stack(alignment: Alignment.center, children: <Widget>[
-        // ################ マップ ################
-        GoogleMap(
-            myLocationEnabled: navigator.myBoat.value == null,
-            myLocationButtonEnabled: false,
-            initialCameraPosition: navMap.initCamPos,
-            mapType: mapType.value,
-            onMapCreated: (GoogleMapController controller) async {
-              navMap.setController(controller);
-              await permission.requestLocationServicePermission(); // 位置情報の許可取得
-              final pos = await navigator.getCurrentPosition(LOCATION_ACCURACY);
-              focusP14y(pos.latitude, pos.longitude, 0.0); // 現在地を中心に表示
-            },
-            onCameraMoveStarted: () {
-              // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
-              if (!tracking.progFlag.value) {
-                tracking.setMode(TrackingMode.untrack);
-              }
-              // プログラムによる操作フラグを解除
-              tracking.setProgFlag(false);
-            },
-            markers: navMap.markers.value,
-            polygons: navMap.polygons.value,
-            circles: navigator.myBoat.value != null
-                ? getShipArea(
-                    navigator.myBoat.value!.lat, navigator.myBoat.value!.lng)
-                : {}),
-        // ################ 艇情報カード ################
-        Column(
-          children: [
-            if (showInfo.value)
-              SizedBox(
-                  width: double.infinity,
-                  child: BoatStatusCard(
-                    myBoat: navigator.myBoat.value,
-                    config: navigator.config.value,
-                    preProcessTime: navigator.preProcessTime.value,
-                    postProcessTime: navigator.postProcessTime.value,
-                  ))
-          ],
-        ),
-        // ################ 左右操作ボタン類 ################
-        Container(
-          alignment: Alignment.center,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: loading.value
+          ? Center(
+              child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ################ 左側 ################
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    MapTypeSwitcher(
-                      mapType: mapType.value,
-                      onTap: () {
-                        mapType.value = mapType.value == MapType.normal
-                            ? MapType.hybrid
-                            : MapType.normal;
-                      },
-                    ),
-                  ],
-                ),
-                // ################ 右側 ################
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 17),
-                      child: RoundedIconButton(
-                        icon: Icons.article,
-                        onPressed: () {
-                          showInfo.value = !showInfo.value;
-                        },
-                      ),
-                    ),
-                    if (navigator.mode.value == NavMode.observer)
-                      Container(
-                        margin: const EdgeInsets.only(top: 17),
-                        child: RoundedIconButton(
-                          icon: Icons.map,
-                          onPressed: () {
-                            Navigator.push(context,
-                                MaterialPageRoute(builder: (context) {
-                              return const AreaSettingScreen();
-                            }));
-                          },
-                        ),
-                      ),
-                    if (navigator.mode.value == NavMode.observer)
-                      Container(
-                        margin: const EdgeInsets.only(top: 17),
-                        child: RoundedIconButton(
-                          icon: Icons.gps_fixed,
-                          onPressed: () async {
-                            // 現在地をフォーカス
-                            final pos = await navigator
-                                .getCurrentPosition(LOCATION_ACCURACY);
-                            focusP14y(pos.latitude, pos.longitude, 0.0);
-                          },
-                        ),
-                      ),
-                    if (navigator.mode.value == NavMode.navigator)
-                      Container(
-                        margin: const EdgeInsets.only(top: 17),
-                        child: RoundedIconButton(
-                          icon: Icons.navigation,
-                          angle: 45,
-                          onPressed: () async {
-                            // トラッキングモードに切り替え
-                            tracking.setMode(TrackingMode.track);
-                            // 現在位置をフォーカス
-                            final myBoat = navigator.myBoat.value;
-                            if (myBoat != null) {
-                              focusP14y(myBoat.lat, myBoat.lng,
-                                  navigator.myBoat.value?.heading ?? 0.0);
-                            }
-                          },
-                        ),
-                      ),
-                  ],
-                ),
+                Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    child: const CircularProgressIndicator()),
+                const Text("Loading...")
               ],
-            ),
-          ),
-        ),
-        // ################ ナビゲーションボタン ################
-        Container(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.center,
+            ))
+          : Stack(alignment: Alignment.center, children: <Widget>[
+              // ################ マップ ################
+              GoogleMap(
+                  myLocationEnabled: navigator.myBoat.value == null,
+                  myLocationButtonEnabled: false,
+                  initialCameraPosition: CameraPosition(
+                    target: initLatLng.value!,
+                    zoom: DEFAULT_ZOOM_LEVEL,
+                  ),
+                  mapType: navMap.mapType.value,
+                  onMapCreated: (GoogleMapController controller) async {
+                    navMap.setController(controller);
+                  },
+                  onCameraMoveStarted: () {
+                    // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
+                    if (!tracking.progFlag.value) {
+                      tracking.setMode(TrackingMode.untrack);
+                    }
+                    // プログラムによる操作フラグを解除
+                    tracking.setProgFlag(false);
+                  },
+                  markers: navMap.markers.value,
+                  polygons: navMap.polygons.value,
+                  circles: navigator.myBoat.value != null
+                      ? getShipArea(navigator.myBoat.value!.lat,
+                          navigator.myBoat.value!.lng)
+                      : {}),
+              // ################ 艇情報カード ################
+              Column(
                 children: [
-                  if (navigator.mode.value == NavMode.observer)
-                    RoundedButton(
-                      label: "Start Nav",
-                      onPressed: () async {
-                        if (!navMap.isReady.value || !auth.isSignedIn) return;
-                        // ナビゲーションを開始
-                        final userId = auth.currentUser!.uid;
-                        final config = NavConfig(
-                            boatId: userId,
-                            boatType: 0,
-                            seatPos: 0,
-                            accuracy: LocationAccuracy.bestForNavigation);
-                        await navigator.startNavigation(config);
-                        // トラッキングモードに切り替え
-                        tracking.setMode(TrackingMode.track);
-                        // 現在位置をフォーカス
-                        final myBoat = navigator.myBoat.value;
-                        if (myBoat != null) {
-                          focusP14y(myBoat.lat, myBoat.lng,
-                              navigator.myBoat.value?.heading ?? 0.0);
-                        }
-                        print("Navigation started.");
-                      },
-                    ),
-                  if (navigator.mode.value == NavMode.navigator)
-                    RoundedButton(
-                        label: "Stop Nav",
-                        onPressed: () async {
-                          if (!navMap.isReady.value || !auth.isSignedIn) return;
-                          // 現在位置をフォーカス
-                          final myBoat = navigator.myBoat.value;
-                          if (myBoat != null) {
-                            focusP14y(myBoat.lat, myBoat.lng, 0.0);
-                          }
-                          // ナビゲーションを停止
-                          await navigator.stopNavigation();
-                          print("Navigation stopped.");
-                        }),
-                ]),
-          ),
-        ),
-      ]),
+                  if (showInfo.value)
+                    SizedBox(
+                        width: double.infinity,
+                        child: BoatStatusCard(
+                          myBoat: navigator.myBoat.value,
+                          config: navigator.config.value,
+                          preProcessTime: navigator.preProcessTime.value,
+                          postProcessTime: navigator.postProcessTime.value,
+                        ))
+                ],
+              ),
+              // ################ 左右操作ボタン類 ################
+              Container(
+                alignment: Alignment.center,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // ################ 左側 ################
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          MapTypeSwitcher(
+                            mapType: navMap.mapType.value,
+                            onTap: () {
+                              navMap.setMapType(
+                                  navMap.mapType.value == MapType.normal
+                                      ? MapType.hybrid
+                                      : MapType.normal);
+                            },
+                          ),
+                        ],
+                      ),
+                      // ################ 右側 ################
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(top: 17),
+                            child: RoundedIconButton(
+                              icon: Icons.article,
+                              onPressed: () {
+                                showInfo.value = !showInfo.value;
+                              },
+                            ),
+                          ),
+                          if (navigator.mode.value == NavMode.observer)
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.map,
+                                onPressed: () {
+                                  Navigator.push(context,
+                                      MaterialPageRoute(builder: (context) {
+                                    return const AreaSettingScreen();
+                                  }));
+                                },
+                              ),
+                            ),
+                          if (navigator.mode.value == NavMode.observer)
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.gps_fixed,
+                                onPressed: () async {
+                                  // 現在地をフォーカス
+                                  final pos = await navigator
+                                      .getCurrentPosition(LOCATION_ACCURACY);
+                                  focusP14y(pos.latitude, pos.longitude, 0.0);
+                                },
+                              ),
+                            ),
+                          if (navigator.mode.value == NavMode.navigator)
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.navigation,
+                                angle: 45,
+                                onPressed: () async {
+                                  // トラッキングモードに切り替え
+                                  tracking.setMode(TrackingMode.track);
+                                  // 現在位置をフォーカス
+                                  final myBoat = navigator.myBoat.value;
+                                  if (myBoat != null) {
+                                    focusP14y(myBoat.lat, myBoat.lng,
+                                        navigator.myBoat.value?.heading ?? 0.0);
+                                  }
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // ################ ナビゲーションボタン ################
+              Container(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (navigator.mode.value == NavMode.observer)
+                          RoundedButton(
+                            label: "Start Nav",
+                            onPressed: () async {
+                              if (!navMap.isReady.value || !auth.isSignedIn)
+                                return;
+                              // ナビゲーションを開始
+                              final userId = auth.currentUser!.uid;
+                              final config = NavConfig(
+                                  boatId: userId,
+                                  boatType: 0,
+                                  seatPos: 0,
+                                  accuracy: LocationAccuracy.bestForNavigation);
+                              await navigator.startNavigation(config);
+                              // トラッキングモードに切り替え
+                              tracking.setMode(TrackingMode.track);
+                              // 現在位置をフォーカス
+                              final myBoat = navigator.myBoat.value;
+                              if (myBoat != null) {
+                                focusP14y(myBoat.lat, myBoat.lng,
+                                    navigator.myBoat.value?.heading ?? 0.0);
+                              }
+                              print("Navigation started.");
+                            },
+                          ),
+                        if (navigator.mode.value == NavMode.navigator)
+                          RoundedButton(
+                              label: "Stop Nav",
+                              onPressed: () async {
+                                if (!navMap.isReady.value || !auth.isSignedIn)
+                                  return;
+                                // 現在位置をフォーカス
+                                final myBoat = navigator.myBoat.value;
+                                if (myBoat != null) {
+                                  focusP14y(myBoat.lat, myBoat.lng, 0.0);
+                                }
+                                // ナビゲーションを停止
+                                await navigator.stopNavigation();
+                                print("Navigation stopped.");
+                              }),
+                      ]),
+                ),
+              ),
+            ]),
     );
   }
 }

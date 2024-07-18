@@ -8,16 +8,13 @@ import '../utils/image2icon.dart';
 
 UseNavMap useNavMap() {
   final mapController = useState<GoogleMapController?>(null);
+  final mapType = useState(MapType.normal);
   final markers = useState<Set<Marker>>({});
   final polylines = useState<Set<Polyline>>({});
   final polygons = useState<Set<Polygon>>({});
   final isReady = useState(false);
   const BLUE_BOAT_ICON_PATH = 'assets/icons/blue_boat.png';
   const RED_BOAT_ICON_PATH = 'assets/icons/red_boat.png';
-  const initCamPos = CameraPosition(
-    target: LatLng(35.681236, 139.767125), // 東京駅
-    zoom: 18.0,
-  );
 
   void setController(GoogleMapController controller) {
     mapController.value = controller;
@@ -26,6 +23,10 @@ UseNavMap useNavMap() {
 
   Future<double> getZoomLevel() {
     return mapController.value!.getZoomLevel();
+  }
+
+  setMapType(MapType newMapType) {
+    mapType.value = newMapType;
   }
 
   void setMarkers(Set<Marker> newMarkers) {
@@ -122,32 +123,36 @@ UseNavMap useNavMap() {
   }, []);
 
   return UseNavMap(
-      mapController: mapController,
-      getZoomLevel: getZoomLevel,
-      markers: markers,
-      polylines: polylines,
-      polygons: polygons,
-      isReady: isReady,
-      setController: setController,
-      createMarker: createMarker,
-      createHiddenMarker: createHiddenMarker,
-      createPolyline: createPolyline,
-      createPolygon: createPolygon,
-      setMarkers: setMarkers,
-      setPolylines: setPolylines,
-      setPolygons: setPolygons,
-      focus: focus,
-      initCamPos: initCamPos);
+    mapController: mapController,
+    mapType: mapType,
+    getZoomLevel: getZoomLevel,
+    markers: markers,
+    polylines: polylines,
+    polygons: polygons,
+    isReady: isReady,
+    setController: setController,
+    setMapType: setMapType,
+    createMarker: createMarker,
+    createHiddenMarker: createHiddenMarker,
+    createPolyline: createPolyline,
+    createPolygon: createPolygon,
+    setMarkers: setMarkers,
+    setPolylines: setPolylines,
+    setPolygons: setPolygons,
+    focus: focus,
+  );
 }
 
 class UseNavMap {
   final ValueNotifier<GoogleMapController?> mapController;
+  final ValueNotifier<MapType> mapType;
   final Future<double> Function() getZoomLevel;
   final ValueNotifier<Set<Marker>> markers;
   final ValueNotifier<Set<Polyline>> polylines;
   final ValueNotifier<Set<Polygon>> polygons;
   final ValueNotifier<bool> isReady;
   final void Function(GoogleMapController controller) setController;
+  final void Function(MapType newMapType) setMapType;
   final Future<Marker> Function(String markerId, MarkerType type, double lat,
       double lng, double heading, String title, String snippet) createMarker;
   final Marker Function(
@@ -162,16 +167,17 @@ class UseNavMap {
   final void Function(Set<Polygon> newPolygons) setPolygons;
   final Future<void> Function(
       double lat, double lng, double heading, double zoomLevel) focus;
-  final CameraPosition initCamPos;
 
   UseNavMap({
     required this.mapController,
+    required this.mapType,
     required this.getZoomLevel,
     required this.markers,
     required this.polylines,
     required this.polygons,
     required this.isReady,
     required this.setController,
+    required this.setMapType,
     required this.createMarker,
     required this.createHiddenMarker,
     required this.createPolyline,
@@ -180,6 +186,5 @@ class UseNavMap {
     required this.setPolylines,
     required this.setPolygons,
     required this.focus,
-    required this.initCamPos,
   });
 }
