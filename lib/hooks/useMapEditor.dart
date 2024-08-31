@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/env_service.dart';
+import 'package:rowing_navigator/utils/self_intersection.dart';
 
 import '../types/map_editor_mode.dart';
 
@@ -69,8 +70,9 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     lastPoint.value = newPoint;
 
     // ポリラインを描画
-    drawingLinePoints.value.add(newPoint);
-    drawingLinePoints.value = List<LatLng>.from(drawingLinePoints.value);
+    List<LatLng> newPoints = drawingLinePoints.value;
+    newPoints.add(newPoint);
+    drawingLinePoints.value = List<LatLng>.from(newPoints);
   }
 
   void finishDraw(DragEndDetails details) async {
@@ -78,11 +80,16 @@ UseMapEditor useMapEditor(GoogleMapController? mapController) {
     setMode(MapEditorMode.select);
     // 直前の座標を削除
     lastPoint.value = null;
-    // 描画中の線が3点未満の場合は無視
-    if (drawingLinePoints.value.length < 3) return;
+
+    final points = drawingLinePoints.value;
+    // 描画中の線が3点未満の場合・自己交差している場合は無視
+    if (drawingLinePoints.value.length < 3 || isSelfIntersecting(points)) {
+      print("Invalid polygon");
+      erasePolyline();
+      return;
+    }
 
     // 障害物を作成
-    final points = drawingLinePoints.value;
     final newObstacle = StaticObstacle(id: "dummy", points: points); // 障害物を作成
     await env.addStaticObstacle(newObstacle); // 障害物をDBに登録
     erasePolyline();

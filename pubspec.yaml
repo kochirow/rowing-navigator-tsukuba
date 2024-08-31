@@ -44,6 +44,7 @@ dependencies:
   audioplayers: ^6.0.0
   flutter_map_math: ^0.1.7
   flutter_compass: ^0.8.0
+  vector_math: ^2.1.4
 
 dev_dependencies:
   flutter_test:

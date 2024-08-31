@@ -11,9 +11,9 @@ UseAlert useAlert() {
     Future(() async {
       player.value.setPlayerMode(PlayerMode.lowLatency);
       AudioCache.instance.loadAll([
-        'audio/alert_lv1.mp3',
-        'audio/alert_lv2.mp3',
-        'audio/alert_lv3.mp3',
+        'audio/alert_low_tempo.mp3',
+        'audio/alert_high_tempo.mp3',
+        'audio/alert_beep.mp3',
       ]);
     });
     return () async {
@@ -26,16 +26,13 @@ UseAlert useAlert() {
     AssetSource source;
     switch (type) {
       case AlertType.caution:
-        source = AssetSource('audio/alert_lv1.mp3');
+        source = AssetSource('audio/alert_low_tempo.mp3');
         break;
       case AlertType.warning:
-        source = AssetSource('audio/alert_lv2.mp3');
-        break;
-      case AlertType.critical:
-        source = AssetSource('audio/alert_lv3.mp3');
+        source = AssetSource('audio/alert_high_tempo.mp3');
         break;
       case AlertType.emergency:
-        source = AssetSource('audio/alert_lv4.mp3');
+        source = AssetSource('audio/alert_beep.mp3');
         break;
     }
     await player.value.setVolume(0.5);

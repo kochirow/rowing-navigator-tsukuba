@@ -41,6 +41,8 @@ UseNavigator useNavigator() {
   final alert = useAlert();
   // Services
   final geoService = GeoService();
+  final messageService = MessageService();
+  final evaluatorService = CollisionRiskEvaluatorService();
 
   // Constants
   final POSITION_UPDATE_INTERVAL = 3;
@@ -106,15 +108,13 @@ UseNavigator useNavigator() {
 
   getSafetyLevelFrom(CollisionRiskLevel riskLevel) {
     switch (riskLevel) {
-      case CollisionRiskLevel.lv1:
+      case CollisionRiskLevel.lv0:
         return SafetyLevel.safe;
-      case CollisionRiskLevel.lv2:
+      case CollisionRiskLevel.lv1:
         return SafetyLevel.caution;
-      case CollisionRiskLevel.lv3:
+      case CollisionRiskLevel.lv2:
         return SafetyLevel.warning;
-      case CollisionRiskLevel.lv4:
-        return SafetyLevel.critical;
-      case CollisionRiskLevel.lv5:
+      case CollisionRiskLevel.lv3:
         return SafetyLevel.emergency;
       default:
         return SafetyLevel.emergency;
@@ -127,8 +127,6 @@ UseNavigator useNavigator() {
         return AlertType.caution;
       case SafetyLevel.warning:
         return AlertType.warning;
-      case SafetyLevel.critical:
-        return AlertType.critical;
       case SafetyLevel.emergency:
         return AlertType.emergency;
       default:
@@ -143,16 +141,15 @@ UseNavigator useNavigator() {
 
     // ######## Send Message ########
     final message = Message.fromBoat(latestMyBoat);
-    final messageService = MessageService();
     // messageService.sendMessage(message);
 
     // ######## Evaluate Collision Risk ########
-    final evaluator = CollisionRiskEvaluatorService();
-    final riskLevel = evaluator.evaluateRisk(
+    final riskLevel = evaluatorService.evaluateFutureRisk(
       latestMyBoat,
       otherBoats.value,
       obstacles.value,
     );
+    // print("Risk Level: $riskLevel");
     final safetyLevel_ = getSafetyLevelFrom(riskLevel);
     safetyLevel.value = safetyLevel_;
 

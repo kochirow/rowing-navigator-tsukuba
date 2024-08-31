@@ -5,12 +5,14 @@ import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/utils/ship_area.dart';
+import 'package:rowing_navigator/services/ship_domain_service.dart';
 
+import '../config/risk_evaluation_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useTracking.dart';
+import '../services/collision_risk_evaluator_service.dart';
 import '../types/tracking_mode.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavigator.dart';
@@ -35,6 +37,8 @@ class HomeMapScreen extends HookConsumerWidget {
     final loading = useState(true);
     final initLatLng = useState<LatLng?>(null);
     final showInfo = useState(false);
+    final shipDomains = useState<Set<Polygon>>({});
+    final obstacles = useState<Set<Polygon>>({});
     // Services
     final permission = PermissionService();
     final auth = AuthService();
@@ -118,6 +122,40 @@ class HomeMapScreen extends HookConsumerWidget {
           focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
         }
       });
+
+      // ###########################
+      // 船舶領域を可視化
+      // ###########################
+      final shipDomainService = ShipDomainService();
+      final evalService = CollisionRiskEvaluatorService();
+      // 全艇の船舶領域を取得
+      final myBoat = navigator.myBoat.value;
+      final allBoats = [
+        if (myBoat != null) myBoat,
+        ...navigator.otherBoats.value
+      ];
+      Set<Polygon> newShipDomains = {};
+      for (final boat in allBoats) {
+        const speed = 2.0; // for development
+        final stoppingDistance = evalService.getStoppingDistance(boat);
+        for (double t = 0; speed * t <= stoppingDistance; t += deltaTime) {
+          final futureBoat = evalService.predictPosition(boat, t);
+          final futureDomains = shipDomainService.getShipDomains(futureBoat);
+          List<Polygon> domains = futureDomains.allDomains;
+          domains = domains.map((domain) {
+            return Polygon(
+              polygonId:
+                  PolygonId("${domain.polygonId.value}_${boat.boatId}_$t"),
+              points: domain.points,
+              strokeWidth: 0,
+              fillColor: domain.fillColor
+                  .withOpacity((1.0 - t / stoppingDistance) * 0.1 + 0.1),
+            );
+          }).toList();
+          newShipDomains.addAll(domains);
+        }
+      }
+      shipDomains.value = newShipDomains;
       return null;
     }, [navigator.myBoat.value, navigator.otherBoats.value]);
 
@@ -126,21 +164,30 @@ class HomeMapScreen extends HookConsumerWidget {
     // ##########################
     useEffect(() {
       // 障害物のポリゴンを描画
-      final newPolygons = <Polygon>{};
+      final newObstacles = <Polygon>{};
       for (final obstacle in navigator.obstacles.value) {
         final points = obstacle.points
             .map((point) => LatLng(point.latitude, point.longitude))
             .toList();
-        newPolygons.add(Polygon(
+        newObstacles.add(Polygon(
           polygonId: PolygonId(obstacle.id),
           points: points,
           strokeWidth: 0,
           fillColor: Colors.red.withOpacity(0.5),
         ));
       }
-      navMap.setPolygons(newPolygons);
+      obstacles.value = newObstacles;
       return null;
     }, [navigator.obstacles.value]);
+
+    // ##########################
+    // Polygonsの統合
+    // ##########################
+    useEffect(() {
+      final newPolygons = {...shipDomains.value, ...obstacles.value};
+      navMap.setPolygons(newPolygons);
+      return null;
+    }, [shipDomains.value, obstacles.value]);
 
     return Scaffold(
       appBar: AppBar(),
@@ -158,30 +205,27 @@ class HomeMapScreen extends HookConsumerWidget {
           : Stack(alignment: Alignment.center, children: <Widget>[
               // ################ マップ ################
               GoogleMap(
-                  myLocationEnabled: navigator.myBoat.value == null,
-                  myLocationButtonEnabled: false,
-                  initialCameraPosition: CameraPosition(
-                    target: initLatLng.value!,
-                    zoom: DEFAULT_ZOOM_LEVEL,
-                  ),
-                  mapType: navMap.mapType.value,
-                  onMapCreated: (GoogleMapController controller) async {
-                    navMap.setController(controller);
-                  },
-                  onCameraMoveStarted: () {
-                    // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
-                    if (!tracking.progFlag.value) {
-                      tracking.setMode(TrackingMode.untrack);
-                    }
-                    // プログラムによる操作フラグを解除
-                    tracking.setProgFlag(false);
-                  },
-                  markers: navMap.markers.value,
-                  polygons: navMap.polygons.value,
-                  circles: navigator.myBoat.value != null
-                      ? getShipArea(navigator.myBoat.value!.lat,
-                          navigator.myBoat.value!.lng)
-                      : {}),
+                myLocationEnabled: navigator.myBoat.value == null,
+                myLocationButtonEnabled: false,
+                initialCameraPosition: CameraPosition(
+                  target: initLatLng.value!,
+                  zoom: DEFAULT_ZOOM_LEVEL,
+                ),
+                mapType: navMap.mapType.value,
+                onMapCreated: (GoogleMapController controller) async {
+                  navMap.setController(controller);
+                },
+                onCameraMoveStarted: () {
+                  // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
+                  if (!tracking.progFlag.value) {
+                    tracking.setMode(TrackingMode.untrack);
+                  }
+                  // プログラムによる操作フラグを解除
+                  tracking.setProgFlag(false);
+                },
+                markers: navMap.markers.value,
+                polygons: navMap.polygons.value,
+              ),
               // ################ 艇情報カード ################
               Column(
                 children: [
