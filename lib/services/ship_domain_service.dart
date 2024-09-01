@@ -76,26 +76,26 @@ class ShipDomainService {
   }
 
   ShipDomains getShipDomains(Boat boat) {
-    BoatType boatType = BoatType.values.byName("single");
+    BoatType boatType = BoatType.r_1x;
     ShipDomainParam shipBodyParam; // 船体領域
     ShipDomainParam exclusiveParam; // 排他領域
     ShipDomainParam attentionParam; // 注意領域
 
     switch (boatType) {
-      case BoatType.single:
-        shipBodyParam = boatConfigs.single.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.single.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.single.shipDomainParams.attentionParam;
+      case BoatType.r_1x:
+        shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
+        attentionParam = boatConfigs.r_1x.shipDomainParams.attentionParam;
         break;
-      case BoatType.double:
-        shipBodyParam = boatConfigs.single.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.single.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.single.shipDomainParams.attentionParam;
+      case BoatType.r_2x:
+        shipBodyParam = boatConfigs.r_2x.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_2x.shipDomainParams.exclusiveParam;
+        attentionParam = boatConfigs.r_2x.shipDomainParams.attentionParam;
         break;
       default:
-        shipBodyParam = boatConfigs.double.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.double.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.double.shipDomainParams.attentionParam;
+        shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
+        attentionParam = boatConfigs.r_1x.shipDomainParams.attentionParam;
         break;
     }
     final shipDomains = ShipDomains(

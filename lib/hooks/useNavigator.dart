@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/types/boat_type.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
@@ -97,7 +98,7 @@ UseNavigator useNavigator() {
     }
     return Boat(
       boatId: config.value!.boatId, // 自艇のID
-      boatType: 0,
+      boatType: BoatType.r_1x, // for development
       seatPos: 0,
       lat: position.latitude,
       lng: position.longitude,
@@ -140,7 +141,7 @@ UseNavigator useNavigator() {
     myBoat.value = latestMyBoat;
 
     // ######## Send Message ########
-    final message = Message.fromBoat(latestMyBoat);
+    final message = latestMyBoat.toMessage();
     // messageService.sendMessage(message);
 
     // ######## Evaluate Collision Risk ########

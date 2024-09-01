@@ -2,24 +2,24 @@ import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 
 class BoatConfigs {
-  final BoatConfig single;
-  final BoatConfig double;
+  final BoatConfig r_1x;
+  final BoatConfig r_2x;
 
   // BoatTypeに従ってBoatConfigを取得
   BoatConfig byBoatType(BoatType type) {
     switch (type) {
-      case BoatType.single:
-        return single;
-      case BoatType.double:
-        return double;
+      case BoatType.r_1x:
+        return r_1x;
+      case BoatType.r_2x:
+        return r_2x;
       default:
-        return single;
+        return r_1x;
     }
   }
 
   BoatConfigs({
-    required this.single,
-    required this.double,
+    required this.r_1x,
+    required this.r_2x,
   });
 }
 
@@ -52,8 +52,8 @@ class ShipDomainParams {
 // Boat Config
 // ============================
 BoatConfigs boatConfigs = BoatConfigs(
-  single: BoatConfig(
-    type: BoatType.single,
+  r_1x: BoatConfig(
+    type: BoatType.r_1x,
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
       exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
@@ -64,8 +64,8 @@ BoatConfigs boatConfigs = BoatConfigs(
     },
     seatPosList: [1],
   ),
-  double: BoatConfig(
-    type: BoatType.double,
+  r_2x: BoatConfig(
+    type: BoatType.r_2x,
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
       exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),

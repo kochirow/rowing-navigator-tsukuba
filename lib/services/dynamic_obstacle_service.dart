@@ -26,7 +26,7 @@ class DynamicObstacleService {
       stream.listen((messages) {
         List<Boat> boats = [];
         for (final Message message in messages) {
-          final boat = Boat.fromJson(message.toJson());
+          final boat = Boat.fromMessage(message);
           boats.add(boat);
         }
         controller.add(boats);

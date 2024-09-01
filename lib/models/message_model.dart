@@ -1,8 +1,9 @@
 import '../models/boat_model.dart';
+import '../types/boat_type.dart';
 
 class Message {
   String _boatId;
-  int _boatType;
+  BoatType _boatType;
   int _seatPos;
   double _lat;
   double _lng;
@@ -11,7 +12,7 @@ class Message {
 
   Message({
     required String boatId,
-    required int boatType,
+    required BoatType boatType,
     required int seatPos,
     required double lat,
     required double lng,
@@ -26,7 +27,7 @@ class Message {
         _timestamp = timestamp;
 
   String get boatId => _boatId;
-  int get boatType => _boatType;
+  BoatType get boatType => _boatType;
   int get seatPos => _seatPos;
   double get lat => _lat;
   double get lng => _lng;
@@ -36,7 +37,7 @@ class Message {
   Map<String, dynamic> toJson() {
     return {
       'boatId': _boatId,
-      'boatType': _boatType,
+      'boatType': _boatType.toString().split('.').last,
       'seatPos': _seatPos,
       'lat': _lat,
       'lng': _lng,
@@ -48,24 +49,15 @@ class Message {
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
       boatId: json['boatId'],
-      boatType: json['boatType'],
+      boatType: BoatType.values
+              .any((elm) => elm.toString().split('.').last == json['boatType'])
+          ? BoatType.values.byName(json['boatType'])
+          : BoatType.r_1x, // 艇種の識別子が不正な場合は1xとする
       seatPos: json['seatPos'],
       lat: json['lat'].toDouble(),
       lng: json['lng'].toDouble(),
       heading: json['heading'].toDouble(),
       timestamp: json['timestamp'].toDate(),
-    );
-  }
-
-  factory Message.fromBoat(Boat boat) {
-    return Message(
-      boatId: boat.boatId,
-      boatType: boat.boatType,
-      seatPos: boat.seatPos,
-      lat: boat.lat,
-      lng: boat.lng,
-      heading: boat.heading,
-      timestamp: boat.timestamp,
     );
   }
 }

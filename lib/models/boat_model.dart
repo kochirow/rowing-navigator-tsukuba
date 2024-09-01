@@ -1,6 +1,10 @@
+import 'package:rowing_navigator/types/boat_type.dart';
+
+import 'message_model.dart';
+
 class Boat {
   String _boatId;
-  int _boatType;
+  BoatType _boatType;
   int _seatPos; // 要enum定義
   double _lat;
   double _lng;
@@ -8,7 +12,7 @@ class Boat {
   DateTime _timestamp;
   static final init = Boat(
     boatId: 'init',
-    boatType: 0,
+    boatType: BoatType.r_1x,
     seatPos: 0,
     lat: 35.681236,
     lng: 139.767125,
@@ -17,7 +21,7 @@ class Boat {
   );
 
   String get boatId => _boatId;
-  int get boatType => _boatType;
+  BoatType get boatType => _boatType;
   int get seatPos => _seatPos;
   double get lat => _lat;
   double get lng => _lng;
@@ -26,7 +30,7 @@ class Boat {
 
   Boat({
     required String boatId,
-    required int boatType,
+    required BoatType boatType,
     required int seatPos,
     required double lat,
     required double lng,
@@ -40,27 +44,28 @@ class Boat {
         _heading = heading,
         _timestamp = timestamp;
 
-  Map<String, dynamic> toJson() {
-    return {
-      'boatId': _boatId,
-      'boatType': _boatType,
-      'seatPos': _seatPos,
-      'lat': _lat,
-      'lng': _lng,
-      'heading': _heading,
-      'timestamp': _timestamp,
-    };
+  Message toMessage() {
+    final m = Message(
+      boatId: init.boatId,
+      boatType: init.boatType,
+      seatPos: init.seatPos,
+      lat: init.lat,
+      lng: init.lng,
+      heading: init.heading,
+      timestamp: init.timestamp,
+    );
+    return m;
   }
 
-  factory Boat.fromJson(Map<String, dynamic> json) {
+  factory Boat.fromMessage(Message message) {
     final b = Boat(
-      boatId: json['boatId'],
-      boatType: json['boatType'],
-      seatPos: json['seatPos'],
-      lat: json['lat'],
-      lng: json['lng'],
-      heading: json['heading'],
-      timestamp: json['timestamp'],
+      boatId: message.boatId,
+      boatType: message.boatType,
+      seatPos: message.seatPos,
+      lat: message.lat,
+      lng: message.lng,
+      heading: message.heading,
+      timestamp: message.timestamp,
     );
     return b;
   }

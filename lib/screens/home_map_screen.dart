@@ -99,7 +99,7 @@ class HomeMapScreen extends HookConsumerWidget {
             myBoat.lng,
             myBoat.heading,
             "自艇",
-            "自艇の位置情報\n${myBoat.boatId}",
+            "自艇の位置情報\n${myBoat.boatId}\nBoatType: ${myBoat.boatType}",
           ));
         }
         // 他艇のマーカーを作成
@@ -112,7 +112,7 @@ class HomeMapScreen extends HookConsumerWidget {
             boat.lng,
             boat.heading,
             "他艇",
-            "他艇の位置情報\n${boat.boatId}",
+            "他艇の位置情報\n${boat.boatId}\nBoatType: ${boat.boatType}",
           ));
         }
         // マーカーを更新
