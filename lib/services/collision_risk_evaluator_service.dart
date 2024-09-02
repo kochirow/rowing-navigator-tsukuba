@@ -25,15 +25,15 @@ class Situation {
 
 class CollisionRiskEvaluatorService {
   double getStoppingDistance(Boat boat) {
-    // return boatConfigs.byBoatType(boat.boatType).stoppingDistanceFormula(10);
     // 艇種ごとに停止距離を計算する
-    return 50; // for development
+    const speed = 2.0;
+    return boatConfigs.byBoatType(boat.boatType).stoppingDistanceFormula(speed);
   }
 
   Boat predictPosition(Boat boat, double afterSeconds) {
     const speed = 2.0; // for development / m/s
     double distance = speed * afterSeconds;
-    final stoppingDistance = getStoppingDistance(boat); // for development
+    final stoppingDistance = getStoppingDistance(boat);
     // 停止距離を超える場合は移動距離を停止距離とする
     if (distance > stoppingDistance) {
       distance = stoppingDistance;

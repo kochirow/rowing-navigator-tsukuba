@@ -1,9 +1,12 @@
+import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 
 class BoatConfigs {
   final BoatConfig r_1x;
   final BoatConfig r_2x;
+  final BoatConfig r_4x;
+  final BoatConfig r_8p;
 
   // BoatTypeに従ってBoatConfigを取得
   BoatConfig byBoatType(BoatType type) {
@@ -12,6 +15,10 @@ class BoatConfigs {
         return r_1x;
       case BoatType.r_2x:
         return r_2x;
+      case BoatType.r_4x:
+        return r_4x;
+      case BoatType.r_8p:
+        return r_8p;
       default:
         return r_1x;
     }
@@ -20,6 +27,8 @@ class BoatConfigs {
   BoatConfigs({
     required this.r_1x,
     required this.r_2x,
+    required this.r_4x,
+    required this.r_8p,
   });
 }
 
@@ -60,7 +69,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return 10.0;
+      return 5.0;
     },
     seatPosList: [1],
   ),
@@ -75,5 +84,29 @@ BoatConfigs boatConfigs = BoatConfigs(
       return 10.0;
     },
     seatPosList: [1, 2],
+  ),
+  r_4x: BoatConfig(
+    type: BoatType.r_4x,
+    shipDomainParams: ShipDomainParams(
+      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
+      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
+    ),
+    stoppingDistanceFormula: (speed) {
+      return 20.0;
+    },
+    seatPosList: [1, 2, 3, 4],
+  ),
+  r_8p: BoatConfig(
+    type: BoatType.r_8p,
+    shipDomainParams: ShipDomainParams(
+      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
+      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
+    ),
+    stoppingDistanceFormula: (speed) {
+      return 30.0;
+    },
+    seatPosList: [1, 2, 3, 4, 5, 6, 7, 8],
   ),
 );
