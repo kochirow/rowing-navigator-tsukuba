@@ -23,15 +23,12 @@ class ShipDomainParam {
 class ShipDomains {
   final Polygon shipBodyDomain;
   final Polygon exclusiveDomain;
-  final Polygon cautionDomain;
 
-  List<Polygon> get allDomains =>
-      [shipBodyDomain, exclusiveDomain, cautionDomain];
+  List<Polygon> get allDomains => [shipBodyDomain, exclusiveDomain];
 
   ShipDomains({
     required this.shipBodyDomain,
     required this.exclusiveDomain,
-    required this.cautionDomain,
   });
 }
 
@@ -79,23 +76,19 @@ class ShipDomainService {
     BoatType boatType = BoatType.r_1x;
     ShipDomainParam shipBodyParam; // 船体領域
     ShipDomainParam exclusiveParam; // 排他領域
-    ShipDomainParam attentionParam; // 注意領域
 
     switch (boatType) {
       case BoatType.r_1x:
         shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
         exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.r_1x.shipDomainParams.attentionParam;
         break;
       case BoatType.r_2x:
         shipBodyParam = boatConfigs.r_2x.shipDomainParams.shipBodyParam;
         exclusiveParam = boatConfigs.r_2x.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.r_2x.shipDomainParams.attentionParam;
         break;
       default:
         shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
         exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
-        attentionParam = boatConfigs.r_1x.shipDomainParams.attentionParam;
         break;
     }
     final shipDomains = ShipDomains(
@@ -112,13 +105,6 @@ class ShipDomainService {
             exclusiveParam.h, exclusiveParam.w, exclusiveParam.s),
         strokeWidth: 0,
         fillColor: Colors.yellow.withOpacity(0.6),
-      ),
-      cautionDomain: Polygon(
-        polygonId: PolygonId(ShipDomainType.cautionDomain.value),
-        points: getShipDomainPoints(LatLng(boat.lat, boat.lng), boat.heading,
-            attentionParam.h, attentionParam.w, attentionParam.s),
-        strokeWidth: 0,
-        fillColor: Colors.green.withOpacity(0.3),
       ),
     );
     return shipDomains;

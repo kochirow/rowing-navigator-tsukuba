@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,7 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 
-import '../config/risk_evaluation_config.dart';
+import '../config/risk_evaluatior_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
@@ -138,21 +139,32 @@ class HomeMapScreen extends HookConsumerWidget {
       for (final boat in allBoats) {
         const speed = 2.0; // for development
         final stoppingDistance = evalService.getStoppingDistance(boat);
-        for (double t = 0; speed * t <= stoppingDistance; t += deltaTime) {
+        final warningDistantce = stoppingDistance + warningTime * speed;
+        final cautionDistance = warningDistantce + cautionTime * speed;
+        double t = 0;
+        while (true) {
+          final distance = speed * t;
+          if (distance > cautionDistance) break;
           final futureBoat = evalService.predictPosition(boat, t);
           final futureDomains = shipDomainService.getShipDomains(futureBoat);
-          List<Polygon> domains = futureDomains.allDomains;
-          domains = domains.map((domain) {
-            return Polygon(
-              polygonId:
-                  PolygonId("${domain.polygonId.value}_${boat.boatId}_$t"),
-              points: domain.points,
-              strokeWidth: 0,
-              fillColor: domain.fillColor
-                  .withOpacity((1.0 - t / stoppingDistance) * 0.1 + 0.1),
-            );
-          }).toList();
-          newShipDomains.addAll(domains);
+          Polygon futureBodyDomain = futureDomains.shipBodyDomain;
+          Color fillColor = Colors.red.withOpacity(0.5);
+          if (distance <= stoppingDistance) {
+            fillColor = Colors.red.withOpacity(0.5);
+          } else if (distance <= warningDistantce) {
+            fillColor = Colors.yellow.withOpacity(0.5);
+          } else if (distance <= cautionDistance) {
+            fillColor = Colors.green.withOpacity(0.5);
+          }
+          final domain = Polygon(
+            polygonId: PolygonId(
+                "${futureBodyDomain.polygonId.value}_${boat.boatId}_$t"),
+            points: futureBodyDomain.points,
+            strokeWidth: 0,
+            fillColor: fillColor,
+          );
+          newShipDomains.add(domain);
+          t += deltaTime;
         }
       }
       shipDomains.value = newShipDomains;
