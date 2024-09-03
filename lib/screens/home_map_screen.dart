@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/config/boat_config.dart';
+import 'package:rowing_navigator/providers/nav_config.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
+import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart';
 
 import '../config/risk_evaluatior_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
@@ -14,6 +19,7 @@ import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useTracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
+import '../types/boat_type.dart';
 import '../types/tracking_mode.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavigator.dart';
@@ -46,6 +52,9 @@ class HomeMapScreen extends HookConsumerWidget {
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
     const DEFAULT_ZOOM_LEVEL = 17.0;
+
+    final boatType = ref.watch(boatTypeProvider);
+    final seatPosision = ref.watch(seatPositionProvider);
 
     focusP14y(double lat, double lng, double heading) async {
       // Focus programatically
@@ -352,26 +361,41 @@ class HomeMapScreen extends HookConsumerWidget {
                         if (navigator.mode.value == NavMode.observer)
                           RoundedButton(
                             label: "Start Nav",
-                            onPressed: () async {
-                              if (!navMap.isReady.value || !auth.isSignedIn)
-                                return;
-                              // ナビゲーションを開始
-                              final userId = auth.currentUser!.uid;
-                              final config = NavConfig(
-                                  boatId: userId,
-                                  boatType: 0,
-                                  seatPos: 0,
-                                  accuracy: LocationAccuracy.bestForNavigation);
-                              await navigator.startNavigation(config);
-                              // トラッキングモードに切り替え
-                              tracking.setMode(TrackingMode.track);
-                              // 現在位置をフォーカス
-                              final myBoat = navigator.myBoat.value;
-                              if (myBoat != null) {
-                                focusP14y(myBoat.lat, myBoat.lng,
-                                    navigator.myBoat.value?.heading ?? 0.0);
-                              }
-                              print("Navigation started.");
+                            onPressed: () {
+                              showModalBottomSheet<void>(
+                                context: context,
+                                backgroundColor: Colors.transparent,
+                                builder: (BuildContext context) {
+                                  return NavSettingModal(
+                                    onPressStartNav: () async {
+                                      Navigator.of(context).pop();
+                                      if (!navMap.isReady.value ||
+                                          !auth.isSignedIn) return;
+                                      // ナビゲーションを開始
+                                      final userId = auth.currentUser!.uid;
+                                      final config = NavConfig(
+                                          boatId: userId,
+                                          boatType: boatType,
+                                          seatPos: seatPosision,
+                                          accuracy: LocationAccuracy
+                                              .bestForNavigation);
+                                      await navigator.startNavigation(config);
+                                      // トラッキングモードに切り替え
+                                      tracking.setMode(TrackingMode.track);
+                                      // 現在位置をフォーカス
+                                      final myBoat = navigator.myBoat.value;
+                                      if (myBoat != null) {
+                                        focusP14y(
+                                            myBoat.lat,
+                                            myBoat.lng,
+                                            navigator.myBoat.value?.heading ??
+                                                0.0);
+                                      }
+                                      print("Navigation started.");
+                                    },
+                                  );
+                                },
+                              );
                             },
                           ),
                         if (navigator.mode.value == NavMode.navigator)

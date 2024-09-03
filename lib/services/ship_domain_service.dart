@@ -79,16 +79,16 @@ class ShipDomainService {
 
     switch (boatType) {
       case BoatType.r_1x:
-        shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
+        shipBodyParam = boatConfigs.r_1x_.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_1x_.shipDomainParams.exclusiveParam;
         break;
       case BoatType.r_2x:
-        shipBodyParam = boatConfigs.r_2x.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_2x.shipDomainParams.exclusiveParam;
+        shipBodyParam = boatConfigs.r_2x_.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_2x_.shipDomainParams.exclusiveParam;
         break;
       default:
-        shipBodyParam = boatConfigs.r_1x.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_1x.shipDomainParams.exclusiveParam;
+        shipBodyParam = boatConfigs.r_1x_.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_1x_.shipDomainParams.exclusiveParam;
         break;
     }
     final shipDomains = ShipDomains(
