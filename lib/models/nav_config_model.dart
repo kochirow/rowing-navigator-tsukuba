@@ -10,7 +10,7 @@ class NavConfig {
   static final init = NavConfig(
     boatId: 'init',
     boatType: BoatType.r_1x,
-    seatPos: SeatPosition(label: 'init', position: 0),
+    seatPos: boatConfigs.r_1x.seatPosList[0],
     accuracy: LocationAccuracy.bestForNavigation,
   );
 

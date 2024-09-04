@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/config/boat_config.dart';
 import 'package:rowing_navigator/features/home_map/widgets/RoundedButton.dart';
 
-import '../../../providers/nav_config.dart';
+import '../../../providers/nav_config_providers.dart';
 import '../../../types/boat_type.dart';
 
 class NavSettingModal extends HookConsumerWidget {

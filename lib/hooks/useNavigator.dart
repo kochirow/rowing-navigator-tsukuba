@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map_math/flutter_geo_math.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
@@ -30,6 +31,7 @@ UseNavigator useNavigator() {
   final otherBoats = useState<List<Boat>>([]);
   final obstacles = useState<List<StaticObstacle>>([]);
   final heading = useState<double?>(null);
+  final preRawPos = useState<Position?>(null);
   // Streams
   final headingStreamSubscription = useState<StreamSubscription?>(null);
   final dynamicObsStreamSubscription = useState<StreamSubscription?>(null);
@@ -50,6 +52,29 @@ UseNavigator useNavigator() {
 
   Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
     return await geoService.getCurrentPosition(accuracy);
+  }
+
+  Position getDestinationPosition(
+      Position pos, double distance, double heading) {
+    LatLng currentLatLng = LatLng(pos.latitude, pos.longitude);
+    final destinationLatLng = FlutterMapMath().destinationPoint(
+      currentLatLng.latitude,
+      currentLatLng.longitude,
+      distance,
+      heading,
+    );
+    return Position(
+      latitude: destinationLatLng.latitude,
+      longitude: destinationLatLng.longitude,
+      timestamp: pos.timestamp,
+      accuracy: pos.accuracy,
+      altitude: pos.altitude,
+      heading: pos.heading,
+      speed: pos.speed,
+      speedAccuracy: pos.speedAccuracy,
+      altitudeAccuracy: pos.altitudeAccuracy,
+      headingAccuracy: pos.headingAccuracy,
+    );
   }
 
   watchHeading() {
@@ -77,29 +102,35 @@ UseNavigator useNavigator() {
   }
 
   getLatestMyBoat() async {
-    final preMyBoat = myBoat.value;
     preProcessTime.value = DateTime.now(); // Pre-Process Time
-    final position = await getCurrentPosition(config.value!.accuracy);
+    final rawPos = await getCurrentPosition(config.value!.accuracy);
     postProcessTime.value = DateTime.now(); // Post-Process Time
-    double heading_;
-    if (heading.value != null) {
-      // Compassで方位角を取れている場合はその値を使用
-      heading_ = heading.value!;
-    } else {
+    double heading_; // 艇情報として使用される方位角
+    if (heading.value == null) {
       // Compassで方位角を取れていない場合は前回の位置情報から算出
-      if (preMyBoat != null) {
+      if (preRawPos.value != null) {
         heading_ = getHeading(
-          LatLng(preMyBoat.lat, preMyBoat.lng),
-          LatLng(position.latitude, position.longitude),
-        );
+          LatLng(preRawPos.value!.latitude, preRawPos.value!.longitude),
+          LatLng(rawPos.latitude, rawPos.longitude),
+        ); // 艇の中心にいると仮定しているため少し誤差がある
       } else {
         heading_ = 0.0;
       }
+    } else {
+      // Compassで方位角を取れている場合はその値を使用
+      heading_ = heading.value!;
     }
+    final offset =
+        Boat.getSeatOffset(config.value!.boatType, config.value!.seatPos);
+    final position = getDestinationPosition(
+      rawPos,
+      offset,
+      heading_,
+    );
+    preRawPos.value = rawPos; // 地理座標から方位角を算出する場合に使用するため保存
     return Boat(
       boatId: config.value!.boatId, // 自艇のID
-      boatType: BoatType.r_1x, // for development
-      seatPos: 0,
+      boatType: config.value!.boatType, // 自艇のtype
       lat: position.latitude,
       lng: position.longitude,
       heading: heading_,

@@ -4,7 +4,7 @@ import 'package:rowing_navigator/types/ship_domain_type.dart';
 import 'package:rowing_navigator/utils/sat_algorithm.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 
-import '../config/risk_evaluatior_config.dart';
+import '../config/risk_evaluator_config.dart';
 import '../models/boat_model.dart';
 import '../models/static_obstacle_model.dart';
 import '../types/collision_risk_level.dart';
@@ -41,7 +41,6 @@ class CollisionRiskEvaluatorService {
       lng: newLatLng.longitude,
       heading: boat.heading,
       boatType: boat.boatType,
-      seatPos: boat.seatPos,
       timestamp: boat.timestamp,
     );
     return newBoat;

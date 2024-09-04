@@ -9,11 +9,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/config/boat_config.dart';
-import 'package:rowing_navigator/providers/nav_config.dart';
+import 'package:rowing_navigator/providers/nav_config_providers.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart';
 
-import '../config/risk_evaluatior_config.dart';
+import '../config/risk_evaluator_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
@@ -373,6 +373,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                           !auth.isSignedIn) return;
                                       // ナビゲーションを開始
                                       final userId = auth.currentUser!.uid;
+                                      print(
+                                          "BoatType: $boatType, SeatPos: $seatPosision");
                                       final config = NavConfig(
                                           boatId: userId,
                                           boatType: boatType,
