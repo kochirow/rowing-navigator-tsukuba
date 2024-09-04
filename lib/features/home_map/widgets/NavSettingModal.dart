@@ -60,7 +60,7 @@ class NavSettingModal extends HookConsumerWidget {
                         fontWeight: FontWeight.normal,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -117,7 +117,7 @@ class NavSettingModal extends HookConsumerWidget {
                         fontWeight: FontWeight.normal,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
