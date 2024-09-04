@@ -53,9 +53,6 @@ class HomeMapScreen extends HookConsumerWidget {
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
     const DEFAULT_ZOOM_LEVEL = 17.0;
 
-    final boatType = ref.watch(boatTypeProvider);
-    final seatPosision = ref.watch(seatPositionProvider);
-
     focusP14y(double lat, double lng, double heading) async {
       // Focus programatically
       tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
@@ -373,12 +370,15 @@ class HomeMapScreen extends HookConsumerWidget {
                                           !auth.isSignedIn) return;
                                       // ナビゲーションを開始
                                       final userId = auth.currentUser!.uid;
-                                      print(
-                                          "BoatType: $boatType, SeatPos: $seatPosision");
+                                      // 最新の boatType と seatPosition を参照
+                                      final boatType =
+                                          ref.read(boatTypeProvider);
+                                      final seatPosition =
+                                          ref.read(seatPositionProvider);
                                       final config = NavConfig(
                                           boatId: userId,
                                           boatType: boatType,
-                                          seatPos: seatPosision,
+                                          seatPos: seatPosition,
                                           accuracy: LocationAccuracy
                                               .bestForNavigation);
                                       await navigator.startNavigation(config);

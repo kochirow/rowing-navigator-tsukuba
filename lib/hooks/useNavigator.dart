@@ -198,6 +198,8 @@ UseNavigator useNavigator() {
     await messageService.clearMessage(config_.boatId);
     // 設定を保存
     config.value = config_;
+    print(
+        "CONFIG - BoatType: ${config.value!.boatType.name}, SeatPos: ${config.value!.seatPos.label}");
     // ナビゲーションを開始
     await navigate();
     watchTimer.value = Timer.periodic(

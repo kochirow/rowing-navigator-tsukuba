@@ -70,7 +70,6 @@ class Boat {
     final seatIndex = pos.position; // 船首側からの座席位置
     final offset = ((seatCount - 2 * seatIndex + 1) / 2) *
         seatSpan; // 艇の中心を原点とし船首方向を正とする座標系での座席位置
-    print("seatCount: $seatCount, seatIndex: $seatIndex, offset: $offset");
     return offset;
   }
 }
