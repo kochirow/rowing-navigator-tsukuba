@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map_math/flutter_geo_math.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/config/navigator_config.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../hooks/useAlert.dart';
@@ -45,9 +46,6 @@ UseNavigator useNavigator() {
   final geoService = GeoService();
   final messageService = MessageService();
   final evaluatorService = CollisionRiskEvaluatorService();
-
-  // Constants
-  final POSITION_UPDATE_INTERVAL = 3;
 
   Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
     return await geoService.getCurrentPosition(accuracy);
@@ -225,7 +223,7 @@ UseNavigator useNavigator() {
     // ナビゲーションを開始
     await navigate();
     watchTimer.value = Timer.periodic(
-        Duration(seconds: POSITION_UPDATE_INTERVAL), (timer) async {
+        const Duration(seconds: positionUpdateInterval), (timer) async {
       await navigate();
     });
   }

@@ -49,7 +49,7 @@ class HomeMapScreen extends HookConsumerWidget {
     final auth = AuthService();
     // Constants
     const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
-    const DEFAULT_ZOOM_LEVEL = 17.0;
+    const DEFAULT_ZOOM_LEVEL = 19.0;
 
     focusP14y(double lat, double lng, double heading) async {
       // Focus programatically
