@@ -142,7 +142,7 @@ UseNavigator useNavigator() {
         Boat.getSeatOffset(config.value!.boatType, config.value!.seatPos);
     final position = getDestinationPosition(
       rawPos,
-      offset,
+      -offset,
       heading_,
     );
     preRawPos.value = rawPos; // 地理座標から方位角を算出する場合に使用するため保存
