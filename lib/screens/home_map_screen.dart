@@ -14,6 +14,7 @@ import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart'
 import '../config/risk_evaluator_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
+import '../features/home_map/widgets/NavStatusCard.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useTracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
@@ -246,6 +247,18 @@ class HomeMapScreen extends HookConsumerWidget {
               // ################ 艇情報カード ################
               Column(
                 children: [
+                  if (navigator.mode.value == NavMode.navigator)
+                    SizedBox(
+                        width: double.infinity,
+                        child: NavStatusCard(
+                          paceSeconds: navigator.myBoat.value != null
+                              ? navigator.myBoat.value!.speed != 0
+                                  ? (500 ~/ navigator.myBoat.value!.speed)
+                                  : 0
+                              : 0,
+                          distanceMeters: 1024,
+                          elapsedTimeSeconds: 4200,
+                        )),
                   if (showInfo.value)
                     SizedBox(
                         width: double.infinity,
@@ -254,7 +267,7 @@ class HomeMapScreen extends HookConsumerWidget {
                           config: navigator.config.value,
                           preProcessTime: navigator.preProcessTime.value,
                           postProcessTime: navigator.postProcessTime.value,
-                        ))
+                        )),
                 ],
               ),
               // ################ 左右操作ボタン類 ################
