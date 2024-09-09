@@ -89,7 +89,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return 5.0;
+      return speed;
     },
     seatPosList: [
       SeatPosition(label: '1', position: 1),
@@ -104,7 +104,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return 10.0;
+      return speed;
     },
     seatPosList: [
       SeatPosition(label: 'stroke', position: 2),
@@ -120,7 +120,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return 20.0;
+      return speed;
     },
     seatPosList: [
       SeatPosition(label: 'stroke', position: 4),
@@ -138,7 +138,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return 30.0;
+      return speed;
     },
     seatPosList: [
       SeatPosition(label: 'cox', position: 9),

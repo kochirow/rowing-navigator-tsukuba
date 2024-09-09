@@ -9,6 +9,7 @@ class Boat {
   double _lat;
   double _lng;
   double _heading;
+  double _speed;
   DateTime _timestamp;
 
   static final init = Boat(
@@ -17,6 +18,7 @@ class Boat {
     lat: 35.681236,
     lng: 139.767125,
     heading: 0,
+    speed: 0,
     timestamp: DateTime.now(),
   );
 
@@ -25,6 +27,7 @@ class Boat {
   double get lat => _lat;
   double get lng => _lng;
   double get heading => _heading;
+  double get speed => _speed;
   DateTime get timestamp => _timestamp;
 
   Boat({
@@ -33,12 +36,14 @@ class Boat {
     required double lat,
     required double lng,
     required double heading,
+    required double speed,
     required DateTime timestamp,
   })  : _boatId = boatId,
         _boatType = boatType,
         _lat = lat,
         _lng = lng,
         _heading = heading,
+        _speed = speed,
         _timestamp = timestamp;
 
   Message toMessage() {
@@ -48,6 +53,7 @@ class Boat {
       lat: init.lat,
       lng: init.lng,
       heading: init.heading,
+      speed: init.speed,
       timestamp: init.timestamp,
     );
     return m;
@@ -60,6 +66,7 @@ class Boat {
       lat: message.lat,
       lng: message.lng,
       heading: message.heading,
+      speed: message.speed,
       timestamp: message.timestamp,
     );
     return b;

@@ -77,6 +77,16 @@ UseNavigator useNavigator() {
     );
   }
 
+  double getDistanceBetween(Position pos1, Position pos2) {
+    final distance = Geolocator.distanceBetween(
+      pos1.latitude,
+      pos1.longitude,
+      pos2.latitude,
+      pos2.longitude,
+    );
+    return distance;
+  }
+
   watchHeading() {
     headingStreamSubscription.value = FlutterCompass.events?.listen((snapshot) {
       heading.value = snapshot.heading;
@@ -120,6 +130,17 @@ UseNavigator useNavigator() {
       // Compassで方位角を取れている場合はその値を使用
       heading_ = heading.value!;
     }
+    double speed_; // 艇情報として使用される速度
+    if (rawPos.speed < 0) {
+      // 直前の位置情報がある場合は直前の位置情報から算出
+      speed_ = preRawPos.value == null
+          ? 0.0
+          : getDistanceBetween(preRawPos.value!, rawPos);
+    } else {
+      // 速度情報が正常な場合はその値を使用
+      speed_ = rawPos.speed;
+    }
+    // print("speed = $speed_");
     final offset =
         Boat.getSeatOffset(config.value!.boatType, config.value!.seatPos);
     final position = getDestinationPosition(
@@ -134,6 +155,7 @@ UseNavigator useNavigator() {
       lat: position.latitude,
       lng: position.longitude,
       heading: heading_,
+      speed: speed_,
       timestamp: position.timestamp,
     );
   }

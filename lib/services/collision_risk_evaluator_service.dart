@@ -26,12 +26,12 @@ class Situation {
 class CollisionRiskEvaluatorService {
   double getStoppingDistance(Boat boat) {
     // 艇種ごとに停止距離を計算する
-    const speed = 2.0;
+    final speed = boat.speed;
     return boatConfigs.byBoatType(boat.boatType).stoppingDistanceFormula(speed);
   }
 
   Boat predictPosition(Boat boat, double afterSeconds) {
-    const speed = 2.0; // for development / m/s
+    final speed = boat.speed;
     double distance = speed * afterSeconds;
     final newLatLng =
         computeOffset(LatLng(boat.lat, boat.lng), distance, boat.heading);
@@ -40,6 +40,7 @@ class CollisionRiskEvaluatorService {
       lat: newLatLng.latitude,
       lng: newLatLng.longitude,
       heading: boat.heading,
+      speed: boat.speed,
       boatType: boat.boatType,
       timestamp: boat.timestamp,
     );
@@ -117,11 +118,12 @@ class CollisionRiskEvaluatorService {
     CollisionRiskLevel level = CollisionRiskLevel.lv0;
 
     // 自艇が停止するまでの他艇および障害物との衝突リスクを評価
-    const speed = 2.0; // for development / m/s
+    final speed = myBoat.speed;
     final stoppingDistance = getStoppingDistance(myBoat);
     final warningDistance = stoppingDistance + speed * warningTime;
     final cautionDistance = warningDistance + speed * cautionTime;
     double t = 0;
+    double deltaTime = evaluationInterval / speed;
     while (true) {
       final distance = speed * t;
       if (distance > cautionDistance) break;
@@ -149,11 +151,12 @@ class CollisionRiskEvaluatorService {
 
     // 他艇が停止するまでの自艇との衝突リスクを評価
     for (final otherBoat in otherBoats) {
-      final speed = 2.0; // for development / m/s
+      final speed = otherBoat.speed;
       final stoppingDistance = getStoppingDistance(otherBoat);
       final warningDistance = stoppingDistance + speed * warningTime;
       final cautionDistance = warningDistance + speed * cautionTime;
       double t = 0;
+      double deltaTime = evaluationInterval / speed;
       while (true) {
         final distance = speed * t;
         if (distance > cautionDistance) break;

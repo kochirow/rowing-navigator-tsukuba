@@ -7,6 +7,7 @@ class Message {
   double _lat;
   double _lng;
   double _heading;
+  double _speed;
   DateTime _timestamp;
 
   Message({
@@ -15,12 +16,14 @@ class Message {
     required double lat,
     required double lng,
     required double heading,
+    required double speed,
     required DateTime timestamp,
   })  : _boatId = boatId,
         _boatType = boatType,
         _lat = lat,
         _lng = lng,
         _heading = heading,
+        _speed = speed,
         _timestamp = timestamp;
 
   String get boatId => _boatId;
@@ -28,6 +31,7 @@ class Message {
   double get lat => _lat;
   double get lng => _lng;
   double get heading => _heading;
+  double get speed => _speed;
   DateTime get timestamp => _timestamp;
 
   Map<String, dynamic> toJson() {
@@ -37,6 +41,7 @@ class Message {
       'lat': _lat,
       'lng': _lng,
       'heading': _heading,
+      'speed': _speed,
       'timestamp': _timestamp,
     };
   }
@@ -51,6 +56,7 @@ class Message {
       lat: json['lat'].toDouble(),
       lng: json['lng'].toDouble(),
       heading: json['heading'].toDouble(),
+      speed: json['speed'].toDouble(),
       timestamp: json['timestamp'].toDate(),
     );
   }

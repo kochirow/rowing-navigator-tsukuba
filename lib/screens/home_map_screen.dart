@@ -143,11 +143,12 @@ class HomeMapScreen extends HookConsumerWidget {
       ];
       Set<Polygon> newShipDomains = {};
       for (final boat in allBoats) {
-        const speed = 2.0; // for development
+        final speed = boat.speed;
         final stoppingDistance = evalService.getStoppingDistance(boat);
         final warningDistantce = stoppingDistance + warningTime * speed;
         final cautionDistance = warningDistantce + cautionTime * speed;
         double t = 0;
+        double deltaTime = evaluationInterval / speed;
         while (true) {
           final distance = speed * t;
           if (distance > cautionDistance) break;
