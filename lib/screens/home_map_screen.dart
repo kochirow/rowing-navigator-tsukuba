@@ -148,7 +148,7 @@ class HomeMapScreen extends HookConsumerWidget {
         final warningDistantce = stoppingDistance + warningTime * speed;
         final cautionDistance = warningDistantce + cautionTime * speed;
         double t = 0;
-        double deltaTime = evaluationInterval / speed;
+        double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
         while (true) {
           final distance = speed * t;
           if (distance > cautionDistance) break;
@@ -171,6 +171,7 @@ class HomeMapScreen extends HookConsumerWidget {
             fillColor: fillColor,
           );
           newShipDomains.add(domain);
+          if (speed == 0.0) break; // 艇が停止している場合は離脱
           t += deltaTime;
         }
       }
