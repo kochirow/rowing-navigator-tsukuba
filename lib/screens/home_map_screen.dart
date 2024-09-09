@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -8,7 +7,6 @@ import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/config/boat_config.dart';
 import 'package:rowing_navigator/providers/nav_config_providers.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart';
@@ -19,7 +17,6 @@ import '../features/home_map/widgets/MapTypeSwitcher.dart';
 import '../features/home_map/widgets/RoundedButton.dart';
 import '../hooks/useTracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
-import '../types/boat_type.dart';
 import '../types/tracking_mode.dart';
 import '../widgets/RoundedIconButton.dart';
 import '../hooks/useNavigator.dart';

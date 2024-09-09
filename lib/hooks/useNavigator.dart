@@ -5,11 +5,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map_math/flutter_geo_math.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/types/boat_type.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
-import '../models/message_model.dart';
 import '../models/nav_config_model.dart';
 import '../models/static_obstacle_model.dart';
 import '../services/collision_risk_evaluator_service.dart';
@@ -214,6 +213,7 @@ UseNavigator useNavigator() {
   startNavigation(NavConfig config_) async {
     // モードを変更
     mode.value = NavMode.navigator;
+    WakelockPlus.enable(); // spell-checker:disable-line
     // 初期化
     safetyLevel.value = SafetyLevel.safe;
     final messageService = MessageService();
@@ -233,6 +233,7 @@ UseNavigator useNavigator() {
   stopNavigation() async {
     // モードを変更
     mode.value = NavMode.observer;
+    WakelockPlus.disable(); // spell-checker:disable-line
     // 終了処理
     watchTimer.value?.cancel();
     final messageService = MessageService();

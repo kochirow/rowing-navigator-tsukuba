@@ -1,6 +1,5 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/config/boat_config.dart';
-import 'package:rowing_navigator/types/ship_domain_type.dart';
 import 'package:rowing_navigator/utils/sat_algorithm.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 

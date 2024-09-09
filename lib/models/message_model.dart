@@ -1,4 +1,3 @@
-import '../models/boat_model.dart';
 import '../types/boat_type.dart';
 
 class Message {
