@@ -157,4 +157,4 @@ BoatConfigs boatConfigs = BoatConfigs(
   ),
 );
 
-const seatSpan = 0.9; // 座席間距離
+const seatSpan = 1.4; // 座席間距離
