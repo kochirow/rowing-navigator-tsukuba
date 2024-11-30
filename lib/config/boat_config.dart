@@ -79,6 +79,9 @@ class SeatPosition {
 // ============================
 // Boat Config
 // ============================
+const tp = 0.5; // perception time
+const td = 1.0; // decision time
+const tr = 2.0; // reaction time
 BoatConfigs boatConfigs = BoatConfigs(
   r_1x_: BoatConfig(
     type: BoatType.r_1x,
@@ -89,7 +92,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return speed;
+      return (tp + td + tr) * speed + 3.45 * speed;
     },
     seatPosList: [
       SeatPosition(label: '1', position: 1),
@@ -104,7 +107,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return speed;
+      return (tp + td + tr) * speed + 3.10 * speed;
     },
     seatPosList: [
       SeatPosition(label: 'stroke', position: 2),
@@ -120,7 +123,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return speed;
+      return (tp + td + tr) * speed + 3.18 * speed;
     },
     seatPosList: [
       SeatPosition(label: 'stroke', position: 4),
@@ -138,7 +141,7 @@ BoatConfigs boatConfigs = BoatConfigs(
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
-      return speed;
+      return (tp + td + tr) * speed + 4.65 * speed;
     },
     seatPosList: [
       SeatPosition(label: 'cox', position: 9),
