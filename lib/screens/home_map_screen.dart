@@ -144,22 +144,19 @@ class HomeMapScreen extends HookConsumerWidget {
         final speed = boat.speed;
         final stoppingDistance = evalService.getStoppingDistance(boat);
         final warningDistantce = stoppingDistance + warningTime * speed;
-        final cautionDistance = warningDistantce + cautionTime * speed;
         double t = 0;
         double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
         while (true) {
           final distance = speed * t;
-          if (distance > cautionDistance) break;
+          if (distance > warningDistantce) break;
           final futureBoat = evalService.predictPosition(boat, t);
           final futureDomains = shipDomainService.getShipDomains(futureBoat);
           Polygon futureBodyDomain = futureDomains.shipBodyDomain;
           Color fillColor = Colors.red.withOpacity(0.5);
           if (distance <= stoppingDistance) {
-            fillColor = Colors.red.withOpacity(0.5);
+            fillColor = futureDomains.shipBodyDomain.fillColor;
           } else if (distance <= warningDistantce) {
-            fillColor = Colors.yellow.withOpacity(0.5);
-          } else if (distance <= cautionDistance) {
-            fillColor = Colors.green.withOpacity(0.5);
+            fillColor = futureDomains.exclusiveDomain.fillColor;
           }
           final domain = Polygon(
             polygonId: PolygonId(

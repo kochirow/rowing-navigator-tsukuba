@@ -57,12 +57,10 @@ class BoatConfig {
 class ShipDomainParams {
   final ShipDomainParam shipBodyParam;
   final ShipDomainParam exclusiveParam;
-  final ShipDomainParam attentionParam;
 
   ShipDomainParams({
     required this.shipBodyParam,
     required this.exclusiveParam,
-    required this.attentionParam,
   });
 }
 
@@ -89,7 +87,6 @@ BoatConfigs boatConfigs = BoatConfigs(
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 8.2, w: 6, s: 4),
       exclusiveParam: ShipDomainParam(h: 11.2, w: 9, s: 5.8),
-      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
       return (tp + td + tr) * speed + 3.45 * speed;
@@ -104,7 +101,6 @@ BoatConfigs boatConfigs = BoatConfigs(
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 10.4, w: 6, s: 5),
       exclusiveParam: ShipDomainParam(h: 13.4, w: 9, s: 5.6),
-      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
       return (tp + td + tr) * speed + 3.10 * speed;
@@ -120,7 +116,6 @@ BoatConfigs boatConfigs = BoatConfigs(
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 13.4, w: 6, s: 8.5),
       exclusiveParam: ShipDomainParam(h: 16.4, w: 9, s: 9.6),
-      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
       return (tp + td + tr) * speed + 3.18 * speed;
@@ -138,7 +133,6 @@ BoatConfigs boatConfigs = BoatConfigs(
     shipDomainParams: ShipDomainParams(
       shipBodyParam: ShipDomainParam(h: 19.9, w: 7.5, s: 16),
       exclusiveParam: ShipDomainParam(h: 22.9, w: 10.5, s: 18.88),
-      attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
       return (tp + td + tr) * speed + 4.65 * speed;

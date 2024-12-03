@@ -120,12 +120,11 @@ class CollisionRiskEvaluatorService {
     final speed = myBoat.speed;
     final stoppingDistance = getStoppingDistance(myBoat);
     final warningDistance = stoppingDistance + speed * warningTime;
-    final cautionDistance = warningDistance + speed * cautionTime;
     double t = 0;
     double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
     while (true) {
       final distance = speed * t;
-      if (distance > cautionDistance) break;
+      if (distance > warningDistance) break;
       Situation futureSituation =
           predictSituation(myBoat, otherBoats, obstacles, t); // t秒後の状況を予測
       final isColliding = checkCollision(futureSituation.myBoat,
@@ -139,10 +138,6 @@ class CollisionRiskEvaluatorService {
           level = CollisionRiskLevel.lv2.index > level.index
               ? CollisionRiskLevel.lv2
               : level;
-        } else if (distance <= cautionDistance) {
-          level = CollisionRiskLevel.lv1.index > level.index
-              ? CollisionRiskLevel.lv1
-              : level;
         }
       }
       if (speed == 0.0) break; // 艇が停止している場合は離脱
@@ -154,12 +149,11 @@ class CollisionRiskEvaluatorService {
       final speed = otherBoat.speed;
       final stoppingDistance = getStoppingDistance(otherBoat);
       final warningDistance = stoppingDistance + speed * warningTime;
-      final cautionDistance = warningDistance + speed * cautionTime;
       double t = 0;
       double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
       while (true) {
         final distance = speed * t;
-        if (distance > cautionDistance) break;
+        if (distance > warningDistance) break;
         Situation futureSituation = predictSituation(
             myBoat, [otherBoat], [], t); // t秒後の状況を予測／対象の艇以外と障害物は無視
         final isColliding = checkCollision(futureSituation.myBoat,
@@ -172,10 +166,6 @@ class CollisionRiskEvaluatorService {
           } else if (distance <= warningDistance) {
             level = CollisionRiskLevel.lv2.index > level.index
                 ? CollisionRiskLevel.lv2
-                : level;
-          } else if (distance <= cautionDistance) {
-            level = CollisionRiskLevel.lv1.index > level.index
-                ? CollisionRiskLevel.lv1
                 : level;
           }
         }

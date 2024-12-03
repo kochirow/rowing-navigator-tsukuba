@@ -105,14 +105,14 @@ class ShipDomainService {
         points: getShipDomainPoints(LatLng(boat.lat, boat.lng), boat.heading,
             shipBodyParam.h, shipBodyParam.w, shipBodyParam.s),
         strokeWidth: 0,
-        fillColor: Colors.red.withOpacity(0.9),
+        fillColor: Colors.red.withOpacity(0.5),
       ),
       exclusiveDomain: Polygon(
         polygonId: PolygonId(ShipDomainType.exclusiveDomain.value),
         points: getShipDomainPoints(LatLng(boat.lat, boat.lng), boat.heading,
             exclusiveParam.h, exclusiveParam.w, exclusiveParam.s),
         strokeWidth: 0,
-        fillColor: Colors.yellow.withOpacity(0.6),
+        fillColor: Colors.yellow.withOpacity(0.5),
       ),
     );
     return shipDomains;
