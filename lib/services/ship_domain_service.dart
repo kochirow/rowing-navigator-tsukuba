@@ -73,7 +73,7 @@ class ShipDomainService {
   }
 
   ShipDomains getShipDomains(Boat boat) {
-    BoatType boatType = BoatType.r_1x;
+    BoatType boatType = boat.boatType;
     ShipDomainParam shipBodyParam; // 船体領域
     ShipDomainParam exclusiveParam; // 排他領域
 
@@ -85,6 +85,14 @@ class ShipDomainService {
       case BoatType.r_2x:
         shipBodyParam = boatConfigs.r_2x_.shipDomainParams.shipBodyParam;
         exclusiveParam = boatConfigs.r_2x_.shipDomainParams.exclusiveParam;
+        break;
+      case BoatType.r_4x:
+        shipBodyParam = boatConfigs.r_4x_.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_4x_.shipDomainParams.exclusiveParam;
+        break;
+      case BoatType.r_8p:
+        shipBodyParam = boatConfigs.r_8p_.shipDomainParams.shipBodyParam;
+        exclusiveParam = boatConfigs.r_8p_.shipDomainParams.exclusiveParam;
         break;
       default:
         shipBodyParam = boatConfigs.r_1x_.shipDomainParams.shipBodyParam;

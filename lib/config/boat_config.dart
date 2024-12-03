@@ -87,8 +87,8 @@ BoatConfigs boatConfigs = BoatConfigs(
     type: BoatType.r_1x,
     label: '1x',
     shipDomainParams: ShipDomainParams(
-      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
-      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      shipBodyParam: ShipDomainParam(h: 8.2, w: 6, s: 4),
+      exclusiveParam: ShipDomainParam(h: 11.2, w: 9, s: 5.8),
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
@@ -102,8 +102,8 @@ BoatConfigs boatConfigs = BoatConfigs(
     type: BoatType.r_2x,
     label: '2x',
     shipDomainParams: ShipDomainParams(
-      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
-      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      shipBodyParam: ShipDomainParam(h: 10.4, w: 6, s: 5),
+      exclusiveParam: ShipDomainParam(h: 13.4, w: 9, s: 5.6),
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
@@ -118,8 +118,8 @@ BoatConfigs boatConfigs = BoatConfigs(
     type: BoatType.r_4x,
     label: '4x',
     shipDomainParams: ShipDomainParams(
-      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
-      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      shipBodyParam: ShipDomainParam(h: 13.4, w: 6, s: 8.5),
+      exclusiveParam: ShipDomainParam(h: 16.4, w: 9, s: 9.6),
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
@@ -136,8 +136,8 @@ BoatConfigs boatConfigs = BoatConfigs(
     type: BoatType.r_8p,
     label: '8+',
     shipDomainParams: ShipDomainParams(
-      shipBodyParam: ShipDomainParam(h: 10, w: 6, s: 6),
-      exclusiveParam: ShipDomainParam(h: 20, w: 10, s: 14),
+      shipBodyParam: ShipDomainParam(h: 19.9, w: 7.5, s: 16),
+      exclusiveParam: ShipDomainParam(h: 22.9, w: 10.5, s: 18.88),
       attentionParam: ShipDomainParam(h: 40, w: 14, s: 22),
     ),
     stoppingDistanceFormula: (speed) {
