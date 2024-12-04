@@ -66,6 +66,7 @@ class CollisionRiskEvaluatorService {
     final shipDomainService = ShipDomainService();
     final myShipDomains = shipDomainService.getShipDomains(myBoat);
     final myShipBodyDomain = myShipDomains.shipBodyDomain;
+    final myExclusiveDomain = myShipDomains.exclusiveDomain;
 
     // ===========================
     // 障害物との衝突リスクを評価
@@ -75,9 +76,9 @@ class CollisionRiskEvaluatorService {
         polygonId: PolygonId(obstacle.id),
         points: obstacle.points,
       );
+      // 自艇の排他領域と障害物領域の衝突判定
       try {
-        final collide = polygonsOverlap(myShipBodyDomain,
-            obstacleDomain); // 自艇は船体領域で衝突判定を行う／停止時に余裕を持たせるなら排他領域で衝突判定を行う
+        final collide = polygonsOverlap(myExclusiveDomain, obstacleDomain);
         if (collide) return true;
       } catch (e) {
         print(e); // 衝突判定ができない場合は無視
@@ -90,19 +91,18 @@ class CollisionRiskEvaluatorService {
     for (final otherBoat in otherBoats) {
       final otherShipDomains = shipDomainService.getShipDomains(otherBoat);
       final otherShipBodyDomain = otherShipDomains.shipBodyDomain;
-      // 1. 自艇の領域と他艇の船体領域との衝突判定
+      final otherExclusiveDomain = otherShipDomains.exclusiveDomain;
+      // 1. 自艇の排他領域と他艇の船体領域との衝突判定
       try {
-        final collide = polygonsOverlap(myShipBodyDomain,
-            otherShipBodyDomain); // 自艇は船体領域で衝突判定を行う／停止時に余裕を持たせるなら排他領域で衝突判定を行う
+        final collide = polygonsOverlap(myExclusiveDomain, otherShipBodyDomain);
         if (collide) return true;
       } catch (e) {
         print(e); // 衝突判定ができない場合は無視
       }
 
-      // 2. 自艇の船体領域と他艇の領域との衝突判定
+      // 2. 他艇の排他領域と自艇の船体領域との衝突判定
       try {
-        final collide = polygonsOverlap(otherShipBodyDomain,
-            myShipBodyDomain); // 他艇は船体領域で衝突判定を行う／停止時に余裕を持たせるなら排他領域で衝突判定を行う
+        final collide = polygonsOverlap(otherExclusiveDomain, myShipBodyDomain);
         if (collide) return true;
       } catch (e) {
         print(e); // 衝突判定ができない場合は無視
