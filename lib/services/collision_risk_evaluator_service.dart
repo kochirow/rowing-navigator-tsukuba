@@ -121,7 +121,9 @@ class CollisionRiskEvaluatorService {
     final stoppingDistance = getStoppingDistance(myBoat);
     final warningDistance = stoppingDistance + speed * warningTime;
     double t = 0;
-    double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
+    double deltaTime = speed == 0
+        ? -1
+        : evalIntervalDistance / speed; // evalIntervalDistance[m]ごとに衝突リスクを評価
     while (true) {
       final distance = speed * t;
       if (distance > warningDistance) break;
@@ -150,7 +152,9 @@ class CollisionRiskEvaluatorService {
       final stoppingDistance = getStoppingDistance(otherBoat);
       final warningDistance = stoppingDistance + speed * warningTime;
       double t = 0;
-      double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
+      double deltaTime = speed == 0
+          ? -1
+          : evalIntervalDistance / speed; // evalIntervalDistance[m]ごとに衝突リスクを評価
       while (true) {
         final distance = speed * t;
         if (distance > warningDistance) break;

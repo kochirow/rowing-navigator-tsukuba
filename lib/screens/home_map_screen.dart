@@ -145,7 +145,7 @@ class HomeMapScreen extends HookConsumerWidget {
         final stoppingDistance = evalService.getStoppingDistance(boat);
         final warningDistantce = stoppingDistance + warningTime * speed;
         double t = 0;
-        double deltaTime = speed == 0 ? -1 : evaluationInterval / speed;
+        double deltaTime = speed == 0 ? -1 : evalIntervalDistance / speed;
         while (true) {
           final distance = speed * t;
           if (distance > warningDistantce) break;
