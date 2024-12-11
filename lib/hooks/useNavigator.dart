@@ -192,7 +192,7 @@ UseNavigator useNavigator() {
 
     // ######## Send Message ########
     final message = latestMyBoat.toMessage();
-    // messageService.sendMessage(message);
+    messageService.sendMessage(message);
 
     // ######## Evaluate Collision Risk ########
     final riskLevel = evaluatorService.evaluateFutureRisk(

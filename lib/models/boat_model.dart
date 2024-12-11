@@ -48,13 +48,13 @@ class Boat {
 
   Message toMessage() {
     final m = Message(
-      boatId: init.boatId,
-      boatType: init.boatType,
-      lat: init.lat,
-      lng: init.lng,
-      heading: init.heading,
-      speed: init.speed,
-      timestamp: init.timestamp,
+      boatId: _boatId,
+      boatType: _boatType,
+      lat: _lat,
+      lng: _lng,
+      heading: _heading,
+      speed: _speed,
+      timestamp: _timestamp,
     );
     return m;
   }
