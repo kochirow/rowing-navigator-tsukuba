@@ -151,21 +151,33 @@ class HomeMapScreen extends HookConsumerWidget {
           if (distance > warningDistantce) break;
           final futureBoat = evalService.predictPosition(boat, t);
           final futureDomains = shipDomainService.getShipDomains(futureBoat);
-          Polygon futureBodyDomain = futureDomains.shipBodyDomain;
-          Color fillColor = Colors.red.withOpacity(0.5);
+          Polygon futureShipBodyDomain = futureDomains.shipBodyDomain;
+          Polygon futureExclusiveDomain = futureDomains.exclusiveDomain;
+          Color shipBodyDomainColor = Colors.black.withOpacity(0.2);
+          Color exclusiveDomainColor = Colors.red.withOpacity(0.5);
           if (distance <= stoppingDistance) {
-            fillColor = futureDomains.shipBodyDomain.fillColor;
+            exclusiveDomainColor = Colors.red.withOpacity(0.5);
           } else if (distance <= warningDistantce) {
-            fillColor = futureDomains.exclusiveDomain.fillColor;
+            exclusiveDomainColor = Colors.yellow.withOpacity(0.5);
           }
-          final domain = Polygon(
+          // 船体領域を描画
+          final shipBodyDomain = Polygon(
             polygonId: PolygonId(
-                "${futureBodyDomain.polygonId.value}_${boat.boatId}_$t"),
-            points: futureBodyDomain.points,
+                "${futureShipBodyDomain.polygonId.value}_${boat.boatId}_$t"),
+            points: futureShipBodyDomain.points,
             strokeWidth: 0,
-            fillColor: fillColor,
+            fillColor: shipBodyDomainColor,
           );
-          newShipDomains.add(domain);
+          newShipDomains.add(shipBodyDomain);
+          // 排他領域を描画
+          final exclusiveDomain = Polygon(
+            polygonId: PolygonId(
+                "${futureExclusiveDomain.polygonId.value}_${boat.boatId}_$t"),
+            points: futureExclusiveDomain.points,
+            strokeWidth: 0,
+            fillColor: exclusiveDomainColor,
+          );
+          newShipDomains.add(exclusiveDomain);
           if (speed == 0.0) break; // 艇が停止している場合は離脱
           t += deltaTime;
         }

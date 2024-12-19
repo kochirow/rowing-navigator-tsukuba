@@ -164,12 +164,12 @@ class CollisionRiskEvaluatorService {
             futureSituation.otherBoats, futureSituation.obstacles);
         if (isColliding) {
           if (distance <= stoppingDistance) {
-            level = CollisionRiskLevel.lv3.index > level.index
-                ? CollisionRiskLevel.lv3
-                : level;
-          } else if (distance <= warningDistance) {
             level = CollisionRiskLevel.lv2.index > level.index
                 ? CollisionRiskLevel.lv2
+                : level;
+          } else if (distance <= warningDistance) {
+            level = CollisionRiskLevel.lv1.index > level.index
+                ? CollisionRiskLevel.lv1
                 : level;
           }
         }
