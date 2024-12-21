@@ -32,6 +32,7 @@ UseNavigator useNavigator() {
   final obstacles = useState<List<StaticObstacle>>([]);
   final heading = useState<double?>(null);
   final preRawPos = useState<Position?>(null);
+  final preHeading = useState<double?>(0.0);
   // Streams
   final headingStreamSubscription = useState<StreamSubscription?>(null);
   final dynamicObsStreamSubscription = useState<StreamSubscription?>(null);
@@ -112,21 +113,6 @@ UseNavigator useNavigator() {
     preProcessTime.value = DateTime.now(); // Pre-Process Time
     final rawPos = await getCurrentPosition(config.value!.accuracy);
     postProcessTime.value = DateTime.now(); // Post-Process Time
-    double heading_; // 艇情報として使用される方位角
-    if (heading.value == null) {
-      // Compassで方位角を取れていない場合は前回の位置情報から算出
-      if (preRawPos.value != null) {
-        heading_ = getHeading(
-          LatLng(preRawPos.value!.latitude, preRawPos.value!.longitude),
-          LatLng(rawPos.latitude, rawPos.longitude),
-        ); // 艇の中心にいると仮定しているため少し誤差がある
-      } else {
-        heading_ = 0.0;
-      }
-    } else {
-      // Compassで方位角を取れている場合はその値を使用
-      heading_ = heading.value!;
-    }
     double speed_; // 艇情報として使用される速度
     if (rawPos.speed < 0) {
       // 直前の位置情報がある場合は直前の位置情報から算出
@@ -137,7 +123,52 @@ UseNavigator useNavigator() {
       // 速度情報が正常な場合はその値を使用
       speed_ = rawPos.speed;
     }
-    // print("speed = $speed_");
+    double heading_; // 艇情報として使用される方位角
+    if (speed_ < 2.25 && heading.value != null) {
+      // 2.25m/s未満かつCompassの方位角情報を利用できる場合はその値を使用
+      // コンパスの値を-180から180の範囲に正規化
+      double normalizedCompassHeading = ((heading.value! + 180) % 360) - 180;
+      double normalizedPreHeading = ((preHeading.value! + 180) % 360) - 180;
+
+      // 180度付近での遷移を考慮した平均計算
+      double diff = normalizedCompassHeading - normalizedPreHeading;
+      if (diff > 180) {
+        normalizedCompassHeading -= 360;
+      } else if (diff < -180) {
+        normalizedCompassHeading += 360;
+      }
+
+      // 前回と現在の方位角の平均を使用
+      heading_ = (normalizedCompassHeading + normalizedPreHeading) / 2;
+      // 最終的な結果を-180から180の範囲に正規化
+      heading_ = ((heading_ + 180) % 360) - 180;
+    } else {
+      // 2.25m/s以上またはCompassの方位角情報を利用できない場合は前回の位置情報から算出
+      if (preRawPos.value != null) {
+        final posHeading = getHeading(
+          LatLng(preRawPos.value!.latitude, preRawPos.value!.longitude),
+          LatLng(rawPos.latitude, rawPos.longitude),
+        ); // 艇の中心にいると仮定しているため少し誤差がある
+        // 位置情報から算出した方位角を-180から180の範囲に正規化
+        double normalizedPosHeading = ((posHeading + 180) % 360) - 180;
+        double normalizedPreHeading = ((preHeading.value! + 180) % 360) - 180;
+
+        // 180度付近での遷移を考慮した平均計算
+        double diff = normalizedPosHeading - normalizedPreHeading;
+        if (diff > 180) {
+          normalizedPosHeading -= 360;
+        } else if (diff < -180) {
+          normalizedPosHeading += 360;
+        }
+
+        // 前回と現在の方位角の平均を使用
+        heading_ = (normalizedPosHeading + normalizedPreHeading) / 2;
+        // 最終的な結果を-180から180の範囲に正規化
+        heading_ = ((heading_ + 180) % 360) - 180;
+      } else {
+        heading_ = 0.0;
+      }
+    }
     final offset =
         Boat.getSeatOffset(config.value!.boatType, config.value!.seatPos);
     final position = getDestinationPosition(
@@ -146,6 +177,7 @@ UseNavigator useNavigator() {
       heading_,
     );
     preRawPos.value = rawPos; // 地理座標から方位角を算出する場合に使用するため保存
+    preHeading.value = heading_; // 艇情報として使用する方位角を保存
     return Boat(
       boatId: config.value!.boatId, // 自艇のID
       boatType: config.value!.boatType, // 自艇のtype

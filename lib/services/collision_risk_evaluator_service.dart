@@ -81,6 +81,7 @@ class CollisionRiskEvaluatorService {
         final collide = polygonsOverlap(myExclusiveDomain, obstacleDomain);
         if (collide) return true;
       } catch (e) {
+        print('Obstacle ID: ${obstacle.id}');
         print(e); // 衝突判定ができない場合は無視
       }
     }
@@ -97,6 +98,7 @@ class CollisionRiskEvaluatorService {
         final collide = polygonsOverlap(myExclusiveDomain, otherShipBodyDomain);
         if (collide) return true;
       } catch (e) {
+        print('Boat ID: ${otherBoat.boatId}');
         print(e); // 衝突判定ができない場合は無視
       }
 
@@ -105,6 +107,7 @@ class CollisionRiskEvaluatorService {
         final collide = polygonsOverlap(otherExclusiveDomain, myShipBodyDomain);
         if (collide) return true;
       } catch (e) {
+        print('Boat ID: ${otherBoat.boatId}');
         print(e); // 衝突判定ができない場合は無視
       }
     }
