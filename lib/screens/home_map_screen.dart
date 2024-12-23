@@ -11,6 +11,7 @@ import 'package:rowing_navigator/providers/nav_config_providers.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart';
 
+import '../config/boat_config.dart';
 import '../config/risk_evaluator_config.dart';
 import '../features/home_map/widgets/BoatStatusCard.dart';
 import '../features/home_map/widgets/MapTypeSwitcher.dart';
@@ -116,8 +117,10 @@ class HomeMapScreen extends HookConsumerWidget {
             boat.lat,
             boat.lng,
             boat.heading,
-            "他艇",
-            "他艇の位置情報\n${boat.boatId}\nBoatType: ${boat.boatType}",
+            boatConfigs.byBoatType(boat.boatType).label,
+            "${boat.boatId}\n"
+            "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
+            "進路: ${boat.heading.toStringAsFixed(1)}°",
           ));
         }
         // マーカーを更新
