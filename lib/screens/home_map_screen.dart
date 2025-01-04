@@ -105,7 +105,10 @@ class HomeMapScreen extends HookConsumerWidget {
             myBoat.lng,
             myBoat.heading,
             "自艇",
-            "自艇の位置情報\n${myBoat.boatId}\nBoatType: ${myBoat.boatType}",
+            "${myBoat.boatId}\n"
+                "BoatType: ${myBoat.boatType}\n"
+                "速度: ${myBoat.speed.toStringAsFixed(1)} m/s\n"
+                "進路: ${myBoat.heading.toStringAsFixed(1)}°",
           ));
         }
         // 他艇のマーカーを作成
@@ -119,6 +122,7 @@ class HomeMapScreen extends HookConsumerWidget {
             boat.heading,
             boatConfigs.byBoatType(boat.boatType).label,
             "${boat.boatId}\n"
+            "BoatType: ${boat.boatType}\n"
             "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
             "進路: ${boat.heading.toStringAsFixed(1)}°",
           ));
