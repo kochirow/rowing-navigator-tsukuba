@@ -126,7 +126,7 @@ UseNavigator useNavigator() {
     double heading_; // 艇情報として使用される方位角
     if (speed_ < 1.67 && heading.value != null) {
       // 1.67m/s未満かつCompassの方位角情報を利用できる場合はその値を使用
-      // コンパスの値を-180から180の範囲に正規化e
+      // コンパスの値を-180から180の範囲に正規化
       double normalizedCompassHeading = ((heading.value! + 180) % 360) - 180;
       double normalizedPreHeading = ((preHeading.value! + 180) % 360) - 180;
 

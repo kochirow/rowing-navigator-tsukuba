@@ -78,8 +78,8 @@ class SeatPosition {
 // Boat Config
 // ============================
 const tp = 0.5; // perception time
-const td = 1.0; // decision time
-const tr = 2.0; // reaction time
+const td = 2.0; // decision time
+const tr = 1.0; // reaction time
 BoatConfigs boatConfigs = BoatConfigs(
   r_1x_: BoatConfig(
     type: BoatType.r_1x,
