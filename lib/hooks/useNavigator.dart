@@ -32,6 +32,7 @@ UseNavigator useNavigator() {
   final obstacles = useState<List<StaticObstacle>>([]);
   final heading = useState<double?>(null);
   final preRawPos = useState<Position?>(null);
+  final preHeading2 = useState<double?>(0.0);
   final preHeading = useState<double?>(0.0);
   // Streams
   final headingStreamSubscription = useState<StreamSubscription?>(null);
@@ -129,21 +130,32 @@ UseNavigator useNavigator() {
       // コンパスの値を-180から180の範囲に正規化
       double normalizedCompassHeading = ((heading.value! + 180) % 360) - 180;
       double normalizedPreHeading = ((preHeading.value! + 180) % 360) - 180;
+      double normalizedPreHeading2 = ((preHeading2.value! + 180) % 360) - 180;
 
       // 180度付近での遷移を考慮した平均計算
-      double diff = normalizedCompassHeading - normalizedPreHeading;
+      // 1つ目の平均計算
+      double firstAvg = normalizedCompassHeading;
+      double diff = normalizedPreHeading - firstAvg;
       if (diff > 180) {
-        normalizedCompassHeading -= 360;
+        normalizedPreHeading -= 360;
       } else if (diff < -180) {
-        normalizedCompassHeading += 360;
+        normalizedPreHeading += 360;
       }
+      firstAvg = (firstAvg + normalizedPreHeading) / 2;
+      firstAvg = ((firstAvg + 180) % 360) - 180; // 中間結果を正規化
 
-      // 前回と現在の方位角の平均を使用
-      heading_ = (normalizedCompassHeading + normalizedPreHeading) / 2;
+      // 2つ目の平均計算
+      diff = normalizedPreHeading2 - firstAvg;
+      if (diff > 180) {
+        normalizedPreHeading2 -= 360;
+      } else if (diff < -180) {
+        normalizedPreHeading2 += 360;
+      }
+      heading_ = (firstAvg + normalizedPreHeading2) / 2;
       // 最終的な結果を-180から180の範囲に正規化
-      heading_ = ((heading_ + 180) % 360) - 180;
+      heading_ = ((heading_ + 180) % 360) - 180; // 最終結果を正規化
     } else {
-      // 1.67m/s以上またはCompassの方位角情報を利用できない場合は前回の位置情報から算出
+      // 1.67m/s(5min/500m)以上またはCompassの方位角情報を利用できない場合は前回の位置情報から算出
       if (preRawPos.value != null) {
         final posHeading = getHeading(
           LatLng(preRawPos.value!.latitude, preRawPos.value!.longitude),
@@ -152,19 +164,30 @@ UseNavigator useNavigator() {
         // 位置情報から算出した方位角を-180から180の範囲に正規化
         double normalizedPosHeading = ((posHeading + 180) % 360) - 180;
         double normalizedPreHeading = ((preHeading.value! + 180) % 360) - 180;
+        double normalizedPreHeading2 = ((preHeading2.value! + 180) % 360) - 180;
 
         // 180度付近での遷移を考慮した平均計算
-        double diff = normalizedPosHeading - normalizedPreHeading;
+        // 1つ目の平均計算
+        double firstAvg = normalizedPosHeading;
+        double diff = normalizedPreHeading - firstAvg;
         if (diff > 180) {
-          normalizedPosHeading -= 360;
+          normalizedPreHeading -= 360;
         } else if (diff < -180) {
-          normalizedPosHeading += 360;
+          normalizedPreHeading += 360;
         }
+        firstAvg = (firstAvg + normalizedPreHeading) / 2;
+        firstAvg = ((firstAvg + 180) % 360) - 180; // 中間結果を正規化
 
-        // 前回と現在の方位角の平均を使用
-        heading_ = (normalizedPosHeading + normalizedPreHeading) / 2;
+        // 2つ目の平均計算
+        diff = normalizedPreHeading2 - firstAvg;
+        if (diff > 180) {
+          normalizedPreHeading2 -= 360;
+        } else if (diff < -180) {
+          normalizedPreHeading2 += 360;
+        }
+        heading_ = (firstAvg + normalizedPreHeading2) / 2;
         // 最終的な結果を-180から180の範囲に正規化
-        heading_ = ((heading_ + 180) % 360) - 180;
+        heading_ = ((heading_ + 180) % 360) - 180; // 最終結果を正規化
       } else {
         heading_ = 0.0;
       }
@@ -177,6 +200,7 @@ UseNavigator useNavigator() {
       heading_,
     );
     preRawPos.value = rawPos; // 地理座標から方位角を算出する場合に使用するため保存
+    preHeading2.value = preHeading.value;
     preHeading.value = heading_; // 艇情報として使用する方位角を保存
     return Boat(
       boatId: config.value!.boatId, // 自艇のID
