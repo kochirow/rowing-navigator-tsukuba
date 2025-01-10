@@ -29,6 +29,7 @@ import '../services/permission_service.dart';
 import '../types/marker_type.dart';
 import '../types/nav_mode.dart';
 import 'area_setting_screen.dart';
+import 'record_list_screen.dart';
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
@@ -323,6 +324,19 @@ class HomeMapScreen extends HookConsumerWidget {
                               },
                             ),
                           ),
+                          if (navigator.mode.value == NavMode.observer)
+                            Container(
+                              margin: const EdgeInsets.only(top: 17),
+                              child: RoundedIconButton(
+                                icon: Icons.list,
+                                onPressed: () {
+                                  Navigator.push(context,
+                                      MaterialPageRoute(builder: (context) {
+                                    return const RecordListScreen();
+                                  }));
+                                },
+                              ),
+                            ),
                           if (navigator.mode.value == NavMode.observer)
                             Container(
                               margin: const EdgeInsets.only(top: 17),

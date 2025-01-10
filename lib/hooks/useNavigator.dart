@@ -7,6 +7,7 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/config/navigator_config.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../hooks/useAlert.dart';
 import '../models/boat_model.dart';
@@ -48,6 +49,8 @@ UseNavigator useNavigator() {
   final geoService = GeoService();
   final messageService = MessageService();
   final evaluatorService = CollisionRiskEvaluatorService();
+  // Record
+  final recordData = useState<String>('');
 
   Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
     return await geoService.getCurrentPosition(accuracy);
@@ -260,6 +263,11 @@ UseNavigator useNavigator() {
     final safetyLevel_ = getSafetyLevelFrom(riskLevel);
     safetyLevel.value = safetyLevel_;
 
+    // ######## Record Navigation Log ########
+    final record =
+        '${latestMyBoat.timestamp.toIso8601String()},${latestMyBoat.lat},${latestMyBoat.lng},${latestMyBoat.heading},${latestMyBoat.speed},${safetyLevel.value.name},${config.value?.boatType.name},${config.value?.seatPos.label}';
+    recordData.value += record + '\n';
+
     // ######## Alert ########
     // useEffectにて実装
   }
@@ -272,6 +280,7 @@ UseNavigator useNavigator() {
     safetyLevel.value = SafetyLevel.safe;
     final messageService = MessageService();
     await messageService.clearMessage(config_.boatId);
+    recordData.value = '';
     // 設定を保存
     config.value = config_;
     print(
@@ -288,6 +297,11 @@ UseNavigator useNavigator() {
     // モードを変更
     mode.value = NavMode.observer;
     WakelockPlus.disable(); // spell-checker:disable-line
+    // ログを保存
+    final prefs = await SharedPreferences.getInstance();
+    List<String> existingRecords = prefs.getStringList('records') ?? [];
+    existingRecords.add(recordData.value.trim());
+    await prefs.setStringList('records', existingRecords);
     // 終了処理
     watchTimer.value?.cancel();
     final messageService = MessageService();

@@ -46,6 +46,8 @@ dependencies:
   flutter_compass: ^0.8.0
   vector_math: ^2.1.4
   wakelock_plus: ^1.2.8
+  shared_preferences: ^2.2.3
+  share_plus: ^10.0.0
 
 dev_dependencies:
   flutter_test:
