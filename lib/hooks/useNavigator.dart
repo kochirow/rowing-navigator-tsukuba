@@ -59,7 +59,7 @@ UseNavigator useNavigator() {
   Position getDestinationPosition(
       Position pos, double distance, double heading) {
     LatLng currentLatLng = LatLng(pos.latitude, pos.longitude);
-    final destinationLatLng = FlutterMapMath().destinationPoint(
+    final destinationLatLng = FlutterMapMath.destinationPoint(
       currentLatLng.latitude,
       currentLatLng.longitude,
       distance,

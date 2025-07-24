@@ -35,19 +35,19 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.6
   google_maps_flutter: ^2.6.1
-  geolocator: ^12.0.0
+  geolocator: ^14.0.2
   firebase_core: ^3.1.0
   firebase_auth: ^5.1.0
   cloud_firestore: ^5.0.1
-  hooks_riverpod: ^2.5.1
+  hooks_riverpod: ^2.6.1
   rxdart: ^0.28.0
   audioplayers: ^6.0.0
-  flutter_map_math: ^0.1.7
+  flutter_map_math: ^0.2.4
   flutter_compass: ^0.8.0
   vector_math: ^2.1.4
   wakelock_plus: ^1.2.8
   shared_preferences: ^2.2.3
-  share_plus: ^10.0.0
+  share_plus: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -58,7 +58,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
