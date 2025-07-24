@@ -1,16 +1,80 @@
-# rowing_navigator
+# Rowing Navigator
 
-A new Flutter project.
+## 概要
 
-## Getting Started
+Rowing Navigator はローイングの安全な航行を支援するアプリです。
+艇の航行状況や危険な水域をマップ上でリアルタイムに可視化するとともに、他艇や危険な水域への接近を検知して音声による衝突警告を行います。
 
-This project is a starting point for a Flutter application.
+## 起動方法
 
-A few resources to get you started if this is your first Flutter project:
+// Flutter の起動方法を掲載／デベロッパーモードの旨も添える
+// バージョンも掲載
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Flutter のバージョン
+- Dart のライブラリのインストール手順
+- iOS と Simulator のバージョン
+- 実機の動作確認のバージョン
+- Firebase の API key 登録
+- Firestore のスキーマ作成
+- Fireauth の匿名アカウント設定
+- GoogleMaps の API key 登録
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 機能
+
+// 各機能を列挙
+
+- 水域マップ機能
+  - 詳細
+- 衝突警告機能
+  - 詳細
+
+## 使い方
+
+// 使い方を簡単に掲載
+
+- 水域の状況を確認する
+- ナビゲーションを行う
+- 水域マップを編集する
+
+## 使用技術
+
+// サービス・ライブラリとか、バージョンも添えて
+
+- フレームワーク
+- サービス
+- ライブラリ
+
+## システム構成
+
+// より大域的なシステム構成
+
+## ディレクトリ構成
+
+// そのまま
+// 表形式でまとめたい
+
+## 未実装機能
+
+- 航行状況表示
+- 航行記録
+- 救難信号発信
+- 広範囲での動作確認
+  - 半球を変えても大丈夫か確認
+- 近隣の障害物・艇のみ取得
+
+## 課題
+
+- バッテリー消費量の低減
+- 測位誤差の低減
+- 欠落したセンサ値の補完
+- 端末の設置方法の改善
+- 高頻度通信によるサーバ負荷の軽減
+- コスト面から高頻度通信に適したインフラサービスへの乗り換え
+
+## ライセンス
+
+// 検討
+
+## 謝辞
+
+// 書くよー
