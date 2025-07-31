@@ -3,7 +3,7 @@
 ## 概要
 
 Rowing Navigator はローイングの安全な航行を支援するアプリです。
-艇の航行状況や危険な水域をマップ上にリアルタイムに可視化、他艇や危険な水域への接近を検知して音声による衝突警告を行います。
+艇の航行状況や危険な水域をマップ上にリアルタイムに可視化し、他艇や危険な水域への接近を検知して音声による衝突警告を行います。
 
 本アプリは、Shunsuke Oba の修士研究において開発されました。修士論文は[こちら](https://github.com/obashun22/master_thesis)からご覧いただけます。
 
@@ -36,10 +36,10 @@ $ flutter run
 | -------------------- | ---------------------------- |
 | Flutter              | 3.32.7                       |
 | Dart                 | 3.3.4                        |
-| iOS Simulator        | iPhone 15 Pro Max (iOS 17.5) |
 | Real iOS Machine     | iPhone 16 Pro (iOS 18.5)     |
-| Android Simulator    | Not tested                   |
+| iOS Simulator        | iPhone 15 Pro Max (iOS 17.5) |
 | Real Android Machine | Google Pixel 7 (Android 14)  |
+| Android Simulator    | Not tested                   |
 
 ## セットアップ
 
@@ -48,11 +48,11 @@ $ flutter run
 各サービスの API Key を取得して、次のとおり適切に配置してください。  
 API Key の取得に際して、各サービスでのプロジェクト作成が必要です。
 
-| Service     | Platform      | Description                                                                                                                   |
-| ----------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Firebase    | iOS & Android | [Firebase の公式ドキュメント](https://firebase.google.com/docs/flutter/setup?hl=ja&platform=ios)に従い API Key を設定         |
-| Google Maps | iOS           | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を `ios/Runner/Environment.swift` に設定 |
-|             | Android       | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を`android/secret.properties` に設定     |
+| Service     | Platform      | Description                                                                                                                      |
+| ----------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Firebase    | iOS & Android | [Firebase の公式ドキュメント](https://firebase.google.com/docs/flutter/setup?hl=ja&platform=ios)に従い API Key を設定            |
+| Google Maps | iOS           | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を `ios/Runner/Environment.swift` に設 i 定 |
+|             | Android       | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を`android/secret.properties` に設定        |
 
 ### Firebase
 
@@ -79,12 +79,13 @@ Rowing Navigator では認証機能を使用するため Firebase Authentication
 
 ## 主な機能
 
-| 機能           | 概要                                                               |
-| -------------- | ------------------------------------------------------------------ |
-| 水域情報表示   | 水域マップ上に危険な水域や航行中の艇の位置・針路をリアルタイム表示 |
-| 衝突警告       | 他艇や静的障害物への接近時に音声で警告                             |
-| 水域マップ編集 | 水域マップへの静的障害物の登録・削除                               |
-| マップ表示切替 | 通常地図と航空写真の表示切替機能                                   |
+| 機能             | 概要                                                               |
+| ---------------- | ------------------------------------------------------------------ |
+| 水域情報表示     | 水域マップ上に危険な水域や航行中の艇の位置・針路をリアルタイム表示 |
+| 衝突警告         | 他艇や静的障害物への接近時に音声で警告                             |
+| 水域マップ編集   | 水域マップへの静的障害物の登録・削除                               |
+| マップ表示切替   | 通常地図と航空写真の表示切替機能                                   |
+| 航行情報記録機能 | 航行情報を記録・共有／研究目的で実装した機能                       |
 
 ### 今後の展望
 
@@ -92,8 +93,8 @@ Rowing Navigator では認証機能を使用するため Firebase Authentication
 
 | 機能             | 概要                                                                 |
 | ---------------- | -------------------------------------------------------------------- |
-| 航行状況表示機能 | 自艇の航行状況（航路・艇速・レート・航行距離など）をリアルタイム表示 |
-| 航行状況記録機能 | 航行状況を記録・表示                                                 |
+| 航行情報表示機能 | 自艇の航行情報（航路・艇速・レート・航行距離など）をリアルタイム表示 |
+| 航行情報記録機能 | 航行情報を記録・表示・共有                                           |
 | 救難信号機能     | 緊急時に救難信号を発信し、他艇に通知                                 |
 
 ## 使い方
@@ -106,7 +107,7 @@ Rowing Navigator では認証機能を使用するため Firebase Authentication
 
 ### 衝突警告を行う
 
-乗艇中に衝突警告を行うには、水域マップ画面下の「Start Nav」からナビゲーションモードをオンにします。ナビゲーションモードでは、自艇が他艇または静的障害物と衝突することが予測される場合に音声による警告を行います。衝突予測は自艇および他艇の艇速を考慮して行われます。衝突警告の詳細については[設計書](./docs/DESIGN.md)を参照してください。  
+乗艇中に衝突警告を行うには、水域マップ画面下の「Start Nav」からナビゲーションモードをオンにします。ナビゲーションモードでは、自艇が他艇または静的障害物と衝突することが予測される場合に音声による段階的な警告を行います。衝突予測は自艇および他艇の艇速を考慮して行われます。衝突警告の詳細については[設計書](./docs/DESIGN.md)を参照してください。  
 また、ナビゲーションモードでは自艇の航行情報が他の端末と共有され、水域マップ上に自艇の情報が表示されます。  
 本機能は、乗艇時の使用を想定しています。
 
