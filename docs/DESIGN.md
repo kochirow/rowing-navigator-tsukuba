@@ -1,4 +1,4 @@
-# Rowing Navigator 設計書
+# 設計書
 
 ## 目次
 
@@ -52,7 +52,7 @@ Rowing Navigator はローイングの安全な航行を支援するアプリで
 
 Rowing Navigator のシステム構成は以下の図の通りです。
 
-![system_architecture](./images/system_architecture.png)
+![system_architecture](./img/system_architecture.png)
 
 ### 2.2. ディレクトリ設計
 
