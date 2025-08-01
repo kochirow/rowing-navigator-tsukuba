@@ -5,7 +5,7 @@
 Rowing Navigator はローイングの安全な航行を支援するアプリです。
 艇の航行状況や危険な水域をマップ上にリアルタイムに可視化し、他艇や危険な水域への接近を検知して音声による衝突警告を行います。
 
-本アプリは、Shunsuke Oba の修士研究において開発されました。修士論文は[こちら](https://github.com/obashun22/master_thesis)からご覧いただけます。
+本アプリは、大羽俊輔の修士研究において開発されました。修士論文は[こちら](https://github.com/obashun22/master_thesis)からご覧いただけます。
 
 ### 目次
 
@@ -48,11 +48,11 @@ $ flutter run
 各サービスの API Key を取得して、次のとおり適切に配置してください。  
 API Key の取得に際して、各サービスでのプロジェクト作成が必要です。
 
-| Service     | Platform      | Description                                                                                                                      |
-| ----------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Firebase    | iOS & Android | [Firebase の公式ドキュメント](https://firebase.google.com/docs/flutter/setup?hl=ja&platform=ios)に従い API Key を設定            |
-| Google Maps | iOS           | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を `ios/Runner/Environment.swift` に設 i 定 |
-|             | Android       | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を`android/secret.properties` に設定        |
+| Service     | Platform      | Description                                                                                                                   |
+| ----------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Firebase    | iOS & Android | [Firebase の公式ドキュメント](https://firebase.google.com/docs/flutter/setup?hl=ja&platform=ios)に従い API Key を設定         |
+| Google Maps | iOS           | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を `ios/Runner/Environment.swift` に設定 |
+|             | Android       | [Google Maps Platform](https://console.cloud.google.com/google/maps-apis) の API key を`android/secret.properties` に設定     |
 
 ### Firebase
 
