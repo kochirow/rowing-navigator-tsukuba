@@ -7,6 +7,27 @@ Rowing Navigator はローイングの安全な航行を支援するアプリで
 
 本アプリは、大羽俊輔の修士研究において開発されました。修士論文は[こちら](https://github.com/obashun22/master_thesis)からご覧いただけます。
 
+### デモ動画
+
+<div align="left">
+<a href="https://www.youtube.com/watch?v=7UsPkerIZm0" target="_blank" style="position: relative; display: inline-block;">
+  <img src="docs/img/rowing_navigator_case_img_1.png" alt="Rowing Navigator Demo" height="315" style="cursor: pointer; display: block;">
+  <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80px; height: 80px; background-color: rgba(255, 0, 0, 0.8); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+    <div style="width: 0; height: 0; border-left: 30px solid white; border-top: 20px solid transparent; border-bottom: 20px solid transparent; margin-left: 8px;"></div>
+  </div>
+</a>
+<br>
+<a href="https://www.youtube.com/watch?v=7UsPkerIZm0" target="_blank">https://www.youtube.com/watch?v=7UsPkerIZm0</a>
+</div>
+
+<details>
+<summary>アプリ画面はこちら</summary>
+<div align="left">
+<img src="docs/img/rowing_navigator_case_img_2.gif" alt="App Screen 2" height="400" style="margin: 0 10px;">
+<img src="docs/img/rowing_navigator_case_img_3.gif" alt="App Screen 3" height="400" style="margin: 0 10px;">
+</div>
+</details>
+
 ### 目次
 
 1. [起動方法](#起動方法)
