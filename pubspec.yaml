@@ -75,10 +75,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-  # Flutter 3.32の実験的SPMは、日本語を含むプロジェクトパスを
-  # 二重URLエンコードして依存解決に失敗するためCocoaPodsを使う。
-  config:
-    enable-swift-package-manager: false
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
