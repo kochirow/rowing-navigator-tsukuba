@@ -8,5 +8,14 @@
 import Foundation
 
 struct Env {
-    static let googleMapApiKey = "AIzaSyDogpS5nz-dvumwXP3Q1Q5HghvG8lB1pUM"
+    static var googleMapApiKey: String? {
+        guard
+            let value = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String,
+            !value.isEmpty,
+            !value.contains("$(")
+        else {
+            return nil
+        }
+        return value
+    }
 }

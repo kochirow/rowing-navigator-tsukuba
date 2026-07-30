@@ -1,0 +1,11 @@
+{
+  "name": "rowing-navigator-firebase-rules-test",
+  "private": true,
+  "scripts": {
+    "test": "node rules.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.0.0"
+  }
+}

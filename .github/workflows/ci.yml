@@ -1,0 +1,54 @@
+name: CI
+
+# ローカルの作業パスに日本語が含まれる環境では、Dart analysis server の
+# LSPチャネルがヘッダのバイト長とUTF-16長を取り違えて必ずクラッシュするため、
+# `flutter analyze` をローカルで実行できない。ASCIIパスのCIで必ず通す。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Flutter version from .fvmrc
+        id: fvm
+        run: |
+          version="$(python3 -c "import json;print(json.load(open('.fvmrc'))['flutter'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          cache: true
+
+      - run: flutter pub get
+
+      # 危険区域データとハッシュの乖離を検出する。乖離しても実機は動作するが、
+      # 「検証済み」状態が外れるためリリース前に必ず解消する。
+      - name: Verify hazard profile checksum
+        run: bash tool/update_hazard_profile_hash.sh --check
+
+      - name: Verify generated hazard allowlists
+        run: dart run tool/generate_hazard_constants.dart --check
+
+      # 警告音の音圧が揃っているかを検証する。ファイル間で差があると
+      # 端末のボリューム1つでは両立できず、どちらかが聞こえなくなる。
+      # 聞こえない警告は警告漏れと同じ(CLAUDE.md 安全方針)。
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Verify warning audio loudness
+        run: bash tool/check_warning_audio.sh
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test

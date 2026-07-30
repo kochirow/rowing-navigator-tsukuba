@@ -28,3 +28,13 @@ LatLng computeOffset(LatLng from, double distance, double heading) {
 
   return LatLng(radiansToDegrees(toLat), radiansToDegrees(toLng));
 }
+
+/// 2点間の距離 [m] を返す(正距円筒近似)。
+/// 数百m程度の近距離用。衝突判定のフォールバック等に使用する。
+double distanceMeters(LatLng a, LatLng b) {
+  const double earthRadius = 6378137;
+  final lat0 = degreesToRadians((a.latitude + b.latitude) / 2);
+  final dx = degreesToRadians(b.longitude - a.longitude) * cos(lat0);
+  final dy = degreesToRadians(b.latitude - a.latitude);
+  return earthRadius * sqrt(dx * dx + dy * dy);
+}

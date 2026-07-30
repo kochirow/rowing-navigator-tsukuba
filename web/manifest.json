@@ -1,6 +1,6 @@
 {
-    "name": "rowing_navigator",
-    "short_name": "rowing_navigator",
+    "name": "Rowing Navigator",
+    "short_name": "Rowing Navigator",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
