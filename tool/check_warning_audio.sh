@@ -47,9 +47,28 @@ for cmd in ffmpeg python3; do
 done
 
 measure_lufs() {
-  ffmpeg -hide_banner -nostats -i "$1" -filter_complex ebur128 -f null - 2>&1 |
-    grep -A2 'Integrated loudness' | grep 'I:' | tail -1 |
-    sed -E 's/.*I: *(-?[0-9.]+).*/\1/'
+  local output
+  output="$(
+    LC_ALL=C ffmpeg -hide_banner -nostats -i "$1" \
+      -filter_complex ebur128 -f null - 2>&1 || true
+  )"
+
+  printf '%s\n' "${output}" |
+    awk '
+      /Integrated loudness:/ {
+        in_summary = 1
+        next
+      }
+      in_summary && $1 == "I:" {
+        value = $2
+      }
+      END {
+        if (value == "") {
+          exit 1
+        }
+        print value
+      }
+    '
 }
 
 status=0
