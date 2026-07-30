@@ -16,7 +16,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:rowing_navigator/models/alert_candidate.dart';
 import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/models/danger_zone_settings.dart';
 import 'package:rowing_navigator/models/safety_snapshot.dart';
@@ -87,8 +86,9 @@ void main() {
       ...await _guidanceZones(),
     ];
 
+    final ashoreAreas = await service.loadAshoreAreas();
     final ashoreDetector = AshoreDetector(
-      shoreBaselines: await service.loadShoreBaselines(),
+      ashoreAreas: ashoreAreas.map((area) => area.points).toList(),
     );
     final evaluator = CollisionRiskEvaluatorService();
     final orchestrator = SafetyOrchestrator(
