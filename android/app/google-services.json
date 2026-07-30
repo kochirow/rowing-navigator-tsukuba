@@ -1,21 +1,22 @@
 {
   "project_info": {
-    "project_number": "386742106425",
-    "project_id": "rowing-navigator",
-    "storage_bucket": "rowing-navigator.appspot.com"
+    "project_number": "430420830197",
+    "firebase_url": "https://rowing-navigator-tsukuba-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "rowing-navigator-tsukuba",
+    "storage_bucket": "rowing-navigator-tsukuba.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:386742106425:android:754f9a8dffbc7015d990e8",
+        "mobilesdk_app_id": "1:430420830197:android:ebd7abdd340fc5e96de2bc",
         "android_client_info": {
-          "package_name": "com.obashun.rowing_navigator"
+          "package_name": "jp.kosei.rowingnavigator.tsukuba"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAf05QMXE2pppaED34xiTneoBPbxoVSUVo"
+          "current_key": "AIzaSyDCHgU1k1P_OmE_ee7Rn8UAscRS78eCPq4"
         }
       ],
       "services": {

@@ -34,47 +34,87 @@ if (secretPropertiesFile.exists()) {
     }
 }
 
+// Release signing must never fall back to the shared debug key.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains('release')
+}
+def googleMapsApiKey = secretProperties.getProperty('googleMap.apiKey', '')?.trim()
+if (releaseTaskRequested && !googleMapsApiKey) {
+    throw new GradleException(
+        'Production Google Maps key is not configured. Copy '
+        + 'android/secret.properties.sample to android/secret.properties and '
+        + 'set googleMap.apiKey to a package-restricted key.'
+    )
+}
+def requiredSigningKeys = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+def missingSigningKeys = requiredSigningKeys.findAll {
+    !keystoreProperties.getProperty(it)?.trim()
+}
+if (releaseTaskRequested &&
+        (!keystorePropertiesFile.exists() || !missingSigningKeys.isEmpty())) {
+    throw new GradleException(
+        'Production signing is not configured. Copy android/key.properties.example '
+        + 'to android/key.properties and set the upload keystore values. Missing: '
+        + missingSigningKeys.join(', ')
+    )
+}
+
 
 android {
-    namespace "com.obashun.rowing_navigator"
+    namespace "jp.kosei.rowingnavigator.tsukuba"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists() && missingSigningKeys.isEmpty()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.obashun.rowing_navigator"
+        applicationId "jp.kosei.rowingnavigator.tsukuba"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         // minSdkVersion flutter.minSdkVersion
-        minSdkVersion 20
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
 
         // For Google Maps API key
         manifestPlaceholders += [
-            googleMapApiKey: secretProperties.getProperty('googleMap.apiKey'),
+            googleMapApiKey: googleMapsApiKey,
         ]
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
         }
     }
 }

@@ -1,0 +1,549 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberPath(teamId, uid) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(uid);
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function invitePath(inviteCode) {
+      return /databases/$(database)/documents/invite_codes/$(inviteCode);
+    }
+
+    function isTeamMember(teamId) {
+      return signedIn() && exists(memberPath(teamId, request.auth.uid));
+    }
+
+    // 現地で発見したずれをすぐ共有できるよう、同じチームの全メンバーが
+    // 公開できる。revisionとpreviousStateで同時更新の上書きは拒否する。
+    // 将来校正担当roleを追加する場合は、この関数だけを狭める。
+    function canPublishTeamSafety(teamId) {
+      return isTeamMember(teamId);
+    }
+
+    function validInviteCode(value) {
+      // 新規12文字と、更新前に発行済みの20文字を受理する。
+      return value is string && (value.size() == 12 || value.size() == 20);
+    }
+
+    function validCirclePoints(points) {
+      return points is list
+        && points.size() == 24
+        && points[0] is latlng && points[1] is latlng
+        && points[2] is latlng && points[3] is latlng
+        && points[4] is latlng && points[5] is latlng
+        && points[6] is latlng && points[7] is latlng
+        && points[8] is latlng && points[9] is latlng
+        && points[10] is latlng && points[11] is latlng
+        && points[12] is latlng && points[13] is latlng
+        && points[14] is latlng && points[15] is latlng
+        && points[16] is latlng && points[17] is latlng
+        && points[18] is latlng && points[19] is latlng
+        && points[20] is latlng && points[21] is latlng
+        && points[22] is latlng && points[23] is latlng;
+    }
+
+    function validTemporaryShape(data) {
+      return data.keys().hasAll([
+          'name', 'shape', 'kind', 'center', 'radiusMeters', 'points',
+          'createdBy', 'source', 'createdAt', 'confirmedAt', 'updatedAt',
+          'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'name', 'shape', 'kind', 'center', 'radiusMeters', 'points',
+          'createdBy', 'source', 'createdAt', 'confirmedAt', 'updatedAt',
+          'updatedBy', 'expiresAt'
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 40
+        && data.shape == 'circle'
+        && data.kind == 'generic'
+        && data.center is latlng
+        && data.radiusMeters is number
+        && data.radiusMeters >= 1
+        && data.radiusMeters <= 100
+        && validCirclePoints(data.points)
+        && data.createdBy is string
+        && data.source == 'user_confirmed'
+        && data.createdAt is timestamp
+        && data.confirmedAt is timestamp
+        && data.updatedAt is timestamp
+        && data.updatedBy is string
+        // expiresAtを持つ旧アプリのデータも読取り・編集を継続可能にする。
+        // 新アプリはこのフィールドを作らない。
+        && (!data.keys().hasAny(['expiresAt']) || data.expiresAt is timestamp);
+    }
+
+    function validManagedHazard(data) {
+      return data.keys().hasAll([
+          'kind', 'baseShapeVersion', 'center', 'lengthScale', 'widthScale',
+          'rotationDegrees', 'outwardMarginMeters', 'revision', 'updatedAt',
+          'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseShapeVersion', 'center', 'lengthScale', 'widthScale',
+          'rotationDegrees', 'outwardMarginMeters', 'revision', 'updatedAt',
+          'updatedBy', 'previousState'
+        ])
+        && data.kind == 'fixed_driftwood'
+        && data.baseShapeVersion == 1
+        && data.center is latlng
+        && data.center.latitude >= 36.060
+        && data.center.latitude <= 36.100
+        && data.center.longitude >= 140.195
+        && data.center.longitude <= 140.230
+        && data.lengthScale is number
+        && data.lengthScale >= 0.5 && data.lengthScale <= 3
+        && data.widthScale is number
+        && data.widthScale >= 0.5 && data.widthScale <= 3
+        && data.rotationDegrees is number
+        && data.rotationDegrees >= -180 && data.rotationDegrees <= 180
+        && data.outwardMarginMeters is number
+        && data.outwardMarginMeters >= 0 && data.outwardMarginMeters <= 30
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validPreviousState(previous, current) {
+      return previous is map
+        && previous.keys().hasAll([
+          'center', 'lengthScale', 'widthScale', 'rotationDegrees',
+          'outwardMarginMeters', 'revision'
+        ])
+        && previous.keys().hasOnly([
+          'center', 'lengthScale', 'widthScale', 'rotationDegrees',
+          'outwardMarginMeters', 'revision'
+        ])
+        && previous.center == current.center
+        && previous.lengthScale == current.lengthScale
+        && previous.widthScale == current.widthScale
+        && previous.rotationDegrees == current.rotationDegrees
+        && previous.outwardMarginMeters == current.outwardMarginMeters
+        && previous.revision == current.revision;
+    }
+
+    // 頂点補正は、変更した障害物だけを保存する。各listの長さは
+    // 同梱プロフィールv5の頂点数と一致させ、未知の障害物や巨大な
+    // payloadを受け付けない。各要素はクライアント側でもGeoPointと
+    // ±30mへ復元できるかを検証し、不正な共有設定を適用しない。
+    function validScaledVertexOffsetList(values, pointCount) {
+      return values is list && values.size() == pointCount;
+    }
+
+    // GENERATED: hazard-allowlist BEGIN
+    function validHazardSourceIds(values) {
+      return values.keys().hasOnly([
+        'curve_1',
+        'curve_2',
+        'curve_3',
+        'curve_4',
+        'curve_5',
+        'curve_6',
+        'curve_7',
+        'reverse_main_channel',
+        'driftwood_estuary',
+        'island_sakuragawa_bridge',
+        'island_upstream',
+        'bridge_suigo',
+        'bridge_railway',
+        'bridge_sakuragawa',
+        'bridge_nioi',
+        'bridge_zenigame',
+        'bridge_tsuchiura',
+        'bridge_gakuen',
+        'shore_north',
+        'shore_south',
+        'test_zone_land',
+        'shore_bd39c863',
+      ]);
+    }
+
+    function validScaledOffsetMap(values) {
+      // 全sourceを個別型検査するとFirestore Rulesの1000式上限を超える。
+      // 未知IDはここで拒否し、GeoPoint型・値域は読込時にも検証して、
+      // 不正な共有文書は適用せず最後の正常cacheを維持する。
+      return values is map
+        && validHazardSourceIds(values);
+    }
+
+    function validScaledVertexOffsets(values) {
+      return values is map
+        && validHazardSourceIds(values)
+        && (!('curve_1' in values) || validScaledVertexOffsetList(values.curve_1, 5))
+        && (!('curve_2' in values) || validScaledVertexOffsetList(values.curve_2, 7))
+        && (!('curve_3' in values) || validScaledVertexOffsetList(values.curve_3, 5))
+        && (!('curve_4' in values) || validScaledVertexOffsetList(values.curve_4, 5))
+        && (!('curve_5' in values) || validScaledVertexOffsetList(values.curve_5, 5))
+        && (!('curve_6' in values) || validScaledVertexOffsetList(values.curve_6, 5))
+        && (!('curve_7' in values) || validScaledVertexOffsetList(values.curve_7, 5))
+        && (!('reverse_main_channel' in values) || validScaledVertexOffsetList(values.reverse_main_channel, 59))
+        && (!('driftwood_estuary' in values) || validScaledVertexOffsetList(values.driftwood_estuary, 6))
+        && (!('island_sakuragawa_bridge' in values) || validScaledVertexOffsetList(values.island_sakuragawa_bridge, 9))
+        && (!('island_upstream' in values) || validScaledVertexOffsetList(values.island_upstream, 12))
+        && (!('bridge_suigo' in values) || validScaledVertexOffsetList(values.bridge_suigo, 5))
+        && (!('bridge_railway' in values) || validScaledVertexOffsetList(values.bridge_railway, 5))
+        && (!('bridge_sakuragawa' in values) || validScaledVertexOffsetList(values.bridge_sakuragawa, 5))
+        && (!('bridge_nioi' in values) || validScaledVertexOffsetList(values.bridge_nioi, 5))
+        && (!('bridge_zenigame' in values) || validScaledVertexOffsetList(values.bridge_zenigame, 5))
+        && (!('bridge_tsuchiura' in values) || validScaledVertexOffsetList(values.bridge_tsuchiura, 5))
+        && (!('bridge_gakuen' in values) || validScaledVertexOffsetList(values.bridge_gakuen, 5))
+        && (!('shore_north' in values) || validScaledVertexOffsetList(values.shore_north, 154))
+        && (!('shore_south' in values) || validScaledVertexOffsetList(values.shore_south, 108))
+        && (!('test_zone_land' in values) || validScaledVertexOffsetList(values.test_zone_land, 5))
+        && (!('shore_bd39c863' in values) || validScaledVertexOffsetList(values.shore_bd39c863, 27));
+    }
+
+    function validDisabledWarningSourceIds(values) {
+      return values is list
+        && values.size() <= 22
+        && values.hasOnly([
+          'curve_1',
+          'curve_2',
+          'curve_3',
+          'curve_4',
+          'curve_5',
+          'curve_6',
+          'curve_7',
+          'reverse_main_channel',
+          'driftwood_estuary',
+          'island_sakuragawa_bridge',
+          'island_upstream',
+          'bridge_suigo',
+          'bridge_railway',
+          'bridge_sakuragawa',
+          'bridge_nioi',
+          'bridge_zenigame',
+          'bridge_tsuchiura',
+          'bridge_gakuen',
+          'shore_north',
+          'shore_south',
+          'test_zone_land',
+          'shore_bd39c863',
+        ]);
+    }
+// GENERATED: hazard-allowlist END
+
+    function validDangerZoneOffset(value) {
+      return value is map
+        && value.keys().hasAll(['waterSideMeters', 'landSideMeters'])
+        && value.keys().hasOnly(['waterSideMeters', 'landSideMeters'])
+        && value.waterSideMeters is number
+        && value.waterSideMeters >= 0 && value.waterSideMeters <= 30
+        && value.landSideMeters is number
+        && value.landSideMeters >= 0 && value.landSideMeters <= 30;
+    }
+
+    function validDangerZoneOffsets(values) {
+      return values is map
+        && values.keys().hasAll([
+          'shore', 'bridge', 'island', 'driftwood', 'testZone'
+        ])
+        && values.keys().hasOnly([
+          'shore', 'bridge', 'island', 'driftwood', 'testZone'
+        ])
+        && validDangerZoneOffset(values.shore)
+        && validDangerZoneOffset(values.bridge)
+        && validDangerZoneOffset(values.island)
+        && validDangerZoneOffset(values.driftwood)
+        && validDangerZoneOffset(values.testZone);
+    }
+
+    function validSharedSafetyCalibrationV3(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 5
+        // 同梱プロファイルのSHA-256。`lib/config/hazard_profile_config.dart` の
+        // `currentHazardProfileSha256` と必ず一致させること。
+        // ルールはimportできないので直書きせざるを得ないが、ずれると
+        // 共有校正の書き込みが黙って全て拒否される。
+        // `test/firebase_rules_contract_test.dart` が一致を固定している。
+        // **このファイルを変更したらルールのデプロイが必要。**
+        && data.baseProfileSha256 ==
+          '15631cf1f94d0edf9c7608b85e16e7d29961a2fcc5d7c47c11976ac0988991da'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsets(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validPreviousSafetyCalibration(previous, current) {
+      return previous is map
+        && previous.keys().hasAll([
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'revision'
+        ])
+        && previous.keys().hasOnly([
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision'
+        ])
+        && previous.scaledOffsets == current.scaledOffsets
+        && previous.scaledVertexOffsets == current.scaledVertexOffsets
+        && previous.dangerZoneOffsets == current.dangerZoneOffsets
+        // 既存v2文書には警告対象の項目がない。次回公開で追加するまで
+        // previousStateだけが新形式でも更新できるようにする。
+        && (!previous.keys().hasAny(['disabledWarningSourceIds'])
+          || !current.keys().hasAny(['disabledWarningSourceIds'])
+          || previous.disabledWarningSourceIds
+            == current.disabledWarningSourceIds)
+        && previous.revision == current.revision;
+    }
+
+    // 1ユーザ1チーム。usersとmembersは必ず同じatomic writeで
+    // 作成/削除し、片側だけの所属を作れないようにする。
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['teamId', 'joinedAt'])
+        && request.resource.data.teamId is string
+        && request.resource.data.joinedAt == request.time
+        && existsAfter(memberPath(request.resource.data.teamId, uid))
+        && getAfter(memberPath(request.resource.data.teamId, uid)).data.inviteCode
+          is string
+        && getAfter(invitePath(
+          getAfter(memberPath(request.resource.data.teamId, uid)).data.inviteCode
+        )).data.teamId == request.resource.data.teamId;
+      allow update: if false;
+      allow delete: if signedIn()
+        && request.auth.uid == uid
+        && !existsAfter(memberPath(resource.data.teamId, uid));
+    }
+
+    // コードは推測困難な新規12文字または既存20文字IDを知る場合だけgetできる。
+    // list/queryは拒否し、全招待コードの列挙を防ぐ。
+    match /invite_codes/{inviteCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && validInviteCode(inviteCode)
+        && request.resource.data.keys().hasOnly([
+          'teamId', 'createdBy', 'createdAt'
+        ])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId))
+        && getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.inviteCode
+          == inviteCode
+        && existsAfter(memberPath(request.resource.data.teamId, request.auth.uid));
+      allow update: if signedIn()
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == 'deleted-account'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['createdBy']);
+      allow delete: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read: if isTeamMember(teamId);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'name', 'inviteCode', 'createdBy', 'createdAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40
+        && validInviteCode(request.resource.data.inviteCode)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && existsAfter(memberPath(teamId, request.auth.uid))
+        && existsAfter(invitePath(request.resource.data.inviteCode))
+        && getAfter(invitePath(request.resource.data.inviteCode)).data.teamId
+          == teamId;
+      allow update: if isTeamMember(teamId)
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == 'deleted-account'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['createdBy']);
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow get: if isTeamMember(teamId) && request.auth.uid == uid;
+        allow list: if false;
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['inviteCode', 'joinedAt'])
+          && validInviteCode(request.resource.data.inviteCode)
+          && request.resource.data.joinedAt == request.time
+          && !exists(userPath(uid))
+          && existsAfter(userPath(uid))
+          && getAfter(userPath(uid)).data.teamId == teamId
+          && existsAfter(invitePath(request.resource.data.inviteCode))
+          && getAfter(invitePath(request.resource.data.inviteCode)).data.teamId
+            == teamId;
+        allow update: if false;
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && !existsAfter(userPath(uid));
+      }
+
+      match /temporary_obstacles/{obstacleId} {
+        allow get: if isTeamMember(teamId);
+        // 異常な大量データを全件同期して、Firestoreの
+        // 日次無料枠と端末メモリを消費し尽くさない。
+        allow list: if isTeamMember(teamId)
+          && request.query.limit != null
+          && request.query.limit <= 100;
+        allow create: if isTeamMember(teamId)
+          && validTemporaryShape(request.resource.data)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.confirmedAt == request.time
+          && request.resource.data.updatedAt == request.time
+          // 旧アプリからの登録は受け入れる。アプリ側ではexpiresAtを
+          // 失効判定に使わず、Firestore TTLも設定しないため自動削除されない。
+          && (!request.resource.data.keys().hasAny(['expiresAt'])
+            || (
+              request.resource.data.expiresAt >=
+                request.time + duration.value(1435, 'm')
+              && request.resource.data.expiresAt <=
+                request.time + duration.value(1445, 'm')
+            ));
+        allow update: if isTeamMember(teamId)
+          && validTemporaryShape(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'shape', 'center', 'radiusMeters', 'points', 'confirmedAt',
+            'updatedAt', 'updatedBy'
+          ])
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && (!resource.data.keys().hasAny(['expiresAt'])
+            || request.resource.data.expiresAt == resource.data.expiresAt)
+          && request.resource.data.source == resource.data.source
+          && request.resource.data.confirmedAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && (
+            request.resource.data.updatedBy == request.auth.uid
+            || (
+              resource.data.updatedBy == request.auth.uid
+              && request.resource.data.updatedBy == 'deleted-account'
+            )
+          );
+        // 第一発見者がすぐ対応できるよう、チーム全員に許可。
+        allow delete: if isTeamMember(teamId);
+      }
+
+      match /managed_hazards/fixed_driftwood_01 {
+        allow read: if isTeamMember(teamId);
+        allow create: if isTeamMember(teamId)
+          && validManagedHazard(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if isTeamMember(teamId)
+          && validManagedHazard(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseShapeVersion == resource.data.baseShapeVersion
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && (
+            request.resource.data.updatedBy == request.auth.uid
+            || (
+              resource.data.updatedBy == request.auth.uid
+              && request.resource.data.updatedBy == 'deleted-account'
+            )
+          )
+          && validPreviousState(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v1 {
+        // 旧profile用の共有設定は消さずに残すが、新profileと混在させない。
+        allow read: if isTeamMember(teamId);
+        allow create, update, delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v2 {
+        // v2は固定長リスト形式。旧アプリの閲覧互換のため読み取りだけ残す。
+        allow read: if isTeamMember(teamId);
+        allow create, update, delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v3 {
+        // profile v4用。旧座標の頂点補正をprofile v5へ混在させない。
+        allow read: if isTeamMember(teamId);
+        allow create, update, delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v4 {
+        // v4はprofile v5専用のMap形式。Rulesのallowlistは生成器で
+        // 同梱JSONと同期し、旧座標用の文書とは分離する。
+        allow read: if isTeamMember(teamId);
+        allow create: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV3(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV3(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseProfileVersion
+            == resource.data.baseProfileVersion
+          && request.resource.data.baseProfileSha256
+            == resource.data.baseProfileSha256
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && validPreviousSafetyCalibration(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      // 公開版の位置共有はRTDB固定。Firestore fallbackはpayload schema・
+      // 値域・server timestamp・更新間隔を完全検証するRulesとテストを
+      // 同時deployするまで閉じ、正規利用者による大容量/高頻度writeを防ぐ。
+      match /messages/{boatId} {
+        allow read, write: if false;
+      }
+    }
+
+    // 旧グローバルパスは常に拒否。公開版の他チーム漏洩を防ぐ。
+    match /temporary_obstacles/{document=**} {
+      allow read, write: if false;
+    }
+    match /managed_hazards/{document=**} {
+      allow read, write: if false;
+    }
+    match /static_obstacles/{document=**} {
+      allow read, write: if false;
+    }
+    match /messages/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

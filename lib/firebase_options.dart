@@ -47,30 +47,34 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBRfxj1cIvtwxz7HdQF-pJafw-TZyirvSI',
-    appId: '1:386742106425:web:bb55d618cd9aabf8d990e8',
-    messagingSenderId: '386742106425',
-    projectId: 'rowing-navigator',
-    authDomain: 'rowing-navigator.firebaseapp.com',
-    storageBucket: 'rowing-navigator.appspot.com',
-    measurementId: 'G-QCQ6BWT8F0',
+    apiKey: 'AIzaSyA55n308sX8O86-GXrA9P9XxqIssq-zJoI',
+    appId: '1:430420830197:web:87e1dde5e7585e846de2bc',
+    messagingSenderId: '430420830197',
+    projectId: 'rowing-navigator-tsukuba',
+    authDomain: 'rowing-navigator-tsukuba.firebaseapp.com',
+    databaseURL:
+        'https://rowing-navigator-tsukuba-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'rowing-navigator-tsukuba.firebasestorage.app',
+    measurementId: 'G-31KFELJVP2',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAf05QMXE2pppaED34xiTneoBPbxoVSUVo',
-    appId: '1:386742106425:android:754f9a8dffbc7015d990e8',
-    messagingSenderId: '386742106425',
-    projectId: 'rowing-navigator',
-    storageBucket: 'rowing-navigator.appspot.com',
+    apiKey: 'AIzaSyDCHgU1k1P_OmE_ee7Rn8UAscRS78eCPq4',
+    appId: '1:430420830197:android:ebd7abdd340fc5e96de2bc',
+    messagingSenderId: '430420830197',
+    projectId: 'rowing-navigator-tsukuba',
+    databaseURL:
+        'https://rowing-navigator-tsukuba-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'rowing-navigator-tsukuba.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAoAS8VvN9v1HQHj3eHFsLrGiN9QpsZiCk',
-    appId: '1:386742106425:ios:c665e66c2b64068bd990e8',
-    messagingSenderId: '386742106425',
-    projectId: 'rowing-navigator',
-    storageBucket: 'rowing-navigator.appspot.com',
-    iosBundleId: 'com.obashun.rowing-navigator',
+    apiKey: 'AIzaSyA0UkF2OFt_9U4UyO81t4MIZmQYhskjth4',
+    appId: '1:430420830197:ios:a6befdb39770f60c6de2bc',
+    messagingSenderId: '430420830197',
+    projectId: 'rowing-navigator-tsukuba',
+    databaseURL:
+        'https://rowing-navigator-tsukuba-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'rowing-navigator-tsukuba.firebasestorage.app',
+    iosBundleId: 'jp.kosei.rowingnavigator.tsukuba',
   );
-
 }

@@ -1,0 +1,109 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "team_meta": {
+      "$teamId": {
+        ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && !root.child('team_members').child($teamId).exists()))",
+        ".validate": "newData.hasChildren(['inviteCode','ownerUid','createdAt'])",
+        "inviteCode": { ".validate": "newData.isString() && (newData.val().length === 12 || newData.val().length === 20)" },
+        "ownerUid": {
+          ".write": "auth != null && ((data.val() === auth.uid && newData.val() === 'deleted-account') || (data.val() === 'deleted-account' && newData.val() === 'deleted-account'))",
+          ".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === 'deleted-account')"
+        },
+        "createdAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+        "$other": { ".validate": false }
+      }
+    },
+    "team_invites": {
+      "$inviteCode": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid && root.child('team_meta').child(newData.child('teamId').val()).child('ownerUid').val() === auth.uid && root.child('team_meta').child(newData.child('teamId').val()).child('inviteCode').val() === $inviteCode) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && root.child('team_meta').child(data.child('teamId').val()).child('ownerUid').val() === auth.uid && !root.child('team_members').child(data.child('teamId').val()).exists()))",
+        ".validate": "newData.hasChildren(['teamId','ownerUid','createdAt']) && ($inviteCode.length === 12 || $inviteCode.length === 20)",
+        "teamId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
+        "ownerUid": {
+          ".write": "auth != null && ((data.val() === auth.uid && newData.val() === 'deleted-account') || (data.val() === 'deleted-account' && newData.val() === 'deleted-account'))",
+          ".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === 'deleted-account')"
+        },
+        "createdAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+        "$other": { ".validate": false }
+      }
+    },
+    "team_users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_invites').child(newData.child('inviteCode').val()).child('teamId').val() === newData.child('teamId').val() && root.child('team_meta').child(newData.child('teamId').val()).child('inviteCode').val() === newData.child('inviteCode').val()) || !newData.exists())",
+        ".validate": "newData.hasChildren(['teamId','inviteCode'])",
+        "teamId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
+        "inviteCode": { ".validate": "newData.isString() && (newData.val().length === 12 || newData.val().length === 20)" },
+        "$other": { ".validate": false }
+      }
+    },
+    "team_members": {
+      "$teamId": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid && root.child('team_users').child(auth.uid).child('teamId').val() === $teamId",
+          ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_users').child($uid).child('teamId').val() === $teamId) || !newData.exists())",
+          ".validate": "newData.hasChildren(['joinedAt'])",
+          "joinedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "teams": {
+      "$teamId": {
+        "live_positions": {
+          ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
+          "$boatId": {
+            ".write": "auth != null && auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())",
+            ".validate": "newData.hasChildren(['s','q','u','o','x','y','z','c','v'])",
+            "s": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
+            "q": { ".validate": "newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.parent().child('s').val() !== data.parent().child('s').val() || newData.val() > data.val())" },
+            // "u" は ServerValue.timestamp (message_model.dart:196) = サーバー到着時刻で
+            // あり、ここで比較しているのは「連続する2回の書き込みの到着間隔」である
+            // (クライアントのローカル送信間隔ではない)。
+            // クライアントは use_navigator.dart:2032 の `intervalSec * 1000 - 100` で
+            // 発火するため、最短の2秒間隔では意図的に 1900ms で撃つ。下限も 1900ms だと
+            // 余裕がゼロで、2回目が相対的に速く届くだけで書き込み全体
+            // (位置 + プロファイル)が permission-denied で拒否される。
+            // 1700ms なら 200ms のネットワークジッタを吸収でき、レート制限としては
+            // 依然として有効(最短送信間隔の85%)。
+            "u": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000 && (!data.exists() || newData.val() >= data.val() + 1700)" },
+            "o": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+            "x": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "y": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+            "z": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 1000" },
+            "c": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
+            "v": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 30" },
+            "b": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "j": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 180" },
+            "k": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 30" },
+            "w": { ".validate": "newData.isString() && newData.val().matches(/^[012][obsidcrgf]$/)" },
+            "m": { ".validate": "newData.isString() && newData.val().matches(/^[fdu]$/)" },
+            "a": { ".validate": "newData.isNumber() && newData.val() === 1" },
+            // 新版が追加した任意スカラー値は旧版が無視して位置を読める。
+            // 巨大文字列や嵌め込みオブジェクトは受理しない。
+            "$other": { ".validate": "newData.isNumber() || newData.isBoolean() || (newData.isString() && newData.val().length <= 256)" }
+          }
+        },
+        "boat_profiles": {
+          ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
+          "$boatId": {
+            ".write": "auth != null && auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())",
+            ".validate": "newData.hasChildren(['displayName','boatType','protocolVersion','appVersion','profileVersion','updatedAt'])",
+            "displayName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
+            "boatType": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32" },
+            // 版番号は値を固定しない。新旧版が混在しても、共通フィールドの
+            // 読み書きを継続し、版の不一致だけで他艇を消さない。
+            "protocolVersion": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 9007199254740991 && newData.val() % 1 === 0" },
+            "appVersion": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64" },
+            "profileVersion": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
+            "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+            "$other": { ".validate": "newData.isNumber() || newData.isBoolean() || (newData.isString() && newData.val().length <= 256)" }
+          }
+        }
+      }
+    }
+  }
+}

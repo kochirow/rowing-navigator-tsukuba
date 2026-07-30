@@ -39,9 +39,31 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio will place build artifacts here
+/android/build/
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local API key configuration (never commit)
+android/secret.properties
+android/key.properties
+/android/**/*.jks
+/android/**/*.keystore
+ios/Flutter/Secrets.xcconfig
+node_modules/
+firebase-debug.log
+
+# Local obstacle coordinate plotter artifacts (never commit secrets or changesets)
+tool/obstacle-plotter/node_modules/
+tool/obstacle-plotter/dist/
+tool/obstacle-plotter/.env
+tool/obstacle-plotter/.env.local
+tool/obstacle-plotter/changeset/
+assets/data/.backup/
+*.p8
+
+# Accidental root-level audio scratch files
+/*.aiff
 
 # FVM Version Cache
 .fvm/

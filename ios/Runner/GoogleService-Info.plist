@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyAoAS8VvN9v1HQHj3eHFsLrGiN9QpsZiCk</string>
+	<string>AIzaSyA0UkF2OFt_9U4UyO81t4MIZmQYhskjth4</string>
 	<key>GCM_SENDER_ID</key>
-	<string>386742106425</string>
+	<string>430420830197</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.obashun.rowing-navigator</string>
+	<string>jp.kosei.rowingnavigator.tsukuba</string>
 	<key>PROJECT_ID</key>
-	<string>rowing-navigator</string>
+	<string>rowing-navigator-tsukuba</string>
 	<key>STORAGE_BUCKET</key>
-	<string>rowing-navigator.appspot.com</string>
+	<string>rowing-navigator-tsukuba.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:386742106425:ios:c665e66c2b64068bd990e8</string>
+	<string>1:430420830197:ios:a6befdb39770f60c6de2bc</string>
+	<key>DATABASE_URL</key>
+	<string>https://rowing-navigator-tsukuba-default-rtdb.asia-southeast1.firebasedatabase.app</string>
 </dict>
 </plist>

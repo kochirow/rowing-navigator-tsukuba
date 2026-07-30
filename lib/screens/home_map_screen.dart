@@ -1,35 +1,146 @@
 import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/providers/nav_config_providers.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
-import 'package:rowing_navigator/features/home_map/widgets/NavSettingModal.dart';
+import 'package:rowing_navigator/features/home_map/widgets/nav_setting_modal.dart';
+import 'package:rowing_navigator/features/home_map/widgets/navigation_safety_settings_sheet.dart';
 
 import '../config/boat_config.dart';
-import '../config/risk_evaluator_config.dart';
-import '../features/home_map/widgets/BoatStatusCard.dart';
-import '../features/home_map/widgets/MapTypeSwitcher.dart';
-import '../features/home_map/widgets/NavStatusCard.dart';
-import '../features/home_map/widgets/RoundedButton.dart';
-import '../hooks/useTracking.dart';
+import '../config/coach_config.dart';
+import '../config/map_style_config.dart';
+import '../config/navigator_config.dart';
+import '../features/home_map/widgets/boat_list_panel.dart';
+import '../features/home_map/widgets/boat_status_card.dart';
+import '../features/home_map/widgets/background_location_disclosure_dialog.dart';
+import '../features/home_map/widgets/ashore_notice.dart';
+import '../features/home_map/widgets/coach_anomaly_chip.dart';
+import '../features/home_map/widgets/map_menu_sheet.dart';
+import '../features/home_map/widgets/map_type_switcher.dart';
+import '../features/home_map/widgets/navigation_status_panel.dart';
+import '../features/home_map/widgets/rounded_button.dart';
+import '../features/home_map/widgets/safety_banner.dart';
+import '../hooks/use_coach_watch.dart';
+import '../hooks/use_practice_log_recording.dart';
+import '../hooks/use_tracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
+import '../services/map_render_update_policy.dart';
+import '../services/safety_shape_overlay_service.dart';
 import '../types/tracking_mode.dart';
-import '../widgets/RoundedIconButton.dart';
-import '../hooks/useNavigator.dart';
-import '../hooks/useNavMap.dart';
+import '../utils/rowing_navigation.dart';
+import '../widgets/map_control_button.dart';
+import '../widgets/app_state_views.dart';
+import '../models/navigation_warning.dart';
+import '../theme/app_theme.dart';
+import '../theme/hazard_palette.dart';
+import '../utils/tactile_feedback.dart';
+import '../hooks/use_navigator.dart';
+import '../hooks/use_nav_map.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
+import '../services/map_display_settings_service.dart';
 import '../services/permission_service.dart';
+import '../services/preset_obstacle_service.dart';
+import '../services/team_service.dart';
 import '../types/marker_type.dart';
 import '../types/nav_mode.dart';
+import 'app_entry_gate.dart';
 import 'area_setting_screen.dart';
+import 'danger_zone_settings_screen.dart';
+import 'fixed_obstacle_calibration_screen.dart';
+import 'device_status_screen.dart';
 import 'record_list_screen.dart';
+import 'practice_log_list_screen.dart';
+import 'usage_guide_screen.dart';
+import 'team_screen.dart';
+
+const _sakuragawaFallbackCenter = LatLng(36.069, 140.208);
+
+enum _NavigationStartRecoveryAction {
+  none,
+  locationSettings,
+  audioCheck,
+}
+
+class _NavigationStartRecovery {
+  final String message;
+  final String? actionLabel;
+  final _NavigationStartRecoveryAction action;
+
+  const _NavigationStartRecovery({
+    required this.message,
+    this.actionLabel,
+    this.action = _NavigationStartRecoveryAction.none,
+  });
+}
+
+_NavigationStartRecovery _navigationStartRecoveryFor(Object error) {
+  final detail = error.toString().replaceFirst('Bad state: ', '');
+  final normalized = detail.toLowerCase();
+  if (detail.contains('音声') || detail.contains('警告音')) {
+    return const _NavigationStartRecovery(
+      message: '警告音を準備できません。端末の音量と音声出力を確認してください。',
+      actionLabel: '音声確認',
+      action: _NavigationStartRecoveryAction.audioCheck,
+    );
+  }
+  if (detail.contains('権限') ||
+      detail.contains('位置情報サービス') ||
+      detail.contains('位置情報の利用許可')) {
+    return const _NavigationStartRecovery(
+      message: '位置情報を利用できません。端末の位置情報設定を確認してください。',
+      actionLabel: '位置情報設定',
+      action: _NavigationStartRecoveryAction.locationSettings,
+    );
+  }
+  if (detail.contains('GPS') ||
+      normalized.contains('timeout') ||
+      detail.contains('現在地') ||
+      detail.contains('位置を取得')) {
+    return const _NavigationStartRecovery(
+      message: 'GPSを十分に受信できません。空が見える屋外へ移動して、同じ画面から再試行してください。',
+    );
+  }
+  if (detail.contains('危険区域') ||
+      normalized.contains('firebase') ||
+      normalized.contains('network') ||
+      normalized.contains('connection') ||
+      detail.contains('通信')) {
+    return const _NavigationStartRecovery(
+      message: '通信データを準備できません。通信状態を確認し、同じ画面から再試行してください。',
+    );
+  }
+  return _NavigationStartRecovery(
+    message: '航行の準備を完了できませんでした。同じ画面から再試行してください。\n$detail',
+  );
+}
+
+Future<bool> _confirmBackgroundLocationUse(BuildContext context) async {
+  final currentPermission = await Geolocator.checkPermission();
+  if (currentPermission == LocationPermission.always) return true;
+  if (!context.mounted) return false;
+
+  return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const BackgroundLocationDisclosureDialog(),
+      ) ??
+      false;
+}
+
+void _returnToTeamEntry(BuildContext context) {
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const AppEntryGate()),
+    (_) => false,
+  );
+}
 
 class HomeMapScreen extends HookConsumerWidget {
   const HomeMapScreen({super.key});
@@ -40,99 +151,620 @@ class HomeMapScreen extends HookConsumerWidget {
     final navigator = useNavigator();
     final navMap = useNavMap();
     final tracking = useTracking();
+    final auth = AuthService();
+    final coachWatch = useCoachWatch(
+      otherBoats: navigator.otherBoats.value,
+      enabled: navigator.mode.value == NavMode.observer &&
+          navigator.isWatching.value,
+    );
+    final practiceLogRecording = usePracticeLogRecording(
+      enabled: navigator.mode.value == NavMode.observer &&
+          navigator.isWatching.value,
+      teamId: TeamService.activeMembership?.teamId,
+      recordedBy: auth.currentUser?.uid,
+      messages: navigator.receivedPracticeLogMessages.value,
+      anomalies: coachWatch.anomalies.value,
+    );
     // State
     final loading = useState(true);
     final initLatLng = useState<LatLng?>(null);
+    final initError = useState<String?>(null);
+    final initAttempt = useState(0);
+    final locationPermissionGranted = useState(false);
     final showInfo = useState(false);
+    final showBoatList = useState(false);
     final shipDomains = useState<Set<Polygon>>({});
+    final shipDomainRenderSnapshot = useRef<ShipDomainRenderSnapshot?>(null);
     final obstacles = useState<Set<Polygon>>({});
+    // 開発者が明示的に有効化したときだけ判定形状を加える別レイヤー。
+    // 通常の shipDomains はここへ判定用の拡張を混ぜない（不変条件6）。
+    final developerSafetyShapeOverlay = useState<Set<Polygon>>({});
+    // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
+    final highContrastMap = useState(false);
+    final showDeveloperSafetyShapeOverlay = useState(false);
+    final mapDisplaySettings = useMemoized(MapDisplaySettingsService.new);
+    final safetyShapeOverlayService =
+        useMemoized(SafetyShapeOverlayService.new);
+    final announcedImminentWarnings = useRef(<String>{});
+    final previousSharedCalibrationFailure = useRef(false);
+    final announcedCoachAnomalies = useRef(<String, DateTime>{});
+    final lowBatteryNotificationShown = useRef(false);
+    final gestureAutoRecenterTimer = useRef<Timer?>(null);
     // Services
     final permission = PermissionService();
-    final auth = AuthService();
     // Constants
-    const LOCATION_ACCURACY = LocationAccuracy.bestForNavigation;
-    const DEFAULT_ZOOM_LEVEL = 18.0;
+    const locationAccuracy = LocationAccuracy.bestForNavigation;
+    const defaultZoomLevel = 18.0;
 
-    focusP14y(double lat, double lng, double heading) async {
+    void showNavigationStartFailure(Object error) {
+      final recovery = _navigationStartRecoveryFor(error);
+      SnackBarAction? action;
+      switch (recovery.action) {
+        case _NavigationStartRecoveryAction.locationSettings:
+          action = SnackBarAction(
+            label: recovery.actionLabel!,
+            onPressed: () async => Geolocator.openAppSettings(),
+          );
+          break;
+        case _NavigationStartRecoveryAction.audioCheck:
+          action = SnackBarAction(
+            label: recovery.actionLabel!,
+            onPressed: () async {
+              final ok = await navigator.testAudio();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(ok
+                    ? '警告音を再生しました。実際に聞こえたことを確認してください。'
+                    : '音声を再生できませんでした。端末の音量・消音設定を確認してください。'),
+              ));
+            },
+          );
+          break;
+        case _NavigationStartRecoveryAction.none:
+          break;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(recovery.message),
+          duration: const Duration(seconds: 7),
+          action: action,
+        ));
+    }
+
+    focusP14y(double lat, double lng, double heading,
+        {bool force = false}) async {
       // Focus programatically
       tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
-      final currentZoomLevel = await navMap.getZoomLevel();
-      final zoomLevel = currentZoomLevel > DEFAULT_ZOOM_LEVEL
-          ? currentZoomLevel
-          : DEFAULT_ZOOM_LEVEL;
-      await navMap.focus(lat, lng, heading, zoomLevel);
+      try {
+        final currentZoomLevel = await navMap.getZoomLevel();
+        // 航行中に利用者が選んだ拡大・縮小倍率を保ったまま、現在地へ
+        // 戻す。以前は縮小した場合に18へ戻ってしまっていた。
+        final zoomLevel = zoomForMapRefocus(
+          currentZoomLevel,
+          fallbackZoomLevel: defaultZoomLevel,
+        );
+        final moved =
+            await navMap.focus(lat, lng, heading, zoomLevel, force: force);
+        // 微小更新を省略した場合はonCameraIdleが呼ばれない。
+        if (!moved) tracking.setProgFlag(false);
+      } catch (_) {
+        tracking.setProgFlag(false);
+        rethrow;
+      }
+    }
+
+    void cancelGestureAutoRecenter() {
+      gestureAutoRecenterTimer.value?.cancel();
+      gestureAutoRecenterTimer.value = null;
+    }
+
+    void scheduleGestureAutoRecenter() {
+      cancelGestureAutoRecenter();
+      if (navigator.mode.value != NavMode.navigator ||
+          !tracking.mode.value.allowsAutomaticRecentering) {
+        return;
+      }
+      gestureAutoRecenterTimer.value = Timer(mapAutoRecenterDelay, () {
+        gestureAutoRecenterTimer.value = null;
+        if (navigator.mode.value != NavMode.navigator ||
+            !tracking.mode.value.allowsAutomaticRecentering) {
+          return;
+        }
+        tracking.setMode(TrackingMode.track);
+        final myBoat = navigator.myBoat.value;
+        if (myBoat == null) return;
+        unawaited(focusP14y(
+          myBoat.lat,
+          myBoat.lng,
+          rowingMapBearing(myBoat.heading),
+          force: true,
+        ).catchError((_) {}));
+      });
+    }
+
+    useEffect(() {
+      return cancelGestureAutoRecenter;
+    }, const []);
+
+    // 副次操作(チーム/記録/障害物の追加/安全設定/詳細)は、マップ上に並べると
+    // 小型端末でオーバーフローするため、単一の「メニュー」からシートで開く。
+    void openMapMenu() {
+      final isObserver = navigator.mode.value == NavMode.observer;
+      // 航行中に使えない項目は消さず、無効表示のまま同じ位置に残す。
+      // 項目が減ると並びが変わり、覚えた位置が毎回ずれる。
+      const duringNavigation = '航行終了後に利用できます';
+      final actions = <MapMenuAction>[
+        MapMenuAction(
+          icon: Icons.groups_outlined,
+          title: 'チーム',
+          subtitle: '招待コードの確認・共有',
+          enabled: isObserver,
+          disabledReason: duringNavigation,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TeamScreen()),
+            );
+          },
+        ),
+        MapMenuAction(
+          icon: Icons.history,
+          title: '記録',
+          subtitle: '過去の練習ログ',
+          enabled: isObserver,
+          disabledReason: duringNavigation,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RecordListScreen()),
+            );
+          },
+        ),
+        MapMenuAction(
+          icon: Icons.folder_zip_outlined,
+          title: '練習一括ログ',
+          subtitle: '監視端末に記録した全艇の位置・警告状態',
+          enabled: isObserver,
+          disabledReason: duringNavigation,
+          onTap: () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const PracticeLogListScreen()));
+          },
+        ),
+        MapMenuAction(
+          icon: Icons.edit_location_alt,
+          title: '障害物の追加',
+          subtitle: '臨時危険区域・固定流木の編集',
+          onTap: () async {
+            // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
+            // 背景の位置共有・警告処理は継続する。
+            // ただしこの画面は地図に全画面で重なるため、航行中は警告バナーを
+            // 画面上部へ引き継ぐ(音だけになる状態を作らない)。
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AreaSettingScreen(
+                  navigationWarnings: navigator.mode.value == NavMode.navigator
+                      ? navigator.activeWarnings
+                      : null,
+                ),
+              ),
+            );
+            await navigator.reloadDefaultObstacles();
+          },
+        ),
+        MapMenuAction(
+          icon: Icons.shield_outlined,
+          title: isObserver ? '安全設定' : '航行中の安全設定',
+          subtitle:
+              isObserver ? '危険区域の幅・警告開始時間・プライバシー' : '地図と警告を見ながら、確認して安全設定を反映',
+          onTap: () async {
+            if (!isObserver) {
+              await showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+                ),
+                builder: (_) => NavigationSafetySettingsSheet(
+                  safetySettingsLabel: navigator.safetySettingsLabel.value,
+                  usesSharedSafetySettings:
+                      navigator.dangerZoneSettingsSource.value ==
+                          DangerZoneSettingsSource.shared,
+                  appliedSharedSafetyRevision:
+                      navigator.appliedSharedSafetyRevision.value,
+                  pendingSharedSafetyRevision:
+                      navigator.pendingSharedSafetyRevision.value,
+                  onApplyWarningLeadTimes:
+                      navigator.applyWarningLeadTimesDuringNavigation,
+                  onApplyObstacles: navigator.applyNavigationObstacleSettings,
+                  onApplyPendingSharedSafetySettings:
+                      navigator.applyPendingSharedSafetySettings,
+                ),
+              );
+              return;
+            }
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const DangerZoneSettingsScreen(),
+              ),
+            );
+            await navigator.reloadDefaultObstacles();
+            // 開発者トグルは設定画面の最下部で変更する。判定そのものを
+            // 変更しない表示設定なので、ここでだけ復元すればよい。
+            showDeveloperSafetyShapeOverlay.value =
+                await mapDisplaySettings.loadDeveloperSafetyShapeOverlay();
+          },
+        ),
+        MapMenuAction(
+          icon: Icons.edit_location_alt_outlined,
+          title: '固定障害物の位置調整',
+          subtitle: '位置を調整・チームに公開',
+          enabled: isObserver,
+          disabledReason: duringNavigation,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const FixedObstacleCalibrationScreen(),
+              ),
+            );
+            await navigator.reloadDefaultObstacles();
+          },
+        ),
+        // 表示だけの切替なので航行中でも触れる。安全判定には影響しない。
+        MapMenuAction(
+          icon:
+              highContrastMap.value ? Icons.contrast : Icons.contrast_outlined,
+          title: '高コントラスト表示',
+          subtitle: highContrastMap.value
+              ? 'オン: 地図を淡いグレーにし、危険区域を目立たせる'
+              : 'オフ: 通常の地図配色',
+          onTap: () {
+            final next = !highContrastMap.value;
+            highContrastMap.value = next;
+            unawaited(mapDisplaySettings.saveHighContrast(next));
+          },
+        ),
+        // 使い方・端末情報は航行中でも開ける。航行を止めず、書き込みもしない。
+        MapMenuAction(
+          icon: Icons.help_outline,
+          title: '使い方',
+          subtitle: '警告の3段階・地図の色・警告音の試聴',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UsageGuideScreen()),
+            );
+          },
+        ),
+        // リリースでも見られるようにする。現地で「鳴らない」と言われたとき、
+        // 何が落ちているのかを開発ビルド無しで確かめられる必要がある。
+        MapMenuAction(
+          icon: Icons.monitor_heart_outlined,
+          title: '端末情報',
+          subtitle: 'GPS精度・最終測位・安全機能の状態',
+          onTap: () {
+            final boat = navigator.myBoat.value;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DeviceStatusScreen(
+                  latitude: boat?.lat,
+                  longitude: boat?.lng,
+                  accuracyMeters: boat?.accuracy,
+                  speedMetersPerSecond: boat?.speed,
+                  headingDegrees: boat?.heading,
+                  lastFixAt: boat?.timestamp,
+                  batteryPercent: navigator.batteryLevel.value,
+                  positionSharingUnavailable:
+                      navigator.isPositionSharingUnavailable.value,
+                  otherBoatReceiveUnavailable:
+                      navigator.isDynamicReceiveUnavailable.value,
+                  temporaryObstacleReceiveUnavailable:
+                      navigator.isTemporaryObstacleReceiveUnavailable.value,
+                  operationalCoverageUnverified:
+                      navigator.isOperationalCoverageUnverified.value,
+                  outsideOperationalCoverage:
+                      navigator.isOutsideOperationalCoverage.value,
+                  safetyRunMode: navigator.safetyRunMode.value,
+                  otherBoatCount: navigator.otherBoats.value.length,
+                  obstacleCount: navigator.obstacles.value.length,
+                  navigating: navigator.mode.value == NavMode.navigator,
+                ),
+              ),
+            );
+          },
+        ),
+        if (!kReleaseMode)
+          MapMenuAction(
+            icon: Icons.article_outlined,
+            title: '詳細（開発用）',
+            subtitle: '緯度経度・処理時刻などの内部情報',
+            onTap: () {
+              showInfo.value = !showInfo.value;
+            },
+          ),
+      ];
+      showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (_) => MapMenuSheet(actions: actions),
+      );
     }
 
     // ##########################
-    // ログイン処理／初期位置の取得
+    // 初期位置の取得
+    // Firebaseの匿名認証とチーム所属は入口で復元済み。ここでは新しい
+    // 匿名UIDを作らず、認証が失われた場合は招待コード再参加へ戻す。
     // ##########################
     useEffect(() {
-      Future(() async {
+      var cancelled = false;
+      unawaited(Future<void>(() async {
+        if (cancelled) return;
         loading.value = true;
-        if (!auth.isSignedIn) {
-          await auth.signInAnonymously();
-          print("Signed in with temporary account.");
-          print("UID: ${auth.currentUser?.uid}");
-        } else {
-          print("Already signed in.");
-          print("UID: ${auth.currentUser?.uid}");
+        initError.value = null;
+        try {
+          // 起動直後にOS権限を要求しない。拒否中でも記録、
+          // プライバシー、設定に入れるよう、桜川中心を初期表示する。
+          navMap.setMapType(MapType.normal);
+          final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          if (cancelled) return;
+          final currentPermission = await Geolocator.checkPermission();
+          if (cancelled) return;
+          final granted = serviceEnabled &&
+              (currentPermission == LocationPermission.whileInUse ||
+                  currentPermission == LocationPermission.always);
+          locationPermissionGranted.value = granted;
+          if (granted) {
+            final currentPosition =
+                await navigator.getCurrentPosition(locationAccuracy);
+            if (cancelled) return;
+            initLatLng.value =
+                LatLng(currentPosition.latitude, currentPosition.longitude);
+          } else {
+            initLatLng.value = _sakuragawaFallbackCenter;
+          }
+        } catch (e) {
+          if (cancelled) return;
+          // 現在地の一時的な取得失敗でアプリ全体をブロックしない。
+          initLatLng.value = _sakuragawaFallbackCenter;
+          initError.value = null;
+        } finally {
+          if (!cancelled) loading.value = false;
         }
-        // 初期位置の取得
-        navMap.setMapType(MapType.normal);
-        await permission.requestLocationServicePermission(); // 位置情報の許可取得
-        final currentPosition = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LOCATION_ACCURACY);
-        initLatLng.value =
-            LatLng(currentPosition.latitude, currentPosition.longitude);
-        loading.value = false;
-      });
+      }));
+      return () {
+        cancelled = true;
+      };
+    }, [initAttempt.value]);
+
+    // 地図の見え方設定を復元する。失敗しても既定(通常表示)で続行する。
+    useEffect(() {
+      var disposed = false;
+      unawaited(mapDisplaySettings.loadHighContrast().then((enabled) {
+        if (disposed) return;
+        highContrastMap.value = enabled;
+      }));
+      unawaited(
+          mapDisplaySettings.loadDeveloperSafetyShapeOverlay().then((enabled) {
+        if (disposed) return;
+        showDeveloperSafetyShapeOverlay.value = enabled;
+      }));
+      return () => disposed = true;
+    }, const []);
+
+    // 起動時は音を鳴らさず、対象別の警告音の準備状態だけ自動確認する。
+    // 問題があっても画面に警告を出すだけで、航行開始は妨げない。
+    useEffect(() {
+      unawaited(Future<void>(() async {
+        await navigator.checkAudio();
+      }).catchError((Object error) {
+        if (kDebugMode) debugPrint('Boat marker render failed: $error');
+      }));
       return null;
     }, []);
+
+    // 監視中の地図操作で追跡を解除していても、航行開始時は必ず
+    // ローイング用の後ろ向き追跡へ戻す。
+    useEffect(() {
+      if (navigator.mode.value == NavMode.navigator) {
+        cancelGestureAutoRecenter();
+        tracking.setMode(TrackingMode.track);
+      }
+      return null;
+    }, [navigator.mode.value]);
+
+    // 臨時危険区域の受信障害は「今そうなっている状態」であって出来事ではない。
+    // 5秒で消えるトーストに載せると、見逃したあとは能力が落ちたまま
+    // 気づけない。計器カードの能力低下バッジ(常設)が同じ内容を
+    // 持ち続けるため、ここでは重ねて通知しない。
+    //
+    // 連続音の警告が出た瞬間だけ強い触覚を返す。風・イヤホン無し・エルゴ音で
+    // 音が届かないときの冗長経路。同じ警告が続く間は繰り返さない。
+    useEffect(() {
+      final imminentKeys = navigator.activeWarnings.value
+          .where((warning) => warning.urgency == WarningDisplayUrgency.imminent)
+          .map((warning) => warning.key)
+          .toSet();
+      final isNew =
+          imminentKeys.difference(announcedImminentWarnings.value).isNotEmpty;
+      announcedImminentWarnings.value = imminentKeys;
+      if (isNew) TactileFeedback.alert();
+      return null;
+    }, [navigator.activeWarnings.value]);
+
+    // 共有校正の受信障害も航行を止めず、最後に検証できた範囲を使い続ける。
+    // 同じ障害が継続している間は通知を繰り返さない。
+    useEffect(() {
+      final unavailable =
+          navigator.isSharedSafetyCalibrationSyncUnavailable.value;
+      final newlyUnavailable =
+          unavailable && !previousSharedCalibrationFailure.value;
+      previousSharedCalibrationFailure.value = unavailable;
+      if (newlyUnavailable) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('チーム安全設定を更新できません。直前の設定で航行を続けます。'),
+            duration: Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ));
+        });
+      }
+      return null;
+    }, [navigator.isSharedSafetyCalibrationSyncUnavailable.value]);
+
+    // 自艇の低電池は安全機能を止めず、閾値を下回った時に一度だけ
+    // 小さく知らせる。25%まで回復するか航行終了で通知ラッチを戻す。
+    useEffect(() {
+      final level = navigator.batteryLevel.value;
+      if (navigator.mode.value != NavMode.navigator) {
+        lowBatteryNotificationShown.value = false;
+        return null;
+      }
+      if (level == null) return null;
+      if (level >= lowBatteryWarningResetPercent) {
+        lowBatteryNotificationShown.value = false;
+        return null;
+      }
+      if (level <= lowBatteryWarningPercent &&
+          !lowBatteryNotificationShown.value) {
+        lowBatteryNotificationShown.value = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('電池残量が$level%です。航行はそのまま継続できます。'),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ));
+        });
+      }
+      return null;
+    }, [navigator.mode.value, navigator.batteryLevel.value]);
+
+    // 監視異常の提示は「地図上の小さなチップ(CoachAnomalyChip)+ 艇一覧」で行う。
+    // ここが受け持つのは音だけで、既定では一度も鳴らない。
+    //
+    // 以前は新規異常のたびに `playCoachAnomalyAlert()`(= 他艇衝突と同じ
+    // add_warning.mp3)と赤い danger SnackBar を出し、`anomalyReannounceSec`
+    // 間隔で鳴らし直していた。実機テストで利用者から
+    // 「監視は画面で見られれば十分。音はトランシーバーアプリと干渉し、
+    // 近隣住民にも迷惑」「細かいエラーを大きく伝えすぎ」との指摘を受け、
+    // DESIGN_PRINCIPLES 原則2(使い方は使い手が決める)に従って既定を無音にした。
+    //
+    // トレードオフ: 監視者が画面から目を離している間、沈・電池切れへの
+    // 気づきが音では得られない。運用でそこを拾いたい場合は
+    // `coachAudibleAnomalyKindNames` に種類を足すと、この経路が復活する。
+    // 異常の**表示**は常に出しており、情報は減らしていない(原則1・原則6)。
+    useEffect(() {
+      final watching = navigator.mode.value == NavMode.observer &&
+          navigator.isWatching.value;
+      // 音を鳴らす対象が無ければ再通知ラッチも持たない。次に対象が現れた
+      // ときは「新規」として扱われ、設定を有効にした運用でも正しく鳴る。
+      final audible = watching
+          ? coachWatch.anomalies.value
+              .where((anomaly) => isAudibleCoachAnomalyKind(anomaly.kind))
+              .toList()
+          : const <BoatAnomaly>[];
+      if (audible.isEmpty) {
+        announcedCoachAnomalies.value = <String, DateTime>{};
+        return null;
+      }
+      final now = DateTime.now();
+      const reannounceInterval = Duration(seconds: anomalyReannounceSec);
+      final announceTargets = audible.where((anomaly) {
+        final lastAnnouncedAt = announcedCoachAnomalies.value[anomaly.key];
+        return lastAnnouncedAt == null ||
+            now.difference(lastAnnouncedAt) >= reannounceInterval;
+      }).toList();
+      announcedCoachAnomalies.value = {
+        for (final anomaly in audible)
+          anomaly.key: announceTargets.contains(anomaly)
+              ? now
+              : (announcedCoachAnomalies.value[anomaly.key] ?? now),
+      };
+      if (announceTargets.isNotEmpty) {
+        unawaited(navigator.playCoachAnomalyAlert());
+      }
+      return null;
+    }, [
+      navigator.mode.value,
+      navigator.isWatching.value,
+      coachWatch.anomalies.value,
+    ]);
+
+    // 練習水域を読めないと「水域外」の検知だけが黙って止まる。能力が欠けた
+    // ことは必ず知らせるが(原則1)、8秒の赤い SnackBar ではなく
+    // `CoachAnomalyChip` へ小さく併記する。消えるバナーと違い常時出るので、
+    // 知らせる度合いはむしろ上がっている。
 
     // ##########################
     // 自艇および他艇を描画
     // ##########################
     useEffect(() {
       if (!navMap.isReady.value) return;
+      final evalService = CollisionRiskEvaluatorService();
       Future(() async {
-        final newMarkers = <Marker>{};
+        final markerSpecs = <BoatMarkerRenderSpec>[];
         // 自艇のマーカーを作成
         final myBoat = navigator.myBoat.value;
         if (myBoat != null) {
-          newMarkers.add(await navMap.createMarker(
-            myBoat.boatId,
-            MarkerType.myBoat,
-            myBoat.lat,
-            myBoat.lng,
-            myBoat.heading,
-            "自艇",
-            "${myBoat.boatId}\n"
+          final travelBearing = normalizeBearing(myBoat.heading);
+          markerSpecs.add(BoatMarkerRenderSpec(
+            markerId: myBoat.boatId,
+            type: MarkerType.myBoat,
+            boatType: myBoat.boatType,
+            lat: myBoat.lat,
+            lng: myBoat.lng,
+            heading: travelBearing,
+            title: '自艇',
+            snippet: "${myBoat.boatId}\n"
                 "BoatType: ${myBoat.boatType}\n"
                 "速度: ${myBoat.speed.toStringAsFixed(1)} m/s\n"
-                "進路: ${myBoat.heading.toStringAsFixed(1)}°",
+                "進路: ${myBoat.heading.toStringAsFixed(1)}°\n"
+                "画面上の矢印: 下向き",
           ));
         }
-        // 他艇のマーカーを作成
+        // 他艇は新しい受信値が届いた時だけ描画位置を更新する。
+        // 1Hzの安全判定では従来どおり現在時刻まで外挿するが、表示だけの
+        // 補間で全艇マーカーを毎秒再生成しないことで電池消費を抑える。
         final otherBoats = navigator.otherBoats.value;
         for (final boat in otherBoats) {
-          newMarkers.add(await navMap.createMarker(
-            boat.boatId,
-            MarkerType.otherBoat,
-            boat.lat,
-            boat.lng,
-            boat.heading,
-            boatConfigs.byBoatType(boat.boatType).label,
-            "${boat.boatId}\n"
-            "BoatType: ${boat.boatType}\n"
-            "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
-            "進路: ${boat.heading.toStringAsFixed(1)}°",
+          markerSpecs.add(BoatMarkerRenderSpec(
+            markerId: boat.boatId,
+            type: MarkerType.otherBoat,
+            boatType: boat.boatType,
+            lat: boat.lat,
+            lng: boat.lng,
+            heading: boat.heading,
+            title: boat.displayName,
+            snippet: "名前: ${boat.displayName}\n"
+                "艇種: ${boatConfigs.byBoatType(boat.boatType).label}\n"
+                "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
+                "進路: ${boat.heading.toStringAsFixed(1)}°"
+                "${boat.battery != null ? '\n電池: ${boat.battery}%' : ''}",
+            // 他艇は受信鮮度で既に絞られている。航行中だけ名称を隠すと、
+            // 警告対象が誰かを確認できないため、表示対象はすべてラベルを出す。
+            nameLabel: boat.displayName,
           ));
         }
-        // マーカーを更新
-        navMap.setMarkers(newMarkers);
+        final rendered = await navMap.renderBoatMarkers(markerSpecs);
+        // より新しいGPS更新の描画が始まっていたら、古い位置へ
+        // カメラを戻さず、その新しい処理に追跡を任せる。
+        if (!rendered) return;
         // ナビゲーションモードかつトラッキングモードなら自艇を追跡
         if (myBoat != null && tracking.mode.value == TrackingMode.track) {
-          focusP14y(myBoat.lat, myBoat.lng, myBoat.heading);
+          // 艇の矢印と実際の進行方向を画面下に固定する。
+          await focusP14y(
+            myBoat.lat,
+            myBoat.lng,
+            rowingMapBearing(myBoat.heading),
+          );
         }
       });
 
@@ -140,41 +772,60 @@ class HomeMapScreen extends HookConsumerWidget {
       // 船舶領域を可視化
       // ###########################
       final shipDomainService = ShipDomainService();
-      final evalService = CollisionRiskEvaluatorService();
       // 全艇の船舶領域を取得
       final myBoat = navigator.myBoat.value;
       final allBoats = [
         if (myBoat != null) myBoat,
         ...navigator.otherBoats.value
       ];
+      final nextRenderSnapshot = ShipDomainRenderSnapshot(
+        renderedAt: DateTime.now(),
+        warningTimeSeconds: navigator.warningTimeSeconds.value,
+        boats: allBoats.map(BoatRenderSnapshot.fromBoat),
+      );
+      if (!shouldRefreshShipDomains(
+        previous: shipDomainRenderSnapshot.value,
+        next: nextRenderSnapshot,
+      )) {
+        return null;
+      }
       Set<Polygon> newShipDomains = {};
       for (final boat in allBoats) {
         final speed = boat.speed;
         final stoppingDistance = evalService.getStoppingDistance(boat);
-        final warningDistantce = stoppingDistance + warningTime * speed;
-        double t = 0;
-        double deltaTime = speed == 0 ? -1 : evalIntervalDistance / speed;
-        while (true) {
-          final distance = speed * t;
-          if (distance > warningDistantce) break;
+        final warningDistantce = max(
+          stoppingDistance,
+          navigator.warningTimeSeconds.value * speed,
+        );
+        final sampleDistances =
+            shipDomainDisplaySampleDistances(warningDistantce);
+        for (final distance in sampleDistances) {
+          final t = speed > 0 ? distance / speed : 0.0;
           final futureBoat = evalService.predictPosition(boat, t);
-          final futureDomains = shipDomainService.getShipDomains(futureBoat);
+          // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
+          // 描画すると停止のたびに領域が太って見え、意味を誤解させる。
+          final futureDomains = shipDomainService.getShipDomains(
+            futureBoat,
+            headingReliable: true,
+          );
           Polygon futureShipBodyDomain = futureDomains.shipBodyDomain;
           Polygon futureExclusiveDomain = futureDomains.exclusiveDomain;
-          Color shipBodyDomainColor = Colors.black.withOpacity(0.2);
-          Color exclusiveDomainColor = Colors.red.withOpacity(0.5);
-          if (distance <= stoppingDistance) {
-            exclusiveDomainColor = Colors.red.withOpacity(0.5);
-          } else if (distance <= warningDistantce) {
-            exclusiveDomainColor = Colors.yellow.withOpacity(0.5);
-          }
+          // 「塗り = 実在する危険」「線 = 自艇/他艇の予測」という規則を守る。
+          // 以前は予測の排他領域も危険区域と同じ赤50%で塗っていたため、
+          // そこに何かが在るのか、自分がこれから通るだけなのかが読めなかった。
+          final Color exclusiveOutline = distance <= stoppingDistance
+              ? const Color(0xFFD32F2F)
+              : distance <= warningDistantce
+                  ? const Color(0xFFF9A825)
+                  : const Color(0xFFD32F2F);
           // 船体領域を描画
           final shipBodyDomain = Polygon(
             polygonId: PolygonId(
                 "${futureShipBodyDomain.polygonId.value}_${boat.boatId}_$t"),
             points: futureShipBodyDomain.points,
-            strokeWidth: 0,
-            fillColor: shipBodyDomainColor,
+            strokeWidth: 2,
+            strokeColor: Colors.black.withValues(alpha: 0.45),
+            fillColor: Colors.black.withValues(alpha: 0.08),
           );
           newShipDomains.add(shipBodyDomain);
           // 排他領域を描画
@@ -182,285 +833,914 @@ class HomeMapScreen extends HookConsumerWidget {
             polygonId: PolygonId(
                 "${futureExclusiveDomain.polygonId.value}_${boat.boatId}_$t"),
             points: futureExclusiveDomain.points,
-            strokeWidth: 0,
-            fillColor: exclusiveDomainColor,
+            strokeWidth: 3,
+            strokeColor: exclusiveOutline.withValues(alpha: 0.9),
+            fillColor: exclusiveOutline.withValues(alpha: 0.10),
           );
           newShipDomains.add(exclusiveDomain);
-          if (speed == 0.0) break; // 艇が停止している場合は離脱
-          t += deltaTime;
         }
       }
       shipDomains.value = newShipDomains;
+      shipDomainRenderSnapshot.value = nextRenderSnapshot;
       return null;
-    }, [navigator.myBoat.value, navigator.otherBoats.value]);
+    }, [
+      navigator.myBoat.value,
+      navigator.otherBoats.value,
+      coachWatch.boatStatuses.value, // 観察者モードでも定期的に再描画する
+      tracking.mode.value,
+      navMap.isReady.value,
+      navigator.warningTimeSeconds.value,
+    ]);
+
+    // ##########################
+    // 開発用: 実際の安全判定形状を別レイヤーへ描画
+    // ##########################
+    useEffect(() {
+      final myBoat = navigator.myBoat.value;
+      if (!showDeveloperSafetyShapeOverlay.value ||
+          !navMap.isReady.value ||
+          myBoat == null) {
+        if (developerSafetyShapeOverlay.value.isNotEmpty) {
+          developerSafetyShapeOverlay.value = {};
+        }
+        return null;
+      }
+      developerSafetyShapeOverlay.value = safetyShapeOverlayService.build(
+        boat: myBoat,
+        obstacles: navigator.obstacles.value,
+        warningTimeSeconds: navigator.warningTimeSeconds.value,
+        // 判定器と同じ中心線を使う。中心線が無ければサービス側は従来と
+        // 同じ直線予測へ縮退するため、表示だけ別の予測をしない。
+        centerline: navigator.channelCenterline.value,
+      );
+      return null;
+    }, [
+      showDeveloperSafetyShapeOverlay.value,
+      navMap.isReady.value,
+      navigator.myBoat.value,
+      navigator.obstacles.value,
+      navigator.warningTimeSeconds.value,
+      navigator.channelCenterline.value,
+    ]);
 
     // ##########################
     // 障害物を描画
     // ##########################
+    // 種類ごとに色と濃さを変える。すべて同じ赤で塗ると、release で約310枚に
+    // なる岸の長方形が川の両側を一様に埋め、本当に避けたい流木や中州が
+    // その中へ紛れる。バナーと同じ HazardPalette を参照し、
+    // 「バナーは流木と言っているのに地図では岸と同じ色」を起こさない。
     useEffect(() {
-      // 障害物のポリゴンを描画
       final newObstacles = <Polygon>{};
       for (final obstacle in navigator.obstacles.value) {
         final points = obstacle.points
             .map((point) => LatLng(point.latitude, point.longitude))
             .toList();
+        final category = obstacle.kind.name;
         newObstacles.add(Polygon(
           polygonId: PolygonId(obstacle.id),
           points: points,
-          strokeWidth: 0,
-          fillColor: Colors.red.withOpacity(0.5),
+          // 塗りが薄い区域ほど輪郭線で形を伝える。色だけに頼らない。
+          strokeWidth: HazardPalette.strokeWidthOf(category),
+          strokeColor: HazardPalette.strokeColorOf(context, category),
+          fillColor: HazardPalette.fillColorOf(
+            context,
+            category,
+            isTemporary: obstacle.isTemporary,
+          ),
         ));
       }
       obstacles.value = newObstacles;
       return null;
-    }, [navigator.obstacles.value]);
+    }, [navigator.obstacles.value, navigator.warningTimeSeconds.value]);
 
     // ##########################
     // Polygonsの統合
     // ##########################
     useEffect(() {
-      final newPolygons = {...shipDomains.value, ...obstacles.value};
+      final newPolygons = {
+        ...shipDomains.value,
+        ...obstacles.value,
+        // この集合は開発者トグルがONのときだけ非空。通常地図の描画形状を
+        // 安全判定用のGPS帯・低速時拡張へ置き換えない。
+        ...developerSafetyShapeOverlay.value,
+      };
+      // 観察者(コーチ)モードでは練習水域の枠を表示
+      if (navigator.mode.value == NavMode.observer &&
+          coachWatch.practiceArea.value != null) {
+        newPolygons.add(Polygon(
+          polygonId: const PolygonId('practice_area'),
+          points: coachWatch.practiceArea.value!,
+          strokeWidth: 2,
+          strokeColor: Colors.blue,
+          fillColor: Colors.transparent,
+        ));
+      }
       navMap.setPolygons(newPolygons);
       return null;
-    }, [shipDomains.value, obstacles.value]);
+    }, [
+      shipDomains.value,
+      obstacles.value,
+      developerSafetyShapeOverlay.value,
+      coachWatch.practiceArea.value,
+      navigator.mode.value,
+    ]);
+
+    // ##########################
+    // 航跡(コーチモード)の描画
+    // ##########################
+    useEffect(() {
+      if (navigator.mode.value == NavMode.observer) {
+        navMap.setPolylines(coachWatch.trailPolylines.value);
+      } else {
+        navMap.setPolylines({});
+      }
+      return null;
+    }, [coachWatch.trailPolylines.value, navigator.mode.value]);
 
     return Scaffold(
-      appBar: AppBar(),
+      // 水上では地図が1pxでも広い方がよいためAppBarは置かず、マップを全画面に使う
       body: loading.value
-          ? Center(
-              child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    child: const CircularProgressIndicator()),
-                const Text("Loading...")
-              ],
-            ))
-          : Stack(alignment: Alignment.center, children: <Widget>[
-              // ################ マップ ################
-              GoogleMap(
-                myLocationEnabled: navigator.myBoat.value == null,
-                myLocationButtonEnabled: false,
-                initialCameraPosition: CameraPosition(
-                  target: initLatLng.value!,
-                  zoom: DEFAULT_ZOOM_LEVEL,
-                ),
-                mapType: navMap.mapType.value,
-                onMapCreated: (GoogleMapController controller) async {
-                  navMap.setController(controller);
-                },
-                onCameraMoveStarted: () {
-                  // プログラムによる操作でない場合はユーザによる操作とみなしてトラッキングモードを解除
-                  if (!tracking.progFlag.value) {
-                    tracking.setMode(TrackingMode.untrack);
-                  }
-                  // プログラムによる操作フラグを解除
-                  tracking.setProgFlag(false);
-                },
-                markers: navMap.markers.value,
-                polygons: navMap.polygons.value,
-              ),
-              // ################ 艇情報カード ################
-              Column(
-                children: [
-                  if (navigator.mode.value == NavMode.navigator)
-                    SizedBox(
-                        width: double.infinity,
-                        child: NavStatusCard(
-                          paceSeconds: navigator.myBoat.value != null
-                              ? navigator.myBoat.value!.speed != 0
-                                  ? (500 ~/ navigator.myBoat.value!.speed)
-                                  : 0
-                              : 0,
-                          distanceMeters: 1024,
-                          elapsedTimeSeconds: 4200,
-                        )),
-                  if (showInfo.value)
-                    SizedBox(
-                        width: double.infinity,
-                        child: BoatStatusCard(
-                          myBoat: navigator.myBoat.value,
-                          config: navigator.config.value,
-                          preProcessTime: navigator.preProcessTime.value,
-                          postProcessTime: navigator.postProcessTime.value,
-                        )),
-                ],
-              ),
-              // ################ 左右操作ボタン類 ################
-              Container(
-                alignment: Alignment.center,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // ################ 左側 ################
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          MapTypeSwitcher(
-                            mapType: navMap.mapType.value,
-                            onTap: () {
-                              navMap.setMapType(
-                                  navMap.mapType.value == MapType.normal
-                                      ? MapType.hybrid
-                                      : MapType.normal);
-                            },
-                          ),
-                        ],
-                      ),
-                      // ################ 右側 ################
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 17),
-                            child: RoundedIconButton(
-                              icon: Icons.article,
-                              onPressed: () {
-                                showInfo.value = !showInfo.value;
-                              },
-                            ),
-                          ),
-                          if (navigator.mode.value == NavMode.observer)
-                            Container(
-                              margin: const EdgeInsets.only(top: 17),
-                              child: RoundedIconButton(
-                                icon: Icons.list,
-                                onPressed: () {
-                                  Navigator.push(context,
-                                      MaterialPageRoute(builder: (context) {
-                                    return const RecordListScreen();
-                                  }));
-                                },
-                              ),
-                            ),
-                          if (navigator.mode.value == NavMode.observer)
-                            Container(
-                              margin: const EdgeInsets.only(top: 17),
-                              child: RoundedIconButton(
-                                icon: Icons.map,
-                                onPressed: () {
-                                  Navigator.push(context,
-                                      MaterialPageRoute(builder: (context) {
-                                    return const AreaSettingScreen();
-                                  }));
-                                },
-                              ),
-                            ),
-                          if (navigator.mode.value == NavMode.observer)
-                            Container(
-                              margin: const EdgeInsets.only(top: 17),
-                              child: RoundedIconButton(
-                                icon: Icons.gps_fixed,
-                                onPressed: () async {
-                                  // 現在地をフォーカス
-                                  final pos = await navigator
-                                      .getCurrentPosition(LOCATION_ACCURACY);
-                                  focusP14y(pos.latitude, pos.longitude, 0.0);
-                                },
-                              ),
-                            ),
-                          if (navigator.mode.value == NavMode.navigator)
-                            Container(
-                              margin: const EdgeInsets.only(top: 17),
-                              child: RoundedIconButton(
-                                icon: Icons.navigation,
-                                angle: 45,
-                                onPressed: () async {
-                                  // トラッキングモードに切り替え
-                                  tracking.setMode(TrackingMode.track);
-                                  // 現在位置をフォーカス
-                                  final myBoat = navigator.myBoat.value;
-                                  if (myBoat != null) {
-                                    focusP14y(myBoat.lat, myBoat.lng,
-                                        navigator.myBoat.value?.heading ?? 0.0);
-                                  }
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+          ? const AppLoadingView(message: '位置情報を取得しています…')
+          : initError.value != null
+              ? AppErrorView(
+                  icon: Icons.location_off,
+                  title: '起動を完了できませんでした',
+                  message: initError.value!,
+                  primaryLabel: '再試行',
+                  onPrimary: () => initAttempt.value += 1,
+                  secondaryLabel: '端末の設定を開く',
+                  onSecondary: () async {
+                    await Geolocator.openAppSettings();
+                  },
+                )
+              : Stack(alignment: Alignment.center, children: <Widget>[
+                  // ################ マップ ################
+                  GoogleMap(
+                    // 通常時も許可済みならOS標準の現在地アイコンを表示する。
+                    // 航行中の安全判定・位置共有とは別の地図表示専用レイヤーである。
+                    // 航行中はOS標準の現在地(生GPS)を出さない。Kalman推定で
+                    // 描く自艇マーカーと数m ずれた青丸が並ぶと、どちらが自分の
+                    // 位置なのか判断できなくなる。監視中は自艇マーカーが
+                    // 無いので、こちらだけ表示する。
+                    myLocationEnabled: locationPermissionGranted.value &&
+                        navigator.mode.value != NavMode.navigator,
+                    myLocationButtonEnabled: false,
+                    initialCameraPosition: CameraPosition(
+                      target: initLatLng.value!,
+                      zoom: defaultZoomLevel,
+                    ),
+                    mapType: navMap.mapType.value,
+                    // 航空写真ではスタイルが無視されるため、通常地図のときだけ
+                    // 適用する。適用に失敗しても通常表示のまま航行は続く。
+                    style: highContrastMap.value &&
+                            navMap.mapType.value == MapType.normal
+                        ? highContrastMapStyle
+                        : null,
+                    onMapCreated: (GoogleMapController controller) async {
+                      navMap.setController(controller);
+                    },
+                    onCameraMoveStarted: () {
+                      // プログラムによる操作以外はジェスチャーとして扱う。
+                      // ボタンでの明示解除は、ジェスチャーで上書きしない。
+                      if (!tracking.progFlag.value) {
+                        cancelGestureAutoRecenter();
+                        if (tracking.mode.value !=
+                            TrackingMode.untrackedByUser) {
+                          tracking.setMode(TrackingMode.untrackedByGesture);
+                        }
+                      }
+                    },
+                    onCameraIdle: () {
+                      // カメラ更新完了までフラグを維持する。開始直後に解除すると
+                      // 同じアニメーションのコールバックで追跡が外れる端末がある。
+                      final wasProgrammatic = tracking.progFlag.value;
+                      tracking.setProgFlag(false);
+                      if (!wasProgrammatic) scheduleGestureAutoRecenter();
+                    },
+                    markers: navMap.markers.value,
+                    polygons: navMap.polygons.value,
+                    polylines: navMap.polylines.value,
                   ),
-                ),
-              ),
-              // ################ ナビゲーションボタン ################
-              Container(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 48, horizontal: 17),
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (navigator.mode.value == NavMode.observer)
-                          RoundedButton(
-                            label: "Start Nav",
-                            onPressed: () {
-                              showModalBottomSheet<void>(
-                                context: context,
-                                backgroundColor: Colors.transparent,
-                                builder: (BuildContext context) {
-                                  return NavSettingModal(
-                                    onPressStartNav: () async {
-                                      Navigator.of(context).pop();
-                                      if (!navMap.isReady.value ||
-                                          !auth.isSignedIn) return;
-                                      // ナビゲーションを開始
-                                      final userId = auth.currentUser!.uid;
-                                      // 最新の boatType と seatPosition を参照
-                                      final boatType =
-                                          ref.read(boatTypeProvider);
-                                      final seatPosition =
-                                          ref.read(seatPositionProvider);
-                                      final config = NavConfig(
-                                          boatId: userId,
-                                          boatType: boatType,
-                                          seatPos: seatPosition,
-                                          accuracy: LocationAccuracy
-                                              .bestForNavigation);
-                                      await navigator.startNavigation(config);
-                                      // トラッキングモードに切り替え
-                                      tracking.setMode(TrackingMode.track);
-                                      // 現在位置をフォーカス
-                                      final myBoat = navigator.myBoat.value;
-                                      if (myBoat != null) {
-                                        focusP14y(
-                                            myBoat.lat,
-                                            myBoat.lng,
-                                            navigator.myBoat.value?.heading ??
-                                                0.0);
-                                      }
-                                      print("Navigation started.");
-                                    },
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        if (navigator.mode.value == NavMode.navigator)
-                          RoundedButton(
-                              label: "Stop Nav",
-                              onPressed: () async {
-                                if (!navMap.isReady.value || !auth.isSignedIn)
-                                  return;
-                                // 現在位置をフォーカス
-                                final myBoat = navigator.myBoat.value;
-                                if (myBoat != null) {
-                                  focusP14y(myBoat.lat, myBoat.lng, 0.0);
-                                }
-                                // ナビゲーションを停止
-                                await navigator.stopNavigation();
-                                print("Navigation stopped.");
-                              }),
-                      ]),
-                ),
-              ),
-            ]),
+                  // ################ マップ上のオーバーレイ ################
+                  SafeArea(
+                    child:
+                        LayoutBuilder(builder: (context, overlayConstraints) {
+                      final isLandscape = overlayConstraints.maxWidth >
+                          overlayConstraints.maxHeight;
+                      // 縦向きは従来どおり上部40%以内、横向きは左上の小型カードにし、
+                      // 地図の大部分を計器で覆わない。
+                      final topOverlayBudget = overlayConstraints.maxHeight *
+                          (isLandscape ? 0.3 : 0.4);
+                      // 連続音が鳴っている警告があるか。計器の縮小に使う。
+                      final hasImminentWarning = SafetyBanner.hasImminent(
+                        navigator.activeWarnings.value,
+                      );
+                      return Stack(
+                          alignment: Alignment.center,
+                          children: <Widget>[
+                            // ################ 艇情報カード(画面上部のみ) ################
+                            Align(
+                              alignment: isLandscape ||
+                                      navigator.mode.value == NavMode.navigator
+                                  ? Alignment.topLeft
+                                  : Alignment.topCenter,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: isLandscape ||
+                                        navigator.mode.value ==
+                                            NavMode.navigator
+                                    ? CrossAxisAlignment.start
+                                    : CrossAxisAlignment.center,
+                                children: [
+                                  // 監視中であることを表示する。
+                                  //
+                                  // 航行していない待機状態は observer だが、
+                                  // それを「監視モード」と出すと、画面下に
+                                  // 「監視スタート」が並んで矛盾して見える。
+                                  // 実際に監視しているときだけ出す。
+                                  if (navigator.mode.value ==
+                                          NavMode.observer &&
+                                      navigator.isWatching.value)
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: context.colors.chipScrim,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.visibility,
+                                              size: 18, color: Colors.white),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            '監視モード',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  // 監視異常と「水域外の自動検知が停止中」を
+                                  // 小さく常時表示する。赤い SnackBar の
+                                  // 置き換えで、消えないぶん見落としにくい。
+                                  // 詳細(艇名・継続時間)は艇一覧に出ており、
+                                  // タップでそこへ辿れる。
+                                  if (navigator.mode.value == NavMode.observer)
+                                    CoachAnomalyChip(
+                                      anomalies: coachWatch.anomalies.value,
+                                      practiceAreaUnavailable: coachWatch
+                                          .practiceAreaUnavailable.value,
+                                      onTap: () => showBoatList.value = true,
+                                    ),
+                                  // 陸上と判定して警告音を止めている間は、
+                                  // その事実を必ず画面へ出す。黙って音を
+                                  // 止めると「鳴らないアプリ」と区別できない。
+                                  // 判定を誤っていると感じたら、ここから
+                                  // すぐ音へ戻せる。
+                                  if (navigator.mode.value ==
+                                          NavMode.navigator &&
+                                      navigator.isAshore.value)
+                                    AshoreNotice(
+                                      onRestoreAudio:
+                                          navigator.overrideAshoreToWater,
+                                    ),
+                                  // 安全レベルに応じた警告バナー(音声警告と併用)。
+                                  // 警告は最優先のため高さ制限の外に置き、常に全体表示する。
+                                  if (navigator.mode.value == NavMode.navigator)
+                                    SafetyBanner(
+                                      warnings: navigator.activeWarnings.value,
+                                    ),
+                                  if (navigator.audioError.value != null)
+                                    Container(
+                                      width: double.infinity,
+                                      color: context.colors.danger,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.volume_off,
+                                              color: Colors.white),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              navigator.audioError.value!,
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  // 縦向きは上部40%以内、横向きは左上の小型カードにする。
+                                  // 警告バナーはカードに含めず、独立した細い表示を保つ。
+                                  if (navigator.mode.value == NavMode.navigator)
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                          maxHeight: topOverlayBudget),
+                                      child: SingleChildScrollView(
+                                        child: NavigationStatusPanel(
+                                          paceSeconds: navigator.myBoat.value !=
+                                                  null
+                                              ? navigator.myBoat.value!.speed !=
+                                                      0
+                                                  ? (500 ~/
+                                                      navigator
+                                                          .myBoat.value!.speed)
+                                                  : 0
+                                              : 0,
+                                          distanceMeters: navigator
+                                              .totalDistance.value
+                                              .round(),
+                                          sessionStartedAt:
+                                              navigator.sessionStartedAt.value,
+                                          lastGpsTimestamp:
+                                              navigator.myBoat.value?.timestamp,
+                                          gpsQuality:
+                                              navigator.gpsQuality.value,
+                                          spm: navigator.spm.value,
+                                          spmMeasurementEnabled: navigator
+                                                  .config
+                                                  .value
+                                                  ?.strokeRateEnabled ??
+                                              false,
+                                          compact: isLandscape,
+                                          portraitCompact: !isLandscape,
+                                          positionSharingUnavailable: navigator
+                                              .isPositionSharingUnavailable
+                                              .value,
+                                          otherBoatReceiveUnavailable: navigator
+                                              .isDynamicReceiveUnavailable
+                                              .value,
+                                          temporaryObstacleReceiveUnavailable:
+                                              navigator
+                                                  .isTemporaryObstacleReceiveUnavailable
+                                                  .value,
+                                          operationalCoverageLimited: navigator
+                                                  .isOperationalCoverageUnverified
+                                                  .value ||
+                                              navigator
+                                                  .isOutsideOperationalCoverage
+                                                  .value,
+                                          safetySettingsLabel: navigator
+                                              .safetySettingsLabel.value,
+                                          safetySettingsNeedsAttention:
+                                              navigator
+                                                  .safetySettingsNeedsAttention
+                                                  .value,
+                                          pendingSharedSafetyRevision: navigator
+                                              .pendingSharedSafetyRevision
+                                              .value,
+                                          onApplyPendingSafetySettings:
+                                              navigator.pendingSharedSafetyRevision
+                                                          .value ==
+                                                      null
+                                                  ? null
+                                                  : () async {
+                                                      final revision = navigator
+                                                          .pendingSharedSafetyRevision
+                                                          .value;
+                                                      final confirmed =
+                                                          await showDialog<
+                                                                  bool>(
+                                                                context:
+                                                                    context,
+                                                                builder:
+                                                                    (dialogContext) =>
+                                                                        AlertDialog(
+                                                                  title: Text(
+                                                                    '共有安全設定 rev.$revision を反映しますか？',
+                                                                  ),
+                                                                  content:
+                                                                      const Text(
+                                                                    '新しい全区域を生成できた場合だけ一括で切り替えます。生成に失敗した場合は、現在の警告区域を保ちます。',
+                                                                  ),
+                                                                  actions: [
+                                                                    TextButton(
+                                                                      onPressed:
+                                                                          () =>
+                                                                              Navigator.pop(
+                                                                        dialogContext,
+                                                                        false,
+                                                                      ),
+                                                                      child:
+                                                                          const Text(
+                                                                        'キャンセル',
+                                                                      ),
+                                                                    ),
+                                                                    FilledButton(
+                                                                      onPressed:
+                                                                          () =>
+                                                                              Navigator.pop(
+                                                                        dialogContext,
+                                                                        true,
+                                                                      ),
+                                                                      child:
+                                                                          const Text(
+                                                                        '反映',
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ) ??
+                                                              false;
+                                                      if (confirmed) {
+                                                        unawaited(navigator
+                                                            .applyPendingSharedSafetySettings());
+                                                      }
+                                                    },
+                                          // 連続音が鳴っている間だけ主計器を
+                                          // 縮め、警告バナーへ視線を譲る。
+                                          deemphasized: hasImminentWarning,
+                                        ),
+                                      ),
+                                    ),
+                                  // コーチモードの艇一覧パネル(同じく上部40%以内で内部スクロール)
+                                  if (navigator.mode.value ==
+                                          NavMode.observer &&
+                                      showBoatList.value)
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                          maxHeight: topOverlayBudget),
+                                      child: SingleChildScrollView(
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          child: BoatListPanel(
+                                            statuses:
+                                                coachWatch.boatStatuses.value,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (!kReleaseMode && showInfo.value)
+                                    SizedBox(
+                                        width: double.infinity,
+                                        child: BoatStatusCard(
+                                          myBoat: navigator.myBoat.value,
+                                          config: navigator.config.value,
+                                          preProcessTime:
+                                              navigator.preProcessTime.value,
+                                          postProcessTime:
+                                              navigator.postProcessTime.value,
+                                        )),
+                                ],
+                              ),
+                            ),
+                            // ################ 左右操作ボタン類 ################
+                            Container(
+                              alignment: Alignment.center,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 48, horizontal: 17),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    // ################ 左側 ################
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        MapTypeSwitcher(
+                                          mapType: navMap.mapType.value,
+                                          onTap: () {
+                                            navMap.setMapType(
+                                                navMap.mapType.value ==
+                                                        MapType.normal
+                                                    ? MapType.hybrid
+                                                    : MapType.normal);
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    // ################ 右側 ################
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        // コーチ用: 艇一覧パネルの表示切替(監視中のみ)
+                                        if (navigator.mode.value ==
+                                                NavMode.observer &&
+                                            navigator.isWatching.value)
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(top: 12),
+                                            child: MapControlButton(
+                                              icon: Icons.groups,
+                                              label: '艇一覧',
+                                              active: showBoatList.value,
+                                              onPressed: () {
+                                                showBoatList.value =
+                                                    !showBoatList.value;
+                                              },
+                                            ),
+                                          ),
+                                        // 航行用: 自艇の追跡ON/OFF
+                                        if (navigator.mode.value ==
+                                            NavMode.navigator)
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(top: 12),
+                                            child: MapControlButton(
+                                              icon: Icons.navigation,
+                                              label: '追跡',
+                                              angle: 45,
+                                              active: tracking.mode.value ==
+                                                  TrackingMode.track,
+                                              onPressed: () async {
+                                                if (tracking.mode.value ==
+                                                    TrackingMode.track) {
+                                                  // カメラの自動追従だけを解除する。
+                                                  // 位置共有・警告処理は継続する。
+                                                  cancelGestureAutoRecenter();
+                                                  tracking.setMode(TrackingMode
+                                                      .untrackedByUser);
+                                                  return;
+                                                }
+                                                cancelGestureAutoRecenter();
+                                                tracking.setMode(
+                                                    TrackingMode.track);
+                                                // 現在位置をフォーカス
+                                                final myBoat =
+                                                    navigator.myBoat.value;
+                                                if (myBoat != null) {
+                                                  focusP14y(
+                                                      myBoat.lat,
+                                                      myBoat.lng,
+                                                      rowingMapBearing(navigator
+                                                              .myBoat
+                                                              .value
+                                                              ?.heading ??
+                                                          0.0),
+                                                      force: true);
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        // 監視用: 現在地へフォーカス
+                                        if (navigator.mode.value ==
+                                            NavMode.observer)
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(top: 12),
+                                            child: MapControlButton(
+                                              icon: Icons.gps_fixed,
+                                              label: '現在地',
+                                              onPressed: () async {
+                                                try {
+                                                  await permission
+                                                      .requestLocationServicePermission();
+                                                  locationPermissionGranted
+                                                      .value = true;
+                                                  final pos = await navigator
+                                                      .getCurrentPosition(
+                                                          locationAccuracy);
+                                                  focusP14y(pos.latitude,
+                                                      pos.longitude, 0.0,
+                                                      force: true);
+                                                } catch (e) {
+                                                  if (!context.mounted) return;
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(SnackBar(
+                                                    content:
+                                                        Text('現在地を取得できません: $e'),
+                                                  ));
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        // その他の操作はメニューへ集約(過密・オーバーフロー回避)
+                                        Container(
+                                          margin:
+                                              const EdgeInsets.only(top: 12),
+                                          child: MapControlButton(
+                                            icon: Icons.menu,
+                                            label: 'メニュー',
+                                            onPressed: openMapMenu,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            // ################ ナビゲーションボタン ################
+                            Container(
+                              alignment: Alignment.bottomCenter,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                    top: 48, bottom: 24, left: 17, right: 17),
+                                child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      if (navigator.isTransitioning.value)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 18, vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.7),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                navigator.mode.value ==
+                                                        NavMode.navigator
+                                                    ? '航行を終了しています…'
+                                                    : '航行を準備しています…',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      if (!navigator.isTransitioning.value &&
+                                          navigator.mode.value ==
+                                              NavMode.observer)
+                                        RoundedButton(
+                                          label: "航行スタート",
+                                          icon: Icons.rowing,
+                                          onPressed: () {
+                                            showModalBottomSheet<void>(
+                                              context: context,
+                                              backgroundColor:
+                                                  Colors.transparent,
+                                              // 名前入力でキーボードが出ると、
+                                              // 既定の高さでは入力欄が隠れる。
+                                              isScrollControlled: true,
+                                              // ただし画面いっぱいには開かない。
+                                              // 全画面まで伸びると、シートを
+                                              // 閉じるために触れる場所が画面の
+                                              // 最上端しか残らず、そこからの
+                                              // 下スワイプはOSの通知センターに
+                                              // 取られて戻れなくなる。
+                                              // 上に2割残し、その暗い部分を
+                                              // タップして地図へ戻れるようにする。
+                                              constraints: BoxConstraints(
+                                                maxHeight: MediaQuery.sizeOf(
+                                                      context,
+                                                    ).height *
+                                                    0.8,
+                                              ),
+                                              builder:
+                                                  (BuildContext sheetContext) {
+                                                return NavSettingModal(
+                                                  onPressTestAudio: () async {
+                                                    final ok = await navigator
+                                                        .testAudio();
+                                                    if (!context.mounted) {
+                                                      return;
+                                                    }
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(SnackBar(
+                                                      content: Text(ok
+                                                          ? '警告音を再生しました。実際に聞こえたことを確認してください。'
+                                                          : '音声を再生できませんでした。端末の音量・消音設定を確認してください。'),
+                                                    ));
+                                                  },
+                                                  onPressStartNav: (displayName,
+                                                      strokeRateEnabled) async {
+                                                    if (!navMap.isReady.value) {
+                                                      ScaffoldMessenger.of(
+                                                              context)
+                                                          .showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text(
+                                                              '地図を準備中です。数秒後に同じ画面から再試行してください。'),
+                                                          duration: Duration(
+                                                              seconds: 4),
+                                                        ),
+                                                      );
+                                                      return;
+                                                    }
+                                                    try {
+                                                      final user =
+                                                          auth.currentUser;
+                                                      if (user == null) {
+                                                        _returnToTeamEntry(
+                                                            context);
+                                                        return;
+                                                      }
+                                                      final accepted =
+                                                          await _confirmBackgroundLocationUse(
+                                                              context);
+                                                      if (!accepted) return;
+                                                      final notificationGranted =
+                                                          await permission
+                                                              .requestNavigationNotificationPermission();
+                                                      // ナビゲーションを開始
+                                                      final userId = user.uid;
+                                                      // 最新の boatType と seatPosition を参照
+                                                      final boatType = ref.read(
+                                                          boatTypeProvider);
+                                                      final seatPosition = ref.read(
+                                                          seatPositionProvider);
+                                                      final config = NavConfig(
+                                                          boatId: userId,
+                                                          displayName:
+                                                              displayName,
+                                                          boatType: boatType,
+                                                          seatPos: seatPosition,
+                                                          accuracy: LocationAccuracy
+                                                              .bestForNavigation,
+                                                          strokeRateEnabled:
+                                                              strokeRateEnabled);
+                                                      try {
+                                                        await navigator
+                                                            .startNavigation(
+                                                                config);
+                                                        locationPermissionGranted
+                                                            .value = true;
+                                                      } catch (e) {
+                                                        if (!context.mounted) {
+                                                          return;
+                                                        }
+                                                        showNavigationStartFailure(
+                                                            e);
+                                                        return;
+                                                      }
+                                                      if (sheetContext
+                                                          .mounted) {
+                                                        Navigator.of(
+                                                                sheetContext)
+                                                            .pop();
+                                                      }
+                                                      // トラッキングモードに切り替え
+                                                      tracking.setMode(
+                                                          TrackingMode.track);
+                                                      // 現在位置をフォーカス
+                                                      final myBoat = navigator
+                                                          .myBoat.value;
+                                                      if (myBoat != null) {
+                                                        focusP14y(
+                                                            myBoat.lat,
+                                                            myBoat.lng,
+                                                            rowingMapBearing(
+                                                                navigator
+                                                                        .myBoat
+                                                                        .value
+                                                                        ?.heading ??
+                                                                    0.0),
+                                                            force: true);
+                                                      }
+                                                      if (!notificationGranted &&
+                                                          context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                                context)
+                                                            .showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text(
+                                                              '通知が許可されていないため、バックグラウンド航行中の持続通知が表示されません。',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                      debugPrint(
+                                                          "Navigation started.");
+                                                    } catch (e) {
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      showNavigationStartFailure(
+                                                          e);
+                                                    }
+                                                  },
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      if (!navigator.isTransitioning.value &&
+                                          navigator.mode.value ==
+                                              NavMode.observer &&
+                                          !navigator.isWatching.value)
+                                        RoundedButton(
+                                          label: '監視スタート',
+                                          icon: Icons.visibility,
+                                          compact: true,
+                                          onPressed: () async {
+                                            try {
+                                              if (auth.currentUser == null) {
+                                                _returnToTeamEntry(context);
+                                                return;
+                                              }
+                                              await navigator.startWatching();
+                                            } catch (e) {
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(SnackBar(
+                                                content: Text('監視を開始できません: $e'),
+                                              ));
+                                            }
+                                          },
+                                        ),
+                                      if (!navigator.isTransitioning.value &&
+                                          navigator.mode.value ==
+                                              NavMode.observer &&
+                                          navigator.isWatching.value)
+                                        RoundedButton(
+                                          label:
+                                              practiceLogRecording.log.value ==
+                                                      null
+                                                  ? '監視終了'
+                                                  : '監視終了（記録中）',
+                                          icon: Icons.visibility_off,
+                                          color: context.colors.danger,
+                                          compact: true,
+                                          onPressed: navigator.stopWatching,
+                                        ),
+                                      if (!navigator.isTransitioning.value &&
+                                          navigator.mode.value ==
+                                              NavMode.navigator)
+                                        RoundedButton(
+                                            label: "航行終了",
+                                            icon: Icons.stop_circle_outlined,
+                                            color: context.colors.danger,
+                                            onPressed: () async {
+                                              // 誤タップで位置共有・警告が止まるのを防ぐため必ず確認する
+                                              final confirmed =
+                                                  await showDialog<bool>(
+                                                context: context,
+                                                builder: (dialogContext) =>
+                                                    AlertDialog(
+                                                  title:
+                                                      const Text('航行を終了しますか?'),
+                                                  content: const Text(
+                                                      '位置共有と衝突警告が停止し、練習記録が保存されます。'),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                                  dialogContext)
+                                                              .pop(false),
+                                                      child:
+                                                          const Text('キャンセル'),
+                                                    ),
+                                                    FilledButton(
+                                                      style: FilledButton
+                                                          .styleFrom(
+                                                        backgroundColor:
+                                                            const Color(
+                                                                0xFFC62828),
+                                                      ),
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                                  dialogContext)
+                                                              .pop(true),
+                                                      child: const Text('終了する'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                              if (confirmed != true) return;
+                                              try {
+                                                // 地図描画の状態に関係なく、資源解放を
+                                                // 最優先で実行する。
+                                                await navigator
+                                                    .stopNavigation();
+                                                debugPrint(
+                                                    "Navigation stopped.");
+                                              } catch (error) {
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(SnackBar(
+                                                  content: Text(
+                                                      '航行終了処理でエラーが発生しました。資源解放は継続しました: $error'),
+                                                ));
+                                              }
+                                            }),
+                                    ]),
+                              ),
+                            ),
+                          ]);
+                    }),
+                  ),
+                ]),
     );
   }
 }

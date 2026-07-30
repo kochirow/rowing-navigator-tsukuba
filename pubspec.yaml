@@ -1,5 +1,5 @@
 name: rowing_navigator
-description: "A new Flutter project."
+description: "Tsukuba rowing navigation, hazard warning, and training support app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
   sdk: ">=3.3.4 <4.0.0"
@@ -37,17 +37,27 @@ dependencies:
   google_maps_flutter: ^2.6.1
   geolocator: ^14.0.2
   firebase_core: ^3.1.0
+  firebase_app_check: ^0.3.2+10
   firebase_auth: ^5.1.0
   cloud_firestore: ^5.0.1
   hooks_riverpod: ^2.6.1
+  flutter_hooks: ^0.21.2
+  flutter_riverpod: ^2.6.1
   rxdart: ^0.28.0
   audioplayers: ^6.0.0
   flutter_map_math: ^0.2.4
-  flutter_compass: ^0.8.0
   vector_math: ^2.1.4
   wakelock_plus: ^1.2.8
   shared_preferences: ^2.2.3
   share_plus: ^11.0.0
+  firebase_database: ^11.3.0
+  battery_plus: ^6.2.0
+  package_info_plus: ^8.3.0
+  sensors_plus: ^6.1.0
+  path_provider: ^2.1.4
+  crypto: ^3.0.7
+  url_launcher: ^6.3.2
+  archive: ^3.6.1
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +75,10 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # Flutter 3.32の実験的SPMは、日本語を含むプロジェクトパスを
+  # 二重URLエンコードして依存解決に失敗するためCocoaPodsを使う。
+  config:
+    enable-swift-package-manager: false
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
@@ -76,6 +90,7 @@ flutter:
     - assets/icons/
     - assets/audio/
     - assets/images/
+    - assets/data/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

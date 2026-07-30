@@ -8,5 +8,7 @@
 import Foundation
 
 struct Env {
-    static let googleMapApiKey = "YOUR_GOOGLE_MAPS_API_KEY"
+    static var googleMapApiKey: String? {
+        Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String
+    }
 }
