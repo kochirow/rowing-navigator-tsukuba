@@ -47,28 +47,43 @@ for cmd in ffmpeg python3; do
 done
 
 measure_lufs() {
-  local output
-  output="$(
-    LC_ALL=C ffmpeg -hide_banner -nostats -i "$1" \
-      -filter_complex ebur128 -f null - 2>&1 || true
-  )"
+  LC_ALL=C python3 - "$1" <<'PY'
+import re
+import subprocess
+import sys
 
-  printf '%s\n' "${output}" |
-    awk '
-      /Integrated loudness:/ {
-        in_summary = 1
-        next
-      }
-      in_summary && $1 == "I:" {
-        value = $2
-      }
-      END {
-        if (value == "") {
-          exit 1
-        }
-        print value
-      }
-    '
+audio_path = sys.argv[1]
+result = subprocess.run(
+    [
+        "ffmpeg",
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        audio_path,
+        "-filter_complex",
+        "ebur128",
+        "-f",
+        "null",
+        "-",
+    ],
+    capture_output=True,
+    text=True,
+)
+matches = re.findall(
+    r"Integrated loudness:\s*\n\s*I:\s*(-?[0-9.]+)\s+LUFS",
+    result.stderr,
+)
+if not matches:
+    print(
+        f"ffmpegからIntegrated loudnessを取得できませんでした"
+        f" (exit={result.returncode})",
+        file=sys.stderr,
+    )
+    print(result.stderr[-2000:], file=sys.stderr)
+    sys.exit(1)
+
+print(matches[-1])
+PY
 }
 
 status=0
@@ -92,7 +107,11 @@ printf '%s\n' '-------------------------------------------'
 values=()
 while IFS= read -r -d '' mp3; do
   name="$(basename "${mp3}")"
-  lufs="$(measure_lufs "${mp3}")"
+  if ! lufs="$(measure_lufs "${mp3}")"; then
+    echo "エラー: ${name} のラウドネス測定処理に失敗しました。" >&2
+    status=1
+    continue
+  fi
   if [[ -z "${lufs}" ]]; then
     echo "エラー: ${name} のラウドネスを測れません(無音の可能性)。" >&2
     status=1
