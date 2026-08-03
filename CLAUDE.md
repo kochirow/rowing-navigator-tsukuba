@@ -112,6 +112,8 @@ flutter run
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
 | `lib/services/gpx_export_service.dart` | GPX/CSV出力 |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
+| `lib/theme/map_layer_spec.dart` | 地図の3層(航路＝帯／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。航路レーンの色は `laneStyleFor` だけが決める |
+| `lib/services/swept_outline_service.dart` | 予測掃引の外形(凸包)を1枚にまとめる(純Dart)。**表示専用で判定には使わない** |
 | `lib/services/static_obstacle_service.dart` | 臨時危険区域の CRUD(Firestore) |
 | `lib/config/` | 全設定値(コメント付き)。調整はここ |
 
@@ -202,7 +204,7 @@ flutter run
   **待たせるのは音声だけで、候補・表示・`runMode` は即座に立てる。**
   候補まで遅らせると、`AlertDataQuality.unusable` で物理警告が3秒で終わるのに
   理由が表示されない窓が空き、データ欠損が警告を消す根拠になる(不変条件3・原則6)。
-  他の fault(受信途絶・送信停止・区域データ・対応範囲外・他艇ロスト)は**表示のみ**。
+  他の fault(受信途絶・送信停止・区域データ・他艇ロスト)は**表示のみ**。
   漕ぎながら対処できない情報を読み上げると、本当に鳴るべき衝突警告を覆い隠す。
   **表示・バナー・`runMode` は従来どおり残る**(原則1・原則6)。
   `NavigationWarningService` で `?? genericWarningAudioAsset` のような
