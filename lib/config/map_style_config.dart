@@ -62,6 +62,16 @@ const boatArrowOutlineWidthLogicalPixels = 1.5;
 const minBoatMarkerLengthPixels = 36;
 const maxBoatMarkerLengthPixels = 56;
 
+/// アイコンの最小の幅/長さ比。
+///
+/// 実艇は長さ8〜17mに対し船体幅0.55〜0.7m(幅/長さは約1/15〜1/25)で、
+/// 実寸のまま描くと長さを36〜56ptへ収めた時点で幅が2〜3pxの糸になり、
+/// 進行方向どころか艇の存在も読めない。表示は「そこに艇がいて、どちらを
+/// 向いているか」を伝えるための記号なので、幅だけは実寸比を捨てて
+/// この比率まで太らせる。安全判定に使う船体領域(`ShipDomainService`)は
+/// 実寸のままで、この値は描画にしか効かない(不変条件6)。
+const minBoatMarkerAspectRatio = 0.34;
+
 bool isValidMapAutoRecenterDelay(Duration value) =>
     value >= mapAutoRecenterMinimumDelay &&
     value <= mapAutoRecenterMaximumDelay;

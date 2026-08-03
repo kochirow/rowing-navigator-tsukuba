@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +31,12 @@ Future<BitmapDescriptor> getBoatHomePlateBitmapDescriptor({
       .clamp(safeMinPixels, safeMaxPixels)
       .toDouble();
   final scale = targetLength / (safeLength * safePixelsPerMeter);
-  final targetWidth = safeWidth * safePixelsPerMeter * scale;
+  // 実寸比のままだと幅が数pxの糸になって向きも存在も読めない。
+  // 長さは実艇に連動させたまま、幅だけ下限比まで太らせる。
+  final targetWidth = math.max(
+    safeWidth * safePixelsPerMeter * scale,
+    targetLength * minBoatMarkerAspectRatio,
+  );
   final views = ui.PlatformDispatcher.instance.views;
   final devicePixelRatio = views.isEmpty ? 1.0 : views.first.devicePixelRatio;
   final outline = boatArrowOutlineWidthLogicalPixels * devicePixelRatio;
@@ -40,10 +46,15 @@ Future<BitmapDescriptor> getBoatHomePlateBitmapDescriptor({
   final top = outline;
   final bottom = height - outline;
   final halfWidth = targetWidth / 2.0;
-  final shoulderY = top + targetLength * 0.42;
-  final sternHalfWidth = halfWidth * 0.72;
+  // 船首は前方1/3で尖らせ、船尾はわずかに絞る。艇首側の面積が小さいほど
+  // 「どちらが前か」が一目で決まる。
+  final shoulderY = top + targetLength * 0.34;
+  final sternHalfWidth = halfWidth * 0.78;
+  final bowTip = math.min(targetWidth * 0.16, targetLength * 0.06);
   final path = Path()
-    ..moveTo(centerX, top)
+    // 先端だけ丸めて、拡大時に針のように尖って見えないようにする。
+    ..moveTo(centerX - bowTip, top + bowTip * 1.2)
+    ..quadraticBezierTo(centerX, top, centerX + bowTip, top + bowTip * 1.2)
     ..lineTo(centerX + halfWidth, shoulderY)
     ..lineTo(centerX + sternHalfWidth, bottom)
     ..lineTo(centerX - sternHalfWidth, bottom)
@@ -51,13 +62,19 @@ Future<BitmapDescriptor> getBoatHomePlateBitmapDescriptor({
     ..close();
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  canvas.drawPath(path, Paint()..color = color);
+  canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..isAntiAlias = true);
   canvas.drawPath(
     path,
     Paint()
       ..color = color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = outline,
+      ..strokeWidth = outline
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true,
   );
   final picture = recorder.endRecording();
   try {
