@@ -16,6 +16,7 @@ export type ObjectKind =
   | 'bridgePier'
   | 'island'
   | 'driftwood'
+  | 'pile'
   | 'testZone'
   | 'curve'
   | 'reverse'
@@ -61,7 +62,23 @@ export type MapObject = {
   /// bridgePier の親となる dangerZoneBaselines の bridge exportId。
   bridgeId?: string;
   /// `lane` のときだけ、中心線の頂点順に対する規定進行方向を持つ。
+  /// **安全判定（逆走）に使う内部量。** 人間の呼ぶ往路・復路とは無関係。
   laneDirection?: 'along' | 'against';
+  /// `lane` のときだけ、人間の呼ぶ往路・復路を持つ。**アプリの表示専用。**
+  ///
+  /// アプリは地図で往路・復路をグレーの濃淡に塗り分けるためだけに読む
+  /// （`lib/theme/map_layer_spec.dart` の `laneStyleFor`）。安全判定用の
+  /// `ChannelLane` はこの値を一切見ない。
+  ///
+  /// **`laneDirection` から導いてはいけない。** 実データでも桜川河口の往路は
+  /// `direction: "against"` であり、両者に対応関係は無い。id や name の
+  /// 文字列から推測するのも同じ理由で禁止（名前を変えた瞬間に色が入れ替わる）。
+  ///
+  /// 未設定でもエクスポートは通る。アプリ側は「向きが不明な航路」として
+  /// 無彩色で描き、航行も警告も止めない。
+  laneLeg?: 'outbound' | 'return';
+  /// `lane` が方向・経路予測の基準にする channelCenterline の exportId。
+  centerlineId?: string;
   geometry: Geometry;
   warningAudio: string | null;
   parentFolderId: string | null;
@@ -119,8 +136,8 @@ export type ValidationIssue = {
 export const DANGER_BASELINE_KINDS = new Set<ObjectKind>([
   'shore', 'bridge', 'island', 'driftwood', 'testZone',
 ]);
-export const DANGER_POLYGON_KINDS = new Set<ObjectKind>(['bridgePier', 'curve', 'reverse', 'generic']);
+export const DANGER_POLYGON_KINDS = new Set<ObjectKind>(['bridgePier', 'pile', 'curve', 'reverse', 'generic']);
 export const NAVIGABLE_KINDS = new Set<ObjectKind>(['navigableWater', 'lane']);
 export const SINGLETON_KINDS = new Set<ObjectKind>([
-  'practiceArea', 'operationalCoverage', 'channelCenterline',
+  'practiceArea', 'operationalCoverage',
 ]);

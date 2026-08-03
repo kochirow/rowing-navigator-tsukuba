@@ -33,17 +33,17 @@ function changesetMarkdown(project: Project, profileHash: string, count: number,
       ? `\n> 検証警告 ${warnings.length} 件があります。詳細は \`changeset.json\` を確認してください。\n`
       : '\n> 検証エラー・警告はありません。\n';
   const hasAshore = project.objects.some((object) => object.kind === 'ashoreArea');
-  const hasCenterline = project.objects.some((object) => object.kind === 'channelCenterline');
+  const centerlines = project.objects.filter((object) => object.kind === 'channelCenterline');
   const lanes = project.objects.filter((object) => object.kind === 'lane');
   const laneSummary = lanes.length === 0
     ? 'なし（アプリは cross 符号方式へ縮退）'
-    : `${lanes.length}枚(${lanes.map((lane) => lane.laneDirection ?? 'direction未指定').join(' / ')})`;
+    : `${lanes.length}枚(${lanes.map((lane) => `${lane.centerlineId ?? '中心線未指定'}:${lane.laneDirection ?? 'direction未指定'}`).join(' / ')})`;
   const promotedIds = project.objects.flatMap((object) => object.promotedFromTemporaryDocId ? [object.promotedFromTemporaryDocId] : []);
   let sourceCleanup = promotedIds.length
     ? `\n## 昇格元の臨時障害物（削除は配布後）\n\n次のFirestore文書は、**このプロファイルを含む配布版を実機で確認した後**に、アプリの地図編集画面から手動削除する。配布前には削除しない。\n\n${promotedIds.map((id) => `- \`${id}\``).join('\n')}\n`
     : '';
   sourceCleanup += `\n## 検証状態\n${validationStatus}`;
-  return `# 危険区域データ変更適用手順\n\n## 生成結果\n\n- profile version: ${project.profileVersion}\n- SHA-256: \`${profileHash}\`\n- 校正対象の固定危険区域: ${count} 件\n- 陸上エリア: ${hasAshore ? 'あり' : 'なし（アプリは音を止めない）'}\n- 航路レーン: ${laneSummary}\n- 航路中心線: ${hasCenterline ? '手動プロット' : '岸から自動導出（要手動プロット）'}\n- 校正差分の焼き込み: ${project.bakedCalibration ? 'あり。profileVersionの更新を確認済み。' : 'なし'}\n\n## 必須の反映\n\n1. \`files/sakuragawa_obstacles.json\` を \`assets/data/sakuragawa_obstacles.json\` へ反映する。\n2. \`files/sakuragawa_obstacles.layout.json\` を \`assets/data/\` へ反映する。\n3. \`dart run tool/generate_hazard_constants.dart\` を実行し、生成物とFirestore Rulesを更新する。\n4. \`tool/update_hazard_profile_hash.sh\` を実行し、SHA-256が \`${profileHash}\` になることを確認する。\n5. \`verify.sh\` を実行する。${sourceCleanup}\n## 注意\n\n- 変更適用パッケージはFireStoreへ書き込みません。\n- 実機・水上での検証は別の必須ゲートです。水上で音が止まらないことを必ず確認してください。\n`;
+  return `# 危険区域データ変更適用手順\n\n## 生成結果\n\n- profile version: ${project.profileVersion}\n- SHA-256: \`${profileHash}\`\n- 校正対象の固定危険区域: ${count} 件\n- 陸上エリア: ${hasAshore ? 'あり' : 'なし（アプリは音を止めない）'}\n- 航路レーン: ${laneSummary}\n- 航路中心線: ${centerlines.length ? `${centerlines.length}本(${centerlines.map((line) => line.exportId).join(' / ')})` : '岸から自動導出（要手動プロット）'}\n- 校正差分の焼き込み: ${project.bakedCalibration ? 'あり。profileVersionの更新を確認済み。' : 'なし'}\n\n## 必須の反映\n\n1. \`files/sakuragawa_obstacles.json\` を \`assets/data/sakuragawa_obstacles.json\` へ反映する。\n2. \`files/sakuragawa_obstacles.layout.json\` を \`assets/data/\` へ反映する。\n3. \`dart run tool/generate_hazard_constants.dart\` を実行し、生成物とFirestore Rulesを更新する。\n4. \`tool/update_hazard_profile_hash.sh\` を実行し、SHA-256が \`${profileHash}\` になることを確認する。\n5. \`verify.sh\` を実行する。${sourceCleanup}\n## 注意\n\n- 変更適用パッケージはFireStoreへ書き込みません。\n- 実機・水上での検証は別の必須ゲートです。水上で音が止まらないことを必ず確認してください。\n`;
 }
 
 export async function writeChangeset(repoRoot: string, project: Project) {

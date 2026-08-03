@@ -3,10 +3,10 @@ import type { Coordinate, Geometry, MapObject, ObjectKind, Project } from '../mo
 import { DANGER_BASELINE_KINDS, DANGER_POLYGON_KINDS, NAVIGABLE_KINDS } from '../model/types';
 import { roundCoordinate, sameCoordinate } from './geo';
 
-type RawItem = { id?: unknown; name?: unknown; kind?: unknown; bridgeId?: unknown; direction?: unknown; warningAudio?: unknown; points?: unknown };
+type RawItem = { id?: unknown; name?: unknown; kind?: unknown; bridgeId?: unknown; centerlineId?: unknown; direction?: unknown; leg?: unknown; warningAudio?: unknown; points?: unknown };
 const knownTopLevel = new Set([
   'version', 'area', 'source', 'notice', 'howToEdit', 'defaultObstacleProximityCautionMeters',
-  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'ashoreAreas', 'navigableWaters',
+  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'channelCenterlines', 'ashoreAreas', 'navigableWaters',
   'dangerZoneBaselines', 'obstacles',
 ]);
 
@@ -29,7 +29,7 @@ function withoutClosingDuplicate(points: Coordinate[]): { points: Coordinate[]; 
 }
 
 function kindOf(value: unknown, fallback: ObjectKind): ObjectKind {
-  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'navigableWater', 'lane'];
+  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'pile', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'navigableWater', 'lane', 'channelCenterline'];
   return typeof value === 'string' && all.includes(value as ObjectKind) ? value as ObjectKind : fallback;
 }
 
@@ -38,7 +38,9 @@ function objectFromRaw(raw: RawItem, kindFallback: ObjectKind, order: number): M
   const sourcePoints = pointsFrom(raw.points);
   const baseline = DANGER_BASELINE_KINDS.has(kind);
   const closedPoints = withoutClosingDuplicate(sourcePoints);
-  const geometry: Geometry = baseline
+  const geometry: Geometry = kind === 'channelCenterline'
+    ? { type: 'polyline', points: sourcePoints }
+    : baseline
     ? { type: 'baseline', points: closedPoints.points, closed: kind !== 'shore' || closedPoints.closed }
     : { type: 'polygon', points: sourcePoints };
   const timestamp = new Date().toISOString();
@@ -51,6 +53,13 @@ function objectFromRaw(raw: RawItem, kindFallback: ObjectKind, order: number): M
     kind,
     ...(kind === 'lane' && (raw.direction === 'along' || raw.direction === 'against')
       ? { laneDirection: raw.direction }
+      : {}),
+    // 表示専用。想定外の値は落として「向きが不明」にするが、レーンは残す。
+    ...(kind === 'lane' && (raw.leg === 'outbound' || raw.leg === 'return')
+      ? { laneLeg: raw.leg }
+      : {}),
+    ...(kind === 'lane' && typeof raw.centerlineId === 'string'
+      ? { centerlineId: raw.centerlineId }
       : {}),
     ...(kind === 'bridgePier' && typeof raw.bridgeId === 'string'
       ? { bridgeId: raw.bridgeId }
@@ -107,6 +116,10 @@ export async function importProfileText(text: string): Promise<Project> {
   for (const [index, item] of (Array.isArray(raw.navigableWaters) ? raw.navigableWaters : []).entries()) {
     objects.push(objectFromRaw(item as RawItem, 'navigableWater', index));
   }
+  const explicitCenterlines = Array.isArray(raw.channelCenterlines) ? raw.channelCenterlines : [];
+  for (const [index, item] of explicitCenterlines.entries()) {
+    objects.push(objectFromRaw(item as RawItem, 'channelCenterline', index));
+  }
   const special = (field: 'practiceArea' | 'operationalCoveragePolygon' | 'channelCenterline', kind: ObjectKind, exportId: string, geometryType: 'polygon' | 'polyline') => {
     const value = raw[field] as Record<string, unknown> | undefined;
     const points = pointsFrom(value?.points);
@@ -121,7 +134,9 @@ export async function importProfileText(text: string): Promise<Project> {
   };
   special('practiceArea', 'practiceArea', 'practice_area', 'polygon');
   special('operationalCoveragePolygon', 'operationalCoverage', 'operational_coverage', 'polygon');
-  special('channelCenterline', 'channelCenterline', 'channel_centerline', 'polyline');
+  if (explicitCenterlines.length === 0) {
+    special('channelCenterline', 'channelCenterline', 'channel_centerline', 'polyline');
+  }
   project.folders = defaultFolders();
   project.objects = objects;
   project.selectedObjectId = objects[0]?.id ?? null;
@@ -139,8 +154,17 @@ function standardItem(object: MapObject) {
     id: object.exportId,
     name: object.name,
     kind: object.kind,
+    // 同梱プロファイルと同じ並び（kind → leg → direction）を保つ。
+    // 並びが変わるとファイルの SHA-256 が変わり、firestore.rules に
+    // 固定された baseProfileSha256 との突き合わせが不必要に外れる。
+    ...(object.kind === 'lane' && object.laneLeg
+      ? { leg: object.laneLeg }
+      : {}),
     ...(object.kind === 'lane' && object.laneDirection
       ? { direction: object.laneDirection }
+      : {}),
+    ...(object.kind === 'lane' && object.centerlineId
+      ? { centerlineId: object.centerlineId }
       : {}),
     ...(object.kind === 'bridgePier' && object.bridgeId
       ? { bridgeId: object.bridgeId }
@@ -165,8 +189,20 @@ export function profileObject(project: Project): Record<string, unknown> {
   if (practice) output.practiceArea = { ...(project.specialFieldExtras?.practiceArea ?? {}), name: practice.name, points: profilePoints(practice.geometry) };
   const coverage = singleton('operationalCoverage');
   if (coverage) output.operationalCoveragePolygon = { ...(project.specialFieldExtras?.operationalCoveragePolygon ?? {}), name: coverage.name, points: profilePoints(coverage.geometry) };
-  const centerline = singleton('channelCenterline');
-  if (centerline) output.channelCenterline = { ...(project.specialFieldExtras?.channelCenterline ?? {}), points: profilePoints(centerline.geometry) };
+  const centerlines = byKind((object) => object.kind === 'channelCenterline');
+  if (centerlines.length > 0) {
+    output.channelCenterlines = centerlines.map(standardItem);
+    // 単一中心線は旧アプリでも使えるよう、従来フィールドも併記する。
+    // 複数時に1本だけを併記すると旧版が別水域へ誤投影するため出力しない。
+    if (centerlines.length === 1) {
+      output.channelCenterline = {
+        ...(project.specialFieldExtras?.channelCenterline ?? {}),
+        id: centerlines[0].exportId,
+        name: centerlines[0].name,
+        points: profilePoints(centerlines[0].geometry),
+      };
+    }
+  }
   output.ashoreAreas = byKind((object) => object.kind === 'ashoreArea').map(standardItem);
   output.navigableWaters = byKind((object) => NAVIGABLE_KINDS.has(object.kind)).map(standardItem);
   output.dangerZoneBaselines = byKind((object) => DANGER_BASELINE_KINDS.has(object.kind)).map(standardItem);

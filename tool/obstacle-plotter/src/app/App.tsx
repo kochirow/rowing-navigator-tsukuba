@@ -8,7 +8,6 @@ import type { Coordinate, Folder, MapObject, ObjectKind, Project } from '../mode
 import { validateProject } from '../validate/project';
 import { MapCanvas, type MapInteractionMode } from '../map/MapCanvas';
 import { defaultObjectColor } from '../map/objectColor';
-import { bearing, destination } from '../io/geo';
 import { useProjectStore } from '../store/projectStore';
 import { download } from './download';
 import { prepareTemporaryObstacleImport, readTeamSafety } from '../io/firestore';
@@ -16,34 +15,12 @@ import { promoteTemporaryObject, temporaryObstacleObjects } from '../io/temporar
 
 const kinds: Array<[ObjectKind, string]> = [
   ['shore', '岸（向きのある基準線）'], ['bridge', '橋（閉じた基準線）'], ['island', '中州（閉じた基準線）'],
-  ['bridgePier', '橋脚（実断面のポリゴン）'],
-  ['driftwood', '流木（閉じた基準線）'], ['testZone', 'テスト区域'], ['curve', 'カーブ'], ['reverse', '逆走注意区域'], ['generic', '危険区域'],
-  ['ashoreArea', '陸上エリア（警告停止）'], ['navigableWater', '航路（水面）'], ['lane', '航路レーン'],
+  ['bridgePier', '橋脚（外周ポリゴン）'],
+  ['driftwood', '流木（閉じた基準線）'], ['pile', '杭（外周ポリゴン）'], ['testZone', 'テスト区域'], ['curve', 'カーブ'], ['reverse', '逆走注意区域（旧データ用）'], ['generic', '危険区域'],
+  ['ashoreArea', '陸上エリア（警告停止）'], ['navigableWater', '移動・一般水域（逆走判定なし）'], ['lane', '航路レーン'],
   ['practiceArea', '練習水域'], ['operationalCoverage', '対応水域'], ['channelCenterline', '航路中心線'],
 ];
 const seven = (value: number) => value.toFixed(7);
-
-function bridgePierDimensions(points: Coordinate[]) {
-  if (points.length < 2) return null;
-  const center = points.reduce((total, point) => ({ lat: total.lat + point.lat / points.length, lng: total.lng + point.lng / points.length }), { lat: 0, lng: 0 });
-  const eastScale = Math.cos(center.lat * Math.PI / 180) * 111_320;
-  const northScale = 110_540;
-  const east = points.map((point) => (point.lng - center.lng) * eastScale);
-  const north = points.map((point) => (point.lat - center.lat) * northScale);
-  const width = Math.max(...east) - Math.min(...east);
-  const height = Math.max(...north) - Math.min(...north);
-  return { long: Math.max(width, height), short: Math.min(width, height) };
-}
-
-function rectangleFromAxis(start: Coordinate, end: Coordinate, widthMeters: number): Coordinate[] | null {
-  if (!Number.isFinite(widthMeters) || widthMeters <= 0 || (start.lat === end.lat && start.lng === end.lng)) return null;
-  const axis = bearing(start, end);
-  const halfWidth = widthMeters / 2;
-  return [
-    destination(start, axis - 90, halfWidth), destination(end, axis - 90, halfWidth),
-    destination(end, axis + 90, halfWidth), destination(start, axis + 90, halfWidth),
-  ];
-}
 
 function selected(project: Project): MapObject | undefined {
   return project.objects.find((object) => object.id === project.selectedObjectId);
@@ -124,15 +101,25 @@ export default function App() {
     });
   };
   const createObject = () => {
-    if (['practiceArea', 'operationalCoverage', 'channelCenterline'].includes(newKind) && project.objects.some((object) => object.kind === newKind)) {
+    if (['practiceArea', 'operationalCoverage'].includes(newKind) && project.objects.some((object) => object.kind === newKind)) {
       setServerMessage(`${kinds.find(([kind]) => kind === newKind)?.[1]} は1つだけ作成できます。`);
       return;
     }
     const created = newMapObject(newKind);
     // 親の橋を選んでから追加すれば、取り違えや手入力漏れを避けられる。
+    const centerlines = project.objects.filter((candidate) => candidate.kind === 'channelCenterline');
     const object = newKind === 'bridgePier' && current?.kind === 'bridge'
       ? { ...created, bridgeId: current.exportId }
-      : created;
+      : newKind === 'lane'
+        ? {
+            ...created,
+            centerlineId: current?.kind === 'channelCenterline'
+              ? current.exportId
+              : centerlines.length === 1
+                ? centerlines[0].exportId
+                : undefined,
+          }
+        : created;
     setSelectedFolderId(null);
     replace({ ...project, objects: [...project.objects, object], selectedObjectId: object.id });
     setMapMode('add');
@@ -281,7 +268,6 @@ function CoordinateInput({ value, axis, disabled, onCommit }: { value: number; a
 }
 
 function Inspector({ object, objects, folders, onChange, onSelect, onDrawing, onMoving, onPromote }: { object: MapObject | undefined; objects: MapObject[]; folders: Folder[]; onChange: (object: MapObject) => void; onSelect: (id: string | null) => void; onDrawing: () => void; onMoving: () => void; onPromote: (object: MapObject, kind: ObjectKind, exportId: string) => void }) {
-  const [pierWidthMeters, setPierWidthMeters] = useState('2');
   if (!object) return <div className="empty">オブジェクトを選択してください。</div>;
   const points = object.geometry.type === 'point' ? [object.geometry.point] : object.geometry.points;
   const patch = (partial: Partial<MapObject>) => onChange({ ...object, ...partial });
@@ -301,15 +287,26 @@ function Inspector({ object, objects, folders, onChange, onSelect, onDrawing, on
     <label>名前<input value={object.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>export ID<input value={object.exportId} onChange={(event) => patch({ exportId: event.target.value.toLowerCase() })} /></label>
     {object.kind === 'bridgePier' && <label>親の橋<select value={object.bridgeId ?? ''} onChange={(event) => patch({ bridgeId: event.target.value || undefined })} disabled={object.locked}><option value="">選択してください</option>{objects.filter((candidate) => candidate.kind === 'bridge').sort((a, b) => a.name.localeCompare(b.name, 'ja')).map((bridge) => <option value={bridge.exportId} key={bridge.id}>{bridge.name || bridge.exportId}</option>)}</select></label>}
-    {object.kind === 'bridgePier' && <fieldset disabled={object.locked}><legend>橋脚の実断面</legend>{bridgePierDimensions(points) && <p>外接寸法: 長辺 {bridgePierDimensions(points)!.long.toFixed(1)}m × 短辺 {bridgePierDimensions(points)!.short.toFixed(1)}m</p>}<label>幅[m]<input inputMode="decimal" value={pierWidthMeters} onChange={(event) => setPierWidthMeters(event.target.value)} /></label><button type="button" onClick={() => { if (object.geometry.type === 'point' || points.length < 2) return; const rectangle = rectangleFromAxis(points[0], points[1], Number(pierWidthMeters)); if (rectangle) patch({ geometry: { type: 'polygon', points: rectangle } } as Partial<MapObject>); }}>先頭2点を長辺にして矩形化</button><p>航空写真上で長辺の両端を先に置き、実測幅を入力します。水中に立つ柱の輪郭だけを囲んでください。</p></fieldset>}
+    {object.kind === 'bridgePier' && <p className="folder-help">橋脚の実際の外周を、3点以上で直接囲んでください。橋桁全体・影・周囲の余裕幅は含めません。形状が不明な場合は、確認状況を「draft」または「航空写真で確認」のままにして現地確認へつなげてください。</p>}
+    {object.kind === 'pile' && <p className="folder-help">水中に立つ杭の実際の外周を、3点以上で直接囲んでください。周囲の余裕幅や推定の幅は含めません。杭の中心点だけで登録せず、航空写真で見える輪郭をそのままプロットします。</p>}
     <label>説明<textarea value={object.description} onChange={(event) => patch({ description: event.target.value })} /></label>
     <label>フォルダ<select value={object.parentFolderId ?? ''} onChange={(event) => patch({ parentFolderId: event.target.value || null })} disabled={object.locked}><option value="">未分類</option>{folders.slice().sort((a, b) => a.name.localeCompare(b.name, 'ja')).map((folder) => <option value={folder.id} key={folder.id}>{folder.name}</option>)}</select></label>
     {object.kind === 'lane' && <fieldset className="lane-direction" disabled={object.locked}>
       <legend>規定進行方向</legend>
-      <p>航路中心線の頂点順を基準にします。地図上の矢印が意図どおり互いに逆を向くことを確認してください。</p>
+      <label>基準にする航路中心線<select value={object.centerlineId ?? ''} onChange={(event) => patch({ centerlineId: event.target.value || undefined })}><option value="">選択してください</option>{objects.filter((candidate) => candidate.kind === 'channelCenterline').sort((a, b) => a.name.localeCompare(b.name, 'ja')).map((centerline) => <option value={centerline.exportId} key={centerline.id}>{centerline.name || centerline.exportId}</option>)}</select></label>
+      <p>選択した中心線の頂点順を基準にします。霞ヶ浦、桜川河口、桜川上流のように航路が分かれる場合は、区間ごとの中心線を選んでください。移動水域にはレーンを重ねません。</p>
       <label><input type="radio" name={`lane-direction-${object.id}`} checked={object.laneDirection === 'along'} onChange={() => patch({ laneDirection: 'along' })} /> 中心線の向きと同じ</label>
       <label><input type="radio" name={`lane-direction-${object.id}`} checked={object.laneDirection === 'against'} onChange={() => patch({ laneDirection: 'against' })} /> 中心線の向きと逆</label>
     </fieldset>}
+    {object.kind === 'lane' && <fieldset className="lane-direction" disabled={object.locked}>
+      <legend>往路・復路（表示専用）</legend>
+      <p>アプリが地図でグレーの濃淡に塗り分けるためだけに使います。<strong>安全判定（逆走）には使いません。</strong>上の「規定進行方向」とは無関係で、桜川河口の往路のように「往路なのに中心線とは逆向き」の組み合わせが実際にあります。片方から他方を推測せず、人が呼んでいるとおりに選んでください。</p>
+      <label><input type="radio" name={`lane-leg-${object.id}`} checked={object.laneLeg === 'outbound'} onChange={() => patch({ laneLeg: 'outbound' })} /> 往路</label>
+      <label><input type="radio" name={`lane-leg-${object.id}`} checked={object.laneLeg === 'return'} onChange={() => patch({ laneLeg: 'return' })} /> 復路</label>
+      <div className="style-actions"><button onClick={() => patch({ laneLeg: undefined })} disabled={object.locked || !object.laneLeg}>未設定に戻す</button></div>
+    </fieldset>}
+    {object.kind === 'channelCenterline' && <p className="folder-help">同じ区間の往路・復路が同じ軸を共有できる場合、中心線は1本で十分です。現在の想定では「霞ヶ浦」「桜川河口」「桜川上流」の3本を基本にします。河口と上流の間の移動水域では中心線・レーンを中断してください。</p>}
+    {object.kind === 'navigableWater' && <p className="folder-help">移動水域は表示用の水面です。方向と中心線を持たず、逆走判定には使いません。河口レーンと上流レーンの間をこの水域だけにすると、判定が中断し、上流レーンへ入ると再開します。</p>}
     <label>表示色<input type="color" value={object.style.color ?? defaultObjectColor(object.exportId || object.id)} onChange={(event) => patch({ style: { ...object.style, color: event.target.value } })} disabled={object.locked} /></label>
     <div className="style-actions"><button onClick={() => patch({ style: { ...object.style, color: undefined } })} disabled={object.locked || !object.style.color}>自動色に戻す</button></div>
     <label>確認状況<select value={object.verificationStatus} onChange={(event) => patch({ verificationStatus: event.target.value as MapObject['verificationStatus'] })}><option value="draft">draft</option><option value="aerial_only">航空写真で確認</option><option value="field_verified">現地確認済み</option><option value="field_calibrated">現地校正済み</option><option value="needs_review">要再確認</option></select></label>
@@ -317,7 +314,10 @@ function Inspector({ object, objects, folders, onChange, onSelect, onDrawing, on
     <div className="inspector-actions"><button onClick={onDrawing} disabled={object.locked || object.geometry.type === 'point'}>頂点を追加</button><button onClick={onMoving} disabled={object.locked || object.geometry.type === 'point'}>頂点を移動</button>{object.kind === 'shore' && object.geometry.type === 'baseline' && <button onClick={() => {
       const geometry = object.geometry;
       if (geometry.type === 'baseline') patch({ geometry: { ...geometry, points: [...geometry.points].reverse() } } as Partial<MapObject>);
-    }} disabled={object.locked}>向きを反転</button>}<button onClick={() => patch({ locked: !object.locked })}>{object.locked ? 'ロック解除' : 'ロック'}</button><button onClick={() => onSelect(null)}>選択解除</button></div>
+    }} disabled={object.locked}>向きを反転</button>}{object.kind === 'channelCenterline' && object.geometry.type === 'polyline' && <button onClick={() => {
+      const geometry = object.geometry;
+      if (geometry.type === 'polyline') patch({ geometry: { ...geometry, points: [...geometry.points].reverse() } } as Partial<MapObject>);
+    }} disabled={object.locked}>中心線の向きを反転</button>}<button onClick={() => patch({ locked: !object.locked })}>{object.locked ? 'ロック解除' : 'ロック'}</button><button onClick={() => onSelect(null)}>選択解除</button></div>
     <h3>座標一覧（{points.length}点）</h3><p className="coordinate-help">値は入力欄を離れるかEnterで確定します。Escで変更を取り消せます。</p><div className="coordinate-table">{points.map((point, index) => <div className="coordinate-row" key={index}><span>{index + 1}</span><CoordinateInput value={point.lat} axis="lat" onCommit={(value) => updatePoint(index, 'lat', value)} disabled={object.locked} /><CoordinateInput value={point.lng} axis="lng" onCommit={(value) => updatePoint(index, 'lng', value)} disabled={object.locked} /><button onClick={() => deletePoint(index)} disabled={object.locked}>削除</button></div>)}</div>
   </div>;
 }
@@ -348,7 +348,7 @@ function PromotionControls({ object, onPromote }: { object: MapObject; onPromote
   return <section>
     <h3>固定障害物へ昇格</h3>
     <p>地図上の形状を確認してから昇格してください。元のFirestore文書は、配布版で確認するまで削除しません。</p>
-    <label>種別<select value={promotionKind} onChange={(event) => setPromotionKind(event.target.value as ObjectKind)}><option value="driftwood">流木</option><option value="generic">一般障害物</option><option value="island">中州</option><option value="bridge">橋</option></select></label>
+    <label>種別<select value={promotionKind} onChange={(event) => setPromotionKind(event.target.value as ObjectKind)}><option value="driftwood">流木</option><option value="pile">杭</option><option value="generic">一般障害物</option><option value="island">中州</option><option value="bridge">橋</option></select></label>
     <label>固定用 export ID<input value={promotionId} onChange={(event) => setPromotionId(event.target.value)} /></label>
     <button className="primary" onClick={() => onPromote(object, promotionKind, promotionId)}>固定候補へ昇格</button>
   </section>;

@@ -28,7 +28,7 @@ function safeId(value: string): string {
 }
 
 function temporaryKind(value: unknown): ObjectKind {
-  return value === 'curve' || value === 'reverse' || value === 'generic' ? value : 'generic';
+  return value === 'curve' || value === 'reverse' || value === 'generic' || value === 'pile' ? value : 'generic';
 }
 
 /// Firestore文書を、まだ固定化していない編集候補へ変換する。

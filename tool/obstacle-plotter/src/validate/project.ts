@@ -2,6 +2,10 @@ import { distanceMeters, distancePointToSegmentMeters, hasSelfIntersection, poin
 import type { Geometry, MapObject, Project, ValidationIssue } from '../model/types';
 import { DANGER_BASELINE_KINDS, DANGER_POLYGON_KINDS, NAVIGABLE_KINDS, SINGLETON_KINDS } from '../model/types';
 
+// 実測した橋脚の外周には20mを超えるものが含まれる。極端に大きい入力を
+// 見逃さない上限は残しつつ、実データを誤って変更させないため30mとする。
+const maxBridgePierLongSideMeters = 30;
+
 function pointsOf(geometry: Geometry) {
   return geometry.type === 'point' ? [geometry.point] : geometry.points;
 }
@@ -178,32 +182,76 @@ export function validateProject(project: Project): ValidationIssue[] {
     issues.push(issue('warning', 'ashore.missing', '陸上エリアがありません。アプリは安全側として音を止めません。'));
   }
   const lanes = project.objects.filter((object) => object.kind === 'lane');
-  const centerline = project.objects.find((object) => object.kind === 'channelCenterline');
-  const validLaneDirections = new Map<'along' | 'against', MapObject[]>();
+  const centerlines = project.objects.filter((object) => object.kind === 'channelCenterline');
+  const centerlinesById = new Map(centerlines.map((centerline) => [centerline.exportId, centerline]));
+  const lanesByCenterline = new Map<string, MapObject[]>();
   for (const lane of lanes) {
     if (lane.laneDirection !== 'along' && lane.laneDirection !== 'against') {
       issues.push(issue('error', 'lane.direction.missing', '向きの無いレーンは安全判定に使われません。中心線と同じ向き/逆を指定してください。', lane));
+    }
+    // 往路・復路は表示専用。欠けても航行・警告は止まらず、アプリは
+    // 「向きが不明な航路」として無彩色で描くため error にはしない。
+    if (lane.laneLeg !== 'outbound' && lane.laneLeg !== 'return') {
+      issues.push(issue('warning', 'lane.leg.missing', '往路・復路が未設定です。地図では無彩色の帯になり、どちら回りのレーンか読めません。', lane));
+    }
+    const implicitCenterline = centerlines.length === 1 ? centerlines[0] : undefined;
+    const linkedCenterline = lane.centerlineId
+      ? centerlinesById.get(lane.centerlineId)
+      : implicitCenterline;
+    if (!linkedCenterline) {
+      issues.push(issue(
+        'error',
+        lane.centerlineId ? 'lane.centerline.unknown' : 'lane.centerline.missing',
+        lane.centerlineId
+          ? `基準の航路中心線「${lane.centerlineId}」が見つかりません。`
+          : 'レーンに基準の航路中心線を指定してください。',
+        lane,
+      ));
       continue;
     }
-    const entries = validLaneDirections.get(lane.laneDirection) ?? [];
+    if (!lane.centerlineId) {
+      issues.push(issue('warning', 'lane.centerline.implicit', '中心線が1本なので暫定的に紐付けています。レーンの「基準にする航路中心線」を明示してください。', lane));
+    }
+    const entries = lanesByCenterline.get(linkedCenterline.exportId) ?? [];
     entries.push(lane);
-    validLaneDirections.set(lane.laneDirection, entries);
-  }
-  for (const [direction, sameDirectionLanes] of validLaneDirections) {
-    if (sameDirectionLanes.length > 1) {
-      for (const lane of sameDirectionLanes) issues.push(issue('error', 'lane.direction.duplicate', `${direction === 'along' ? '中心線と同じ向き' : '中心線と逆'}のレーンは1枚だけにしてください。`, lane));
+    lanesByCenterline.set(linkedCenterline.exportId, entries);
+    const linkedCenterlinePoints = linkedCenterline.geometry.type === 'polyline'
+      ? linkedCenterline.geometry.points
+      : [];
+    if (linkedCenterlinePoints.length > 0 &&
+        polygonPoints(lane).some((point) => !isInsideCenterlineCoverage(point, linkedCenterlinePoints))) {
+      issues.push(issue('warning', 'lane.outside.coverage', `レーン頂点が中心線「${linkedCenterline.name || linkedCenterline.exportId}」の端点より外側にあります。その区間では逆走判定が働きません。`, lane));
     }
   }
-  if (lanes.length <= 1) {
-    issues.push(issue('warning', 'lane.count', '航路レーンが揃っていません。アプリは cross 符号方式へ縮退します。'));
+  for (const [centerlineId, linkedLanes] of lanesByCenterline) {
+    for (const direction of ['along', 'against'] as const) {
+      const sameDirectionLanes = linkedLanes.filter((lane) => lane.laneDirection === direction);
+      if (sameDirectionLanes.length > 1) {
+        for (const lane of sameDirectionLanes) {
+          issues.push(issue('error', 'lane.direction.duplicate', `中心線「${centerlinesById.get(centerlineId)?.name || centerlineId}」に対して、${direction === 'along' ? '同じ向き' : '逆向き'}のレーンが複数あります。`, lane));
+        }
+      }
+    }
+    // 同じ区間の2本が同じ往路・復路になっていると、地図で塗り分けられない。
+    // 表示だけの問題なので warning に留める。
+    for (const leg of ['outbound', 'return'] as const) {
+      const sameLegLanes = linkedLanes.filter((lane) => lane.laneLeg === leg);
+      if (sameLegLanes.length > 1) {
+        for (const lane of sameLegLanes) {
+          issues.push(issue('warning', 'lane.leg.duplicate', `中心線「${centerlinesById.get(centerlineId)?.name || centerlineId}」に対して、${leg === 'outbound' ? '往路' : '復路'}のレーンが複数あります。地図で往路・復路を区別できません。`, lane));
+        }
+      }
+    }
   }
-  if (!centerline) {
+  if (!lanes.length) {
+    issues.push(issue('warning', 'lane.count', '航路レーンがありません。逆走判定は中心線からの左右位置へ縮退します。'));
+  }
+  if (!centerlines.length) {
     issues.push(issue(lanes.length ? 'error' : 'warning', 'centerline.missing', lanes.length ? 'レーンには規定進行方向を決める航路中心線が必要です。' : '航路中心線がありません。アプリは岸から自動導出を試みます。'));
-  } else if (centerline.geometry.type === 'polyline') {
-    const centerlinePoints = centerline.geometry.points;
-    for (const lane of lanes) {
-      if (polygonPoints(lane).some((point) => !isInsideCenterlineCoverage(point, centerlinePoints))) {
-        issues.push(issue('warning', 'lane.outside.coverage', 'レーン頂点が中心線の端点より外側にあります。その区間では逆走判定が働きません。', lane));
+  } else {
+    for (const centerline of centerlines) {
+      if (!lanesByCenterline.has(centerline.exportId)) {
+        issues.push(issue('warning', 'centerline.unused', `航路中心線「${centerline.name || centerline.exportId}」に紐付くレーンがありません。`, centerline));
       }
     }
   }
@@ -216,7 +264,13 @@ export function validateProject(project: Project): ValidationIssue[] {
     }
   }
   const reverseZones = project.objects.filter((object) => object.kind === 'reverse');
-  if (lanes.length >= 2) {
+  const hasLinkedReverseGuidance = lanes.length > 0 && lanes.every((lane) =>
+    Boolean(lane.centerlineId && centerlinesById.has(lane.centerlineId)));
+  if (hasLinkedReverseGuidance) {
+    for (const reverse of reverseZones) {
+      issues.push(issue('warning', 'reverse.legacy.disabled', '明示レーンと航路中心線があるため、この旧「逆走注意エリア」はアプリの警告判定に使われません。削除しても逆走警告はレーン全域で継続します。', reverse));
+    }
+  } else if (lanes.length >= 2) {
     for (const reverse of reverseZones) {
       const reversePoints = polygonPoints(reverse);
       const hasWideUncoveredArea = reverseZoneSamples(reversePoints).some((sample) => {
@@ -243,7 +297,7 @@ export function validateProject(project: Project): ValidationIssue[] {
   for (const pier of bridgePiers) {
     const pierPoints = polygonPoints(pier);
     if (pier.geometry.type !== 'polygon' || pierPoints.length < 3) {
-      issues.push(issue('error', 'bridgePier.geometry', '橋脚は3点以上の実断面ポリゴンでなければなりません。', pier));
+      issues.push(issue('error', 'bridgePier.geometry', '橋脚は3点以上の外周ポリゴンでなければなりません。', pier));
       continue;
     }
     if (!pier.bridgeId?.trim()) {
@@ -256,7 +310,7 @@ export function validateProject(project: Project): ValidationIssue[] {
       continue;
     }
     const size = dimensionsMeters(pierPoints);
-    if (size.long > 20 || size.short < 0.5) {
+    if (size.long > maxBridgePierLongSideMeters || size.short < 0.5) {
       issues.push(issue('error', 'bridgePier.size', `橋脚の外接寸法 ${size.long.toFixed(1)}m × ${size.short.toFixed(1)}m が実寸範囲外です。`, pier));
     }
     const parentPoints = pointsOf(parent.geometry);
@@ -264,8 +318,13 @@ export function validateProject(project: Project): ValidationIssue[] {
     if (parentPoints.length >= 3 && !pointInPolygon(center, parentPoints) && distanceToPolygonBoundary(center, parentPoints) > 10) {
       issues.push(issue('warning', 'bridgePier.outsideBridge', '橋脚の重心が親の橋の投影範囲（+10m）外です。親の取り違えを確認してください。', pier));
     }
-    if (centerline?.geometry.type === 'polyline' && centerlineTouchesOrNearPolygon(centerline.geometry.points, pierPoints, 6)) {
-      issues.push(issue('error', 'bridgePier.overlapsCenterline', '航路中心線が橋脚またはその6m以内を通っています。中心線か橋脚を修正してください。', pier));
+    if (centerlines.some((centerline) =>
+      centerline.geometry.type === 'polyline' &&
+      centerlineTouchesOrNearPolygon(centerline.geometry.points, pierPoints, 6))) {
+      // 橋脚が航路中心線に近いこと自体は、橋の実形状を正しく描いた結果
+      // になる場合がある。検証で座標を修正させず、ランタイムの衝突警告は
+      // 維持したまま、適用前確認が必要な警告として残す。
+      issues.push(issue('warning', 'bridgePier.overlapsCenterline', '航路中心線が橋脚またはその6m以内を通っています。座標を変更せず、橋下の航路意図と現地通過可否を確認してください。', pier));
     }
     if (pier.verificationStatus === 'aerial_only') {
       issues.push(issue('warning', 'bridgePier.aerialOnly', '航空写真のみの橋脚があります。変更適用前に現地確認結果を説明へ残してください。', pier));

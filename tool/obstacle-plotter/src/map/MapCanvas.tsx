@@ -67,41 +67,44 @@ function laneCrossSectionPoints(center: Coordinate, tangentBearing: number, poly
   return inside;
 }
 
-/// レーンポリゴンの頂点順ではなく、唯一の航路中心線の接線から矢印を作る。
+/// レーンポリゴンの頂点順ではなく、紐付いた航路中心線の接線から矢印を作る。
 /// アプリの `along` / `against` と同じ基準なので、作図時に向きの反転を地図上で
 /// 確認できる。
 function laneArrows(project: Project): LaneArrow[] {
-  const centerline = project.objects.find((object) => object.kind === 'channelCenterline');
-  if (!centerline || centerline.geometry.type !== 'polyline') return [];
+  const centerlines = new Map(project.objects
+    .filter((object) => object.kind === 'channelCenterline' && object.geometry.type === 'polyline')
+    .map((object) => [object.exportId, object]));
+  const soleCenterline = centerlines.size === 1 ? [...centerlines.values()][0] : undefined;
   const lanes = project.objects.filter((object) => object.visible && object.kind === 'lane' && object.geometry.type === 'polygon' && object.laneDirection);
   if (!lanes.length) return [];
   const arrows: LaneArrow[] = [];
-  const points = centerline.geometry.points;
-  let nextArrowAt = laneArrowSpacingMeters / 2;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const start = points[index];
-    const end = points[index + 1];
-    const segmentLength = distanceMeters(start, end);
-    if (segmentLength < 0.01) continue;
-    const tangent = bearing(start, end);
-    while (nextArrowAt <= segmentLength) {
-      const ratio = nextArrowAt / segmentLength;
-      const point = {
-        lat: start.lat + (end.lat - start.lat) * ratio,
-        lng: start.lng + (end.lng - start.lng) * ratio,
-      };
-      for (const lane of lanes) {
-        if (lane.geometry.type !== 'polygon') continue;
+  for (const lane of lanes) {
+    const centerline = (lane.centerlineId ? centerlines.get(lane.centerlineId) : undefined) ?? soleCenterline;
+    if (!centerline || centerline.geometry.type !== 'polyline' || lane.geometry.type !== 'polygon') continue;
+    const points = centerline.geometry.points;
+    let nextArrowAt = laneArrowSpacingMeters / 2;
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const start = points[index];
+      const end = points[index + 1];
+      const segmentLength = distanceMeters(start, end);
+      if (segmentLength < 0.01) continue;
+      const tangent = bearing(start, end);
+      while (nextArrowAt <= segmentLength) {
+        const ratio = nextArrowAt / segmentLength;
+        const point = {
+          lat: start.lat + (end.lat - start.lat) * ratio,
+          lng: start.lng + (end.lng - start.lng) * ratio,
+        };
         for (const arrowPoint of laneCrossSectionPoints(point, tangent, lane.geometry.points)) {
           arrows.push({
             point: arrowPoint,
             bearingDegrees: (tangent + (lane.laneDirection === 'against' ? 180 : 0)) % 360,
           });
         }
+        nextArrowAt += laneArrowSpacingMeters;
       }
-      nextArrowAt += laneArrowSpacingMeters;
+      nextArrowAt -= segmentLength;
     }
-    nextArrowAt -= segmentLength;
   }
   return arrows;
 }

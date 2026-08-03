@@ -26,4 +26,21 @@ describe('temporary obstacle import', () => {
     expect(promoted.geometry).toMatchObject({ type: 'baseline', closed: true });
     expect(promoted.verificationStatus).toBe('field_verified');
   });
+
+  it('promotes a temporary polygon into a fixed pile polygon', () => {
+    const temporary = temporaryObstacleObjects([{
+      id: 'tmp-pile',
+      name: '杭候補',
+      kind: 'pile',
+      points: [
+        { latitude: 36.07, longitude: 140.19 },
+        { latitude: 36.0701, longitude: 140.19 },
+        { latitude: 36.0701, longitude: 140.1901 },
+      ],
+    }]).objects[0];
+    const promoted = promoteTemporaryObject(temporary, 'pile', 'pile_new');
+    expect(promoted.kind).toBe('pile');
+    expect(promoted.geometry.type).toBe('polygon');
+    expect(promoted.parentFolderId).toBe('fld_piles');
+  });
 });

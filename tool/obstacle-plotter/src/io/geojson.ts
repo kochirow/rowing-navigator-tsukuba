@@ -7,6 +7,10 @@ const properties = (object: MapObject) => ({
   kind: object.kind,
   verificationStatus: object.verificationStatus,
   description: object.description,
+  ...(object.bridgeId ? { bridgeId: object.bridgeId } : {}),
+  ...(object.centerlineId ? { centerlineId: object.centerlineId } : {}),
+  ...(object.laneDirection ? { direction: object.laneDirection } : {}),
+  ...(object.laneLeg ? { leg: object.laneLeg } : {}),
   ...(object.geometry.type === 'baseline' ? { rowingNavigatorGeometry: 'baseline', closed: object.geometry.closed } : {}),
 });
 

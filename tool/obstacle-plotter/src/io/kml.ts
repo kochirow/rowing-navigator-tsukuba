@@ -7,7 +7,7 @@ const coordinates = (points: { lat: number; lng: number }[], closed = false) => 
 };
 function placemark(object: MapObject): string {
   const geometry = object.geometry;
-  const extended = `<ExtendedData><Data name="exportId"><value>${escape(object.exportId)}</value></Data><Data name="kind"><value>${escape(object.kind)}</value></Data><Data name="verificationStatus"><value>${escape(object.verificationStatus)}</value></Data>${geometry.type === 'baseline' ? `<Data name="closed"><value>${geometry.closed}</value></Data>` : ''}</ExtendedData>`;
+  const extended = `<ExtendedData><Data name="exportId"><value>${escape(object.exportId)}</value></Data><Data name="kind"><value>${escape(object.kind)}</value></Data><Data name="verificationStatus"><value>${escape(object.verificationStatus)}</value></Data>${object.bridgeId ? `<Data name="bridgeId"><value>${escape(object.bridgeId)}</value></Data>` : ''}${object.centerlineId ? `<Data name="centerlineId"><value>${escape(object.centerlineId)}</value></Data>` : ''}${object.laneDirection ? `<Data name="direction"><value>${escape(object.laneDirection)}</value></Data>` : ''}${object.laneLeg ? `<Data name="leg"><value>${escape(object.laneLeg)}</value></Data>` : ''}${geometry.type === 'baseline' ? `<Data name="closed"><value>${geometry.closed}</value></Data>` : ''}</ExtendedData>`;
   const body = geometry.type === 'point'
     ? `<Point><coordinates>${coordinates([geometry.point])}</coordinates></Point>`
     : geometry.type === 'polygon'
