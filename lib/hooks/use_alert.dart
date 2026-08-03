@@ -288,6 +288,14 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
   final playerRecreation = useRef<Future<void>?>(null);
   final recreateAlertPlayer =
       useRef<Future<void> Function({required String reason})?>(null);
+  // effect内のwatchdog/recoveryから、後で定義される通常の再生手順へ戻す。
+  // playerを作り直した直後はsourceが無いため、resumeだけでは復旧できない。
+  final replayWithFreshPlayer = useRef<
+      Future<void> Function(
+        String assetPath,
+        _AlertPlaybackMode mode, {
+        String? eventId,
+      })?>(null);
   final requestLoopRestart =
       useRef<void Function({required String asset, required int request})?>(
     null,
@@ -485,6 +493,12 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
         await cancelPlayerSubscriptions();
         player.value = replacement;
         attachPlayerSubscriptions(replacement);
+        // 古いネイティブplayerの状態イベントを、新しいplayerの状態として
+        // 扱わない。特にloopのrestart/recoveryがtimeoutした後は、再作成した
+        // playerにはsourceが設定されていないため、playingのまま残すと以降の
+        // play要求が「既に再生中」と誤認して無音のままになる。
+        progressWatchdog.reset();
+        updatePlayerState(PlayerState.stopped, reason: 'player_recreated');
         unawaited(oldPlayer.dispose().catchError((Object disposeError) {
           if (kDebugMode) {
             debugPrint('Timed-out audio player disposal error: $disposeError');
@@ -627,6 +641,10 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
           }
           await applyAudioContext(reason: 'stalled_recovery', target: target);
           progressWatchdog.start(DateTime.now());
+          // `resume()` だけでは、iOSでcompleted/stoppedになったplayerを
+          // 再開できないことがある。sourceは維持したまま先頭へ戻してから
+          // 再開し、ループ警告が1周で終わったままにならないようにする。
+          await platformCall('seek', () => target.seek(Duration.zero));
           await platformCall('resume', () => target.resume());
           final positionBefore = await platformCall(
             'getCurrentPosition',
@@ -663,9 +681,24 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
               consecutivePlatformTimeouts.value >=
                   alertPlayerRecreateFailureThreshold) {
             try {
-              await recreateAlertPlayer.value?.call(
-                reason: 'recovery_platform_timeout',
-              );
+              final recreate = recreateAlertPlayer.value;
+              if (recreate != null) {
+                await recreate(reason: 'recovery_platform_timeout');
+                // 新しいplayerにはsourceが無い。元の警告がまだ有効なら、
+                // 同じ直列キュー内で完全な再生開始手順をやり直す。
+                if (!isDisposed.value &&
+                    request == requestGeneration.value &&
+                    activeAsset.value == asset &&
+                    activeMode.value == mode) {
+                  final replay = replayWithFreshPlayer.value;
+                  if (replay != null) await replay(asset, mode);
+                  // replayは新しいrequestGenerationを発行する。そのままfinallyの
+                  // 世代一致判定へ任せると recoveryInFlight がtrueのまま残り、
+                  // 次の実際の停止を監視できなくなるため、ここで明示的に解く。
+                  recoveryInFlight.value = false;
+                  return;
+                }
+              }
             } catch (_) {
               // 下の既存error/diagnostic経路でaudio_unavailableへ通知する。
             }
@@ -899,9 +932,17 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
           consecutivePlatformTimeouts.value >=
               alertPlayerRecreateFailureThreshold) {
         try {
-          await recreateAlertPlayer.value?.call(
-            reason: 'play_platform_timeout',
-          );
+          final recreate = recreateAlertPlayer.value;
+          if (recreate != null) {
+            await recreate(reason: 'play_platform_timeout');
+            if (!isDisposed.value) {
+              // timeoutしたplayerは破棄済みなので、置き換え先でsource設定から
+              // やり直す。ここで再試行しないと、同じdirectiveは依存値が変わらず
+              // Hook effectが再実行されないため警告音が無音のまま残る。
+              await runPlayWithMode(assetPath, mode, eventId: eventId);
+              return;
+            }
+          }
         } catch (_) {
           // 下の既存error/diagnostic経路でaudio_unavailableへ通知する。
         }
@@ -927,6 +968,10 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
     required AlertCommandKind kind,
   }) =>
       commandQueue.enqueue(kind, run);
+
+  // Hook effectが動き始める前に参照を設定する。これによりwatchdogが
+  // timeout後の置換playerへ、source設定からの再生を委譲できる。
+  replayWithFreshPlayer.value = runPlayWithMode;
 
   Future<void> runLoopRestart({
     required String asset,
@@ -958,9 +1003,18 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
       if (consecutivePlatformTimeouts.value >=
           alertPlayerRecreateFailureThreshold) {
         try {
-          await recreateAlertPlayer.value?.call(
-            reason: 'loop_restart_platform_timeout',
-          );
+          final recreate = recreateAlertPlayer.value;
+          if (recreate != null) {
+            await recreate(reason: 'loop_restart_platform_timeout');
+            if (!isDisposed.value &&
+                activeAsset.value == asset &&
+                activeMode.value == _AlertPlaybackMode.loop) {
+              // 作り直したplayerにはsourceが無い。seek/resumeだけを再試行しても
+              // 鳴らないため、source設定から行う通常の開始経路へ戻す。
+              await runPlayWithMode(asset, _AlertPlaybackMode.loop);
+              return;
+            }
+          }
         } catch (_) {
           // error値と診断はプレイヤー再作成側が設定する。
         }
