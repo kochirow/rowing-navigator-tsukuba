@@ -22,6 +22,23 @@ service cloud.firestore {
       return signedIn() && exists(memberPath(teamId, request.auth.uid));
     }
 
+    // 新しいチームではadminUidを唯一の管理者とする。追加前に作られた
+    // チームは、最初の管理操作でadminUidを補うまでcreatedByを管理者として扱う。
+    function isTeamAdmin(teamId) {
+      let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
+      return isTeamMember(teamId)
+        && (
+          (team.keys().hasAny(['adminUid']) && team.adminUid == request.auth.uid)
+          || (!team.keys().hasAny(['adminUid'])
+            && team.createdBy == request.auth.uid)
+        );
+    }
+
+    function validTermsAcceptance(data) {
+      return data.termsVersion == '2026-08-03'
+        && data.termsAcceptedAt == request.time;
+    }
+
     // 現地で発見したずれをすぐ共有できるよう、同じチームの全メンバーが
     // 公開できる。revisionとpreviousStateで同時更新の上書きは拒否する。
     // 将来校正担当roleを追加する場合は、この関数だけを狭める。
@@ -538,9 +555,12 @@ service cloud.firestore {
       allow list: if false;
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['teamId', 'joinedAt'])
+        && request.resource.data.keys().hasOnly([
+          'teamId', 'joinedAt', 'termsVersion', 'termsAcceptedAt'
+        ])
         && request.resource.data.teamId is string
         && request.resource.data.joinedAt == request.time
+        && validTermsAcceptance(request.resource.data)
         && existsAfter(memberPath(request.resource.data.teamId, uid))
         && getAfter(memberPath(request.resource.data.teamId, uid)).data.inviteCode
           is string
@@ -549,8 +569,11 @@ service cloud.firestore {
         )).data.teamId == request.resource.data.teamId;
       allow update: if false;
       allow delete: if signedIn()
-        && request.auth.uid == uid
-        && !existsAfter(memberPath(resource.data.teamId, uid));
+        && !existsAfter(memberPath(resource.data.teamId, uid))
+        && (
+          request.auth.uid == uid
+          || (request.auth.uid != uid && isTeamAdmin(resource.data.teamId))
+        );
     }
 
     // コードは推測困難な新規12文字または既存20文字IDを知る場合だけgetできる。
@@ -568,46 +591,73 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId))
         && getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.inviteCode
           == inviteCode
+        && getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.adminUid
+          == request.auth.uid
         && existsAfter(memberPath(request.resource.data.teamId, request.auth.uid));
       allow update: if signedIn()
         && resource.data.createdBy == request.auth.uid
         && request.resource.data.createdBy == 'deleted-account'
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['createdBy']);
-      allow delete: if false;
+      allow delete: if isTeamAdmin(resource.data.teamId)
+        && existsAfter(/databases/$(database)/documents/teams/$(resource.data.teamId))
+        && getAfter(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.inviteCode
+          != inviteCode;
     }
 
     match /teams/{teamId} {
       allow read: if isTeamMember(teamId);
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
-          'name', 'inviteCode', 'createdBy', 'createdAt'
+          'name', 'inviteCode', 'createdBy', 'adminUid', 'createdAt'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 40
         && validInviteCode(request.resource.data.inviteCode)
         && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.adminUid == request.auth.uid
         && request.resource.data.createdAt == request.time
         && existsAfter(memberPath(teamId, request.auth.uid))
         && existsAfter(invitePath(request.resource.data.inviteCode))
         && getAfter(invitePath(request.resource.data.inviteCode)).data.teamId
           == teamId;
-      allow update: if isTeamMember(teamId)
-        && resource.data.createdBy == request.auth.uid
-        && request.resource.data.createdBy == 'deleted-account'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['createdBy']);
+      allow update: if (
+          isTeamAdmin(teamId)
+          && request.resource.data.keys().hasOnly([
+            'name', 'inviteCode', 'createdBy', 'adminUid', 'createdAt'
+          ])
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && validInviteCode(request.resource.data.inviteCode)
+          && request.resource.data.adminUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['inviteCode', 'adminUid'])
+          && existsAfter(invitePath(request.resource.data.inviteCode))
+          && getAfter(invitePath(request.resource.data.inviteCode)).data.teamId == teamId
+        )
+        || (
+          isTeamMember(teamId)
+          && resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdBy == 'deleted-account'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['createdBy'])
+        );
       allow delete: if false;
 
       match /members/{uid} {
-        allow get: if isTeamMember(teamId) && request.auth.uid == uid;
-        allow list: if false;
+        allow get: if isTeamMember(teamId)
+          && (request.auth.uid == uid || isTeamAdmin(teamId));
+        allow list: if isTeamAdmin(teamId);
         allow create: if signedIn()
           && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['inviteCode', 'joinedAt'])
+          && request.resource.data.keys().hasOnly([
+            'inviteCode', 'joinedAt', 'termsVersion', 'termsAcceptedAt'
+          ])
           && validInviteCode(request.resource.data.inviteCode)
           && request.resource.data.joinedAt == request.time
+          && validTermsAcceptance(request.resource.data)
           && !exists(userPath(uid))
           && existsAfter(userPath(uid))
           && getAfter(userPath(uid)).data.teamId == teamId
@@ -616,8 +666,11 @@ service cloud.firestore {
             == teamId;
         allow update: if false;
         allow delete: if signedIn()
-          && request.auth.uid == uid
-          && !existsAfter(userPath(uid));
+          && !existsAfter(userPath(uid))
+          && (
+            request.auth.uid == uid
+            || (request.auth.uid != uid && isTeamAdmin(teamId))
+          );
       }
 
       match /temporary_obstacles/{obstacleId} {

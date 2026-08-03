@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_status_card.dart';
-import 'package:rowing_navigator/services/gps_health_monitor.dart';
 import 'package:rowing_navigator/features/home_map/widgets/stroke_speed_chart.dart';
 import 'package:rowing_navigator/services/rowing_motion_fusion.dart';
 import 'package:rowing_navigator/services/stroke_speed_trace.dart';
@@ -18,8 +17,6 @@ void main() {
     bool spmEnabled = true,
     bool compact = false,
     bool portraitCompact = false,
-    GpsHealthQuality quality = GpsHealthQuality.good,
-    bool degraded = false,
     RowingMotionMetrics? strokeMotion,
     bool showStrokeMotion = false,
     StrokeSpeedTraceWindow? Function(DateTime now)? traceWindowBuilder,
@@ -39,8 +36,6 @@ void main() {
             strokeTraceWindowBuilder: traceWindowBuilder,
             compact: compact,
             portraitCompact: portraitCompact,
-            gpsQuality: quality,
-            otherBoatReceiveUnavailable: degraded,
           ),
         ),
       ),
@@ -65,16 +60,12 @@ void main() {
     expect(fontSizeOf(tester, '1.00 km'), lessThan(fontSizeOf(tester, '2:00')));
   });
 
-  testWidgets('GPS途絶・受信不可が出ても主計器の大きさは変わらない', (tester) async {
+  testWidgets('再buildしても主計器の大きさは変わらない', (tester) async {
     await pumpCard(tester);
     final normalPace = fontSizeOf(tester, '2:00');
     final normalSpm = fontSizeOf(tester, '24');
 
-    await pumpCard(
-      tester,
-      quality: GpsHealthQuality.unusable,
-      degraded: true,
-    );
+    await pumpCard(tester, showStrokeMotion: true);
 
     expect(fontSizeOf(tester, '2:00'), normalPace);
     expect(fontSizeOf(tester, '24'), normalSpm);
@@ -89,18 +80,59 @@ void main() {
     expect(find.text('24'), findsNothing);
   });
 
-  testWidgets('縦向き小型でもSPMを消さない', (tester) async {
+  testWidgets('縦向き小型でもSPMを消さず、主計器がカード幅を使い切る', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
-    expect(find.text('24 spm'), findsOneWidget);
-    expect(fontSizeOf(tester, '2:00'), 46);
+    expect(find.byKey(const ValueKey('compact-spm')), findsOneWidget);
+    // 画面上の実寸で確認する。文字は FittedBox で拡大されるため、
+    // style.fontSize は基準値であって表示サイズではない。
+    final card = tester.getRect(
+        find.byKey(const ValueKey('nav-status-card-portrait-compact')));
+    final pace = tester.getRect(find.text('2:00'));
+    final spm = tester.getRect(find.text('24'));
+    expect(pace.height, greaterThan(40));
+    expect(pace.height, greaterThan(spm.height));
+    // ペース左端からレート右端までがカード幅の8割以上を占める。
+    expect(spm.right - pace.left, greaterThan(card.width * 0.8));
   });
 
   testWidgets('横向き小型でもSPMを消さない', (tester) async {
     await pumpCard(tester, compact: true);
 
-    expect(find.text('24 spm'), findsOneWidget);
-    expect(fontSizeOf(tester, '2:00'), 30);
+    expect(find.byKey(const ValueKey('compact-spm')), findsOneWidget);
+    expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
+  });
+
+  testWidgets('縦向き小型は画面幅の9割を使い中央に寄せる', (tester) async {
+    await pumpCard(tester, portraitCompact: true);
+
+    final screenWidth =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final card = tester.getRect(
+        find.byKey(const ValueKey('nav-status-card-portrait-compact')));
+    expect(card.width, closeTo(screenWidth * 0.9, 1));
+    expect(card.center.dx, closeTo(screenWidth / 2, 1));
+  });
+
+  testWidgets('1ストローク指標は既定で畳み、グラフのタップで開閉する', (tester) async {
+    await pumpCard(
+      tester,
+      portraitCompact: true,
+      strokeMotion: _metrics(),
+      showStrokeMotion: true,
+      traceWindowBuilder: (_) => null,
+    );
+
+    // 既定は非表示。航行中に読むものではなく、記録には残る。
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('stroke-metrics-toggle')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stroke-metrics-toggle')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
   });
 
   testWidgets('1ストローク艇速指標を信頼度付き計測時だけ表示する', (tester) async {

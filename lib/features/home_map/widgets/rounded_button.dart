@@ -24,6 +24,12 @@ class RoundedButton extends StatelessWidget {
     required this.onPressed,
   });
 
+  /// 半透明の面色を指定されたとき、下の地図と文字が混ざらないようにする影。
+  /// 不透明な面でも見た目を損なわないので、常に付ける。
+  static const List<Shadow> _labelHalo = [
+    Shadow(color: Color(0xB3000000), blurRadius: 4),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -46,7 +52,12 @@ class RoundedButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) ...[
-                  Icon(icon, color: Colors.white, size: compact ? 22 : 26),
+                  Icon(
+                    icon,
+                    color: Colors.white,
+                    size: compact ? 22 : 26,
+                    shadows: _labelHalo,
+                  ),
                   SizedBox(width: compact ? 8 : 10),
                 ],
                 Text(
@@ -55,6 +66,7 @@ class RoundedButton extends StatelessWidget {
                     fontSize: compact ? 16 : 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    shadows: _labelHalo,
                   ),
                 ),
               ],

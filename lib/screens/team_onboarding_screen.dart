@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
+import '../config/store_config.dart';
 import '../models/team_model.dart';
 import '../services/team_service.dart';
 import '../widgets/team_invite_share_button.dart';
@@ -29,6 +31,7 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
   final _inviteCodeController = TextEditingController();
   _TeamOnboardingMode? _mode;
   bool _submitting = false;
+  bool _acceptedTerms = false;
   String? _error;
 
   @override
@@ -55,6 +58,9 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
     if (error is AlreadyInTeamException) {
       return 'この端末はすでにチームに参加しています。再試行してください。';
     }
+    if (error is TermsNotAcceptedException) {
+      return '利用規約への同意が必要です。';
+    }
     if (error is ArgumentError) {
       return 'チーム名は1〜40文字で入力してください。';
     }
@@ -63,6 +69,10 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
 
   Future<void> _submit() async {
     if (_submitting || _mode == null) return;
+    if (!_acceptedTerms) {
+      setState(() => _error = '利用規約への同意が必要です。');
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
@@ -70,8 +80,14 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
     });
     try {
       final membership = _mode == _TeamOnboardingMode.create
-          ? await widget.teamService.createTeam(_teamNameController.text)
-          : await widget.teamService.joinTeam(_inviteCodeController.text);
+          ? await widget.teamService.createTeam(
+              _teamNameController.text,
+              acceptedTerms: _acceptedTerms,
+            )
+          : await widget.teamService.joinTeam(
+              _inviteCodeController.text,
+              acceptedTerms: _acceptedTerms,
+            );
       if (!mounted) return;
       if (_mode == _TeamOnboardingMode.create) {
         final shouldContinue = await _showCreatedDialog(membership);
@@ -113,7 +129,7 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'この招待コードは自動で変わりません。チームメンバーだけに共有してください。',
+                  'このコードは管理者が更新できます。チームメンバーだけに共有してください。',
                 ),
                 const SizedBox(height: 14),
                 SelectableText(
@@ -150,6 +166,17 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
           ),
         ) ??
         false;
+  }
+
+  Future<void> _openExternalUrl(String value) async {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('URLを開けませんでした。')),
+      );
+    }
   }
 
   @override
@@ -292,7 +319,7 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
         const SizedBox(height: 8),
         Text(
           creating
-              ? 'チーム名を決めると、自動で変わらない招待コードを発行します。'
+              ? 'チーム名を決めると、管理者が更新できる招待コードを発行します。'
               : 'チームメンバーから受け取った招待コードを入力してください。',
         ),
         const SizedBox(height: 24),
@@ -327,6 +354,60 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
             ),
             onSubmitted: (_) => _submit(),
           ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '利用規約（$teamTermsVersion）',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '・招待コードはチーム外へ公開しません。\n'
+                  '・本アプリの警告は安全確認や操船判断を代替しません。\n'
+                  '・不適切な利用や危険情報は、運営へ通報できます。\n'
+                  '・管理者は必要に応じて招待コードを更新し、メンバーを外せます。',
+                  style: TextStyle(fontSize: 13),
+                ),
+                Wrap(
+                  spacing: 4,
+                  children: [
+                    TextButton(
+                      onPressed: () => _openExternalUrl(privacyPolicyUrl),
+                      child: const Text('プライバシーポリシー'),
+                    ),
+                    TextButton(
+                      onPressed: () => _openExternalUrl(supportUrl),
+                      child: const Text('サポート'),
+                    ),
+                    TextButton(
+                      onPressed: () => _openExternalUrl(supportReportFormUrl),
+                      child: const Text('通報・お問い合わせ'),
+                    ),
+                  ],
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _acceptedTerms,
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() {
+                            _acceptedTerms = value ?? false;
+                            if (_acceptedTerms) _error = null;
+                          }),
+                  title: const Text('利用規約とプライバシーポリシーに同意します。'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+          ),
+        ),
         if (_error != null) ...[
           const SizedBox(height: 12),
           Semantics(
@@ -339,7 +420,7 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
         ],
         const SizedBox(height: 20),
         FilledButton(
-          onPressed: _submitting ? null : _submit,
+          onPressed: _submitting || !_acceptedTerms ? null : _submit,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 13),
             child: _submitting

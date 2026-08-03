@@ -9,6 +9,7 @@ import 'package:firebase_database/firebase_database.dart' as rtdb
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/navigator_config.dart';
+import '../config/store_config.dart';
 import '../models/team_model.dart';
 
 class AlreadyInTeamException implements Exception {
@@ -30,6 +31,34 @@ class TeamMembershipInconsistentException implements Exception {
 
   @override
   String toString() => 'チーム所属データが一致しません。再試行してください。';
+}
+
+class TermsNotAcceptedException implements Exception {
+  const TermsNotAcceptedException();
+
+  @override
+  String toString() => '利用規約への同意が必要です。';
+}
+
+class NotTeamAdministratorException implements Exception {
+  const NotTeamAdministratorException();
+
+  @override
+  String toString() => 'この操作はチーム管理者だけが実行できます。';
+}
+
+class CannotRemoveTeamAdministratorException implements Exception {
+  const CannotRemoveTeamAdministratorException();
+
+  @override
+  String toString() => 'チーム管理者はこの画面から削除できません。';
+}
+
+class TeamManagementSyncException implements Exception {
+  const TeamManagementSyncException();
+
+  @override
+  String toString() => 'チーム管理の反映を完了できませんでした。通信を確認して再試行してください。';
 }
 
 /// 認証情報が失われたときにだけ表示する、再参加用の端末内ヒント。
@@ -173,6 +202,13 @@ class TeamService {
   Stream<String?> get authenticationUserIds =>
       _auth.authStateChanges().map((user) => user?.uid).distinct();
 
+  /// 所属が管理者により削除されたことを、起動中の端末でも検知する。
+  /// Rulesの拒否だけに頼らず、オンラインなら直ちに参加画面へ戻せるようにする。
+  Stream<bool> watchMembershipExists(String uid) =>
+      _firestore.collection('users').doc(uid).snapshots().map(
+            (snapshot) => snapshot.exists,
+          );
+
   static String get requireActiveTeamId {
     final value = _activeMembership?.teamId;
     if (value == null || value.isEmpty) {
@@ -225,11 +261,15 @@ class TeamService {
     }
   }
 
-  Future<TeamMembership> createTeam(String rawName) async {
+  Future<TeamMembership> createTeam(
+    String rawName, {
+    required bool acceptedTerms,
+  }) async {
     final name = rawName.trim();
     if (name.isEmpty || name.length > 40) {
       throw ArgumentError.value(rawName, 'name', 'must be 1-40 characters');
     }
+    if (!acceptedTerms) throw const TermsNotAcceptedException();
     final user = await _ensureUser();
     await _throwIfAlreadyInTeam(user.uid);
 
@@ -266,6 +306,7 @@ class TeamService {
             'name': name,
             'inviteCode': inviteCode,
             'createdBy': user.uid,
+            'adminUid': user.uid,
             'createdAt': FieldValue.serverTimestamp(),
           });
           transaction.set(inviteReference, {
@@ -276,10 +317,14 @@ class TeamService {
           transaction.set(memberReference, {
             'inviteCode': inviteCode,
             'joinedAt': FieldValue.serverTimestamp(),
+            'termsVersion': teamTermsVersion,
+            'termsAcceptedAt': FieldValue.serverTimestamp(),
           });
           transaction.set(userReference, {
             'teamId': teamId,
             'joinedAt': FieldValue.serverTimestamp(),
+            'termsVersion': teamTermsVersion,
+            'termsAcceptedAt': FieldValue.serverTimestamp(),
           });
         });
         await _activateRtdbMembership(
@@ -294,6 +339,7 @@ class TeamService {
               name: name,
               inviteCode: inviteCode,
               createdBy: user.uid,
+              adminUid: user.uid,
             ),
             userId: user.uid,
           ),
@@ -317,11 +363,15 @@ class TeamService {
     throw StateError('招待コードを安全に作成できませんでした。');
   }
 
-  Future<TeamMembership> joinTeam(String rawInviteCode) async {
+  Future<TeamMembership> joinTeam(
+    String rawInviteCode, {
+    required bool acceptedTerms,
+  }) async {
     final inviteCode = TeamInviteCode.normalize(rawInviteCode);
     if (!TeamInviteCode.isValid(inviteCode)) {
       throw const InvalidInviteCodeException();
     }
+    if (!acceptedTerms) throw const TermsNotAcceptedException();
     final user = await _ensureUser();
     await _throwIfAlreadyInTeam(user.uid);
     late String teamId;
@@ -343,10 +393,14 @@ class TeamService {
       transaction.set(teamReference.collection('members').doc(user.uid), {
         'inviteCode': inviteCode,
         'joinedAt': FieldValue.serverTimestamp(),
+        'termsVersion': teamTermsVersion,
+        'termsAcceptedAt': FieldValue.serverTimestamp(),
       });
       transaction.set(userReference, {
         'teamId': teamId,
         'joinedAt': FieldValue.serverTimestamp(),
+        'termsVersion': teamTermsVersion,
+        'termsAcceptedAt': FieldValue.serverTimestamp(),
       });
     });
 
@@ -402,6 +456,49 @@ class TeamService {
       });
     }
     await _clearActive();
+  }
+
+  /// 管理者だけが、現在の招待コードを無効化して新しいコードへ替える。
+  ///
+  /// Firestoreでは古い招待文書の削除と新しい招待文書の作成をtransactionで
+  /// 原子的に行う。RTDBも同一multi-location updateで置き換えるため、
+  /// 新旧コードが共に有効な状態を残さない。
+  Future<TeamMembership> rotateInviteCode() => _changeInviteCode();
+
+  /// 管理者がメンバーをチームから外す。
+  ///
+  /// 削除と同時に招待コードを更新する。外された端末が古いコードを知っていても
+  /// 再参加できず、Firestoreの所属・RTDBの位置共有bridge/艇情報も消える。
+  Future<TeamMembership> removeMember(String memberUid) {
+    if (memberUid.isEmpty) {
+      throw ArgumentError.value(memberUid, 'memberUid', 'must not be empty');
+    }
+    return _changeInviteCode(memberUidToRemove: memberUid);
+  }
+
+  Stream<List<TeamMemberSummary>> watchManagedTeamMembers() {
+    final membership = _activeMembership;
+    if (membership == null || !membership.isAdministrator) {
+      return Stream<List<TeamMemberSummary>>.error(
+        const NotTeamAdministratorException(),
+      );
+    }
+    return _firestore
+        .collection('teams')
+        .doc(membership.teamId)
+        .collection('members')
+        .orderBy('joinedAt')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (document) => TeamMemberSummary.fromFirestore(
+                  document.id,
+                  document.data(),
+                ),
+              )
+              .toList(growable: false),
+        );
   }
 
   /// アカウント削除用。位置を消してからRTDB bridgeと
@@ -601,6 +698,151 @@ class TeamService {
     return _activate(membership);
   }
 
+  Future<TeamMembership> _changeInviteCode({String? memberUidToRemove}) async {
+    final user = await _ensureUser();
+    final active = _activeMembership;
+    if (active == null) throw const TeamMembershipInconsistentException();
+    if (!active.isAdministrator) throw const NotTeamAdministratorException();
+    if (memberUidToRemove == user.uid) {
+      throw const CannotRemoveTeamAdministratorException();
+    }
+
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final nextInviteCode = TeamInviteCode.generate(_random);
+      final teamReference = _firestore.collection('teams').doc(active.teamId);
+      final previousInviteReference =
+          _firestore.collection('invite_codes').doc(active.inviteCode);
+      final nextInviteReference =
+          _firestore.collection('invite_codes').doc(nextInviteCode);
+      final targetUserReference = memberUidToRemove == null
+          ? null
+          : _firestore.collection('users').doc(memberUidToRemove);
+      final targetMemberReference = memberUidToRemove == null
+          ? null
+          : teamReference.collection('members').doc(memberUidToRemove);
+
+      RowingTeam? updatedTeam;
+      try {
+        await _firestore.runTransaction((transaction) async {
+          final snapshots = await Future.wait([
+            transaction.get(teamReference),
+            transaction.get(previousInviteReference),
+            transaction.get(nextInviteReference),
+            if (targetUserReference != null)
+              transaction.get(targetUserReference),
+            if (targetMemberReference != null)
+              transaction.get(targetMemberReference),
+          ]);
+          final teamSnapshot = snapshots[0];
+          final previousInviteSnapshot = snapshots[1];
+          final nextInviteSnapshot = snapshots[2];
+          if (!teamSnapshot.exists ||
+              !previousInviteSnapshot.exists ||
+              nextInviteSnapshot.exists) {
+            throw const InvalidInviteCodeException();
+          }
+          final teamData = teamSnapshot.data();
+          if (teamData == null) {
+            throw const TeamMembershipInconsistentException();
+          }
+          final team = RowingTeam.fromFirestore(active.teamId, teamData);
+          if (team.adminUid != user.uid) {
+            throw const NotTeamAdministratorException();
+          }
+          if (team.inviteCode != active.inviteCode) {
+            // 別端末の管理操作を見落とさず、最新コードを再読込してから再試行する。
+            throw const TeamMembershipInconsistentException();
+          }
+
+          if (memberUidToRemove != null) {
+            final targetUserSnapshot = snapshots[3];
+            final targetMemberSnapshot = snapshots[4];
+            if (!targetUserSnapshot.exists || !targetMemberSnapshot.exists) {
+              throw const TeamMembershipInconsistentException();
+            }
+            if (targetUserSnapshot.data()?['teamId'] != active.teamId) {
+              throw const TeamMembershipInconsistentException();
+            }
+            transaction.delete(targetMemberReference!);
+            transaction.delete(targetUserReference!);
+          }
+
+          final teamUpdate = <String, Object?>{'inviteCode': nextInviteCode};
+          // adminUid追加前のチームを、最初の管理操作時だけ安全に移行する。
+          if (teamData['adminUid'] is! String) {
+            teamUpdate['adminUid'] = user.uid;
+          }
+          transaction.update(teamReference, teamUpdate);
+          transaction.set(nextInviteReference, {
+            'teamId': active.teamId,
+            'createdBy': user.uid,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          transaction.delete(previousInviteReference);
+
+          updatedTeam = RowingTeam(
+            id: team.id,
+            name: team.name,
+            inviteCode: nextInviteCode,
+            createdBy: team.createdBy,
+            adminUid: team.adminUid,
+            createdAt: team.createdAt,
+          );
+        });
+      } on InvalidInviteCodeException {
+        // 生成コードとの稀な衝突だけは、別コードを生成して安全に再試行する。
+        continue;
+      }
+
+      final nextMembership = TeamMembership(
+        team: updatedTeam!,
+        userId: user.uid,
+      );
+      // Firestoreでアクセスを先に失効させる。RTDB側の更新が失敗した場合は
+      // 成功として画面遷移せず、管理者に再試行を促す。
+      try {
+        await _replaceRtdbInviteAndRevokeMember(
+          teamId: active.teamId,
+          previousInviteCode: active.inviteCode,
+          nextInviteCode: nextInviteCode,
+          administratorUid: user.uid,
+          memberUidToRemove: memberUidToRemove,
+        );
+      } on FirebaseException {
+        throw const TeamManagementSyncException();
+      }
+      return _activate(nextMembership);
+    }
+    throw StateError('招待コードを安全に更新できませんでした。');
+  }
+
+  Future<void> _replaceRtdbInviteAndRevokeMember({
+    required String teamId,
+    required String previousInviteCode,
+    required String nextInviteCode,
+    required String administratorUid,
+    required String? memberUidToRemove,
+  }) {
+    final changes = <String, Object?>{
+      'team_meta/$teamId/inviteCode': nextInviteCode,
+      'team_invites/$previousInviteCode': null,
+      'team_invites/$nextInviteCode': {
+        'teamId': teamId,
+        'ownerUid': administratorUid,
+        'createdAt': ServerValue.timestamp,
+      },
+    };
+    if (memberUidToRemove != null) {
+      changes.addAll({
+        'teams/$teamId/live_positions/$memberUidToRemove': null,
+        'teams/$teamId/boat_profiles/$memberUidToRemove': null,
+        'team_users/$memberUidToRemove': null,
+        'team_members/$teamId/$memberUidToRemove': null,
+      });
+    }
+    return _database.ref().update(changes);
+  }
+
   Future<TeamMembership> _activate(TeamMembership membership) async {
     _activeMembership = membership;
     _recoveryHint = null;
@@ -644,6 +886,7 @@ class TeamService {
         name: name,
         inviteCode: inviteCode,
         createdBy: createdBy,
+        adminUid: createdBy,
       ),
       userId: uid,
     );

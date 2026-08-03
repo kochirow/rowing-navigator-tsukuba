@@ -290,23 +290,6 @@ void main() {
     expect(find.byIcon(Icons.schedule_rounded), findsNothing);
   });
 
-  testWidgets('物理警告と別に通信の能力低下を常時表示する', (tester) async {
-    await tester.pumpWidget(
-      wrap(
-        const NavStatusCard(
-          paceSeconds: 120,
-          distanceMeters: 500,
-          elapsedTimeSeconds: 60,
-          positionSharingUnavailable: true,
-          otherBoatReceiveUnavailable: true,
-        ),
-      ),
-    );
-
-    expect(find.text('他艇受信: 利用不可'), findsOneWidget);
-    expect(find.text('自艇共有: 利用不可'), findsOneWidget);
-  });
-
   testWidgets('SPM計測OFFでは表示領域を完全に取り除く', (tester) async {
     await tester.pumpWidget(
       wrap(
@@ -341,15 +324,17 @@ void main() {
 
     final card = find.byKey(const ValueKey('nav-status-card-compact'));
     expect(card, findsOneWidget);
-    expect(tester.getSize(card).width, lessThanOrEqualTo(260));
-    expect(tester.getSize(card).height, lessThan(120));
+    // 主計器を大きく出すため幅は従来より広い。それでも横向き画面の
+    // 左上に収まり、地図の大部分を空ける。
+    expect(tester.getSize(card).width, lessThanOrEqualTo(380));
+    expect(tester.getSize(card).height, lessThan(140));
     expect(find.text('2:00'), findsOneWidget);
     expect(find.text('1:00'), findsOneWidget);
     expect(find.text('500 m'), findsOneWidget);
     expect(find.textContaining('spm'), findsNothing);
   });
 
-  testWidgets('縦向き用カードはペース文字を保ち、SPMなしではさらに細くなる', (tester) async {
+  testWidgets('縦向き用カードは画面幅の9割を使い、主計器を大きく出す', (tester) async {
     tester.view
       ..physicalSize = const Size(375, 667)
       ..devicePixelRatio = 1;
@@ -375,9 +360,10 @@ void main() {
     );
 
     final card = find.byKey(const ValueKey('nav-status-card-portrait-compact'));
-    expect(tester.getSize(card).width, lessThanOrEqualTo(230));
-    expect(tester.getSize(card).height, lessThan(120));
-    expect(tester.widget<Text>(find.text('2:00')).style?.fontSize, 46);
+    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
+    expect(tester.getSize(card).height, lessThan(140));
+    // 表示上の高さで見る(FittedBoxで拡大するため style は基準値)。
+    expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
     expect(find.textContaining('spm'), findsNothing);
 
     await tester.pumpWidget(
@@ -397,12 +383,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(tester.getSize(card).width, greaterThan(230));
-    expect(tester.getSize(card).width, lessThanOrEqualTo(268));
-    expect(find.text('18 spm'), findsOneWidget);
+    // SPMの有無で幅は変えない(計器の位置が動くと読み取りが遅れる)。
+    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
+    expect(find.text('18'), findsOneWidget);
+    expect(find.text(' spm'), findsOneWidget);
   });
 
-  testWidgets('SE相当・文字1.3倍でも計器と全能力低下表示が破綻しない', (tester) async {
+  testWidgets('SE相当・文字1.3倍でも計器が破綻しない', (tester) async {
     tester.view.physicalSize = const Size(375, 667);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -419,10 +406,6 @@ void main() {
               paceSeconds: 599,
               distanceMeters: 12345,
               elapsedTimeSeconds: 3723,
-              gpsAgeSeconds: 30,
-              positionSharingUnavailable: true,
-              otherBoatReceiveUnavailable: true,
-              temporaryObstacleReceiveUnavailable: true,
             ),
           ),
         ),
@@ -430,10 +413,8 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('他艇受信: 利用不可'), findsOneWidget);
-    expect(find.text('自艇共有: 利用不可'), findsOneWidget);
-    expect(find.text('臨時危険区域: 受信不可'), findsOneWidget);
-    expect(find.textContaining('周囲を目視確認'), findsOneWidget);
+    expect(find.text('12.35 km'), findsOneWidget);
+    expect(find.text('1:02:03'), findsOneWidget);
   });
 
   testWidgets('経過時間の1秒更新を独立パネル内で行う', (tester) async {
@@ -445,7 +426,6 @@ void main() {
           paceSeconds: 120,
           distanceMeters: 500,
           sessionStartedAt: startedAt,
-          lastGpsTimestamp: startedAt,
           clock: () => now,
         ),
       ),

@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
+import '../config/store_config.dart';
 import '../services/team_service.dart';
 import '../widgets/team_invite_share_button.dart';
+import '../widgets/team_administration_card.dart';
 import 'app_entry_gate.dart';
 
-class TeamScreen extends StatelessWidget {
+class TeamScreen extends StatefulWidget {
   const TeamScreen({super.key});
 
+  @override
+  State<TeamScreen> createState() => _TeamScreenState();
+}
+
+class _TeamScreenState extends State<TeamScreen> {
   @override
   Widget build(BuildContext context) {
     final membership = TeamService.activeMembership;
@@ -89,7 +97,7 @@ class TeamScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'チームに参加している人は誰でも、このコードを共有できます。自動更新や有効期限はありません。',
+                    'このコードを知る人は参加できます。管理者はコードを更新して、古いコードを即時無効にできます。',
                   ),
                   const SizedBox(height: 18),
                   Container(
@@ -143,23 +151,49 @@ class TeamScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(18),
+              padding: const EdgeInsets.all(18),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.edit_location_alt_outlined),
-                  SizedBox(width: 12),
+                  const Icon(Icons.edit_location_alt_outlined),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'チームメンバーは全員、臨時危険区域の追加・編集・削除と、共有固定危険区域の更新ができます。現場で安全を確認してから操作してください。',
+                      'チームメンバーは全員、臨時危険区域の追加・編集・削除と、共有固定危険区域の更新ができます。現場で安全を確認してから操作してください。問題のある利用や危険情報は、通報フォームから運営へ連絡できます。',
                     ),
                   ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: const Text('通報・お問い合わせ'),
+              subtitle: const Text('不適切な利用、危険情報、招待コードの漏洩は運営へ連絡してください。'),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () async {
+                final opened = await launchUrl(
+                  Uri.parse(supportReportFormUrl),
+                  mode: LaunchMode.externalApplication,
+                );
+                if (!opened && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('通報フォームを開けませんでした。')),
+                  );
+                }
+              },
+            ),
+          ),
+          if (membership.isAdministrator) ...[
+            const SizedBox(height: 12),
+            TeamAdministrationCard(
+              onMembershipChanged: () => setState(() {}),
+            ),
+          ],
           const SizedBox(height: 12),
           const _LeaveTeamCard(),
         ],

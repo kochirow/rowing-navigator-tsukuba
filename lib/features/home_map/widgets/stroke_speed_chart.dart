@@ -104,8 +104,7 @@ class _StrokeSpeedChartState extends State<StrokeSpeedChart>
     final colors = context.colors;
     final foreground =
         widget.onDarkSurface ? colors.onDark : colors.textPrimary;
-    final accent =
-        widget.onDarkSurface ? colors.primaryLight : colors.primary;
+    final accent = widget.onDarkSurface ? colors.primaryLight : colors.primary;
     return RepaintBoundary(
       child: SizedBox(
         height: widget.height,
@@ -115,6 +114,11 @@ class _StrokeSpeedChartState extends State<StrokeSpeedChart>
             model: _model,
             foreground: foreground,
             accent: accent,
+            // 濃色スクリムのカードは半透明で地図が透ける。グラフだけは
+            // 自前の暗い下地を敷いて、波形が建物や水面に紛れないようにする。
+            plotBackground: widget.onDarkSurface
+                ? Colors.black.withValues(alpha: 0.42)
+                : foreground.withValues(alpha: 0.06),
             emptyLabel: widget.emptyLabel,
             textDirection: Directionality.of(context),
           ),
@@ -164,6 +168,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
   final _StrokeChartModel model;
   final Color foreground;
   final Color accent;
+  final Color plotBackground;
   final String emptyLabel;
   final TextDirection textDirection;
 
@@ -171,6 +176,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     required this.model,
     required this.foreground,
     required this.accent,
+    required this.plotBackground,
     required this.emptyLabel,
     required this.textDirection,
   }) : super(repaint: model);
@@ -181,10 +187,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
       Offset.zero & size,
       const Radius.circular(10),
     );
-    canvas.drawRRect(
-      radius,
-      Paint()..color = foreground.withValues(alpha: 0.06),
-    );
+    canvas.drawRRect(radius, Paint()..color = plotBackground);
 
     final window = model.window;
     if (window == null || window.isEmpty || window.length < 2) {
@@ -343,5 +346,6 @@ class _StrokeSpeedChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _StrokeSpeedChartPainter oldDelegate) =>
       oldDelegate.foreground != foreground ||
       oldDelegate.accent != accent ||
+      oldDelegate.plotBackground != plotBackground ||
       oldDelegate.emptyLabel != emptyLabel;
 }

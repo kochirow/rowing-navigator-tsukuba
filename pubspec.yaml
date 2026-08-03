@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+5
+version: 1.1.0+9
 
 environment:
   sdk: ">=3.3.4 <4.0.0"
@@ -75,6 +75,12 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # FlutterFire's Swift Package manifests cannot resolve paths containing
+  # Japanese characters in this checkout. Keep iOS plugin integration on the
+  # existing CocoaPods path until the upstream Swift Package issue is fixed.
+  config:
+    enable-swift-package-manager: false
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

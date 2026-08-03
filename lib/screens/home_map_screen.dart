@@ -71,6 +71,16 @@ import 'team_screen.dart';
 
 const _sakuragawaFallbackCenter = LatLng(36.069, 140.208);
 
+/// 自艇を画面上端から `navigationSelfBoatScreenRatio` の位置へ置くための
+/// カメラパディング。上寄せ(比率 < 0.5)なら下側へ入れる。
+EdgeInsets _selfBoatCameraPadding(double mapHeight) {
+  if (!mapHeight.isFinite || mapHeight <= 0) return EdgeInsets.zero;
+  final shift = mapHeight * (2 * navigationSelfBoatScreenRatio - 1);
+  return shift >= 0
+      ? EdgeInsets.only(top: shift)
+      : EdgeInsets.only(bottom: -shift);
+}
+
 enum _NavigationStartRecoveryAction {
   none,
   locationSettings,
@@ -1164,9 +1174,10 @@ class HomeMapScreen extends HookConsumerWidget {
                 )
               : Stack(alignment: Alignment.center, children: <Widget>[
                   // ################ マップ ################
-                  // 自艇を画面の下から1/3へ置くための上パディングを、実際の
-                  // 地図の高さから計算する。LayoutBuilder は制約をそのまま
-                  // 子へ渡すため、地図の大きさは従来と変わらない。
+                  // 自艇を画面上端から `navigationSelfBoatScreenRatio` の
+                  // 位置へ置くためのパディングを、実際の地図の高さから
+                  // 計算する。LayoutBuilder は制約をそのまま子へ渡すため、
+                  // 地図の大きさは従来と変わらない。
                   LayoutBuilder(builder: (context, mapConstraints) {
                     return GoogleMap(
                       // 通常時も許可済みならOS標準の現在地アイコンを表示する。
@@ -1213,20 +1224,16 @@ class HomeMapScreen extends HookConsumerWidget {
                       markers: navMap.markers.value,
                       polygons: navMap.polygons.value,
                       polylines: navMap.polylines.value,
-                      // 進行方向が上に来る回転地図で自艇を下へ寄せ、前方の
-                      // 見通しを増やす。上パディング P のとき、カメラの
-                      // ターゲットは画面Y=(P+H)/2 に来る。下から1/3
-                      // (Y=0.667H)にしたいので P=(2*0.667-1)*H ≒ H/3。
+                      // 航行中は自艇を画面の上から
+                      // `navigationSelfBoatScreenRatio` の位置へ置く。
+                      // カメラのターゲットは、上パディング P で画面
+                      // Y=(P+H)/2、下パディング Q で Y=(H-Q)/2 に来る。
+                      // 比率が 0.5 より上(小さい)なら下パディングを使う。
                       //
                       // 監視中・待機中は入れない。監視者は艇を俯瞰したいので、
                       // 中心をずらす理由がない。
                       padding: navigator.mode.value == NavMode.navigator
-                          ? EdgeInsets.only(
-                              top: mapConstraints.maxHeight.isFinite
-                                  ? mapConstraints.maxHeight *
-                                      (2 * navigationSelfBoatScreenRatio - 1)
-                                  : 0,
-                            )
+                          ? _selfBoatCameraPadding(mapConstraints.maxHeight)
                           : EdgeInsets.zero,
                     );
                   }),
@@ -1236,10 +1243,12 @@ class HomeMapScreen extends HookConsumerWidget {
                         LayoutBuilder(builder: (context, overlayConstraints) {
                       final isLandscape = overlayConstraints.maxWidth >
                           overlayConstraints.maxHeight;
-                      // 縦向きは従来どおり上部40%以内、横向きは左上の小型カードにし、
-                      // 地図の大部分を計器で覆わない。
+                      // 縦向きは上部40%以内。横向きは画面高さ自体が小さく、
+                      // 30%だと計器カードの下端(距離・経過時間)が切れて
+                      // しまうため広く取る。横向きのカードは幅が
+                      // 380px以内なので、高さを許しても地図は右側に残る。
                       final topOverlayBudget = overlayConstraints.maxHeight *
-                          (isLandscape ? 0.3 : 0.4);
+                          (isLandscape ? 0.72 : 0.4);
                       return Stack(
                           alignment: Alignment.center,
                           children: <Widget>[
@@ -1388,12 +1397,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                               .round(),
                                           sessionStartedAt:
                                               navigator.sessionStartedAt.value,
-                                          lastGpsTimestamp:
-                                              navigator.myBoat.value?.timestamp,
-                                          gpsQuality:
-                                              navigator.gpsQuality.value,
-                                          gpsStreamRecovering: navigator
-                                              .isGpsStreamRecovering.value,
                                           spm: navigator.spm.value,
                                           strokeMotion: navigator.strokeMotion
                                                       .value?.quality ==
@@ -1412,83 +1415,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                               false,
                                           compact: isLandscape,
                                           portraitCompact: !isLandscape,
-                                          positionSharingUnavailable: navigator
-                                              .isPositionSharingUnavailable
-                                              .value,
-                                          otherBoatReceiveUnavailable: navigator
-                                              .isDynamicReceiveUnavailable
-                                              .value,
-                                          temporaryObstacleReceiveUnavailable:
-                                              navigator
-                                                  .isTemporaryObstacleReceiveUnavailable
-                                                  .value,
-                                          safetySettingsLabel: navigator
-                                              .safetySettingsLabel.value,
-                                          safetySettingsNeedsAttention:
-                                              navigator
-                                                  .safetySettingsNeedsAttention
-                                                  .value,
-                                          pendingSharedSafetyRevision: navigator
-                                              .pendingSharedSafetyRevision
-                                              .value,
-                                          onApplyPendingSafetySettings:
-                                              navigator.pendingSharedSafetyRevision
-                                                          .value ==
-                                                      null
-                                                  ? null
-                                                  : () async {
-                                                      final revision = navigator
-                                                          .pendingSharedSafetyRevision
-                                                          .value;
-                                                      final confirmed =
-                                                          await showDialog<
-                                                                  bool>(
-                                                                context:
-                                                                    context,
-                                                                builder:
-                                                                    (dialogContext) =>
-                                                                        AlertDialog(
-                                                                  title: Text(
-                                                                    '共有安全設定 rev.$revision を反映しますか？',
-                                                                  ),
-                                                                  content:
-                                                                      const Text(
-                                                                    '新しい全区域を生成できた場合だけ一括で切り替えます。生成に失敗した場合は、現在の警告区域を保ちます。',
-                                                                  ),
-                                                                  actions: [
-                                                                    TextButton(
-                                                                      onPressed:
-                                                                          () =>
-                                                                              Navigator.pop(
-                                                                        dialogContext,
-                                                                        false,
-                                                                      ),
-                                                                      child:
-                                                                          const Text(
-                                                                        'キャンセル',
-                                                                      ),
-                                                                    ),
-                                                                    FilledButton(
-                                                                      onPressed:
-                                                                          () =>
-                                                                              Navigator.pop(
-                                                                        dialogContext,
-                                                                        true,
-                                                                      ),
-                                                                      child:
-                                                                          const Text(
-                                                                        '反映',
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ) ??
-                                                              false;
-                                                      if (confirmed) {
-                                                        unawaited(navigator
-                                                            .applyPendingSharedSafetySettings());
-                                                      }
-                                                    },
                                         ),
                                       ),
                                     ),
@@ -1989,7 +1915,13 @@ class HomeMapScreen extends HookConsumerWidget {
                                         RoundedButton(
                                             label: "航行終了",
                                             icon: Icons.stop_circle_outlined,
-                                            color: context.colors.danger,
+                                            // 航行中は地図の視認性を優先する。
+                                            // 押し間違いは確認ダイアログで
+                                            // 受け止めるので、面積を大きく
+                                            // 取る必要がない。
+                                            color: context.colors.danger
+                                                .withValues(alpha: 0.55),
+                                            compact: true,
                                             onPressed: () async {
                                               // 誤タップで位置共有・警告が止まるのを防ぐため必ず確認する
                                               final confirmed =

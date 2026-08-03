@@ -110,6 +110,12 @@ class _PrivacyDataScreenState extends State<PrivacyDataScreen> {
             ),
             onTap: supportUrl.isEmpty ? null : () => _openUrl(supportUrl),
           ),
+          ListTile(
+            leading: const Icon(Icons.flag_outlined),
+            title: const Text('通報・お問い合わせ'),
+            subtitle: const Text('不適切な利用、危険情報、招待コードの漏洩を運営へ連絡する'),
+            onTap: () => _openUrl(supportReportFormUrl),
+          ),
           const Divider(height: 32),
           Text(
             user == null
