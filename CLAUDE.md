@@ -61,7 +61,7 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 
 ```bash
 flutter pub get
-dart analyze lib test   # ← flutter analyze は使わない(下記)
+dart analyze lib test tool   # ← flutter analyze は使わない(下記)
 flutter test
 flutter run
 ```
@@ -69,8 +69,15 @@ flutter run
 > **`flutter analyze` はこの作業パスでは必ずクラッシュする。**
 > Dart analysis server の LSP チャネルが、URLエンコードされた日本語パス
 > (`漕艇部` / `桜川プロジェクト`)でヘッダのバイト長とUTF-16長を取り違えるため。
-> ローカルでは `dart analyze lib test` を使い、`flutter analyze` は
+> ローカルでは `dart analyze lib test tool` を使い、`flutter analyze` は
 > ASCIIパスで動く GitHub Actions(`.github/workflows/ci.yml`)で担保する。
+
+> **`tool` を必ず入れること。** `tool/replay_alerts.dart` /
+> `tool/replay_field_log.dart` は `lib/` のモデルを直接呼ぶため、安全経路の
+> クラスから引数を1つ削るだけで壊れる。`lib test` だけで解析すると
+> ローカルは緑のまま CI の `flutter analyze`(プロジェクト全体)だけが落ちる。
+> 実際にこれで2回落ちている(`1724d33`、および 2026-08-03 の
+> `insideSupportedCoverage` 削除)。
 
 起動には Firebase 設定と Google Maps API キーが必要(README参照)。
 

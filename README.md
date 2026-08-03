@@ -54,9 +54,13 @@ $ flutter run
 
 本リポジトリの作業パスに日本語が含まれる場合、Dart analysis server の LSP チャネルが
 ヘッダのバイト長と UTF-16 長を取り違えてクラッシュするため、`flutter analyze` を実行できません。
-ローカルでは代わりに `dart analyze lib test` を使用してください。
+ローカルでは代わりに `dart analyze lib test tool` を使用してください。
 `flutter analyze` と `flutter test` は、ASCII パスで動作する GitHub Actions
 (`.github/workflows/ci.yml`)で担保しています。
+
+`tool` を対象から外さないでください。`tool/` 配下の再生ツールは `lib/` のモデルを
+直接呼ぶため、`lib test` だけを解析するとローカルは緑のまま、プロジェクト全体を見る
+CI の `flutter analyze` だけが落ちます。
 
 危険区域データ(`assets/data/sakuragawa_obstacles.json`)を編集した場合は、
 `tool/update_hazard_profile_hash.sh` を実行してチェックサムを更新してください。
