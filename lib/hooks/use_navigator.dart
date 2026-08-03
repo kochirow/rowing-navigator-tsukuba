@@ -3714,6 +3714,7 @@ UseNavigator useNavigator() {
     receivedPracticeLogMessages: receivedPracticeLogMessages,
     obstacles: obstacles,
     channelCenterline: channelCenterline,
+    channelLaneResolver: channelLaneResolver,
     gpsQuality: gpsQuality,
     isGpsStreamRecovering: isGpsStreamRecovering,
     isPositionSharingUnavailable: isPositionSharingUnavailable,
@@ -3768,6 +3769,7 @@ class UseNavigator {
   final ValueNotifier<List<Message>> receivedPracticeLogMessages;
   final ValueNotifier<List<StaticObstacle>> obstacles;
   final ValueNotifier<ChannelCenterline?> channelCenterline;
+  final ValueNotifier<ChannelLaneResolver?> channelLaneResolver;
   final ValueNotifier<GpsHealthQuality> gpsQuality;
   final ValueNotifier<bool> isGpsStreamRecovering;
   final ValueNotifier<bool> isPositionSharingUnavailable;
@@ -3832,6 +3834,7 @@ class UseNavigator {
     required this.receivedPracticeLogMessages,
     required this.obstacles,
     required this.channelCenterline,
+    required this.channelLaneResolver,
     required this.gpsQuality,
     required this.isGpsStreamRecovering,
     required this.isPositionSharingUnavailable,

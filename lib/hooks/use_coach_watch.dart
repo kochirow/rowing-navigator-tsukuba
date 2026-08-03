@@ -7,6 +7,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../config/coach_config.dart';
 import '../models/boat_model.dart';
+import '../services/channel_centerline.dart';
+import '../services/channel_lane_resolver.dart';
+import '../services/observer_traffic_awareness_evaluator.dart';
 
 /// 検知される異常の種類
 enum BoatAnomalyKind {
@@ -115,6 +118,8 @@ bool isAudibleCoachAnomalyKind(BoatAnomalyKind kind) =>
 UseCoachWatch useCoachWatch({
   required List<Boat> otherBoats,
   required bool enabled,
+  ChannelCenterline? channelCenterline,
+  ChannelLaneResolver? channelLaneResolver,
 }) {
   final trails = useRef<Map<String, List<_TrailPoint>>>({});
   final lastSeen = useRef<Map<String, DateTime>>({});
@@ -124,6 +129,12 @@ UseCoachWatch useCoachWatch({
   final trailPolylines = useState<Set<Polyline>>({});
   final anomalyFirstDetectedAt = useRef<Map<String, DateTime>>({});
   final scanTimer = useState<Timer?>(null);
+  final trafficTimer = useState<Timer?>(null);
+  final trafficState = useRef<ObserverTrafficState>(ObserverTrafficState.empty);
+  final trafficSnapshot = useState<ObserverTrafficSnapshot>(
+    ObserverTrafficSnapshot.empty,
+  );
+  final trafficEvaluator = useMemoized(ObserverTrafficAwarenessEvaluator.new);
 
   // 受信した艇情報を航跡に蓄積
   useEffect(() {
@@ -164,6 +175,10 @@ UseCoachWatch useCoachWatch({
       boatStatuses.value = [];
       trailPolylines.value = {};
       anomalyFirstDetectedAt.value.clear();
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+      trafficState.value = ObserverTrafficState.empty;
+      trafficSnapshot.value = ObserverTrafficSnapshot.empty;
       return null;
     }
 
@@ -274,10 +289,47 @@ UseCoachWatch useCoachWatch({
     };
   }, [enabled]);
 
+  // 早期注意は監視画面だけの表示用判定。既存の衝突判定・位置共有とは
+  // 分離し、ここでの例外や遅延が航行側へ波及しないようにする。
+  useEffect(() {
+    void evaluateTraffic() {
+      if (!enabled) return;
+      try {
+        final evaluation = trafficEvaluator.evaluate(
+          boats: otherBoats,
+          evaluatedAt: DateTime.now().toUtc(),
+          previousState: trafficState.value,
+          channelCenterline: channelCenterline,
+          laneResolver: channelLaneResolver,
+        );
+        trafficState.value = evaluation.nextState;
+        trafficSnapshot.value = evaluation.snapshot;
+      } catch (_) {
+        // 監視補助が失敗しても、既存の艇一覧・航跡・更新途絶監視を止めない。
+      }
+    }
+
+    if (!enabled) {
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+      return null;
+    }
+    evaluateTraffic();
+    trafficTimer.value?.cancel();
+    trafficTimer.value = Timer.periodic(const Duration(seconds: 1), (_) {
+      evaluateTraffic();
+    });
+    return () {
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+    };
+  }, [enabled, otherBoats, channelCenterline, channelLaneResolver]);
+
   return UseCoachWatch(
     anomalies: anomalies,
     boatStatuses: boatStatuses,
     trailPolylines: trailPolylines,
+    trafficSnapshot: trafficSnapshot,
   );
 }
 
@@ -285,10 +337,12 @@ class UseCoachWatch {
   final ValueNotifier<List<BoatAnomaly>> anomalies;
   final ValueNotifier<List<BoatStatus>> boatStatuses;
   final ValueNotifier<Set<Polyline>> trailPolylines;
+  final ValueNotifier<ObserverTrafficSnapshot> trafficSnapshot;
 
   UseCoachWatch({
     required this.anomalies,
     required this.boatStatuses,
     required this.trailPolylines,
+    required this.trafficSnapshot,
   });
 }

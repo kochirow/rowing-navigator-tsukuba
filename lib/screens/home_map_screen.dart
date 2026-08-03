@@ -21,7 +21,8 @@ import '../features/home_map/widgets/boat_list_panel.dart';
 import '../features/home_map/widgets/boat_status_card.dart';
 import '../features/home_map/widgets/background_location_disclosure_dialog.dart';
 import '../features/home_map/widgets/ashore_notice.dart';
-import '../features/home_map/widgets/coach_anomaly_chip.dart';
+import '../features/home_map/widgets/observer_priority_banner.dart';
+import '../features/home_map/widgets/observer_status_icon.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/map_type_switcher.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
@@ -159,6 +160,8 @@ class HomeMapScreen extends HookConsumerWidget {
       otherBoats: navigator.otherBoats.value,
       enabled: navigator.mode.value == NavMode.observer &&
           navigator.isWatching.value,
+      channelCenterline: navigator.channelCenterline.value,
+      channelLaneResolver: navigator.channelLaneResolver.value,
     );
     final practiceLogRecording = usePracticeLogRecording(
       enabled: navigator.mode.value == NavMode.observer &&
@@ -1244,16 +1247,39 @@ class HomeMapScreen extends HookConsumerWidget {
                                         ],
                                       ),
                                     ),
-                                  // 監視異常を小さく常時表示する。
-                                  // 詳細(艇名・継続時間)は艇一覧に出ており、
-                                  // タップでそこへ辿れる。
+                                  // 監視者が即時に読むべき逆走・対向接近だけを
+                                  // 地図上部に最大2本で表示する。既存衝突警報や
+                                  // 音声経路には接続しない。
                                   if (navigator.mode.value == NavMode.observer)
-                                    CoachAnomalyChip(
+                                    ObserverPriorityBanner(
+                                      snapshot:
+                                          coachWatch.trafficSnapshot.value,
+                                      onTapReverse: () {
+                                        showBoatList.value = true;
+                                        final boats = coachWatch
+                                            .trafficSnapshot.value.reverseBoats;
+                                        if (boats.isNotEmpty) {
+                                          unawaited(focusOnWatchedBoat(
+                                              boats.first.boatId));
+                                        }
+                                      },
+                                      onTapApproaching: () {
+                                        showBoatList.value = true;
+                                        final groups = coachWatch
+                                            .trafficSnapshot.value.groups;
+                                        if (groups.isNotEmpty &&
+                                            groups.first.boatIds.isNotEmpty) {
+                                          unawaited(focusOnWatchedBoat(
+                                              groups.first.boatIds.first));
+                                        }
+                                      },
+                                    ),
+                                  // 機能不全・停止・更新途絶は青いアイコンだけに
+                                  // 退避し、タップ後の艇一覧で内容を確認する。
+                                  if (navigator.mode.value == NavMode.observer)
+                                    ObserverStatusIcon(
                                       anomalies: coachWatch.anomalies.value,
                                       onTap: () => showBoatList.value = true,
-                                      onFocusBoat: (boatId) => unawaited(
-                                        focusOnWatchedBoat(boatId),
-                                      ),
                                     ),
                                   // 陸上と判定して警告音を止めている間は、
                                   // その事実を必ず画面へ出す。黙って音を
