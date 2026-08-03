@@ -130,7 +130,7 @@ const diagnosticEventCatalog = <String, dynamic>{
         'gps_dead_reckoning_prediction imuAssisted',
       ],
       'interpretation':
-          'GNSS艇速との差、1漕距離、キャッチ減速、終盤加速、艇速保持、信頼度を同じelapsedMsで比較する。IMU不能時はGNSS単独へ縮退していることも確認する。',
+          'GNSS艇速との差、ストローク距離、キャッチ減速、ドライブ後半加速、リカバリー保持、信頼度を同じelapsedMsで比較する。IMU不能時はGNSS単独へ縮退していることも確認する。',
     },
     {
       'id': 'H6_LOGGING_COMPLETENESS',
@@ -157,7 +157,7 @@ const diagnosticEventCatalog = <String, dynamic>{
         'GPS入力が短時間途絶した間、直前の速度・方位から不確実性を増やしつつ自艇位置と警告を予測した。航跡・位置共有には使用しない。',
     'gps_dead_reckoning_failed': '任意機能である短時間推測航法の計算または警告評価が失敗した。通常のGPS監視は継続する。',
     'stroke_motion_analyzed':
-        '直近の完全な1ストロークから、融合艇速・1漕距離・キャッチ減速・終盤加速・リカバリー艇速保持を算出した。実験指標であり技術評価を断定しない。',
+        '直近の完全な1ストロークから、融合艇速・ストローク距離・キャッチ減速・ドライブ後半加速・リカバリー保持を算出した。実験指標であり技術評価を断定しない。',
     'imu_fusion_health': '加速度・ジャイロのサンプル充足と融合信頼度を10秒ごとに記録する。',
     'imu_sensor_error': '加速度またはジャイロの購読失敗。GNSS単独経路へ縮退する。',
     'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。',

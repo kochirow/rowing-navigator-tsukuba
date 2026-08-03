@@ -623,7 +623,7 @@ void main() {
     expect(submittedName, '後藤');
   });
 
-  testWidgets('SPM・艇速分析は既定ONで航行開始へ渡せる', (tester) async {
+  testWidgets('レート・ストローク分析は既定ONで航行開始へ渡せる', (tester) async {
     useNavigationSettingsViewport(tester);
     bool? submittedStrokeRateEnabled;
     bool? submittedStrokeMotionDisplayEnabled;
@@ -643,11 +643,11 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('SPM・艇速変化を計測する'));
+    await tester.ensureVisible(find.text('レート(SPM)・ストロークの艇速変化を計測する'));
     await tester.pumpAndSettle();
-    expect(find.text('SPM・艇速分析'), findsOneWidget);
+    expect(find.text('レート(SPM)・ストローク分析'), findsOneWidget);
     expect(find.textContaining('艇にスマホを固定して使用'), findsOneWidget);
-    expect(find.text('1ストロークの艇速分析を表示'), findsOneWidget);
+    expect(find.text('1ストロークの艇速変化を表示'), findsOneWidget);
 
     await tester.ensureVisible(find.text('航行スタート'));
     await tester.pumpAndSettle();
@@ -657,7 +657,7 @@ void main() {
     expect(submittedStrokeMotionDisplayEnabled, isFalse);
   });
 
-  testWidgets('1ストローク艇速分析は開始前に表示ONを選べる', (tester) async {
+  testWidgets('1ストロークの艇速変化は開始前に表示ONを選べる', (tester) async {
     useNavigationSettingsViewport(tester);
     bool? submitted;
     await tester.pumpWidget(
@@ -675,7 +675,7 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    final displayOption = find.text('1ストロークの艇速分析を表示');
+    final displayOption = find.text('1ストロークの艇速変化を表示');
     await tester.ensureVisible(displayOption);
     await tester.pumpAndSettle();
     await tester.tap(displayOption);

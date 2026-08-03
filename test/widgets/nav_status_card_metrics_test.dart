@@ -131,11 +131,14 @@ void main() {
 
     expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
     // 値はラベルと数値に分けて並べる。符号を隠さない。
+    // ラベルは競技の用語(キャッチ・ドライブ・リカバリー)に揃える。
+    expect(find.text('1ストローク'), findsOneWidget);
+    expect(find.text('10.2m'), findsOneWidget);
     expect(find.text('キャッチ減速'), findsOneWidget);
     expect(find.text('−0.31'), findsOneWidget);
-    expect(find.text('艇速保持'), findsOneWidget);
+    expect(find.text('リカバリー保持'), findsOneWidget);
     expect(find.text('84%'), findsOneWidget);
-    expect(find.text('終盤加速'), findsOneWidget);
+    expect(find.text('ドライブ後半加速'), findsOneWidget);
     expect(find.text('+0.18'), findsOneWidget);
 
     await pumpCard(tester, strokeMotion: metrics);
@@ -179,16 +182,16 @@ void main() {
     expect(analysisY, lessThan(distanceY));
   });
 
-  testWidgets('終盤失速は符号ごとラベルを切り替えて出す', (tester) async {
+  testWidgets('ドライブ後半の失速は符号ごとラベルを切り替えて出す', (tester) async {
     await pumpCard(
       tester,
       strokeMotion: _metrics(lateDriveSpeedGainMetersPerSecond: -0.22),
       showStrokeMotion: true,
     );
 
-    expect(find.text('終盤失速'), findsOneWidget);
+    expect(find.text('ドライブ後半失速'), findsOneWidget);
     expect(find.text('−0.22'), findsOneWidget);
-    expect(find.text('終盤加速'), findsNothing);
+    expect(find.text('ドライブ後半加速'), findsNothing);
   });
 
   testWidgets('解析が確定する前でもグラフの枠は出す(壊れて見せない)', (tester) async {

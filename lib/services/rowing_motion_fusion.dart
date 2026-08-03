@@ -49,16 +49,16 @@ class RowingMotionMetrics {
   final double fusedSpeedAccuracyMetersPerSecond;
   final double? fusedHeadingDegrees;
 
-  /// 直近1ストロークで進んだ距離。GPS低周波艇速とIMU内速度変動の積分値。
+  /// 1ストロークで進んだ距離。GPS低周波艇速とIMU内速度変動の積分値。
   final double distancePerStrokeMeters;
 
   /// キャッチ直後の最大艇速低下量。
   final double catchSpeedLossMetersPerSecond;
 
-  /// ドライブ中盤から推定フィニッシュまでの艇速増加量。
+  /// ドライブ後半(中盤から推定フィニッシュまで)の艇速増加量。負なら失速。
   final double lateDriveSpeedGainMetersPerSecond;
 
-  /// フィニッシュの艇速を次のキャッチまで何割保ったか。0〜1。
+  /// フィニッシュの艇速を、リカバリーを挟んで次のキャッチまで何割保ったか。0〜1。
   final double recoverySpeedRetention;
 
   final double strokeSpeedRangeMetersPerSecond;
@@ -338,7 +338,7 @@ class RowingMotionFusion {
     final range =
         relativeVelocity.reduce(math.max) - relativeVelocity.reduce(math.min);
     final catchLoss = math.max(0.0, relativeVelocity.first - catchMinimum);
-    // 負値は隠さず「終盤失速」としてUIへ渡す。
+    // 負値は隠さず「ドライブ後半失速」としてUIへ渡す。
     final lateDriveGain = finishVelocity - relativeVelocity[middleIndex];
     final recoveryRetention = range <= 0.05
         ? 1.0
@@ -429,7 +429,7 @@ class RowingMotionFusion {
   /// 直近の完全な1ストロークを、監視端末へ送れる形へまとめる。
   ///
   /// 波形が切り出せない(欠測・軸未確定)ときは null を返す。
-  /// 平均艇速は1漕距離÷周期で、そのストロークの実測平均になる。
+  /// 平均艇速はストローク距離÷周期で、そのストロークの実測平均になる。
   SharedStrokeTrace? buildSharedStrokeTrace(RowingMotionMetrics metrics) {
     if (!_traceEnabled) return null;
     if (metrics.strokeDurationSeconds <= 0) return null;

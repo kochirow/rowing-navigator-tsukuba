@@ -8,6 +8,10 @@ import '../../../theme/app_theme.dart';
 ///
 /// グラフが「形」を見せ、ここが「量」を見せる。**良い・悪いは断定しない**
 /// (設計メモ 2026-08-03 の安全設計8)。色分けもしない。値が読めれば足りる。
+///
+/// ラベルは競技の用語に揃える。キャッチ(入水)・ドライブ(押している間)・
+/// フィニッシュ(抜水)・リカバリー(戻し)は、漕手が普段そのまま使う言葉で、
+/// 別の言い方にすると指標がどの局面の話か分からなくなる。
 class StrokeMetricsChips extends StatelessWidget {
   final double distancePerStrokeMeters;
   final double catchSpeedLossMetersPerSecond;
@@ -52,20 +56,20 @@ class StrokeMetricsChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final base = onDarkSurface ? colors.onDark : colors.textPrimary;
-    // 終盤は加速と失速の両方が起こる。符号を隠さずラベルごと切り替える。
+    // ドライブ後半は加速と失速の両方が起こる。符号を隠さずラベルを切り替える。
     final lateDrivePositive = lateDriveSpeedGainMetersPerSecond >= 0;
     final items = <_ChipData>[
-      _ChipData('1漕', '${distancePerStrokeMeters.toStringAsFixed(1)}m'),
+      _ChipData('1ストローク', '${distancePerStrokeMeters.toStringAsFixed(1)}m'),
       _ChipData(
         'キャッチ減速',
         '−${catchSpeedLossMetersPerSecond.toStringAsFixed(2)}',
       ),
       _ChipData(
-        lateDrivePositive ? '終盤加速' : '終盤失速',
+        lateDrivePositive ? 'ドライブ後半加速' : 'ドライブ後半失速',
         '${lateDrivePositive ? '+' : '−'}'
             '${lateDriveSpeedGainMetersPerSecond.abs().toStringAsFixed(2)}',
       ),
-      _ChipData('艇速保持', '${(recoverySpeedRetention * 100).round()}%'),
+      _ChipData('リカバリー保持', '${(recoverySpeedRetention * 100).round()}%'),
     ];
 
     return Wrap(

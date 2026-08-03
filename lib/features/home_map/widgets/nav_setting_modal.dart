@@ -336,7 +336,7 @@ class NavSettingModal extends HookConsumerWidget {
               const SizedBox(height: 24),
               _sectionTitle(
                 context,
-                'SPM・艇速分析',
+                'レート(SPM)・ストローク分析',
                 '艇にスマホを固定して使用・電池残量が少ない場合はオフ推奨',
               ),
               const SizedBox(height: 8),
@@ -345,7 +345,7 @@ class NavSettingModal extends HookConsumerWidget {
                 child: SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    'SPM・艇速変化を計測する',
+                    'レート(SPM)・ストロークの艇速変化を計測する',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   secondary: Icon(
@@ -370,7 +370,7 @@ class NavSettingModal extends HookConsumerWidget {
                   child: SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(
-                      '1ストロークの艇速分析を表示',
+                      '1ストロークの艇速変化を表示',
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),

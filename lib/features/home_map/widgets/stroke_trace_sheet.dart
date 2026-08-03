@@ -107,7 +107,7 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
     if (_history.isStale(_now)) {
       return '${age.inSeconds}秒前を最後に途絶';
     }
-    return '${age.inSeconds}秒前の漕ぎ';
+    return '${age.inSeconds}秒前のストローク';
   }
 
   @override
@@ -206,7 +206,7 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
               ),
             const SizedBox(height: 12),
             Text(
-              '縦軸が艇速、横軸が時間。細い縦線がキャッチで、'
+              '縦軸が艇速、横軸が時間。細い縦線がキャッチ(入水)で、'
               '直近2ストロークぶんが表示されます。',
               style: TextStyle(fontSize: 12, color: colors.textSecondary),
             ),

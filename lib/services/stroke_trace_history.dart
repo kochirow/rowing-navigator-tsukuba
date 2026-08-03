@@ -49,7 +49,7 @@ class StrokeTraceHistory {
   /// 最後に受け取った波形の末尾が、いま何秒前のものか。
   ///
   /// 送信端末とこの端末の時計ずれを含まないよう、受信時刻からの経過だけで
-  /// 測る。監視画面には「◯秒前の漕ぎ」としてそのまま出す。
+  /// 測る。監視画面には「◯秒前のストローク」としてそのまま出す。
   Duration? ageSince(DateTime now) {
     final receivedAt = _lastReceivedAt;
     if (receivedAt == null) return null;
