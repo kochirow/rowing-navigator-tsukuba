@@ -203,13 +203,13 @@ class HomeMapScreen extends HookConsumerWidget {
     final showDeveloperSafetyShapeOverlay = useState(false);
     // 計測と表示を分離する。表示OFFでもIMU融合とログは継続する。
     final strokeMotionDisplayEnabled = useState(false);
-    // 監視端末への共有は表示とさらに独立。手元に出さずに共有だけ、も選べる。
-    final strokeTraceSharingEnabled = useState(true);
     useStrokeTraceSharing(
+      // 監視への共有は計測と一体で、切替を持たない。オプションにするのは
+      // 「自分の画面に出すか」だけ。共有先は位置共有と同じチーム内で、
+      // 増える転送量は位置の1/20未満(2026-08-03 設計メモ)。
       // 共有は安全経路の外側。ここが失敗しても位置共有・警告は動き続ける。
       enabled: navigator.mode.value == NavMode.navigator &&
-          (navigator.config.value?.strokeRateEnabled ?? false) &&
-          strokeTraceSharingEnabled.value,
+          (navigator.config.value?.strokeRateEnabled ?? false),
       boatId: navigator.config.value?.boatId,
       trace: navigator.latestStrokeTrace,
     );
@@ -492,30 +492,6 @@ class HomeMapScreen extends HookConsumerWidget {
                   .saveStrokeMotionDisplayEnabled(next)
                   .catchError((Object error) {
                 debugPrint('Failed to save stroke analysis display: $error');
-              }),
-            );
-          },
-        ),
-        MapMenuAction(
-          icon: strokeTraceSharingEnabled.value
-              ? Icons.share
-              : Icons.share_outlined,
-          title: '艇速変化を監視へ共有',
-          subtitle: isObserver
-              ? '航行中の艇の設定です'
-              : strokeTraceSharingEnabled.value
-                  ? '共有中・タップで停止'
-                  : '停止中・タップで共有',
-          enabled: !isObserver,
-          disabledReason: '航行中の艇の設定です',
-          onTap: () {
-            final next = !strokeTraceSharingEnabled.value;
-            strokeTraceSharingEnabled.value = next;
-            unawaited(
-              navigationDefaults
-                  .saveStrokeTraceSharingEnabled(next)
-                  .catchError((Object error) {
-                debugPrint('Failed to save stroke trace sharing: $error');
               }),
             );
           },
@@ -1827,8 +1803,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   },
                                                   onPressStartNav: (displayName,
                                                       strokeRateEnabled,
-                                                      showStrokeMotion,
-                                                      shareStrokeMotion) async {
+                                                      showStrokeMotion) async {
                                                     if (!navMap.isReady.value) {
                                                       ScaffoldMessenger.of(
                                                               context)
@@ -1878,10 +1853,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                               .value =
                                                           strokeRateEnabled &&
                                                               showStrokeMotion;
-                                                      strokeTraceSharingEnabled
-                                                              .value =
-                                                          strokeRateEnabled &&
-                                                              shareStrokeMotion;
                                                       try {
                                                         await navigator
                                                             .startNavigation(

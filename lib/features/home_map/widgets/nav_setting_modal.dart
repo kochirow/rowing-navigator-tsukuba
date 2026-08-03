@@ -22,7 +22,6 @@ class NavSettingModal extends HookConsumerWidget {
     String displayName,
     bool strokeRateEnabled,
     bool strokeMotionDisplayEnabled,
-    bool strokeTraceSharingEnabled,
   ) onPressStartNav;
   final Future<void> Function()? onPressTestAudio;
 
@@ -87,7 +86,6 @@ class NavSettingModal extends HookConsumerWidget {
     final nameError = useState<String?>(null);
     final strokeRateEnabled = useState(true);
     final strokeMotionDisplayEnabled = useState(false);
-    final strokeTraceSharingEnabled = useState(true);
     final isStarting = useState(false);
     final defaultsService = useMemoized(NavigationDefaultsService.new);
     // 前回設定を復元できたかどうか。復元できたときだけ、スクロールなしで
@@ -112,7 +110,6 @@ class NavSettingModal extends HookConsumerWidget {
           strokeRateEnabled.value = defaults.strokeRateEnabled;
           strokeMotionDisplayEnabled.value =
               defaults.strokeMotionDisplayEnabled;
-          strokeTraceSharingEnabled.value = defaults.strokeTraceSharingEnabled;
           ref.read(boatTypeProvider.notifier).state = defaults.boatType;
           ref.read(seatPositionProvider.notifier).state = seat;
           restoredSummary.value =
@@ -150,7 +147,6 @@ class NavSettingModal extends HookConsumerWidget {
             seatPosition: seatPosision.position,
             strokeRateEnabled: strokeRateEnabled.value,
             strokeMotionDisplayEnabled: strokeMotionDisplayEnabled.value,
-            strokeTraceSharingEnabled: strokeTraceSharingEnabled.value,
           )
               .catchError((Object error) {
             debugPrint('Failed to save navigation defaults: $error');
@@ -160,7 +156,6 @@ class NavSettingModal extends HookConsumerWidget {
           displayName,
           strokeRateEnabled.value,
           strokeMotionDisplayEnabled.value,
-          strokeTraceSharingEnabled.value,
         );
       } finally {
         if (context.mounted) isStarting.value = false;
@@ -386,31 +381,6 @@ class NavSettingModal extends HookConsumerWidget {
                     onChanged: isStarting.value || !strokeRateEnabled.value
                         ? null
                         : (value) => strokeMotionDisplayEnabled.value = value,
-                  ),
-                ),
-              ),
-              // 共有は表示とは独立にする。自分の画面に出さなくても監視には
-              // 出したい(逆もある)。艇上では端末を触れないため、
-              // どちらも出艇前にここで決められるようにしておく。
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: strokeRateEnabled.value ? 1 : 0.45,
-                child: Material(
-                  color: Colors.transparent,
-                  child: SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      '監視の端末へ艇速変化を共有',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text('監視者が艇を選んだときだけグラフを見られます'),
-                    secondary: const Icon(Icons.share_outlined),
-                    value:
-                        strokeRateEnabled.value && strokeTraceSharingEnabled.value,
-                    onChanged: isStarting.value || !strokeRateEnabled.value
-                        ? null
-                        : (value) => strokeTraceSharingEnabled.value = value,
                   ),
                 ),
               ),

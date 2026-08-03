@@ -201,8 +201,7 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
               StrokeMetricsChips.fromSharedTrace(latest)
             else
               Text(
-                '艇側で「SPM・艇速変化を計測する」と「監視へ共有する」が'
-                'ONのときだけ表示できます。',
+                '艇側で「SPM・艇速変化を計測する」がONのときだけ表示できます。',
                 style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
             const SizedBox(height: 12),
