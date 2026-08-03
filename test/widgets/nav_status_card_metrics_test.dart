@@ -96,6 +96,28 @@ void main() {
     expect(spm.right - pace.left, greaterThan(card.width * 0.8));
   });
 
+  testWidgets('主計器は黒で縁取る(半透明カードの上で白文字が溶けない)', (tester) async {
+    await pumpCard(tester, portraitCompact: true);
+
+    for (final text in ['2:00', '24']) {
+      final shadows = tester.widget<Text>(find.text(text)).style!.shadows!;
+      // ぼかさない黒を放射状に置いて輪郭を切る。方向数は縁の太さから
+      // 決まる(8方向のまま太くすると角が多角形に見える)ので、
+      // 大きな主計器では8より多くなければならない。
+      expect(
+        shadows.where((s) => s.blurRadius == 0).length,
+        greaterThan(8),
+        reason: '$text の縁取りが粗い(角が多角形に見える)',
+      );
+      // その下に明るいにじみを1枚。暗い下地では黒の縁が沈むため、
+      // 明暗どちらの背景でもどこかの層が対比を作れるようにしている。
+      final glow = shadows.first;
+      expect(glow.blurRadius, greaterThan(0));
+      expect(glow.color.computeLuminance(), greaterThan(0.5),
+          reason: '明るいにじみが最下層に無い');
+    }
+  });
+
   testWidgets('横向き小型でもSPMを消さない', (tester) async {
     await pumpCard(tester, compact: true);
 

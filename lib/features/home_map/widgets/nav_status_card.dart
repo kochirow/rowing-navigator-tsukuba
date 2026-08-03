@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../services/rowing_motion_fusion.dart';
@@ -236,10 +238,14 @@ class NavStatusCard extends StatelessWidget {
   /// 拡大するので、実際の文字サイズは「カード幅 ÷ この組の基準幅」で決まる。
   /// ここの値どうしの比だけが見た目を決める。単位を小さくすると
   /// そのぶん数字が大きくなる。
+  ///
+  /// レートはペースの約77%(ペース80pxならレート62px)。レートは2桁固定で
+  /// 幅が出ないため、同じ比でも小さく見える。かといって近づけすぎると
+  /// 「主計器が2つある」ように見えて、視線がどちらへ行くか決まらない。
   static const double _paceBaseFontSize = 92;
-  static const double _paceUnitBaseFontSize = 20;
-  static const double _spmBaseFontSize = 62;
-  static const double _spmUnitBaseFontSize = 18;
+  static const double _paceUnitBaseFontSize = 18;
+  static const double _spmBaseFontSize = 71;
+  static const double _spmUnitBaseFontSize = 16;
 
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
@@ -247,14 +253,75 @@ class NavStatusCard extends StatelessWidget {
   /// 縦向きカードが使う画面幅の割合。
   static const double _portraitWidthFactor = 0.9;
 
-  /// 半透明カードの上でも数字を読ませるための影。
+  /// 縁取り(キーライン)の色。
   ///
-  /// 地図が透けるぶん、白文字が白い建物・水面の上に乗ることがある。
-  /// 縁取り(Stackで2枚描く)より安いぼかし影2枚で輪郭を作る。
-  static const List<Shadow> _textHalo = [
-    Shadow(color: Color(0xE6000000), blurRadius: 3),
-    Shadow(color: Color(0xB3000000), blurRadius: 9),
-  ];
+  /// **わずかに暖色へ振った不透明の黒。** カードの面はどれも寒色の紺
+  /// (`panelScrim` = #002E4D 系)なので、同じ寒色の黒だと面と同系色に
+  /// なって縁が沈む。暖色側へ寄せると、明度差だけでなく色相差でも
+  /// 分離するため、暗い面の上でも縁が縁として見える。
+  static const Color _outlineColor = Color(0xFF120A04);
+
+  /// 縁取りの太さ(文字サイズに対する比)。
+  ///
+  /// [FittedBox] が文字ごと縮小するので、比で持たないと縮小時に
+  /// 縁だけが相対的に太くなって数字が潰れる。
+  static const double _outlineWidthRatio = 0.08;
+
+  /// 白文字を「明るいにじみ + 黒のキーライン」の二重で縁取る影。
+  ///
+  /// **黒一色の縁取りだけでは足りない。** このカードは半透明なので、
+  /// 文字の背後には「濃色の面」と「透けた地図」が混在する。
+  ///   - 地図が明るいとき(白い建物・空・砂地): 黒の縁が効く
+  ///   - 面が暗いとき・夕暮れの水面: 黒の縁は背景に沈んで見えない
+  ///
+  /// そこで字幕やコミックの組版で使う二重縁取りを使う。
+  ///   1. いちばん下に**明るいにじみ**を広めに敷く
+  ///   2. その上に**ぼかさない黒**を8方向へ置いてキーラインを作る
+  ///   3. いちばん上が白い字面
+  ///
+  /// 黒のキーラインが明るいにじみの内側を覆うので、実際に見えるのは
+  /// 「白い字 → 黒い細線 → ほのかな明るい縁」の三層になる。
+  /// 背景が明るければ黒線が、暗ければ明るい縁が効く。どちらの下地でも
+  /// 必ずどこかの層が対比を作るのがこの積み方の要点。
+  ///
+  /// 影は list の先頭から順に描かれ、字面はいちばん最後に乗る。
+  /// **順番を入れ替えないこと。** 黒を先に置くとにじみが黒を覆い、
+  /// 単に眠い文字になる。
+  ///
+  /// なお文字を2枚重ねる(`PaintingStyle.stroke` + 塗り)方式は使わない。
+  /// Textが1つのままならベースライン揃えも寸法も変わらないため。
+  ///
+  /// **方向の数は縁の太さから決める(重要)。** この方式の輪郭は
+  /// 「字を N 方向へずらした複製の和」なので、字の角は半径 d の正N角形に
+  /// なる。8方向のままキーラインを太くすると、角が目に見える多角形に
+  /// なって「フォントがギザギザ」に見える。1辺の長さは
+  /// `2*d*sin(π/N)` なので、これが約1px以下に収まる N を選ぶ。
+  static List<Shadow> _outlineShadows(double fontSize) {
+    final d = fontSize * _outlineWidthRatio;
+    // 1辺 ≒ 1px 以下。細い縁では8方向で十分(描画回数を無駄にしない)。
+    final steps =
+        d <= 1.5 ? 8 : (math.pi / math.asin(0.5 / d)).ceil().clamp(8, 32);
+    return [
+      // 1. 明るいにじみ。暗い下地に対して字の塊を浮かせる。
+      //    強くするとカードの上で灰色のもやに見えるので控えめに。
+      Shadow(
+        color: const Color(0x40C8E8F7),
+        blurRadius: fontSize * 0.18,
+      ),
+      // 2. 黒のキーライン。明るい下地に対して輪郭を切る。
+      for (var i = 0; i < steps; i++)
+        Shadow(
+          color: _outlineColor,
+          offset: Offset(
+            d * math.cos(2 * math.pi * i / steps),
+            d * math.sin(2 * math.pi * i / steps),
+          ),
+        ),
+    ];
+  }
+
+  /// 補助情報(距離・経過時間・アイコン)用。文字が小さいので比ではなく実寸。
+  static final List<Shadow> _smallOutlineShadows = _outlineShadows(14);
 
   Widget _buildCompact({
     required AppColors colors,
@@ -322,7 +389,7 @@ class NavStatusCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           // 地図と他艇が透けて見える程度に薄くする。文字側は影で輪郭を作る
-          // (`_textHalo`)ので、面を濃くして読ませる必要がない。
+          // (`_outlineShadows`)ので、面を濃くして読ませる必要がない。
           color: colors.mapPanelScrim.withValues(alpha: 0.42),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
@@ -344,6 +411,7 @@ class NavStatusCard extends StatelessWidget {
             // ペースとレートを1つの FittedBox に入れ、カード幅いっぱいまで
             // 拡大する。2つを別々に縮小すると、間に無駄な余白が空いたまま
             // 数字だけが小さいという最悪の組合せになる。
+            //
             SizedBox(
               width: double.infinity,
               child: FittedBox(
@@ -362,7 +430,7 @@ class NavStatusCard extends StatelessWidget {
                         height: 1,
                         fontWeight: FontWeight.bold,
                         fontFeatures: _tabularFigures,
-                        shadows: _textHalo,
+                        shadows: _outlineShadows(_paceBaseFontSize),
                       ),
                     ),
                     Text(
@@ -370,7 +438,8 @@ class NavStatusCard extends StatelessWidget {
                       style: TextStyle(
                         color: onDarkSub,
                         fontSize: _paceUnitBaseFontSize,
-                        shadows: _textHalo,
+                        fontWeight: FontWeight.w600,
+                        shadows: _outlineShadows(_paceUnitBaseFontSize),
                       ),
                     ),
                     if (spmMeasurementEnabled) ...[
@@ -384,7 +453,7 @@ class NavStatusCard extends StatelessWidget {
                           height: 1,
                           fontWeight: FontWeight.bold,
                           fontFeatures: _tabularFigures,
-                          shadows: _textHalo,
+                          shadows: _outlineShadows(_spmBaseFontSize),
                         ),
                       ),
                       Text(
@@ -392,7 +461,8 @@ class NavStatusCard extends StatelessWidget {
                         style: TextStyle(
                           color: onDarkSub,
                           fontSize: _spmUnitBaseFontSize,
-                          shadows: _textHalo,
+                          fontWeight: FontWeight.w600,
+                          shadows: _outlineShadows(_spmUnitBaseFontSize),
                         ),
                       ),
                     ],
@@ -406,7 +476,8 @@ class NavStatusCard extends StatelessWidget {
                 metrics: strokeMotion,
                 windowBuilder: strokeTraceWindowBuilder,
                 // 横向き・縦向き縮小時は地図の面積を優先し、グラフだけ残す。
-                chartHeight: 54,
+                // 波形の上下が読める下限として65px(従来54pxから約2割増)。
+                chartHeight: 65,
                 compact: true,
               ),
             ],
@@ -506,14 +577,16 @@ class _StrokeMotionSectionState extends State<_StrokeMotionSection> {
                               ? Icons.expand_less
                               : Icons.expand_more,
                           size: 14,
-                          color: onDark.withValues(alpha: 0.6),
+                          color: onDark.withValues(alpha: 0.85),
+                          shadows: NavStatusCard._smallOutlineShadows,
                         ),
                         Text(
                           '分析',
                           style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: onDark.withValues(alpha: 0.6),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: onDark.withValues(alpha: 0.85),
+                            shadows: NavStatusCard._smallOutlineShadows,
                           ),
                         ),
                       ],
@@ -580,7 +653,7 @@ class _CompactMetric extends StatelessWidget {
           icon,
           size: 14,
           color: onDark.withValues(alpha: 0.8),
-          shadows: NavStatusCard._textHalo,
+          shadows: NavStatusCard._smallOutlineShadows,
         ),
         const SizedBox(width: 4),
         Flexible(
@@ -594,7 +667,7 @@ class _CompactMetric extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.bold,
               fontFeatures: NavStatusCard._tabularFigures,
-              shadows: NavStatusCard._textHalo,
+              shadows: NavStatusCard._smallOutlineShadows,
             ),
           ),
         ),

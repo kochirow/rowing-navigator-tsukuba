@@ -119,6 +119,11 @@ class _StrokeSpeedChartState extends State<StrokeSpeedChart>
             plotBackground: widget.onDarkSurface
                 ? Colors.black.withValues(alpha: 0.42)
                 : foreground.withValues(alpha: 0.06),
+            // 線の縁取りは下地の反対色。濃色スクリムでは黒、
+            // 明色カード(監視シート)では白で縁を取る。
+            lineOutline: widget.onDarkSurface
+                ? const Color(0xCC000000)
+                : const Color(0xE6FFFFFF),
             emptyLabel: widget.emptyLabel,
             textDirection: Directionality.of(context),
           ),
@@ -169,6 +174,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
   final Color foreground;
   final Color accent;
   final Color plotBackground;
+  final Color lineOutline;
   final String emptyLabel;
   final TextDirection textDirection;
 
@@ -177,6 +183,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     required this.foreground,
     required this.accent,
     required this.plotBackground,
+    required this.lineOutline,
     required this.emptyLabel,
     required this.textDirection,
   }) : super(repaint: model);
@@ -211,7 +218,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
 
     // ---- キャッチ(ストローク境界) ----
     final catchPaint = Paint()
-      ..color = foreground.withValues(alpha: 0.28)
+      ..color = foreground.withValues(alpha: 0.34)
       ..strokeWidth = 1;
     for (final catchMs in window.catchTimesMs) {
       final x = dx(catchMs);
@@ -265,12 +272,24 @@ class _StrokeSpeedChartPainter extends CustomPainter {
           ],
         ),
     );
+    // 波形は2度描く。**下に暗い縁、上に本線。**
+    // 半透明カードの上では、明るい水面や建物の色と艇速の線が同系色に
+    // なることがある。縁取りを敷くと、下地が何色でも線の形が残る。
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = lineOutline
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5.4
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
     canvas.drawPath(
       line,
       Paint()
         ..color = accent
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
+        ..strokeWidth = 3
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round,
     );
@@ -281,13 +300,18 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     final headY = dy(window.speeds[window.length - 1]);
     canvas.drawCircle(
       Offset(lastX, headY),
-      3.2,
-      Paint()..color = accent,
+      6.5,
+      Paint()..color = accent.withValues(alpha: 0.22),
     );
     canvas.drawCircle(
       Offset(lastX, headY),
-      6.5,
-      Paint()..color = accent.withValues(alpha: 0.22),
+      4.6,
+      Paint()..color = lineOutline,
+    );
+    canvas.drawCircle(
+      Offset(lastX, headY),
+      3.2,
+      Paint()..color = accent,
     );
 
     canvas.restore();
@@ -305,15 +329,31 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     );
   }
 
+  /// 目盛り・注記用の縁取り。計器カードの縁取りより弱い簡易版で足りる
+  /// (小さい文字は8方向でも角の多角形が目に見えない)。
+  static const _labelShadows = <Shadow>[
+    Shadow(color: Color(0xE6000000), offset: Offset(-1, 0)),
+    Shadow(color: Color(0xE6000000), offset: Offset(1, 0)),
+    Shadow(color: Color(0xE6000000), offset: Offset(0, -1)),
+    Shadow(color: Color(0xE6000000), offset: Offset(0, 1)),
+    Shadow(color: Color(0xE6000000), offset: Offset(-0.7, -0.7)),
+    Shadow(color: Color(0xE6000000), offset: Offset(0.7, -0.7)),
+    Shadow(color: Color(0xE6000000), offset: Offset(-0.7, 0.7)),
+    Shadow(color: Color(0xE6000000), offset: Offset(0.7, 0.7)),
+  ];
+
   void _paintScaleLabel(Canvas canvas, Offset topRight, String text) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: foreground.withValues(alpha: 0.62),
+          color: foreground.withValues(alpha: 0.85),
           fontSize: 10,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           fontFeatures: const [FontFeature.tabularFigures()],
+          // 目盛りはグラフの下地の外(右肩)にも掛かる。地図が透ける
+          // ぶん、影が無いと白い建物の上で消える。
+          shadows: _labelShadows,
         ),
       ),
       textDirection: textDirection,
@@ -326,9 +366,10 @@ class _StrokeSpeedChartPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: foreground.withValues(alpha: 0.6),
+          color: foreground.withValues(alpha: 0.85),
           fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
+          shadows: _labelShadows,
         ),
       ),
       textDirection: textDirection,
@@ -347,5 +388,6 @@ class _StrokeSpeedChartPainter extends CustomPainter {
       oldDelegate.foreground != foreground ||
       oldDelegate.accent != accent ||
       oldDelegate.plotBackground != plotBackground ||
+      oldDelegate.lineOutline != lineOutline ||
       oldDelegate.emptyLabel != emptyLabel;
 }
