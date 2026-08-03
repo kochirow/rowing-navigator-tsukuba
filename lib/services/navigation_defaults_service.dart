@@ -7,12 +7,14 @@ class NavigationDefaults {
   final BoatType boatType;
   final int seatPosition;
   final bool strokeRateEnabled;
+  final bool strokeMotionDisplayEnabled;
 
   const NavigationDefaults({
     required this.displayName,
     required this.boatType,
     required this.seatPosition,
     required this.strokeRateEnabled,
+    required this.strokeMotionDisplayEnabled,
   });
 }
 
@@ -26,6 +28,8 @@ class NavigationDefaultsService {
   static const _boatTypeKey = 'navigation_boat_type_v1';
   static const _seatPositionKey = 'navigation_seat_position_v1';
   static const _strokeRateEnabledKey = 'navigation_stroke_rate_enabled_v1';
+  static const _strokeMotionDisplayEnabledKey =
+      'navigation_stroke_motion_display_enabled_v1';
 
   Future<NavigationDefaults?> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -53,6 +57,9 @@ class NavigationDefaultsService {
       // 未保存の端末ではSPM(レート)計測を既定で有効にする。
       // 明示的にオフを保存した利用者の選択は維持する。
       strokeRateEnabled: prefs.getBool(_strokeRateEnabledKey) ?? true,
+      // 艇速分析は補助表示なので、未選択の端末では表示しない。
+      strokeMotionDisplayEnabled:
+          prefs.getBool(_strokeMotionDisplayEnabledKey) ?? false,
     );
   }
 
@@ -61,6 +68,7 @@ class NavigationDefaultsService {
     required BoatType boatType,
     required int seatPosition,
     bool strokeRateEnabled = true,
+    bool strokeMotionDisplayEnabled = false,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await Future.wait([
@@ -68,6 +76,16 @@ class NavigationDefaultsService {
       prefs.setString(_boatTypeKey, boatType.name),
       prefs.setInt(_seatPositionKey, seatPosition),
       prefs.setBool(_strokeRateEnabledKey, strokeRateEnabled),
+      prefs.setBool(
+        _strokeMotionDisplayEnabledKey,
+        strokeMotionDisplayEnabled,
+      ),
     ]);
+  }
+
+  /// 航行中の表示切替だけを保存する。計測のON/OFFは変えない。
+  Future<void> saveStrokeMotionDisplayEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_strokeMotionDisplayEnabledKey, enabled);
   }
 }

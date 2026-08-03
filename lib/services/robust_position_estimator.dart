@@ -194,6 +194,9 @@ class RobustPositionEstimator {
     required Duration elapsed,
     Duration? maxPredictionGap,
     double? strokeRateSpm,
+    double? motionSpeedMetersPerSecond,
+    double? motionHeadingDegrees,
+    double? motionSpeedAccuracyMetersPerSecond,
   }) {
     final lastElapsed = _lastElapsed;
     final lastMeasurementElapsed = _lastIntegratedMeasurementElapsed;
@@ -207,6 +210,18 @@ class RobustPositionEstimator {
     final limit = maxPredictionGap ?? maximumPredictionGap;
     if (limit <= Duration.zero || elapsed - lastMeasurementElapsed > limit) {
       return null;
+    }
+    final motionVelocity = _velocityObservation(
+      speedMetersPerSecond: motionSpeedMetersPerSecond,
+      headingDegrees: motionHeadingDegrees,
+      speedAccuracyMetersPerSecond: motionSpeedAccuracyMetersPerSecond,
+      headingAccuracyDegrees: 12,
+    );
+    if (motionVelocity != null) {
+      // IMUは絶対位置を作らず、短いGNSS空白中の速度・相対方位だけを
+      // 控えめな分散付き観測として使う。失敗時は従来の等速予測へ戻る。
+      _updateEastVelocity(motionVelocity.east, motionVelocity.variance);
+      _updateNorthVelocity(motionVelocity.north, motionVelocity.variance);
     }
     final deltaSeconds =
         (elapsed - lastElapsed).inMicroseconds / Duration.microsecondsPerSecond;

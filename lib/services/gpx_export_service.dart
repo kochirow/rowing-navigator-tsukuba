@@ -92,7 +92,7 @@ class GpxExportService {
     );
     final fixedObstacleProfile = settings.remove('fixedObstacleProfile');
     final manifest = <String, dynamic>{
-      'diagnosticPackageSchemaVersion': 3,
+      'diagnosticPackageSchemaVersion': 4,
       'diagnosticEventSchemaVersion': diagnosticEventSchemaVersion,
       'diagnosticCatalogVersion': diagnosticCatalogVersion,
       'sessionSchemaVersion': session.schemaVersion,
@@ -164,6 +164,13 @@ class GpxExportService {
         'position_filter_result',
         'estimate_uncertainty_m',
         'estimate_innovation_m',
+        'raw_gnss_speed_mps',
+        'imu_confidence',
+        'imu_quality',
+        'distance_per_stroke_m',
+        'catch_speed_loss_mps',
+        'late_drive_speed_gain_mps',
+        'recovery_speed_retention',
         'spm',
         'safety_level',
       ].join(','));
@@ -184,6 +191,13 @@ class GpxExportService {
         point.positionFilterResult ?? '',
         point.estimateUncertaintyMeters ?? '',
         point.estimateInnovationMeters ?? '',
+        point.rawGnssSpeedMetersPerSecond ?? '',
+        point.imuConfidence ?? '',
+        point.imuQuality ?? '',
+        point.distancePerStrokeMeters ?? '',
+        point.catchSpeedLossMetersPerSecond ?? '',
+        point.lateDriveSpeedGainMetersPerSecond ?? '',
+        point.recoverySpeedRetention ?? '',
         point.spm ?? '',
         point.safetyLevel,
       ].map(_csvCell).join(','));

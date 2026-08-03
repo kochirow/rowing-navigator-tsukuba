@@ -47,3 +47,15 @@ const spmConfidenceFullSpread = 0.25;
 
 /// SPM表示の更新間隔 [秒]
 const spmUpdateIntervalSec = 1;
+
+/// IMUを安全経路の艇速・距離・短時間推測へ接続するロールバックスイッチ。
+/// falseでもSPMと実験的な艇速分析は残し、航行推定だけ従来GNSSへ戻す。
+const enableInertialNavigationFusion = true;
+
+/// IMU艇速を安全経路のKalman速度観測へ使う最低信頼度。
+/// 研究上の改善は固定端末・周期が明瞭な区間で得られているため、低信頼時は
+/// 従来のGNSS速度へ即座に戻す。
+const imuNavigationMinimumConfidence = 0.68;
+
+/// 安全経路へ使えるIMU解析結果の最大鮮度。
+const imuNavigationMaximumAge = Duration(seconds: 2);

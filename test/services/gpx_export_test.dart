@@ -150,14 +150,19 @@ void main() {
     expect(files['manifest.json'], contains('fixedObstacleCalibrations'));
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
-    expect(manifest['diagnosticPackageSchemaVersion'], 3);
-    expect(manifest['diagnosticCatalogVersion'], 2);
+    expect(manifest['diagnosticPackageSchemaVersion'], 4);
+    expect(manifest['diagnosticCatalogVersion'], 3);
     expect(files['diagnostic_event_catalog.json'],
         contains('H1_AUDIO_APP_COMPETITION'));
     expect(
       files['diagnostic_event_catalog.json'],
       contains('gps_dead_reckoning_prediction'),
     );
+    expect(
+      files['diagnostic_event_catalog.json'],
+      contains('H7_IMU_FUSION_AND_STROKE_MOTION'),
+    );
+    expect(files['track.csv'], contains('raw_gnss_speed_mps'));
     final profile =
         Map<String, dynamic>.from(manifest['fixedObstacleProfile'] as Map);
     expect(profile['sha256'], 'abc');

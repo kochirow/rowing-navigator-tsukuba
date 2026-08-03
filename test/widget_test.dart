@@ -473,7 +473,8 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, strokeRateEnabled) async {
+              onPressStartNav:
+                  (displayName, strokeRateEnabled, showStrokeMotion) async {
                 submittedName = displayName;
                 submittedStrokeRate = strokeRateEnabled;
               },
@@ -502,7 +503,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
-            body: NavSettingModal(onPressStartNav: (_, __) async {}),
+            body: NavSettingModal(onPressStartNav: (_, __, ___) async {}),
           ),
         ),
       ),
@@ -534,7 +535,7 @@ void main() {
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
                   builder: (_) =>
-                      NavSettingModal(onPressStartNav: (_, __) async {}),
+                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
@@ -569,7 +570,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __) async {},
+              onPressStartNav: (_, __, ___) async {},
               onPressTestAudio: () async {
                 tapped = true;
               },
@@ -595,7 +596,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, _) async {
+              onPressStartNav: (displayName, _, __) async {
                 submittedName = displayName;
               },
             ),
@@ -622,16 +623,18 @@ void main() {
     expect(submittedName, '後藤');
   });
 
-  testWidgets('SPM(レート)計測は既定ONで航行開始へ渡せる', (tester) async {
+  testWidgets('SPM・艇速分析は既定ONで航行開始へ渡せる', (tester) async {
     useNavigationSettingsViewport(tester);
     bool? submittedStrokeRateEnabled;
+    bool? submittedStrokeMotionDisplayEnabled;
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, strokeRateEnabled) async {
+              onPressStartNav: (_, strokeRateEnabled, showStrokeMotion) async {
                 submittedStrokeRateEnabled = strokeRateEnabled;
+                submittedStrokeMotionDisplayEnabled = showStrokeMotion;
               },
             ),
           ),
@@ -640,16 +643,48 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('SPM(レート)を計測する'));
+    await tester.ensureVisible(find.text('SPM・艇速変化を計測する'));
     await tester.pumpAndSettle();
-    expect(find.text('SPM(レート)計測'), findsOneWidget);
-    expect(find.text('バッテリーが残り少ない場合はオフ推奨'), findsOneWidget);
+    expect(find.text('SPM・艇速分析'), findsOneWidget);
+    expect(find.textContaining('艇にスマホを固定して使用'), findsOneWidget);
+    expect(find.text('1ストロークの艇速分析を表示'), findsOneWidget);
 
     await tester.ensureVisible(find.text('航行スタート'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('航行スタート'));
     await tester.pump();
     expect(submittedStrokeRateEnabled, isTrue);
+    expect(submittedStrokeMotionDisplayEnabled, isFalse);
+  });
+
+  testWidgets('1ストローク艇速分析は開始前に表示ONを選べる', (tester) async {
+    useNavigationSettingsViewport(tester);
+    bool? submitted;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: NavSettingModal(
+              onPressStartNav: (_, __, showStrokeMotion) async {
+                submitted = showStrokeMotion;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
+    final displayOption = find.text('1ストロークの艇速分析を表示');
+    await tester.ensureVisible(displayOption);
+    await tester.pumpAndSettle();
+    await tester.tap(displayOption);
+    await tester.ensureVisible(find.text('航行スタート'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('航行スタート'));
+    await tester.pump();
+
+    expect(submitted, isTrue);
   });
 
   testWidgets('航行開始処理中の二重押しを無視する', (tester) async {
@@ -661,7 +696,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __) {
+              onPressStartNav: (_, __, ___) {
                 startCount += 1;
                 return startCompleter.future;
               },

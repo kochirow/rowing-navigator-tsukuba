@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../services/gps_health_monitor.dart';
+import '../../../services/rowing_motion_fusion.dart';
 import 'nav_status_card.dart';
 
 /// 時刻による1秒更新を地図画面全体から切り離すためのパネル。
@@ -10,6 +11,8 @@ class NavigationStatusPanel extends StatefulWidget {
   final int paceSeconds;
   final int distanceMeters;
   final double? spm;
+  final RowingMotionMetrics? strokeMotion;
+  final bool strokeMotionDisplayEnabled;
   final bool spmMeasurementEnabled;
   final bool compact;
   final bool portraitCompact;
@@ -36,6 +39,8 @@ class NavigationStatusPanel extends StatefulWidget {
     this.gpsQuality = GpsHealthQuality.good,
     this.gpsStreamRecovering = false,
     this.spm,
+    this.strokeMotion,
+    this.strokeMotionDisplayEnabled = false,
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
@@ -93,6 +98,8 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       distanceMeters: widget.distanceMeters,
       elapsedTimeSeconds: _ageSeconds(widget.sessionStartedAt),
       spm: widget.spm,
+      strokeMotion: widget.strokeMotion,
+      strokeMotionDisplayEnabled: widget.strokeMotionDisplayEnabled,
       spmMeasurementEnabled: widget.spmMeasurementEnabled,
       compact: widget.compact,
       portraitCompact: widget.portraitCompact,

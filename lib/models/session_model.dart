@@ -24,6 +24,13 @@ class TrackPoint {
   final String? positionFilterResult;
   final double? estimateUncertaintyMeters;
   final double? estimateInnovationMeters;
+  final double? rawGnssSpeedMetersPerSecond;
+  final double? imuConfidence;
+  final String? imuQuality;
+  final double? distancePerStrokeMeters;
+  final double? catchSpeedLossMetersPerSecond;
+  final double? lateDriveSpeedGainMetersPerSecond;
+  final double? recoverySpeedRetention;
 
   TrackPoint({
     required this.t,
@@ -43,6 +50,13 @@ class TrackPoint {
     this.positionFilterResult,
     this.estimateUncertaintyMeters,
     this.estimateInnovationMeters,
+    this.rawGnssSpeedMetersPerSecond,
+    this.imuConfidence,
+    this.imuQuality,
+    this.distancePerStrokeMeters,
+    this.catchSpeedLossMetersPerSecond,
+    this.lateDriveSpeedGainMetersPerSecond,
+    this.recoverySpeedRetention,
   });
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +83,19 @@ class TrackPoint {
           'estimateUncertaintyMeters': estimateUncertaintyMeters,
         if (estimateInnovationMeters != null)
           'estimateInnovationMeters': estimateInnovationMeters,
+        if (rawGnssSpeedMetersPerSecond != null)
+          'rawGnssSpeedMetersPerSecond': rawGnssSpeedMetersPerSecond,
+        if (imuConfidence != null) 'imuConfidence': imuConfidence,
+        if (imuQuality != null) 'imuQuality': imuQuality,
+        if (distancePerStrokeMeters != null)
+          'distancePerStrokeMeters': distancePerStrokeMeters,
+        if (catchSpeedLossMetersPerSecond != null)
+          'catchSpeedLossMetersPerSecond': catchSpeedLossMetersPerSecond,
+        if (lateDriveSpeedGainMetersPerSecond != null)
+          'lateDriveSpeedGainMetersPerSecond':
+              lateDriveSpeedGainMetersPerSecond,
+        if (recoverySpeedRetention != null)
+          'recoverySpeedRetention': recoverySpeedRetention,
       };
 
   factory TrackPoint.fromJson(Map<String, dynamic> json) => TrackPoint(
@@ -93,6 +120,18 @@ class TrackPoint {
             (json['estimateUncertaintyMeters'] as num?)?.toDouble(),
         estimateInnovationMeters:
             (json['estimateInnovationMeters'] as num?)?.toDouble(),
+        rawGnssSpeedMetersPerSecond:
+            (json['rawGnssSpeedMetersPerSecond'] as num?)?.toDouble(),
+        imuConfidence: (json['imuConfidence'] as num?)?.toDouble(),
+        imuQuality: json['imuQuality'] as String?,
+        distancePerStrokeMeters:
+            (json['distancePerStrokeMeters'] as num?)?.toDouble(),
+        catchSpeedLossMetersPerSecond:
+            (json['catchSpeedLossMetersPerSecond'] as num?)?.toDouble(),
+        lateDriveSpeedGainMetersPerSecond:
+            (json['lateDriveSpeedGainMetersPerSecond'] as num?)?.toDouble(),
+        recoverySpeedRetention:
+            (json['recoverySpeedRetention'] as num?)?.toDouble(),
       );
 }
 
@@ -438,7 +477,7 @@ class SessionSummary {
 
 /// 練習セッション
 class Session {
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
 
   final int schemaVersion;
   final String id;

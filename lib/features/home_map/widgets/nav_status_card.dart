@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../config/navigator_config.dart';
 import '../../../services/gps_health_monitor.dart';
+import '../../../services/rowing_motion_fusion.dart';
 import '../../../theme/app_theme.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
@@ -27,6 +28,8 @@ class NavStatusCard extends StatelessWidget {
   final int distanceMeters;
   final int elapsedTimeSeconds;
   final double? spm; // ストロークレート(計測不能時はnull)
+  final RowingMotionMetrics? strokeMotion;
+  final bool strokeMotionDisplayEnabled;
   final bool spmMeasurementEnabled; // ユーザーがSPM計測をONにしているか
   final bool compact; // 横向き用の省スペース表示
   final bool portraitCompact; // 縦向き用。主計器の可読性を保ちながら左上へ縮小
@@ -47,6 +50,8 @@ class NavStatusCard extends StatelessWidget {
     required this.distanceMeters,
     required this.elapsedTimeSeconds,
     this.spm,
+    this.strokeMotion,
+    this.strokeMotionDisplayEnabled = false,
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
@@ -114,7 +119,7 @@ class NavStatusCard extends StatelessWidget {
         otherBoatReceiveUnavailable ||
         temporaryObstacleReceiveUnavailable;
 
-    // SPMは実験機能。OFF時は値だけでなく表示領域ごと取り除く。
+    // OFF時は値だけでなくSPM・艇速分析の表示領域ごと取り除く。
     final spmValueText = spm?.toStringAsFixed(0) ?? '--';
     final capabilityBadges = <Widget>[
       if (otherBoatReceiveUnavailable)
@@ -222,6 +227,10 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
+          if (strokeMotionDisplayEnabled && strokeMotion != null) ...[
+            SizedBox(height: dimens.space2),
+            _StrokeMotionMetricsRow(metrics: strokeMotion!),
+          ],
           SizedBox(height: dimens.space2),
           Divider(height: 1, color: onDark.withValues(alpha: 0.2)),
           SizedBox(height: dimens.space2),
@@ -455,6 +464,13 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
+          if (strokeMotionDisplayEnabled && strokeMotion != null) ...[
+            const SizedBox(height: 5),
+            _StrokeMotionMetricsRow(
+              metrics: strokeMotion!,
+              compact: true,
+            ),
+          ],
           const SizedBox(height: 6),
           Row(
             children: [
@@ -499,6 +515,40 @@ class NavStatusCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _StrokeMotionMetricsRow extends StatelessWidget {
+  final RowingMotionMetrics metrics;
+  final bool compact;
+
+  const _StrokeMotionMetricsRow({required this.metrics, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final onDark = context.colors.onDark;
+    final lateDriveText = metrics.lateDriveSpeedGainMetersPerSecond >= 0
+        ? '終盤加速 +${metrics.lateDriveSpeedGainMetersPerSecond.toStringAsFixed(2)}m/s'
+        : '終盤失速 −${metrics.lateDriveSpeedGainMetersPerSecond.abs().toStringAsFixed(2)}m/s';
+    final text = compact
+        ? '1漕 ${metrics.distancePerStrokeMeters.toStringAsFixed(1)}m '
+            'キャッチ −${metrics.catchSpeedLossMetersPerSecond.toStringAsFixed(2)}m/s '
+            '保持 ${(metrics.recoverySpeedRetention * 100).round()}%'
+        : 'ストローク艇速　1漕 ${metrics.distancePerStrokeMeters.toStringAsFixed(1)}m　'
+            'キャッチ減速 ${metrics.catchSpeedLossMetersPerSecond.toStringAsFixed(2)}m/s　'
+            '$lateDriveText　'
+            '艇速保持 ${(metrics.recoverySpeedRetention * 100).round()}%';
+    return Text(
+      text,
+      key: const ValueKey('stroke-motion-metrics'),
+      maxLines: compact ? 2 : 3,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: onDark.withValues(alpha: 0.82),
+        fontSize: compact ? 10 : 12,
+        fontWeight: FontWeight.w600,
       ),
     );
   }

@@ -34,6 +34,7 @@ import '../hooks/use_tracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
+import '../services/rowing_motion_fusion.dart';
 import '../services/swept_outline_service.dart';
 import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
@@ -50,6 +51,7 @@ import '../hooks/use_nav_map.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/map_display_settings_service.dart';
+import '../services/navigation_defaults_service.dart';
 import '../services/permission_service.dart';
 import '../services/preset_obstacle_service.dart';
 import '../services/team_service.dart';
@@ -197,7 +199,10 @@ class HomeMapScreen extends HookConsumerWidget {
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     final showDeveloperSafetyShapeOverlay = useState(false);
+    // 計測と表示を分離する。表示OFFでもIMU融合とログは継続する。
+    final strokeMotionDisplayEnabled = useState(false);
     final mapDisplaySettings = useMemoized(MapDisplaySettingsService.new);
+    final navigationDefaults = useMemoized(NavigationDefaultsService.new);
     final safetyShapeOverlayService =
         useMemoized(SafetyShapeOverlayService.new);
     final announcedImminentWarnings = useRef(<String>{});
@@ -453,6 +458,30 @@ class HomeMapScreen extends HookConsumerWidget {
             // 変更しない表示設定なので、ここでだけ復元すればよい。
             showDeveloperSafetyShapeOverlay.value =
                 await mapDisplaySettings.loadDeveloperSafetyShapeOverlay();
+          },
+        ),
+        MapMenuAction(
+          icon: strokeMotionDisplayEnabled.value
+              ? Icons.insights
+              : Icons.insights_outlined,
+          title: '1ストロークの艇速分析',
+          subtitle: isObserver
+              ? '航行開始画面で選択できます'
+              : strokeMotionDisplayEnabled.value
+                  ? '表示中・タップで非表示'
+                  : '非表示・タップで表示',
+          enabled: !isObserver,
+          disabledReason: '航行開始画面で選択できます',
+          onTap: () {
+            final next = !strokeMotionDisplayEnabled.value;
+            strokeMotionDisplayEnabled.value = next;
+            unawaited(
+              navigationDefaults
+                  .saveStrokeMotionDisplayEnabled(next)
+                  .catchError((Object error) {
+                debugPrint('Failed to save stroke analysis display: $error');
+              }),
+            );
           },
         ),
         MapMenuAction(
@@ -1354,6 +1383,13 @@ class HomeMapScreen extends HookConsumerWidget {
                                           gpsStreamRecovering: navigator
                                               .isGpsStreamRecovering.value,
                                           spm: navigator.spm.value,
+                                          strokeMotion: navigator.strokeMotion
+                                                      .value?.quality ==
+                                                  RowingMotionQuality.good
+                                              ? navigator.strokeMotion.value
+                                              : null,
+                                          strokeMotionDisplayEnabled:
+                                              strokeMotionDisplayEnabled.value,
                                           spmMeasurementEnabled: navigator
                                                   .config
                                                   .value
@@ -1726,7 +1762,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                     ));
                                                   },
                                                   onPressStartNav: (displayName,
-                                                      strokeRateEnabled) async {
+                                                      strokeRateEnabled,
+                                                      showStrokeMotion) async {
                                                     if (!navMap.isReady.value) {
                                                       ScaffoldMessenger.of(
                                                               context)
@@ -1772,6 +1809,10 @@ class HomeMapScreen extends HookConsumerWidget {
                                                               .bestForNavigation,
                                                           strokeRateEnabled:
                                                               strokeRateEnabled);
+                                                      strokeMotionDisplayEnabled
+                                                              .value =
+                                                          strokeRateEnabled &&
+                                                              showStrokeMotion;
                                                       try {
                                                         await navigator
                                                             .startNavigation(

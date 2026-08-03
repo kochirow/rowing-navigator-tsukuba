@@ -660,6 +660,31 @@ void main() {
       expect(estimate!.innovationMeters, lessThan(0.1));
     });
 
+    test('GPS短時間欠測中はIMU艇速・相対方位を有界な速度観測として使う', () {
+      final estimator = RobustPositionEstimator();
+      estimator.update(
+        latitude: originLatitude,
+        longitude: originLongitude,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+      );
+
+      final estimate = estimator.predict(
+        elapsed: const Duration(seconds: 2),
+        motionSpeedMetersPerSecond: 4,
+        motionHeadingDegrees: 100,
+        motionSpeedAccuracyMetersPerSecond: 0.5,
+      );
+
+      expect(estimate, isNotNull);
+      expect(estimate!.disposition, PositionEstimateDisposition.predicted);
+      expect(estimate.speedMetersPerSecond, greaterThan(3.4));
+      expect(estimate.headingDegrees, inInclusiveRange(94, 103));
+      expect(estimate.uncertaintyMeters, greaterThan(0));
+    });
+
     test('reset後は以前の原点・速度・共分散を引き継がない', () {
       final estimator = RobustPositionEstimator();
       estimator.update(

@@ -19,6 +19,7 @@ void main() {
       boatType: BoatType.r_4x,
       seatPosition: 3,
       strokeRateEnabled: false,
+      strokeMotionDisplayEnabled: true,
     );
 
     final restored = await service.load();
@@ -27,6 +28,7 @@ void main() {
     expect(restored.boatType, BoatType.r_4x);
     expect(restored.seatPosition, 3);
     expect(restored.strokeRateEnabled, isFalse);
+    expect(restored.strokeMotionDisplayEnabled, isTrue);
   });
 
   test('SPM設定が未保存ならレート計測を既定で有効にする', () async {
@@ -39,6 +41,7 @@ void main() {
     final restored = await NavigationDefaultsService().load();
     expect(restored, isNotNull);
     expect(restored!.strokeRateEnabled, isTrue);
+    expect(restored.strokeMotionDisplayEnabled, isFalse);
   });
 
   test('明示的に保存したSPM設定ONは維持する', () async {
@@ -53,5 +56,18 @@ void main() {
     final restored = await service.load();
     expect(restored, isNotNull);
     expect(restored!.strokeRateEnabled, isTrue);
+  });
+
+  test('舟速分析表示は新規端末で既定OFF、航行中の切替を保存する', () async {
+    final service = NavigationDefaultsService();
+    await service.save(
+      displayName: '後藤',
+      boatType: BoatType.r_1x,
+      seatPosition: 1,
+    );
+    expect((await service.load())!.strokeMotionDisplayEnabled, isFalse);
+
+    await service.saveStrokeMotionDisplayEnabled(true);
+    expect((await service.load())!.strokeMotionDisplayEnabled, isTrue);
   });
 }

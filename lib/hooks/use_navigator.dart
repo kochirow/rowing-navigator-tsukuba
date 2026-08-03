@@ -20,6 +20,7 @@ import '../hooks/navigation_stop_budget.dart';
 import '../hooks/use_screen_wakelock.dart';
 import '../hooks/use_stroke_rate.dart';
 import '../config/log_config.dart';
+import '../config/stroke_rate_config.dart';
 import '../config/system_fault_config.dart';
 import '../config/warning_audio_config.dart';
 import '../models/alert_candidate.dart';
@@ -55,6 +56,7 @@ import '../services/receive_fault_debouncer.dart';
 import '../services/risk_evaluator_settings_service.dart';
 import '../services/resilient_stream_supervisor.dart';
 import '../services/robust_position_estimator.dart';
+import '../services/rowing_motion_fusion.dart';
 import '../services/safety_orchestrator.dart';
 import '../services/safety_evaluation_liveness.dart';
 import '../services/send_policy.dart';
@@ -252,6 +254,7 @@ UseNavigator useNavigator() {
     acceptLowAccuracy: enableRobustPositionFilter,
   ));
   final positionEstimator = useMemoized(RobustPositionEstimator.new);
+  final distanceIntegrator = useMemoized(RowingDistanceIntegrator.new);
   final lastDeadReckoningPredictionTick = useRef<Duration?>(null);
   final previousEstimatedPosition = useRef<LatLng?>(null);
   // Kalmanの dt はGNSSの測位時刻を基準にする。処理時刻を使うと、OSの
@@ -416,6 +419,7 @@ UseNavigator useNavigator() {
   final strokeRate = useStrokeRate(
     active: mode.value == NavMode.navigator,
     enabled: config.value?.strokeRateEnabled ?? false,
+    onDiagnosticEvent: appendRuntimeDiagnostic,
   );
   // Services
   final geoService = useMemoized(GeoService.new);
@@ -909,6 +913,10 @@ UseNavigator useNavigator() {
       'audioError': alert.error.value,
       'gpsQuality': gpsHealth.value.snapshot(now).quality.name,
       'gpsStreamRecovering': isGpsStreamRecovering.value,
+      'imuFusionQuality': strokeRate.motion.value?.quality.name,
+      'imuFusionConfidence': strokeRate.motion.value?.confidence,
+      'distancePerStrokeMeters':
+          strokeRate.motion.value?.distancePerStrokeMeters,
       'lastGpsAgeMs':
           lastGps == null ? null : now.difference(lastGps).inMilliseconds,
       'lastSafetyEvaluationAgeMs': lastSafetyEvaluationAge?.inMilliseconds,
@@ -936,6 +944,19 @@ UseNavigator useNavigator() {
       'primaryWarningLeadSeconds': primaryWarningLeadTimeSeconds.value,
       'advanceWarningLeadSeconds': warningTimeSeconds.value,
       'strokeRateEnabled': navConfig.strokeRateEnabled,
+      'imuFusion': {
+        'enabled': navConfig.strokeRateEnabled,
+        'navigationFusionEnabled': enableInertialNavigationFusion,
+        'samplingHz': 1000 / spmSamplingMs,
+        'navigationMinimumConfidence': imuNavigationMinimumConfidence,
+        'navigationMaximumAgeMs': imuNavigationMaximumAge.inMilliseconds,
+        'sensors': [
+          'userAccelerometer',
+          'accelerometerGravity',
+          'gyroscope',
+        ],
+        'absolutePositionFromImuOnly': false,
+      },
       'boatType': navConfig.boatType.name,
       'seatPosition': navConfig.seatPos.label,
       'locationAccuracy': navConfig.accuracy.name,
@@ -1865,10 +1886,23 @@ UseNavigator useNavigator() {
           try {
             final predictionElapsed =
                 estimatorClock.resolvePrediction(predictionTick);
+            final motion = strokeRate.motion.value;
+            final motionIsUsable = enableInertialNavigationFusion &&
+                motion != null &&
+                motion.confidence >= imuNavigationMinimumConfidence &&
+                now.difference(motion.calculatedAt).abs() <=
+                    imuNavigationMaximumAge;
             final estimate = positionEstimator.predict(
               elapsed: predictionElapsed,
               maxPredictionGap: gpsDeadReckoningMaximumDuration,
               strokeRateSpm: strokeRate.spm.value,
+              motionSpeedMetersPerSecond:
+                  motionIsUsable ? motion.fusedSpeedMetersPerSecond : null,
+              motionHeadingDegrees:
+                  motionIsUsable ? motion.fusedHeadingDegrees : null,
+              motionSpeedAccuracyMetersPerSecond: motionIsUsable
+                  ? motion.fusedSpeedAccuracyMetersPerSecond
+                  : null,
             );
             final previousBoat = myBoat.value;
             if (estimate != null && previousBoat != null) {
@@ -1913,6 +1947,8 @@ UseNavigator useNavigator() {
                 'gpsAgeMs': gpsAge.inMilliseconds,
                 'uncertaintyMeters': estimate.uncertaintyMeters,
                 'speedMetersPerSecond': estimate.speedMetersPerSecond,
+                'imuAssisted': motionIsUsable,
+                if (motionIsUsable) 'imuConfidence': motion.confidence,
                 'otherBoatCount': predictedOthers.length,
               });
             }
@@ -2161,6 +2197,7 @@ UseNavigator useNavigator() {
   Boat buildMyBoat(
     Position rawPos,
     RobustPositionEstimate? estimate,
+    RowingMotionMetrics? motion,
   ) {
     final previous = preRawPos.value;
     final elapsedSeconds = previous == null
@@ -2235,11 +2272,26 @@ UseNavigator useNavigator() {
     // 移動距離も推定軌跡から積算し、停止中のGPS揺れを抑える。
     final previousPosition = previousEstimatedPosition.value;
     if (previousPosition != null && speed_ >= stoppedSpeedThreshold) {
-      totalDistance.value += Geolocator.distanceBetween(
+      final coordinateDistance = Geolocator.distanceBetween(
         previousPosition.latitude,
         previousPosition.longitude,
         sourcePosition.latitude,
         sourcePosition.longitude,
+      );
+      totalDistance.value += distanceIntegrator.add(
+        timestamp: rawPos.timestamp,
+        coordinateDistanceMeters: coordinateDistance,
+        speedMetersPerSecond: speed_,
+        motionConfidence: motion?.confidence,
+        moving: true,
+      );
+    } else {
+      distanceIntegrator.add(
+        timestamp: rawPos.timestamp,
+        coordinateDistanceMeters: 0,
+        speedMetersPerSecond: speed_,
+        motionConfidence: motion?.confidence,
+        moving: false,
       );
     }
     previousEstimatedPosition.value = sourcePosition;
@@ -2322,6 +2374,26 @@ UseNavigator useNavigator() {
                     (rawSpeed ?? 0) >= stoppedSpeedThreshold
                 ? rawPos.heading
                 : null;
+        if (rawSpeed != null) {
+          strokeRate.observeGnss(
+            timestamp: rawPos.timestamp,
+            speedMetersPerSecond: rawSpeed,
+            accuracyMeters: rawPos.accuracy,
+            headingDegrees: rawHeading,
+          );
+        }
+        final motion = strokeRate.motion.value;
+        final motionIsUsable = enableInertialNavigationFusion &&
+            motion != null &&
+            motion.quality != RowingMotionQuality.unavailable &&
+            motion.confidence >= imuNavigationMinimumConfidence &&
+            now.difference(motion.calculatedAt).abs() <=
+                imuNavigationMaximumAge;
+        final observedSpeed =
+            motionIsUsable ? motion.fusedSpeedMetersPerSecond : rawSpeed;
+        final observedHeading = motionIsUsable
+            ? motion.fusedHeadingDegrees ?? rawHeading
+            : rawHeading;
         final candidate = positionEstimator.update(
           latitude: rawPos.latitude,
           longitude: rawPos.longitude,
@@ -2330,10 +2402,11 @@ UseNavigator useNavigator() {
             fixTimestamp: rawPos.timestamp,
             processElapsed: processTick,
           ),
-          speedMetersPerSecond: rawSpeed,
-          headingDegrees: rawHeading,
-          speedAccuracyMetersPerSecond:
-              rawPos.speedAccuracy.isFinite && rawPos.speedAccuracy > 0
+          speedMetersPerSecond: observedSpeed,
+          headingDegrees: observedHeading,
+          speedAccuracyMetersPerSecond: motionIsUsable
+              ? motion.fusedSpeedAccuracyMetersPerSecond
+              : rawPos.speedAccuracy.isFinite && rawPos.speedAccuracy > 0
                   ? rawPos.speedAccuracy
                   : null,
           headingAccuracyDegrees:
@@ -2398,7 +2471,11 @@ UseNavigator useNavigator() {
           (processingStopwatch.elapsed - estimatorStartedAt).inMilliseconds;
     }
     final boatBuildStartedAt = processingStopwatch.elapsed;
-    final latestMyBoat = buildMyBoat(rawPos, estimate);
+    final latestMyBoat = buildMyBoat(
+      rawPos,
+      estimate,
+      enableInertialNavigationFusion ? strokeRate.motion.value : null,
+    );
     final boatBuildDurationMs =
         (processingStopwatch.elapsed - boatBuildStartedAt).inMilliseconds;
     if (!isCurrentNavigation(generation)) return;
@@ -2496,6 +2573,7 @@ UseNavigator useNavigator() {
     final recordingStartedAt = processingStopwatch.elapsed;
     if (sessionPoints.value.length < maxSessionTrackPoints) {
       final health = gpsHealth.value.snapshot(now);
+      final motion = strokeRate.motion.value;
       sessionPoints.value.add(TrackPoint(
         t: latestMyBoat.timestamp,
         elapsedMs: processTick.inMilliseconds,
@@ -2514,6 +2592,14 @@ UseNavigator useNavigator() {
         positionFilterResult: 'accepted',
         estimateUncertaintyMeters: estimate?.uncertaintyMeters,
         estimateInnovationMeters: estimate?.innovationMeters,
+        rawGnssSpeedMetersPerSecond: _finiteOrNull(rawPos.speed),
+        imuConfidence: motion?.confidence,
+        imuQuality: motion?.quality.name,
+        distancePerStrokeMeters: motion?.distancePerStrokeMeters,
+        catchSpeedLossMetersPerSecond: motion?.catchSpeedLossMetersPerSecond,
+        lateDriveSpeedGainMetersPerSecond:
+            motion?.lateDriveSpeedGainMetersPerSecond,
+        recoverySpeedRetention: motion?.recoverySpeedRetention,
       ));
       // 初回fixはすぐ、以後は60秒ごとに保存。ファイルI/Oは
       // awaitせず、衝突判定と次のGPS fixをブロックしない。
@@ -2860,6 +2946,7 @@ UseNavigator useNavigator() {
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
+      distanceIntegrator.reset();
       preRawPos.value = null;
       preHeading.value = 0;
       if (!gpsFilter.value.hasValidCoordinates(initialPos)) {
@@ -3178,6 +3265,7 @@ UseNavigator useNavigator() {
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
+      distanceIntegrator.reset();
       gpsWatchdog.value?.cancel();
       gpsWatchdog.value = null;
 
@@ -3534,6 +3622,7 @@ UseNavigator useNavigator() {
         estimatorClock.reset();
         lastDeadReckoningPredictionTick.value = null;
         previousEstimatedPosition.value = null;
+        distanceIntegrator.reset();
         preRawPos.value = null;
         preHeading.value = 0;
         currentBatteryLevel.value = null;
@@ -3669,6 +3758,7 @@ UseNavigator useNavigator() {
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
+      distanceIntegrator.reset();
       safetyClock.value.stop();
       gpsWatchdog.value?.cancel();
       // stop()は最初のawaitより前に_running=falseを同期反映する。
@@ -3824,6 +3914,7 @@ UseNavigator useNavigator() {
     totalDistance: totalDistance,
     batteryLevel: currentBatteryLevel,
     spm: strokeRate.spm,
+    strokeMotion: strokeRate.motion,
     audioError: alert.error,
     getCurrentPosition: getCurrentPosition,
     startNavigation: startNavigation,
@@ -3884,6 +3975,7 @@ class UseNavigator {
   final ValueNotifier<double> totalDistance;
   final ValueNotifier<int?> batteryLevel;
   final ValueNotifier<double?> spm;
+  final ValueNotifier<RowingMotionMetrics?> strokeMotion;
   final ValueNotifier<String?> audioError;
   final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
   final Future<void> Function(NavConfig config) startNavigation;
@@ -3944,6 +4036,7 @@ class UseNavigator {
     required this.totalDistance,
     required this.batteryLevel,
     required this.spm,
+    required this.strokeMotion,
     required this.audioError,
     required this.getCurrentPosition,
     required this.startNavigation,

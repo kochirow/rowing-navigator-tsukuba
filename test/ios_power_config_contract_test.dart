@@ -16,4 +16,11 @@ void main() {
           'trueの再追加も防ぐため、キーはfalseで明示する。',
     );
   });
+
+  test('IMU艇速融合のモーション利用目的をiOSへ明示する', () {
+    final plist = File('ios/Runner/Info.plist').readAsStringSync();
+
+    expect(plist, contains('<key>NSMotionUsageDescription</key>'));
+    expect(plist, contains('SPM、艇速変化、短時間のGPS誤差'));
+  });
 }

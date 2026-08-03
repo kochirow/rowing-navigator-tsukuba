@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_status_card.dart';
 import 'package:rowing_navigator/services/gps_health_monitor.dart';
+import 'package:rowing_navigator/services/rowing_motion_fusion.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 
 /// 計器の大きさが状況で変わらないことを守るテスト。
@@ -17,6 +18,8 @@ void main() {
     bool portraitCompact = false,
     GpsHealthQuality quality = GpsHealthQuality.good,
     bool degraded = false,
+    RowingMotionMetrics? strokeMotion,
+    bool showStrokeMotion = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -28,6 +31,8 @@ void main() {
             elapsedTimeSeconds: 60,
             spm: 24,
             spmMeasurementEnabled: spmEnabled,
+            strokeMotion: strokeMotion,
+            strokeMotionDisplayEnabled: showStrokeMotion,
             compact: compact,
             portraitCompact: portraitCompact,
             gpsQuality: quality,
@@ -92,5 +97,76 @@ void main() {
 
     expect(find.text('24 spm'), findsOneWidget);
     expect(fontSizeOf(tester, '2:00'), 30);
+  });
+
+  testWidgets('1ストローク艇速指標を信頼度付き計測時だけ表示する', (tester) async {
+    final metrics = RowingMotionMetrics(
+      calculatedAt: DateTime(2026, 8, 3),
+      latestStrokeBoundary: DateTime(2026, 8, 3),
+      quality: RowingMotionQuality.good,
+      confidence: 0.9,
+      spm: 24,
+      fusedSpeedMetersPerSecond: 4,
+      fusedSpeedAccuracyMetersPerSecond: 0.5,
+      fusedHeadingDegrees: 90,
+      distancePerStrokeMeters: 10.2,
+      catchSpeedLossMetersPerSecond: 0.31,
+      lateDriveSpeedGainMetersPerSecond: 0.18,
+      recoverySpeedRetention: 0.84,
+      strokeSpeedRangeMetersPerSecond: 0.8,
+      strokeDurationSeconds: 2.5,
+      finishPhaseFraction: 0.62,
+      accelerometerSampleCount: 125,
+      gyroscopeSampleCount: 125,
+    );
+    await pumpCard(
+      tester,
+      strokeMotion: metrics,
+      showStrokeMotion: true,
+    );
+
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
+    expect(find.textContaining('キャッチ減速 0.31m/s'), findsOneWidget);
+    expect(find.textContaining('艇速保持 84%'), findsOneWidget);
+
+    await pumpCard(tester, strokeMotion: metrics);
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
+
+    await pumpCard(
+      tester,
+      spmEnabled: false,
+      strokeMotion: metrics,
+      showStrokeMotion: true,
+    );
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
+  });
+
+  testWidgets('艇速分析は主計器の直下に表示する', (tester) async {
+    final metrics = RowingMotionMetrics(
+      calculatedAt: DateTime(2026, 8, 3),
+      latestStrokeBoundary: DateTime(2026, 8, 3),
+      quality: RowingMotionQuality.good,
+      confidence: 0.9,
+      spm: 24,
+      fusedSpeedMetersPerSecond: 4,
+      fusedSpeedAccuracyMetersPerSecond: 0.5,
+      fusedHeadingDegrees: 90,
+      distancePerStrokeMeters: 10.2,
+      catchSpeedLossMetersPerSecond: 0.31,
+      lateDriveSpeedGainMetersPerSecond: 0.18,
+      recoverySpeedRetention: 0.84,
+      strokeSpeedRangeMetersPerSecond: 0.8,
+      strokeDurationSeconds: 2.5,
+      finishPhaseFraction: 0.62,
+      accelerometerSampleCount: 125,
+      gyroscopeSampleCount: 125,
+    );
+    await pumpCard(tester, strokeMotion: metrics, showStrokeMotion: true);
+
+    final analysisY = tester
+        .getTopLeft(find.byKey(const ValueKey('stroke-motion-metrics')))
+        .dy;
+    final distanceY = tester.getTopLeft(find.text('1.00 km')).dy;
+    expect(analysisY, lessThan(distanceY));
   });
 }

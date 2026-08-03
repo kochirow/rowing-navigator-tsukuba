@@ -21,6 +21,7 @@ class NavSettingModal extends HookConsumerWidget {
   final Future<void> Function(
     String displayName,
     bool strokeRateEnabled,
+    bool strokeMotionDisplayEnabled,
   ) onPressStartNav;
   final Future<void> Function()? onPressTestAudio;
 
@@ -84,6 +85,7 @@ class NavSettingModal extends HookConsumerWidget {
     final nameController = useTextEditingController();
     final nameError = useState<String?>(null);
     final strokeRateEnabled = useState(true);
+    final strokeMotionDisplayEnabled = useState(false);
     final isStarting = useState(false);
     final defaultsService = useMemoized(NavigationDefaultsService.new);
     // 前回設定を復元できたかどうか。復元できたときだけ、スクロールなしで
@@ -106,6 +108,8 @@ class NavSettingModal extends HookConsumerWidget {
           }
           nameController.text = defaults.displayName;
           strokeRateEnabled.value = defaults.strokeRateEnabled;
+          strokeMotionDisplayEnabled.value =
+              defaults.strokeMotionDisplayEnabled;
           ref.read(boatTypeProvider.notifier).state = defaults.boatType;
           ref.read(seatPositionProvider.notifier).state = seat;
           restoredSummary.value =
@@ -142,12 +146,17 @@ class NavSettingModal extends HookConsumerWidget {
             boatType: boatType,
             seatPosition: seatPosision.position,
             strokeRateEnabled: strokeRateEnabled.value,
+            strokeMotionDisplayEnabled: strokeMotionDisplayEnabled.value,
           )
               .catchError((Object error) {
             debugPrint('Failed to save navigation defaults: $error');
           }),
         );
-        await onPressStartNav(displayName, strokeRateEnabled.value);
+        await onPressStartNav(
+          displayName,
+          strokeRateEnabled.value,
+          strokeMotionDisplayEnabled.value,
+        );
       } finally {
         if (context.mounted) isStarting.value = false;
       }
@@ -327,8 +336,8 @@ class NavSettingModal extends HookConsumerWidget {
               const SizedBox(height: 24),
               _sectionTitle(
                 context,
-                'SPM(レート)計測',
-                'バッテリーが残り少ない場合はオフ推奨',
+                'SPM・艇速分析',
+                '艇にスマホを固定して使用・電池残量が少ない場合はオフ推奨',
               ),
               const SizedBox(height: 8),
               Material(
@@ -336,7 +345,7 @@ class NavSettingModal extends HookConsumerWidget {
                 child: SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    'SPM(レート)を計測する',
+                    'SPM・艇速変化を計測する',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   secondary: Icon(
@@ -347,7 +356,32 @@ class NavSettingModal extends HookConsumerWidget {
                   value: strokeRateEnabled.value,
                   onChanged: isStarting.value
                       ? null
-                      : (value) => strokeRateEnabled.value = value,
+                      : (value) {
+                          strokeRateEnabled.value = value;
+                          if (!value) strokeMotionDisplayEnabled.value = false;
+                        },
+                ),
+              ),
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 150),
+                opacity: strokeRateEnabled.value ? 1 : 0.45,
+                child: Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      '1ストロークの艇速分析を表示',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text('計器のすぐ下に表示します'),
+                    secondary: const Icon(Icons.insights_outlined),
+                    value: strokeRateEnabled.value &&
+                        strokeMotionDisplayEnabled.value,
+                    onChanged: isStarting.value || !strokeRateEnabled.value
+                        ? null
+                        : (value) => strokeMotionDisplayEnabled.value = value,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),

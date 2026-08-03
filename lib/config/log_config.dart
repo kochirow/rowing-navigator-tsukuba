@@ -37,10 +37,10 @@ const maxSessionDiagnosticEvents = 20000;
 
 /// events.jsonl / alerts.jsonl のイベント名・詳細フィールドの意味を識別する版。
 /// 既存イベントは残したまま、因果追跡用のseq・elapsedMsを追加する。
-const diagnosticEventSchemaVersion = 3;
+const diagnosticEventSchemaVersion = 4;
 
 /// 診断イベントの意味と、ログから検証する仮説のカタログ版。
-const diagnosticCatalogVersion = 2;
+const diagnosticCatalogVersion = 3;
 
 /// ZIPに同梱する、AIがイベントを解釈するための最小限のデータ辞書。
 /// ログだけを別のAIへ渡しても、何を観測し、何が未観測なのかを判断できるようにする。
@@ -120,6 +120,19 @@ const diagnosticEventCatalog = <String, dynamic>{
       'interpretation': '検知なし、visualOnly、別警告による優先順位変更、再生失敗、再生成功後の停止を分けて判定する。',
     },
     {
+      'id': 'H7_IMU_FUSION_AND_STROKE_MOTION',
+      'question': '固定端末の加速度・ジャイロ融合が艇速・距離・GPS短時間欠測を改善したか。',
+      'requiredEvidence': [
+        'stroke_motion_analyzed',
+        'imu_fusion_health',
+        'imu_sensor_error',
+        'track.csv rawGnssSpeedMetersPerSecond/imuConfidence',
+        'gps_dead_reckoning_prediction imuAssisted',
+      ],
+      'interpretation':
+          'GNSS艇速との差、1漕距離、キャッチ減速、終盤加速、艇速保持、信頼度を同じelapsedMsで比較する。IMU不能時はGNSS単独へ縮退していることも確認する。',
+    },
+    {
       'id': 'H6_LOGGING_COMPLETENESS',
       'question': 'ログ自体が欠落して、誤って「起きなかった」と判断していないか。',
       'requiredEvidence': [
@@ -143,6 +156,10 @@ const diagnosticEventCatalog = <String, dynamic>{
     'gps_dead_reckoning_prediction':
         'GPS入力が短時間途絶した間、直前の速度・方位から不確実性を増やしつつ自艇位置と警告を予測した。航跡・位置共有には使用しない。',
     'gps_dead_reckoning_failed': '任意機能である短時間推測航法の計算または警告評価が失敗した。通常のGPS監視は継続する。',
+    'stroke_motion_analyzed':
+        '直近の完全な1ストロークから、融合艇速・1漕距離・キャッチ減速・終盤加速・リカバリー艇速保持を算出した。実験指標であり技術評価を断定しない。',
+    'imu_fusion_health': '加速度・ジャイロのサンプル充足と融合信頼度を10秒ごとに記録する。',
+    'imu_sensor_error': '加速度またはジャイロの購読失敗。GNSS単独経路へ縮退する。',
     'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。',
     'safety_timer_stalled': '1秒安全監視タイマー自身の実行間隔が上限を超えた。GPS入力途絶や評価停止とは別に記録する。',
     'safety_evaluation_stalled': 'GPS入力は新しいが、衝突評価の正常完了時刻が上限より古い。',
