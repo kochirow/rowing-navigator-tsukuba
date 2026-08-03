@@ -5,25 +5,29 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../config/map_style_config.dart';
 
-/// 艇首を上にした矢羽を、地図上の実寸に対応するBitmapDescriptorへ描画する。
+/// 艇首を上にしたホームベース型の艇印を、地図上の実寸に対応する
+/// BitmapDescriptorへ描画する。
+///
+/// 後端の切れ込みがある矢羽ではなく、船首が尖り船尾が平らな五角形にする。
+/// 進行方向は先端で読め、細すぎる線形アイコンより水上の地図で見失いにくい。
 /// [pixelsPerMeter] と [minPixels] は物理px単位で渡す。
-Future<BitmapDescriptor> getBoatArrowBitmapDescriptor({
+Future<BitmapDescriptor> getBoatHomePlateBitmapDescriptor({
   required double lengthMeters,
   required double widthMeters,
   required Color color,
   required double pixelsPerMeter,
   required int minPixels,
+  required int maxPixels,
 }) async {
   final safeLength =
       lengthMeters.isFinite && lengthMeters > 0 ? lengthMeters : 1.0;
   final safeWidth = widthMeters.isFinite && widthMeters > 0 ? widthMeters : 1.0;
   final safePixelsPerMeter =
       pixelsPerMeter.isFinite && pixelsPerMeter > 0 ? pixelsPerMeter : 1.0;
+  final safeMinPixels = minPixels.clamp(1, 2048).toDouble();
+  final safeMaxPixels = maxPixels.clamp(safeMinPixels.toInt(), 2048).toDouble();
   final targetLength = (safeLength * safePixelsPerMeter)
-      .clamp(
-        minPixels.toDouble(),
-        double.infinity,
-      )
+      .clamp(safeMinPixels, safeMaxPixels)
       .toDouble();
   final scale = targetLength / (safeLength * safePixelsPerMeter);
   final targetWidth = safeWidth * safePixelsPerMeter * scale;
@@ -36,14 +40,14 @@ Future<BitmapDescriptor> getBoatArrowBitmapDescriptor({
   final top = outline;
   final bottom = height - outline;
   final halfWidth = targetWidth / 2.0;
-  final notchY = bottom - targetLength * boatArrowTailNotchRatio;
+  final shoulderY = top + targetLength * 0.42;
+  final sternHalfWidth = halfWidth * 0.72;
   final path = Path()
     ..moveTo(centerX, top)
-    ..lineTo(centerX + halfWidth, top + targetLength * 0.58)
-    ..lineTo(centerX + halfWidth, bottom)
-    ..lineTo(centerX, notchY)
-    ..lineTo(centerX - halfWidth, bottom)
-    ..lineTo(centerX - halfWidth, top + targetLength * 0.58)
+    ..lineTo(centerX + halfWidth, shoulderY)
+    ..lineTo(centerX + sternHalfWidth, bottom)
+    ..lineTo(centerX - sternHalfWidth, bottom)
+    ..lineTo(centerX - halfWidth, shoulderY)
     ..close();
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -62,7 +66,9 @@ Future<BitmapDescriptor> getBoatArrowBitmapDescriptor({
       final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!
           .buffer
           .asUint8List();
-      return BitmapDescriptor.bytes(bytes);
+      // Canvasは物理pxで描く。DPRを渡して、iOSが物理pxを論理pxとして
+      // 読み違えず、指定した36〜56ptの範囲で表示できるようにする。
+      return BitmapDescriptor.bytes(bytes, imagePixelRatio: devicePixelRatio);
     } finally {
       image.dispose();
     }
@@ -72,7 +78,10 @@ Future<BitmapDescriptor> getBoatArrowBitmapDescriptor({
 }
 
 Future<BitmapDescriptor> getBitmapDescriptorFromAssetBytes(
-    String path, int width) async {
+  String path,
+  int width, {
+  double? imagePixelRatio,
+}) async {
   final ByteData data = await rootBundle.load(path);
   final codec = await ui.instantiateImageCodec(
     data.buffer.asUint8List(),
@@ -85,7 +94,10 @@ Future<BitmapDescriptor> getBitmapDescriptorFromAssetBytes(
           (await frame.image.toByteData(format: ui.ImageByteFormat.png))!
               .buffer
               .asUint8List();
-      return BitmapDescriptor.bytes(bytes);
+      return BitmapDescriptor.bytes(
+        bytes,
+        imagePixelRatio: imagePixelRatio,
+      );
     } finally {
       frame.image.dispose();
     }

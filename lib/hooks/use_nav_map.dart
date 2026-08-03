@@ -59,19 +59,25 @@ UseNavMap useNavMap() {
   }
 
   Future<Marker> createMarkerAtIconSize(
-      String markerId,
-      MarkerType type,
-      double lat,
-      double lng,
-      double heading,
-      String title,
-      String snippet,
-      int iconSize) async {
+    String markerId,
+    MarkerType type,
+    double lat,
+    double lng,
+    double heading,
+    String title,
+    String snippet,
+    int iconSize, {
+    double? imagePixelRatio,
+  }) async {
     final iconPath =
         type == MarkerType.myBoat ? redBoatIconPath : blueBoatIconPath;
-    final cacheKey = '$iconPath@$iconSize';
-    final iconFuture = boatIcons.value[cacheKey] ??=
-        getBitmapDescriptorFromAssetBytes(iconPath, iconSize);
+    final cacheKey = '$iconPath@$iconSize@${imagePixelRatio ?? 1.0}';
+    final iconFuture =
+        boatIcons.value[cacheKey] ??= getBitmapDescriptorFromAssetBytes(
+      iconPath,
+      iconSize,
+      imagePixelRatio: imagePixelRatio,
+    );
     late final BitmapDescriptor icon;
     try {
       icon = await iconFuture;
@@ -115,9 +121,11 @@ UseNavMap useNavMap() {
       boatConfig.displayHullWidthMeters.toStringAsFixed(3),
       pixelsPerMeter.toStringAsFixed(4),
       dpr.toStringAsFixed(2),
+      minBoatMarkerLengthPixels.toString(),
+      maxBoatMarkerLengthPixels.toString(),
     ].join('@');
     final iconFuture =
-        boatIcons.value[cacheKey] ??= getBoatArrowBitmapDescriptor(
+        boatIcons.value[cacheKey] ??= getBoatHomePlateBitmapDescriptor(
       lengthMeters: params.h,
       // 判定用の幅(オーを含む6〜7.5m)ではなく、船体の実幅。
       // 安全ポリゴンと矢羽の役割を視覚的に分ける。
@@ -125,6 +133,7 @@ UseNavMap useNavMap() {
       color: spec.type == MarkerType.myBoat ? Colors.red : Colors.blue,
       pixelsPerMeter: pixelsPerMeter,
       minPixels: (minBoatMarkerLengthPixels * dpr).round(),
+      maxPixels: (maxBoatMarkerLengthPixels * dpr).round(),
     );
     late final BitmapDescriptor icon;
     try {
@@ -142,7 +151,10 @@ UseNavMap useNavMap() {
         spec.heading,
         spec.title,
         spec.snippet,
-        minBoatMarkerLengthPixels,
+        // [getBitmapDescriptorFromAssetBytes] は物理pxで受ける。Canvasの
+        // ホームベース型と同じ最小論理サイズを維持し、縮退時だけ極小にならないようにする。
+        (minBoatMarkerLengthPixels * dpr).round(),
+        imagePixelRatio: dpr,
       );
     }
     return Marker(

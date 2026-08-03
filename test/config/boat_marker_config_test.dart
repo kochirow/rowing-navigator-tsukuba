@@ -14,7 +14,9 @@ void main() {
     }
   });
 
-  test('縮小時の視認性下限は実寸表示を大きく邪魔しない', () {
-    expect(minBoatMarkerLengthPixels, lessThanOrEqualTo(8));
+  test('艇アイコンは縮小・PNG縮退時も視認できる範囲に収める', () {
+    expect(minBoatMarkerLengthPixels, 36);
+    expect(maxBoatMarkerLengthPixels, 56);
+    expect(minBoatMarkerLengthPixels, lessThan(maxBoatMarkerLengthPixels));
   });
 }

@@ -390,19 +390,6 @@ class HomeMapScreen extends HookConsumerWidget {
           },
         ),
         MapMenuAction(
-          icon: Icons.folder_zip_outlined,
-          title: '練習一括ログ',
-          subtitle: '監視端末に記録した全艇の位置・警告状態',
-          enabled: isObserver,
-          disabledReason: duringNavigation,
-          onTap: () {
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const PracticeLogListScreen()));
-          },
-        ),
-        MapMenuAction(
           icon: Icons.edit_location_alt,
           title: '障害物の追加',
           subtitle: '臨時危険区域・固定流木の編集',
@@ -426,7 +413,7 @@ class HomeMapScreen extends HookConsumerWidget {
         ),
         MapMenuAction(
           icon: Icons.shield_outlined,
-          title: isObserver ? '安全設定' : '航行中の安全設定',
+          title: isObserver ? '警告設定' : '航行中の警告設定',
           subtitle:
               isObserver ? '危険区域の幅・警告開始時間・プライバシー' : '地図と警告を見ながら、確認して安全設定を反映',
           onTap: () async {
@@ -563,10 +550,27 @@ class HomeMapScreen extends HookConsumerWidget {
               showInfo.value = !showInfo.value;
             },
           ),
+        // 通常の航行・監視には使わない端末内ログなので、メニューの最後に置く。
+        MapMenuAction(
+          icon: Icons.folder_zip_outlined,
+          title: '練習一括ログ',
+          subtitle: '監視端末に記録した全艇の位置・警告状態',
+          enabled: isObserver,
+          disabledReason: duringNavigation,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PracticeLogListScreen(),
+              ),
+            );
+          },
+        ),
       ];
       showModalBottomSheet<void>(
         context: context,
         backgroundColor: Colors.transparent,
+        isScrollControlled: true,
         builder: (_) => MapMenuSheet(actions: actions),
       );
     }
@@ -848,7 +852,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 "BoatType: ${myBoat.boatType}\n"
                 "速度: ${myBoat.speed.toStringAsFixed(1)} m/s\n"
                 "進路: ${myBoat.heading.toStringAsFixed(1)}°\n"
-                "画面上の矢印: 下向き",
+                "画面上の艇印: 下向き",
           ));
         }
         // 他艇は新しい受信値が届いた時だけ描画位置を更新する。

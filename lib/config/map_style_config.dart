@@ -52,12 +52,15 @@ const mapAutoRecenterDelay = Duration(seconds: 3);
 const mapAutoRecenterMinimumDelay = Duration(seconds: 2);
 const mapAutoRecenterMaximumDelay = Duration(seconds: 10);
 
-/// 艇種別の矢羽アイコン（Canvas描画）の見た目を決める定数。
-const boatArrowTailNotchRatio = 0.22;
+/// 艇種別のホームベース型アイコン（Canvas描画）の見た目を決める定数。
 const boatArrowOutlineWidthLogicalPixels = 1.5;
-// 縮小時だけ見失わない最小長。通常の航行縮尺では実長を優先し、
-// 衝突判定ポリゴンより小さく見えるよう従来の16pxから下げる。
-const minBoatMarkerLengthPixels = 8;
+// 縮小時でも見失わないホームベース型アイコンの論理px範囲。
+//
+// 実艇の長さに連動させつつ、iPhone上で視認できる36〜56ptへ収める。
+// Canvas描画が使えずPNGへ縮退したときも同じ下限を使うため、代替経路だけ
+// 数pxになって自艇・他艇が消えたように見えることを防ぐ。
+const minBoatMarkerLengthPixels = 36;
+const maxBoatMarkerLengthPixels = 56;
 
 bool isValidMapAutoRecenterDelay(Duration value) =>
     value >= mapAutoRecenterMinimumDelay &&
