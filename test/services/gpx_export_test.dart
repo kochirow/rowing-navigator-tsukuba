@@ -151,9 +151,13 @@ void main() {
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
     expect(manifest['diagnosticPackageSchemaVersion'], 3);
-    expect(manifest['diagnosticCatalogVersion'], 1);
+    expect(manifest['diagnosticCatalogVersion'], 2);
     expect(files['diagnostic_event_catalog.json'],
         contains('H1_AUDIO_APP_COMPETITION'));
+    expect(
+      files['diagnostic_event_catalog.json'],
+      contains('gps_dead_reckoning_prediction'),
+    );
     final profile =
         Map<String, dynamic>.from(manifest['fixedObstacleProfile'] as Map);
     expect(profile['sha256'], 'abc');

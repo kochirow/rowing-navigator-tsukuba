@@ -252,6 +252,7 @@ UseNavigator useNavigator() {
     acceptLowAccuracy: enableRobustPositionFilter,
   ));
   final positionEstimator = useMemoized(RobustPositionEstimator.new);
+  final lastDeadReckoningPredictionTick = useRef<Duration?>(null);
   final previousEstimatedPosition = useRef<LatLng?>(null);
   // Kalmanの dt はGNSSの測位時刻を基準にする。処理時刻を使うと、OSの
   // バッファリング遅延のジッタがそのまま dt 誤差になる。
@@ -1851,6 +1852,78 @@ UseNavigator useNavigator() {
       recordGpsQualityIfChanged(health, now);
       final lastFix = lastValidGpsAt.value;
       if (mode.value != NavMode.navigator || lastFix == null) return;
+      final gpsAge = now.difference(lastFix);
+      if (enableRobustPositionFilter &&
+          gpsAge >= gpsDeadReckoningStartAfter &&
+          gpsAge <= gpsDeadReckoningMaximumDuration) {
+        final predictionTick = safetyClock.value.elapsed;
+        final previousPredictionTick = lastDeadReckoningPredictionTick.value;
+        if (previousPredictionTick == null ||
+            predictionTick - previousPredictionTick >=
+                const Duration(milliseconds: 900)) {
+          lastDeadReckoningPredictionTick.value = predictionTick;
+          try {
+            final predictionElapsed =
+                estimatorClock.resolvePrediction(predictionTick);
+            final estimate = positionEstimator.predict(
+              elapsed: predictionElapsed,
+              maxPredictionGap: gpsDeadReckoningMaximumDuration,
+              strokeRateSpm: strokeRate.spm.value,
+            );
+            final previousBoat = myBoat.value;
+            if (estimate != null && previousBoat != null) {
+              final predictedBoat = Boat(
+                boatId: previousBoat.boatId,
+                displayName: previousBoat.displayName,
+                boatType: previousBoat.boatType,
+                lat: estimate.latitude,
+                lng: estimate.longitude,
+                heading: estimate.headingDegrees,
+                speed: estimate.speedMetersPerSecond,
+                timestamp: now,
+                battery: previousBoat.battery,
+                accuracy: estimate.uncertaintyMeters,
+                sessionId: previousBoat.sessionId,
+                serverUpdatedAt: previousBoat.serverUpdatedAt,
+              );
+              final predictedOthers = otherBoats.value
+                  .where((boat) {
+                    final updatedAt = boat.serverUpdatedAt ?? boat.timestamp;
+                    return now.difference(updatedAt).inMilliseconds <
+                        boatPredictionTimeoutSeconds * 1000;
+                  })
+                  .map((boat) =>
+                      evaluatorService.extrapolateToNow(boat, now: now))
+                  .toList(growable: false);
+              final predictionAssessment = evaluatorService.assessRisk(
+                predictedBoat,
+                predictedOthers,
+                obstacles.value,
+                warningTimeSeconds: warningTimeSeconds.value,
+                centerline: channelCenterline.value,
+                laneResolver: channelLaneResolver.value,
+              );
+              myBoat.value = predictedBoat;
+              applySafetyAssessment(
+                predictionAssessment,
+                now,
+                AlertDataQuality.degraded,
+              );
+              appendRuntimeDiagnostic('gps_dead_reckoning_prediction', {
+                'gpsAgeMs': gpsAge.inMilliseconds,
+                'uncertaintyMeters': estimate.uncertaintyMeters,
+                'speedMetersPerSecond': estimate.speedMetersPerSecond,
+                'otherBoatCount': predictedOthers.length,
+              });
+            }
+          } catch (error) {
+            // 任意の縮退経路の失敗で、GPS購読や通常警告を止めない。
+            appendRuntimeDiagnostic('gps_dead_reckoning_failed', {
+              'errorType': error.runtimeType.toString(),
+            });
+          }
+        }
+      }
       if (health.quality == GpsHealthQuality.unusable) {
         gpsLossAnnounced.value = true;
         clearAshoreForUnusableGps();
@@ -2299,6 +2372,7 @@ UseNavigator useNavigator() {
         } else if (candidate != null) {
           positionEstimator.reset();
           estimatorClock.reset();
+          lastDeadReckoningPredictionTick.value = null;
           debugPrint('Position estimator produced an unusable result; reset.');
           appendRuntimeDiagnostic('position_estimator_reset', {
             'reason': divergenceMeters > divergenceLimit
@@ -2313,6 +2387,7 @@ UseNavigator useNavigator() {
         // 推定器の問題で警告処理全体を止めず、このfixだけGNSS値へ戻す。
         positionEstimator.reset();
         estimatorClock.reset();
+        lastDeadReckoningPredictionTick.value = null;
         debugPrint('Position estimator failed and was reset: $error');
         appendRuntimeDiagnostic('position_estimator_reset', {
           'reason': 'exception',
@@ -2616,6 +2691,7 @@ UseNavigator useNavigator() {
     );
     recordGpsQualityIfChanged(health, acceptedAt);
     lastValidGpsAt.value = acceptedAt;
+    lastDeadReckoningPredictionTick.value = null;
     final recoveryFixQuality = evaluationQualityForAcceptedFix(health.quality);
     if (health.quality == GpsHealthQuality.unusable) {
       clearAshoreForUnusableGps();
@@ -2782,6 +2858,7 @@ UseNavigator useNavigator() {
       gpsFilter.value.reset();
       positionEstimator.reset();
       estimatorClock.reset();
+      lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
       preRawPos.value = null;
       preHeading.value = 0;
@@ -3099,6 +3176,7 @@ UseNavigator useNavigator() {
       positionPublisher.stop();
       positionEstimator.reset();
       estimatorClock.reset();
+      lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
       gpsWatchdog.value?.cancel();
       gpsWatchdog.value = null;
@@ -3454,6 +3532,7 @@ UseNavigator useNavigator() {
         lastProcessingTimingSampleTick.value = null;
         positionEstimator.reset();
         estimatorClock.reset();
+        lastDeadReckoningPredictionTick.value = null;
         previousEstimatedPosition.value = null;
         preRawPos.value = null;
         preHeading.value = 0;
@@ -3588,6 +3667,7 @@ UseNavigator useNavigator() {
       positionPublisher.stop();
       positionEstimator.reset();
       estimatorClock.reset();
+      lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
       safetyClock.value.stop();
       gpsWatchdog.value?.cancel();

@@ -7,6 +7,7 @@ enum PositionEstimateDisposition {
   downWeighted,
   rejected,
   reacquired,
+  predicted,
 }
 
 /// GNSS測位を更新した後の軽量な位置推定結果。
@@ -142,6 +143,8 @@ class RobustPositionEstimator {
   double? _originLongitude;
   double _originCosLatitude = 1;
   Duration? _lastElapsed;
+  Duration? _lastIntegratedMeasurementElapsed;
+  double? _lastIntegratedAccuracyMeters;
 
   double _east = 0;
   double _north = 0;
@@ -167,6 +170,8 @@ class RobustPositionEstimator {
     _originLongitude = null;
     _originCosLatitude = 1;
     _lastElapsed = null;
+    _lastIntegratedMeasurementElapsed = null;
+    _lastIntegratedAccuracyMeters = null;
     _east = 0;
     _north = 0;
     _velocityEast = 0;
@@ -178,6 +183,40 @@ class RobustPositionEstimator {
     _northPositionVelocityCovariance = 0;
     _northVelocityVariance = 0;
     _clearPendingReacquisition();
+  }
+
+  /// 最後に統合したGNSS測位から[maxPredictionGap]以内だけ、
+  /// 現在の位置・速度状態を時間更新する。
+  ///
+  /// 観測更新を行わないため共分散はプロセスノイズで増える。
+  /// 上限を超えたらnullを返し、古い速度で無期限に外挿しない。
+  RobustPositionEstimate? predict({
+    required Duration elapsed,
+    Duration? maxPredictionGap,
+    double? strokeRateSpm,
+  }) {
+    final lastElapsed = _lastElapsed;
+    final lastMeasurementElapsed = _lastIntegratedMeasurementElapsed;
+    final reportedAccuracy = _lastIntegratedAccuracyMeters;
+    if (lastElapsed == null ||
+        lastMeasurementElapsed == null ||
+        reportedAccuracy == null ||
+        elapsed <= lastElapsed) {
+      return null;
+    }
+    final limit = maxPredictionGap ?? maximumPredictionGap;
+    if (limit <= Duration.zero || elapsed - lastMeasurementElapsed > limit) {
+      return null;
+    }
+    final deltaSeconds =
+        (elapsed - lastElapsed).inMicroseconds / Duration.microsecondsPerSecond;
+    _lastElapsed = elapsed;
+    _predict(deltaSeconds, strokeRateSpm: strokeRateSpm);
+    return _result(
+      reportedAccuracyMeters: reportedAccuracy,
+      innovationMeters: 0,
+      disposition: PositionEstimateDisposition.predicted,
+    );
   }
 
   /// GNSS測位で1回更新する。
@@ -231,6 +270,7 @@ class RobustPositionEstimator {
         measurementSigma: measurementSigma,
         velocityObservation: velocityObservation,
       );
+      _recordIntegratedMeasurement(elapsed, accuracyMeters);
       return _result(
         reportedAccuracyMeters: accuracyMeters,
         innovationMeters: 0,
@@ -239,11 +279,13 @@ class RobustPositionEstimator {
     }
 
     final delta = elapsed - lastElapsed;
+    final measurementGap =
+        elapsed - (_lastIntegratedMeasurementElapsed ?? lastElapsed);
     _lastElapsed = elapsed;
     final measurement = _toLocal(latitude, longitude);
     final deltaSeconds = delta.inMicroseconds / Duration.microsecondsPerSecond;
 
-    if (delta > maximumPredictionGap) {
+    if (measurementGap > maximumPredictionGap) {
       // GNSS速度観測が無い場合も、直前の速度を惰行として減衰させて
       // 引き継ぐ。0へ落とすと停止距離が0になり、橋の下を抜けた直後などに
       // 警告レベルが不当に下がる。
@@ -251,9 +293,12 @@ class RobustPositionEstimator {
         east: measurement.$1,
         north: measurement.$2,
         measurementSigma: measurementSigma,
-        velocityObservation:
-            velocityObservation ?? _decayedCarriedVelocity(deltaSeconds),
+        velocityObservation: velocityObservation ??
+            _decayedCarriedVelocity(
+              measurementGap.inMicroseconds / Duration.microsecondsPerSecond,
+            ),
       );
+      _recordIntegratedMeasurement(elapsed, accuracyMeters);
       return _result(
         reportedAccuracyMeters: accuracyMeters,
         innovationMeters: 0,
@@ -299,6 +344,7 @@ class RobustPositionEstimator {
           measurementSigma: measurementSigma,
           velocityObservation: velocityObservation ?? derivedPendingVelocity,
         );
+        _recordIntegratedMeasurement(elapsed, accuracyMeters);
         return _result(
           reportedAccuracyMeters: accuracyMeters,
           innovationMeters: innovationMeters,
@@ -343,12 +389,18 @@ class RobustPositionEstimator {
         velocityObservation.variance,
       );
     }
+    _recordIntegratedMeasurement(elapsed, accuracyMeters);
 
     return _result(
       reportedAccuracyMeters: accuracyMeters,
       innovationMeters: innovationMeters,
       disposition: disposition,
     );
+  }
+
+  void _recordIntegratedMeasurement(Duration elapsed, double accuracyMeters) {
+    _lastIntegratedMeasurementElapsed = elapsed;
+    _lastIntegratedAccuracyMeters = accuracyMeters;
   }
 
   bool _isValidRequiredMeasurement(

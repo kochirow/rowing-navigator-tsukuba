@@ -97,6 +97,18 @@ const gpsStaleIndicatorSec = 5;
 /// そのまま維持する。
 const gpsStreamSilenceRecoverySeconds = 8;
 
+/// 1Hzの測位がこの間来なければ、短時間の推測航法を開始する。
+/// 単発の1秒ジッタで予測と実測を往復しない一方、GPS品質表示が
+/// degradedになる3秒より前から安全判定の穴を埋める。
+const gpsDeadReckoningStartAfter = Duration(seconds: 2);
+
+/// GNSS欠測中にKalman状態の時間予測だけで警告判定を続ける上限。
+///
+/// 巡航5m/sで5秒=25m進む。これ以上は操舵・回頭を観測できず、
+/// 古い速度の外挿が危険になるため停止する。不確実性は毎秒
+/// 拡大し、この推測点は生GPS記録・位置共有には使わない。
+const gpsDeadReckoningMaximumDuration = Duration(seconds: 5);
+
 /// 1Hz記録を約10時間まで保持する。異常な長時間セッションで
 /// メモリが無制限に増え、警告処理を圧迫することを防ぐ。
 const maxSessionTrackPoints = 36000;

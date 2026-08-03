@@ -2,6 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/services/estimator_clock.dart';
 
 void main() {
+  test('予測時刻後も復旧fixをより新しい単調時刻に載せる', () {
+    final clock = EstimatorClock();
+    final origin = DateTime.utc(2026, 8, 3, 12);
+    clock.resolve(fixTimestamp: origin, processElapsed: Duration.zero);
+    final predicted =
+        clock.resolvePrediction(const Duration(milliseconds: 3000));
+    final recovered = clock.resolve(
+      fixTimestamp: origin.add(const Duration(milliseconds: 2500)),
+      processElapsed: const Duration(milliseconds: 3100),
+    );
+
+    expect(predicted, const Duration(milliseconds: 3000));
+    expect(recovered, greaterThan(predicted));
+  });
+
   final fixOrigin = DateTime.utc(2026, 7, 25, 6, 0, 0);
 
   group('EstimatorClock', () {

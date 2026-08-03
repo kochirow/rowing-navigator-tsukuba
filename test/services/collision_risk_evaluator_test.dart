@@ -4,6 +4,7 @@ import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
+import 'package:rowing_navigator/services/robust_position_estimator.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/types/collision_risk_level.dart';
 import 'package:rowing_navigator/utils/geo_math.dart';
@@ -67,6 +68,42 @@ void main() {
   });
 
   group('evaluateFutureRisk (静的危険区域)', () {
+    test('GNSS欠測中のKalman予測位置でも前方の危険を判定できる', () {
+      final estimator = RobustPositionEstimator();
+      estimator.update(
+        latitude: 36.0670,
+        longitude: 140.2045,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 0,
+      );
+      final predicted = estimator.predict(
+        elapsed: const Duration(seconds: 3),
+        maxPredictionGap: const Duration(seconds: 5),
+      )!;
+      final predictedBoat = makeBoat(
+        lat: predicted.latitude,
+        lng: predicted.longitude,
+        speed: predicted.speedMetersPerSecond,
+        heading: predicted.headingDegrees,
+        accuracy: predicted.uncertaintyMeters,
+      );
+      final obstacleCenter = computeOffset(
+        const LatLng(36.0670, 140.2045),
+        28,
+        0,
+      );
+
+      final level = evaluator.evaluateFutureRisk(
+        predictedBoat,
+        [],
+        [makeSquareObstacle(obstacleCenter, 4)],
+      );
+
+      expect(level.index, greaterThanOrEqualTo(CollisionRiskLevel.lv1.index));
+    });
+
     test('周囲に何もなければ lv0', () {
       final level = evaluator.evaluateFutureRisk(makeBoat(speed: 3.0), [], []);
       expect(level, CollisionRiskLevel.lv0);

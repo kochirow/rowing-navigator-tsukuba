@@ -40,7 +40,7 @@ const maxSessionDiagnosticEvents = 20000;
 const diagnosticEventSchemaVersion = 3;
 
 /// 診断イベントの意味と、ログから検証する仮説のカタログ版。
-const diagnosticCatalogVersion = 1;
+const diagnosticCatalogVersion = 2;
 
 /// ZIPに同梱する、AIがイベントを解釈するための最小限のデータ辞書。
 /// ログだけを別のAIへ渡しても、何を観測し、何が未観測なのかを判断できるようにする。
@@ -87,6 +87,7 @@ const diagnosticEventCatalog = <String, dynamic>{
         'track.csv',
         'warning_presentation_requested',
         'audio_directive_changed',
+        'gps_dead_reckoning_prediction',
         'diagnostic_heartbeat',
       ],
       'interpretation':
@@ -139,6 +140,9 @@ const diagnosticEventCatalog = <String, dynamic>{
         'AudioPlayerのresume完了とplaying状態をアプリが確認した瞬間。聴感上の成功を意味しない。',
     'audio_route_snapshot': 'OSが報告する音声経路・他音声再生状態のスナップショット。',
     'position_processing_sample': 'GPS受信から警告評価・記録・位置共有までの処理時間内訳。',
+    'gps_dead_reckoning_prediction':
+        'GPS入力が短時間途絶した間、直前の速度・方位から不確実性を増やしつつ自艇位置と警告を予測した。航跡・位置共有には使用しない。',
+    'gps_dead_reckoning_failed': '任意機能である短時間推測航法の計算または警告評価が失敗した。通常のGPS監視は継続する。',
     'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。',
     'safety_timer_stalled': '1秒安全監視タイマー自身の実行間隔が上限を超えた。GPS入力途絶や評価停止とは別に記録する。',
     'safety_evaluation_stalled': 'GPS入力は新しいが、衝突評価の正常完了時刻が上限より古い。',
