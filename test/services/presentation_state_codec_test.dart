@@ -26,7 +26,6 @@ SafetySnapshot snapshotFor({
     capabilities: const CapabilitySnapshot(
       gpsUsable: true,
       staticProfileUsable: true,
-      insideSupportedCoverage: true,
       audioUsable: true,
     ),
     activeAlerts: [
@@ -84,6 +83,17 @@ void main() {
     expect(PresentationStateCodec.warningFor(snapshot), '0c');
   });
 
+  test('杭は圧縮した提示状態でも杭カテゴリを保持する', () {
+    expect(
+      PresentationStateCodec.warningFor(snapshotFor(
+        behavior: AlertBehavior.continuousAction,
+        category: 'pile',
+        audioMode: AudioDirectiveMode.loop,
+      )),
+      '2k',
+    );
+  });
+
   test('警告なしは省略し、run modeを1文字にする', () {
     final noAlert = SafetySnapshot(
       sessionId: 'session',
@@ -92,10 +102,7 @@ void main() {
       evaluatedAt: DateTime.utc(2026),
       runMode: SafetyRunMode.runningDegraded,
       capabilities: const CapabilitySnapshot(
-          gpsUsable: true,
-          staticProfileUsable: true,
-          insideSupportedCoverage: true,
-          audioUsable: true),
+          gpsUsable: true, staticProfileUsable: true, audioUsable: true),
       activeAlerts: const [],
       health: const DetectorHealthSnapshot.empty(),
       visualDirective: const VisualDirective.empty(),

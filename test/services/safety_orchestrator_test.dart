@@ -14,7 +14,6 @@ void main() {
   const capabilities = CapabilitySnapshot(
     gpsUsable: true,
     staticProfileUsable: true,
-    insideSupportedCoverage: true,
     audioUsable: true,
   );
 
@@ -229,7 +228,6 @@ void main() {
     const degraded = CapabilitySnapshot(
       gpsUsable: false,
       staticProfileUsable: true,
-      insideSupportedCoverage: true,
       audioUsable: true,
     );
     final silentFault = AlertCandidate.stable(
@@ -295,7 +293,6 @@ void main() {
       capabilities: const CapabilitySnapshot(
         gpsUsable: false,
         staticProfileUsable: true,
-        insideSupportedCoverage: true,
         audioUsable: true,
       ),
       dataQuality: AlertDataQuality.unusable,
@@ -319,7 +316,6 @@ void main() {
         capabilities: const CapabilitySnapshot(
           gpsUsable: false,
           staticProfileUsable: true,
-          insideSupportedCoverage: true,
           audioUsable: true,
         ),
         dataQuality: AlertDataQuality.unusable,
@@ -540,108 +536,6 @@ void main() {
       healthyBoatIds: const {'boat-a'},
     );
     expect(cleared.snapshot.activeAlerts, isEmpty);
-  });
-
-  test('運用対象水域外でも航行を制限せずdegradedにする', () {
-    final orchestrator = SafetyOrchestrator(
-      sessionId: 'session-a',
-      sessionGeneration: 1,
-    );
-    final result = orchestrator.processAssessment(
-      assessment: assessment(const []),
-      evaluatedAt: t0,
-      capabilities: const CapabilitySnapshot(
-        gpsUsable: true,
-        staticProfileUsable: true,
-        insideSupportedCoverage: false,
-        audioUsable: true,
-      ),
-    );
-    expect(result.snapshot.runMode, SafetyRunMode.runningDegraded);
-  });
-
-  test('coverage補助表示は後から発生した通信障害を抑えない', () {
-    final orchestrator = SafetyOrchestrator(
-      sessionId: 'session-a',
-      sessionGeneration: 1,
-    );
-    AlertCandidate fault({
-      required String detectorId,
-      required String category,
-      required AlertDataQuality quality,
-      required int priority,
-      String? audioAsset,
-      required DateTime at,
-    }) =>
-        AlertCandidate.stable(
-          detectorId: detectorId,
-          category: category,
-          behavior: AlertBehavior.persistentSystemFault,
-          evaluatedAt: at,
-          observationId: '$detectorId:${at.microsecondsSinceEpoch}',
-          actionDeadline: Duration.zero,
-          dataQuality: quality,
-          internalPriority: priority,
-          audioAsset: audioAsset,
-        );
-
-    final coverage = fault(
-      detectorId: 'operational_coverage',
-      category: 'operational_coverage_unverified',
-      quality: AlertDataQuality.degraded,
-      priority: -100,
-      at: t0,
-    );
-    orchestrator.processAssessment(
-      assessment: assessment(const []),
-      evaluatedAt: t0,
-      capabilities: const CapabilitySnapshot(
-        gpsUsable: true,
-        staticProfileUsable: true,
-        insideSupportedCoverage: false,
-        audioUsable: true,
-      ),
-      systemCandidates: [coverage],
-    );
-
-    final sharingFault = fault(
-      detectorId: 'position_sharing',
-      category: 'position_sharing_unavailable',
-      quality: AlertDataQuality.good,
-      priority: 0,
-      audioAsset: 'audio/other_boat_warning.mp3',
-      at: t0.add(const Duration(seconds: 1)),
-    );
-    final result = orchestrator.processAssessment(
-      assessment: assessment(const []),
-      evaluatedAt: t0.add(const Duration(seconds: 1)),
-      capabilities: const CapabilitySnapshot(
-        gpsUsable: true,
-        staticProfileUsable: true,
-        insideSupportedCoverage: false,
-        audioUsable: true,
-        positionSharingUsable: false,
-      ),
-      systemCandidates: [
-        coverage.copyWith(
-          evaluatedAt: t0.add(const Duration(seconds: 1)),
-          observationId: 'coverage:2',
-        ),
-        sharingFault,
-      ],
-    );
-
-    expect(
-      result.state.primaryAlert?.candidate.category,
-      'position_sharing_unavailable',
-    );
-    // system faultはカテゴリによらず音を鳴らさず、表示だけを残す。
-    expect(result.snapshot.audioDirective, isNull);
-    expect(result.snapshot.oneShotAudioCues, isEmpty);
-    expect(
-      result.snapshot.visualDirective.orderedAlertIds,
-      contains(result.state.primaryAlert!.candidate.alertId),
-    );
   });
 
   test('カーブと逆走注意は両方activeで逆走を一回再生する', () {

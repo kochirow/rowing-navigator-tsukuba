@@ -133,10 +133,11 @@ service cloud.firestore {
         && previous.revision == current.revision;
     }
 
-    // 頂点補正は、変更した障害物だけを保存する。各listの長さは
-    // 同梱プロフィールv5の頂点数と一致させ、未知の障害物や巨大な
-    // payloadを受け付けない。各要素はクライアント側でもGeoPointと
-    // ±30mへ復元できるかを検証し、不正な共有設定を適用しない。
+    // 頂点補正は、変更した障害物だけを保存する。基準線・案内区域の
+    // list長は同梱プロフィールの頂点数とRulesでも照合する。橋脚・杭の
+    // 直接外周ポリゴンはID増加でRulesの1000式上限を超えないよう、Rulesでは
+    // 許可IDを照合し、list長・GeoPoint・±30mへの復元可否はクライアント側で
+    // 厳密に検証して不正な共有設定を適用しない。
     function validScaledVertexOffsetList(values, pointCount) {
       return values is list && values.size() == pointCount;
     }
@@ -144,6 +145,8 @@ service cloud.firestore {
     // GENERATED: hazard-allowlist BEGIN
     function validHazardSourceIds(values) {
       return values.keys().hasOnly([
+        'pile_3eacc519',
+        'pile_e14ff5c6',
         'curve_1',
         'curve_2',
         'curve_3',
@@ -152,6 +155,21 @@ service cloud.firestore {
         'curve_6',
         'curve_7',
         'reverse_main_channel',
+        'bridgepier_a2c5433b',
+        'bridgepier_7a5ecc15',
+        'bridgepier_070a656c',
+        'bridgepier_636d911d',
+        'bridgepier_860a0375',
+        'bridgepier_205c3959',
+        'bridgepier_601d9621',
+        'bridgepier_201874a5',
+        'bridgepier_5ca97dbb',
+        'bridgepier_911fc593',
+        'bridgepier_b5c742b7',
+        'bridgepier_bec6898e',
+        'bridgepier_7fdc56a4',
+        'bridgepier_e7ea8ed4',
+        'pile_71ec1621',
         'driftwood_estuary',
         'island_sakuragawa_bridge',
         'island_upstream',
@@ -166,6 +184,7 @@ service cloud.firestore {
         'shore_south',
         'test_zone_land',
         'shore_bd39c863',
+        'driftwood_51534e52',
       ]);
     }
 
@@ -189,7 +208,7 @@ service cloud.firestore {
         && (!('curve_7' in values) || validScaledVertexOffsetList(values.curve_7, 5))
         && (!('reverse_main_channel' in values) || validScaledVertexOffsetList(values.reverse_main_channel, 59))
         && (!('driftwood_estuary' in values) || validScaledVertexOffsetList(values.driftwood_estuary, 6))
-        && (!('island_sakuragawa_bridge' in values) || validScaledVertexOffsetList(values.island_sakuragawa_bridge, 9))
+        && (!('island_sakuragawa_bridge' in values) || validScaledVertexOffsetList(values.island_sakuragawa_bridge, 10))
         && (!('island_upstream' in values) || validScaledVertexOffsetList(values.island_upstream, 12))
         && (!('bridge_suigo' in values) || validScaledVertexOffsetList(values.bridge_suigo, 5))
         && (!('bridge_railway' in values) || validScaledVertexOffsetList(values.bridge_railway, 5))
@@ -201,13 +220,28 @@ service cloud.firestore {
         && (!('shore_north' in values) || validScaledVertexOffsetList(values.shore_north, 154))
         && (!('shore_south' in values) || validScaledVertexOffsetList(values.shore_south, 108))
         && (!('test_zone_land' in values) || validScaledVertexOffsetList(values.test_zone_land, 5))
-        && (!('shore_bd39c863' in values) || validScaledVertexOffsetList(values.shore_bd39c863, 27));
+        && (!('shore_bd39c863' in values) || validScaledVertexOffsetList(values.shore_bd39c863, 27))
+        && (!('driftwood_51534e52' in values) || validScaledVertexOffsetList(values.driftwood_51534e52, 7));
+    }
+
+    // v8では橋脚・杭を直接外周ポリゴンとして追加したため、全sourceの
+    // 頂点数をRulesで個別展開するとFirestoreの1000式上限に達する。
+    // source IDの許可は維持し、既存の基準線 shore_north の頂点数だけを
+    // 互換性テストを兼ねて厳密に確認する。橋脚・杭を含む全頂点配列の
+    // 順序・個数・GeoPoint値域は、生成定数とアプリ読込時の検証で担保する。
+    function validScaledVertexOffsetsV8(values) {
+      return values is map
+        && validHazardSourceIds(values)
+        && (!('shore_north' in values)
+          || validScaledVertexOffsetList(values.shore_north, 154));
     }
 
     function validDisabledWarningSourceIds(values) {
       return values is list
-        && values.size() <= 22
+        && values.size() <= 40
         && values.hasOnly([
+          'pile_3eacc519',
+          'pile_e14ff5c6',
           'curve_1',
           'curve_2',
           'curve_3',
@@ -216,6 +250,21 @@ service cloud.firestore {
           'curve_6',
           'curve_7',
           'reverse_main_channel',
+          'bridgepier_a2c5433b',
+          'bridgepier_7a5ecc15',
+          'bridgepier_070a656c',
+          'bridgepier_636d911d',
+          'bridgepier_860a0375',
+          'bridgepier_205c3959',
+          'bridgepier_601d9621',
+          'bridgepier_201874a5',
+          'bridgepier_5ca97dbb',
+          'bridgepier_911fc593',
+          'bridgepier_b5c742b7',
+          'bridgepier_bec6898e',
+          'bridgepier_7fdc56a4',
+          'bridgepier_e7ea8ed4',
+          'pile_71ec1621',
           'driftwood_estuary',
           'island_sakuragawa_bridge',
           'island_upstream',
@@ -230,6 +279,7 @@ service cloud.firestore {
           'shore_south',
           'test_zone_land',
           'shore_bd39c863',
+          'driftwood_51534e52',
         ]);
     }
 // GENERATED: hazard-allowlist END
@@ -275,6 +325,36 @@ service cloud.firestore {
         ])
         && data.kind == 'fixed_obstacle_calibrations'
         && data.baseProfileVersion == 5
+        && data.baseProfileSha256 ==
+          '15631cf1f94d0edf9c7608b85e16e7d29961a2fcc5d7c47c11976ac0988991da'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsets(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validSharedSafetyCalibrationV4(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 5
         // 同梱プロファイルのSHA-256。`lib/config/hazard_profile_config.dart` の
         // `currentHazardProfileSha256` と必ず一致させること。
         // ルールはimportできないので直書きせざるを得ないが、ずれると
@@ -287,6 +367,120 @@ service cloud.firestore {
         && validScaledVertexOffsets(data.scaledVertexOffsets)
         && validDangerZoneOffsets(data.dangerZoneOffsets)
         && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validSharedSafetyCalibrationV5(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 6
+        && data.baseProfileSha256 ==
+          'fca7a4f8146cfd85fdc3fde545f8ac1d22533ad2c778e48df220747dc292455f'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsets(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validSharedSafetyCalibrationV6(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 7
+        && data.baseProfileSha256 ==
+          '41c44b63977a0dcd3db0617043735ad13bfde1e50e946198b548b4d2aa8f781b'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsets(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validSharedSafetyCalibrationV7(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 8
+        && data.baseProfileSha256 ==
+          'b94e6f0afb23d153f50f63d8f43e020d62cb61fe8cbbe38777822a8e8671ed88'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsetsV8(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
         && data.revision is int
         && data.revision >= 1
         && data.updatedAt is timestamp
@@ -306,12 +500,34 @@ service cloud.firestore {
         && previous.scaledOffsets == current.scaledOffsets
         && previous.scaledVertexOffsets == current.scaledVertexOffsets
         && previous.dangerZoneOffsets == current.dangerZoneOffsets
-        // 既存v2文書には警告対象の項目がない。次回公開で追加するまで
-        // previousStateだけが新形式でも更新できるようにする。
         && (!previous.keys().hasAny(['disabledWarningSourceIds'])
           || !current.keys().hasAny(['disabledWarningSourceIds'])
           || previous.disabledWarningSourceIds
             == current.disabledWarningSourceIds)
+        && previous.revision == current.revision;
+    }
+
+    function validPreviousSafetyCalibrationV4(previous, current) {
+      return previous is map
+        && previous.keys().hasAll([
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds'
+        ])
+        && previous.keys().hasOnly([
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds'
+        ])
+        && previous.scaledOffsets == current.scaledOffsets
+        && previous.scaledVertexOffsets == current.scaledVertexOffsets
+        && previous.dangerZoneOffsets == current.dangerZoneOffsets
+        && previous.primaryWarningLeadSeconds
+          == current.primaryWarningLeadSeconds
+        && previous.advanceWarningLeadSeconds
+          == current.advanceWarningLeadSeconds
+        && previous.disabledWarningSourceIds
+          == current.disabledWarningSourceIds
         && previous.revision == current.revision;
     }
 
@@ -498,8 +714,8 @@ service cloud.firestore {
       }
 
       match /managed_hazards/fixed_obstacle_calibrations_v4 {
-        // v4はprofile v5専用のMap形式。Rulesのallowlistは生成器で
-        // 同梱JSONと同期し、旧座標用の文書とは分離する。
+        // 更新前アプリの航行と明示公開は移行期間も維持する。更新済み端末は
+        // v5だけを読み、v4の端末差分を新しい既定値世代へ混ぜない。
         allow read: if isTeamMember(teamId);
         allow create: if canPublishTeamSafety(teamId)
           && validSharedSafetyCalibrationV3(request.resource.data)
@@ -518,6 +734,114 @@ service cloud.firestore {
           && request.resource.data.updatedAt == request.time
           && request.resource.data.updatedBy == request.auth.uid
           && validPreviousSafetyCalibration(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v5 {
+        // v5はprofile v5と安全既定値世代1専用。同じ文書に警告時間、
+        // 危険区域幅、頂点校正、警告対象をまとめて全艇へ同じrevisionで配る。
+        allow read: if isTeamMember(teamId);
+        allow create: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV4(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV4(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseProfileVersion
+            == resource.data.baseProfileVersion
+          && request.resource.data.baseProfileSha256
+            == resource.data.baseProfileSha256
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && validPreviousSafetyCalibrationV4(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v6 {
+        // v6はprofile v6専用。岸座標と航路契約を更新したため、旧profileの
+        // 頂点校正を再利用せず、新しいrevision 1から共有を開始する。
+        allow read: if isTeamMember(teamId);
+        allow create: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV5(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV5(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseProfileVersion
+            == resource.data.baseProfileVersion
+          && request.resource.data.baseProfileSha256
+            == resource.data.baseProfileSha256
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && validPreviousSafetyCalibrationV4(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v7 {
+        // v7は更新済みprofile v7専用。v6以前の共有校正を新しい座標へ
+        // 誤適用せず、新しいrevision 1から共有を開始する。
+        allow read: if isTeamMember(teamId);
+        allow create: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV6(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV6(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseProfileVersion
+            == resource.data.baseProfileVersion
+          && request.resource.data.baseProfileSha256
+            == resource.data.baseProfileSha256
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && validPreviousSafetyCalibrationV4(
+            request.resource.data.previousState,
+            resource.data
+          );
+        allow delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v8 {
+        // v8は橋脚を追加・更新したprofile v8専用。v7以前の共有校正を
+        // 新しい座標へ誤適用せず、新しいrevision 1から共有を開始する。
+        allow read: if isTeamMember(teamId);
+        allow create: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV7(request.resource.data)
+          && !request.resource.data.keys().hasAny(['previousState'])
+          && request.resource.data.revision == 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canPublishTeamSafety(teamId)
+          && validSharedSafetyCalibrationV7(request.resource.data)
+          && request.resource.data.kind == resource.data.kind
+          && request.resource.data.baseProfileVersion
+            == resource.data.baseProfileVersion
+          && request.resource.data.baseProfileSha256
+            == resource.data.baseProfileSha256
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.updatedBy == request.auth.uid
+          && validPreviousSafetyCalibrationV4(
             request.resource.data.previousState,
             resource.data
           );

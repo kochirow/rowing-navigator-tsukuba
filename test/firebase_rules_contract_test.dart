@@ -109,12 +109,43 @@ void main() {
         'match /managed_hazards/fixed_obstacle_calibrations_v4',
       ),
     );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v5',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v6',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v7',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v8',
+      ),
+    );
     expect(rules, contains('validSharedSafetyCalibrationV3'));
+    expect(rules, contains('validSharedSafetyCalibrationV4'));
+    expect(rules, contains('validSharedSafetyCalibrationV5'));
+    expect(rules, contains('validSharedSafetyCalibrationV6'));
+    expect(rules, contains('validSharedSafetyCalibrationV7'));
     expect(rules, contains('validScaledOffsetMap'));
     expect(rules, contains('// GENERATED: hazard-allowlist BEGIN'));
     expect(rules, contains('function canPublishTeamSafety(teamId)'));
     expect(rules, contains('validPreviousSafetyCalibration'));
+    expect(rules, contains('validPreviousSafetyCalibrationV4'));
     expect(rules, contains('validDisabledWarningSourceIds'));
+    expect(rules, contains('data.primaryWarningLeadSeconds >= 8.5'));
+    expect(rules, contains('data.advanceWarningLeadSeconds <= 25'));
     expect(rules, contains('request.query.limit <= 100'));
     expect(rules, contains('allow list: if false;'));
     expect(

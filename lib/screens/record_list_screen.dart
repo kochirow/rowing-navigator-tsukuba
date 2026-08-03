@@ -1072,6 +1072,7 @@ String _alertCategoryLabel(String category) => switch (category) {
       'bridgePier' => '橋脚',
       'island' => '中州',
       'driftwood' => '流木',
+      'pile' => '杭',
       'curve' => 'カーブ',
       'reverse' => '逆走注意',
       'other_boat' => '他艇',

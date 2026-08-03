@@ -19,7 +19,6 @@ void main() {
   const capabilities = CapabilitySnapshot(
     gpsUsable: true,
     staticProfileUsable: true,
-    insideSupportedCoverage: true,
     audioUsable: true,
   );
 
@@ -503,10 +502,9 @@ void main() {
         evaluatedAt: t0,
         capabilities: capabilities,
         systemCandidates: [
-          // 実機で216回 primary になり、そのたびに音を止めていた候補。
           systemFault(
-            detectorId: 'operational_coverage',
-            category: 'operational_coverage_unverified',
+            detectorId: 'position_sharing',
+            category: 'position_sharing_unavailable',
             at: t0,
           ),
         ],
@@ -515,7 +513,7 @@ void main() {
 
       expect(
         result.state.primaryAlert?.candidate.category,
-        'operational_coverage_unverified',
+        'position_sharing_unavailable',
       );
       // 表示primaryが無音でも、音声の対象は独立に選ばれる。
       expect(result.snapshot.audioDirective, isNotNull);
@@ -537,7 +535,6 @@ void main() {
             capabilities: const CapabilitySnapshot(
               gpsUsable: true,
               staticProfileUsable: true,
-              insideSupportedCoverage: true,
               audioUsable: true,
               dynamicReceiveUsable: false,
             ),

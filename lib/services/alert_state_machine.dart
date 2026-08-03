@@ -212,7 +212,7 @@ class AlertCandidateComparator {
   ///
   /// 表示のprimaryと分けるためだけの入口で、順位付けもロックの挙動も
   /// [selectPrimary] と同じものを使う。無音の system fault
-  /// (`operational_coverage_unverified` など)が表示primaryになっても、
+  /// (`position_sharing_unavailable` など)が表示primaryになっても、
   /// 鳴っている音を止めない経路にするために必要。
   AlertCandidate? selectAudioPrimary(
     Iterable<AlertCandidate> candidates, {

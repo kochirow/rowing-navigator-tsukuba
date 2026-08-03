@@ -71,39 +71,6 @@ void main() {
     expect(warning?.audioAsset, 'audio/other_boat_warning.mp3');
   });
 
-  test('運用対象水域外は航行を止めず無音で未検証表示する', () {
-    final warning = service.fromCandidate(AlertCandidate.stable(
-      detectorId: 'operational_coverage',
-      category: 'outside_operational_coverage',
-      behavior: AlertBehavior.persistentSystemFault,
-      evaluatedAt: DateTime.utc(2026, 7, 15),
-      observationId: 'coverage-1',
-      actionDeadline: Duration.zero,
-      audioAsset: null,
-    ));
-
-    expect(warning?.title, '対応水域の範囲外です');
-    expect(warning?.message, contains('未検証'));
-    expect(warning?.audioAsset, isNull);
-    expect(warning?.audioMode, WarningAudioMode.none);
-  });
-
-  test('運用対象水域が未設定でも警告継続を無音で表示する', () {
-    final warning = service.fromCandidate(AlertCandidate.stable(
-      detectorId: 'operational_coverage',
-      category: 'operational_coverage_unverified',
-      behavior: AlertBehavior.persistentSystemFault,
-      evaluatedAt: DateTime.utc(2026, 7, 15),
-      observationId: 'coverage-2',
-      actionDeadline: Duration.zero,
-      audioAsset: null,
-    ));
-
-    expect(warning?.title, '対応水域が未設定です');
-    expect(warning?.message, contains('警告は継続'));
-    expect(warning?.audioAsset, isNull);
-  });
-
   test('推測警告は残り秒数を持ち、岸表示は省スペースにする', () {
     final warning = service.fromCandidate(AlertCandidate.stable(
       detectorId: 'static_collision',

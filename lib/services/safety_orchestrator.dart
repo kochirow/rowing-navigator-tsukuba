@@ -284,7 +284,6 @@ class SafetyOrchestrator {
     );
     final full = capabilities.gpsUsable &&
         capabilities.staticProfileUsable &&
-        capabilities.insideSupportedCoverage &&
         capabilities.audioUsable &&
         capabilities.dynamicReceiveUsable &&
         capabilities.positionSharingUsable &&

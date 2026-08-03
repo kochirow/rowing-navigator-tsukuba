@@ -10,9 +10,7 @@ import '../models/danger_zone_settings.dart';
 import '../models/fixed_obstacle_calibration.dart';
 import '../models/fixed_obstacle_warning_settings.dart';
 import '../models/shared_safety_calibration.dart';
-import 'danger_zone_settings_service.dart';
-import 'fixed_obstacle_calibration_service.dart';
-import 'fixed_obstacle_warning_settings_service.dart';
+import 'risk_evaluator_settings_service.dart';
 import 'team_service.dart';
 
 class SharedSafetyCalibrationConflictException implements Exception {
@@ -73,31 +71,20 @@ class SharedSafetyCalibrationProfileMismatchException implements Exception {
 /// 呼び出し側が必要な期間だけ購読するためのcold streamである。
 class SharedSafetyCalibrationService {
   static const collectionName = 'managed_hazards';
-  static const _cachePrefix = 'shared_safety_calibration_v1';
+  // v2 cacheは、v4共有文書の現地差分を新しい既定値世代へ混ぜない。
+  static const _cachePrefix = 'shared_safety_calibration_v2';
 
   final FirebaseFirestore? _firestore;
   final FirebaseAuth? _auth;
   final String? _teamId;
-  final FixedObstacleCalibrationService _localCalibrationService;
-  final DangerZoneSettingsService _localDangerZoneSettingsService;
-  final FixedObstacleWarningSettingsService _localWarningSettingsService;
 
   SharedSafetyCalibrationService({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
     String? teamId,
-    FixedObstacleCalibrationService? localCalibrationService,
-    DangerZoneSettingsService? localDangerZoneSettingsService,
-    FixedObstacleWarningSettingsService? localWarningSettingsService,
   })  : _firestore = firestore,
         _auth = auth,
-        _teamId = teamId,
-        _localCalibrationService =
-            localCalibrationService ?? FixedObstacleCalibrationService(),
-        _localDangerZoneSettingsService =
-            localDangerZoneSettingsService ?? DangerZoneSettingsService(),
-        _localWarningSettingsService = localWarningSettingsService ??
-            FixedObstacleWarningSettingsService();
+        _teamId = teamId;
 
   FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
   FirebaseAuth get _firebaseAuth => _auth ?? FirebaseAuth.instance;
@@ -110,13 +97,6 @@ class SharedSafetyCalibrationService {
       .doc(_activeTeamId)
       .collection(collectionName)
       .doc(SharedSafetyCalibrationState.documentId);
-
-  /// profile v4向けv3文書は参照だけに残し、新規書き込みはv4へ行う。
-  DocumentReference<Map<String, dynamic>> get _previousDocument => _db
-      .collection('teams')
-      .doc(_activeTeamId)
-      .collection(collectionName)
-      .doc('fixed_obstacle_calibrations_v3');
 
   String get _teamCacheKey => '${_cachePrefix}_$_activeTeamId';
 
@@ -205,10 +185,9 @@ class SharedSafetyCalibrationService {
         source: forceServer ? Source.server : Source.serverAndCache,
       );
       final snapshot = await _document.get(options);
-      final state = await _acceptCurrentOrLegacy(
+      final state = await _acceptCurrent(
         snapshot,
         cached: cached?.state,
-        options: options,
       );
       return SharedSafetyCalibrationFetch(
         result: SharedSafetyFetchResult.fresh,
@@ -246,7 +225,52 @@ class SharedSafetyCalibrationService {
       source: forceServer ? Source.server : Source.serverAndCache,
     );
     final snapshot = await _document.get(options);
-    return _acceptCurrentOrLegacy(snapshot, cached: cached, options: options);
+    return _acceptCurrent(snapshot, cached: cached);
+  }
+
+  /// 新しい安全既定値世代の共有文書を、チーム内で一度だけ作成する。
+  ///
+  /// 最初に更新した端末がrevision 1のコード既定値を作り、同時起動した端末は
+  /// transactionで同じ文書を読む。既にv5があれば一切上書きしない。
+  Future<SharedSafetyCalibrationState> ensureTeamDefaults() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw StateError('チーム安全設定の初期化にはログインが必要です。');
+    }
+    try {
+      final state = await _db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(_document);
+        if (snapshot.exists && snapshot.data() != null) {
+          final current = SharedSafetyCalibrationState.fromFirestoreMap(
+            snapshot.data()!,
+          );
+          if (!current.isCompatibleWithCurrentProfile) {
+            throw const SharedSafetyCalibrationProfileMismatchException();
+          }
+          return current;
+        }
+        final defaults = SharedSafetyCalibrationState(
+          revision: 1,
+          updatedAt: DateTime.now().toUtc(),
+          updatedBy: user.uid,
+        );
+        transaction.set(
+          _document,
+          defaults.toFirestoreMap(
+            updatedBy: user.uid,
+            updatedAt: FieldValue.serverTimestamp(),
+          ),
+        );
+        return defaults;
+      });
+      await cache(state);
+      return state;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        throw const SharedSafetyCalibrationPermissionException();
+      }
+      rethrow;
+    }
   }
 
   /// 呼び出し側が購読している間だけ、チームの1文書を監視する。
@@ -260,18 +284,9 @@ class SharedSafetyCalibrationService {
       return;
     }
     var lastAccepted = cached;
-    var isFirstEvent = true;
     await for (final snapshot in _document.snapshots()) {
-      final next = snapshot.exists
-          ? await _acceptSnapshot(snapshot, cached: lastAccepted)
-          : isFirstEvent
-              ? await _acceptPreviousSnapshot(
-                  await _previousDocument.get(),
-                  cached: lastAccepted,
-                )
-              : lastAccepted;
-      if (!isFirstEvent && next?.revision == lastAccepted?.revision) continue;
-      isFirstEvent = false;
+      final next = await _acceptSnapshot(snapshot, cached: lastAccepted);
+      if (next?.revision == lastAccepted?.revision) continue;
       lastAccepted = next;
       yield next;
     }
@@ -281,28 +296,21 @@ class SharedSafetyCalibrationService {
     required Map<String, FixedObstacleCalibration> calibrations,
     required int expectedRevision,
   }) async {
-    // 初回文書作成時も既存の端末内危険範囲を失わない。
-    final initialDangerZones = await _localDangerZoneSettingsService.load();
-    final initialWarningSettings = await _localWarningSettingsService.load();
     return publish(
       calibrations: calibrations,
-      initialDangerZoneSettings: initialDangerZones,
-      initialDisabledWarningSourceIds: initialWarningSettings.disabledSourceIds,
       expectedRevision: expectedRevision,
     );
   }
 
   Future<SharedSafetyCalibrationState> publishDangerZones({
     required DangerZoneSettings dangerZoneSettings,
+    WarningLeadTimes? warningLeadTimes,
     required int expectedRevision,
   }) async {
-    // 初回文書作成時も既存の端末内位置校正を失わない。
-    final initialCalibrations = await _localCalibrationService.loadAll();
-    final initialWarningSettings = await _localWarningSettingsService.load();
     return publish(
       dangerZoneSettings: dangerZoneSettings,
-      initialCalibrations: initialCalibrations,
-      initialDisabledWarningSourceIds: initialWarningSettings.disabledSourceIds,
+      primaryWarningLeadSeconds: warningLeadTimes?.primaryWarningLeadSeconds,
+      advanceWarningLeadSeconds: warningLeadTimes?.advanceWarningLeadSeconds,
       expectedRevision: expectedRevision,
     );
   }
@@ -311,14 +319,19 @@ class SharedSafetyCalibrationService {
     required FixedObstacleWarningSettings warningSettings,
     required int expectedRevision,
   }) async {
-    // 初回文書作成時も既存の端末内位置・危険範囲設定を失わない。
-    final initialCalibrations = await _localCalibrationService.loadAll();
-    final initialDangerZones = await _localDangerZoneSettingsService.load();
     return publish(
       disabledWarningSourceIds: warningSettings.disabledSourceIds,
-      initialCalibrations: initialCalibrations,
-      initialDangerZoneSettings: initialDangerZones,
-      initialDisabledWarningSourceIds: warningSettings.disabledSourceIds,
+      expectedRevision: expectedRevision,
+    );
+  }
+
+  Future<SharedSafetyCalibrationState> publishWarningLeadTimes({
+    required WarningLeadTimes warningLeadTimes,
+    required int expectedRevision,
+  }) {
+    return publish(
+      primaryWarningLeadSeconds: warningLeadTimes.primaryWarningLeadSeconds,
+      advanceWarningLeadSeconds: warningLeadTimes.advanceWarningLeadSeconds,
       expectedRevision: expectedRevision,
     );
   }
@@ -329,15 +342,15 @@ class SharedSafetyCalibrationService {
     Map<String, FixedObstacleCalibration>? calibrations,
     DangerZoneSettings? dangerZoneSettings,
     Set<String>? disabledWarningSourceIds,
-    Map<String, FixedObstacleCalibration> initialCalibrations = const {},
-    DangerZoneSettings? initialDangerZoneSettings,
-    Set<String> initialDisabledWarningSourceIds =
-        SharedSafetyCalibrationState.defaultDisabledWarningSourceIds,
+    double? primaryWarningLeadSeconds,
+    double? advanceWarningLeadSeconds,
     required int expectedRevision,
   }) async {
     if (calibrations == null &&
         dangerZoneSettings == null &&
-        disabledWarningSourceIds == null) {
+        disabledWarningSourceIds == null &&
+        primaryWarningLeadSeconds == null &&
+        advanceWarningLeadSeconds == null) {
       throw ArgumentError('At least one shared safety field is required');
     }
     final user = _firebaseAuth.currentUser;
@@ -355,31 +368,20 @@ class SharedSafetyCalibrationService {
           if (!current.isCompatibleWithCurrentProfile) {
             throw const SharedSafetyCalibrationProfileMismatchException();
           }
-        } else {
-          // 旧profile向けv3は変更せず残す。同じprofileの場合だけ引き継ぎ、
-          // 座標が異なる場合は補正を誤適用せず新しいv4をrevision 1で作る。
-          final previous = await transaction.get(_previousDocument);
-          if (previous.exists && previous.data() != null) {
-            final candidate = SharedSafetyCalibrationState.fromFirestoreMap(
-              previous.data()!,
-            );
-            if (candidate.isCompatibleWithCurrentProfile) current = candidate;
-          }
         }
         final currentRevision = current?.revision ?? 0;
         if (currentRevision != expectedRevision) {
           throw const SharedSafetyCalibrationConflictException();
         }
-        final base = current ??
-            SharedSafetyCalibrationState(
-              calibrations: initialCalibrations,
-              dangerZoneSettings: initialDangerZoneSettings,
-              disabledWarningSourceIds: initialDisabledWarningSourceIds,
-            );
+        // v5初回公開は常にコード既定値を土台にする。端末内の旧設定を
+        // 取り込むと、最初に公開した艇だけの値でチーム全体が汚染される。
+        final base = current ?? SharedSafetyCalibrationState();
         final next = base.copyWith(
           calibrations: calibrations,
           dangerZoneSettings: dangerZoneSettings,
           disabledWarningSourceIds: disabledWarningSourceIds,
+          primaryWarningLeadSeconds: primaryWarningLeadSeconds,
+          advanceWarningLeadSeconds: advanceWarningLeadSeconds,
           revision: currentRevision + 1,
           updatedAt: DateTime.now().toUtc(),
           updatedBy: user.uid,
@@ -419,29 +421,10 @@ class SharedSafetyCalibrationService {
     return remote;
   }
 
-  Future<SharedSafetyCalibrationState?> _acceptCurrentOrLegacy(
-    DocumentSnapshot<Map<String, dynamic>> snapshot, {
-    required SharedSafetyCalibrationState? cached,
-    required GetOptions options,
-  }) async {
-    if (snapshot.exists) return _acceptSnapshot(snapshot, cached: cached);
-    return _acceptPreviousSnapshot(
-      await _previousDocument.get(options),
-      cached: cached,
-    );
-  }
-
-  Future<SharedSafetyCalibrationState?> _acceptPreviousSnapshot(
+  Future<SharedSafetyCalibrationState?> _acceptCurrent(
     DocumentSnapshot<Map<String, dynamic>> snapshot, {
     required SharedSafetyCalibrationState? cached,
   }) async {
-    if (!snapshot.exists || snapshot.data() == null) return cached;
-    final previous = SharedSafetyCalibrationState.fromFirestoreMap(
-      snapshot.data()!,
-    );
-    if (!previous.isCompatibleWithCurrentProfile) return cached;
-    if (cached != null && previous.revision <= cached.revision) return cached;
-    await cache(previous);
-    return previous;
+    return _acceptSnapshot(snapshot, cached: cached);
   }
 }

@@ -7,10 +7,21 @@ import '../../../theme/app_theme.dart';
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
 /// 情報を3階層に分けて視線誘導を明確にする。
-///   1. 主計器: ペース(/500m)。SPM実験機能がONの時だけレートを併記。
-///   2. 補助: 距離・経過時間。
-///   3. 状態: GPS鮮度・通信/対応水域の能力低下。異常時のみ強調し、正常時は最小。
+///   1. 主計器: ペース(52px)。SPM計測がONの時はレート(44px)を併記。
+///   2. 補助: 距離・経過時間(16px)。
+///   3. 状態: GPS鮮度・通信の能力低下。異常時のみ強調し、正常時は最小。
 /// 一番下に安全上の注記を最小ウェイトで常時表示する。
+///
+/// **主計器の大きさは状況で変えない(`deemphasized` を廃止した記録)。**
+///
+/// 元の実装には「連続音が鳴っている間は主計器を縮めて(ペース52→32px、
+/// SPMは非表示)、警告バナーへ視線の一等地を譲る」という意図があった。
+/// これを外したのは、**計器の大きさが状況で変わること自体が読み取りを
+/// 遅らせる**という利用者判断による。漕手が常時見たいのはペースとSPMの
+/// 2つだけで、その2つが警告のたびに動く・消えることのほうが害が大きい。
+///
+/// 警告バナーの表示・音・優先順位は一切変えていないので、警告が伝わらなく
+/// なることはない。**この判断を戻すときは、その理由もここへ書くこと。**
 class NavStatusCard extends StatelessWidget {
   final int paceSeconds;
   final int distanceMeters;
@@ -21,21 +32,14 @@ class NavStatusCard extends StatelessWidget {
   final bool portraitCompact; // 縦向き用。主計器の可読性を保ちながら左上へ縮小
   final int? gpsAgeSeconds; // 最後のGPS測位からの経過秒(不明時はnull)
   final GpsHealthQuality gpsQuality;
+  final bool gpsStreamRecovering;
   final bool positionSharingUnavailable;
   final bool otherBoatReceiveUnavailable;
   final bool temporaryObstacleReceiveUnavailable;
-  final bool operationalCoverageLimited;
   final String safetySettingsLabel;
   final bool safetySettingsNeedsAttention;
   final int? pendingSharedSafetyRevision;
   final VoidCallback? onApplyPendingSafetySettings;
-
-  /// 連続音の警告が出ている間、主計器を控えめにする。
-  ///
-  /// 画面でいちばん大きい数字がペースのままだと、一瞬のチラ見で最初に目へ
-  /// 入るのが「2:05 /500m」になる。危険が迫っている間だけ主計器を縮め、
-  /// 警告バナーを視線の一等地へ譲る。距離・時間・状態表示は消さない。
-  final bool deemphasized;
 
   const NavStatusCard({
     super.key,
@@ -48,15 +52,14 @@ class NavStatusCard extends StatelessWidget {
     this.portraitCompact = false,
     this.gpsAgeSeconds,
     this.gpsQuality = GpsHealthQuality.good,
+    this.gpsStreamRecovering = false,
     this.positionSharingUnavailable = false,
     this.otherBoatReceiveUnavailable = false,
     this.temporaryObstacleReceiveUnavailable = false,
-    this.operationalCoverageLimited = false,
     this.safetySettingsLabel = '安全設定: 読込中',
     this.safetySettingsNeedsAttention = true,
     this.pendingSharedSafetyRevision,
     this.onApplyPendingSafetySettings,
-    this.deemphasized = false,
   });
 
   // 数字が変わっても幅が揺れない等幅数字
@@ -94,18 +97,22 @@ class NavStatusCard extends StatelessWidget {
     final onDark = colors.onDark;
     final onDarkSub = onDark.withValues(alpha: 0.7);
 
-    final gpsStale = gpsQuality != GpsHealthQuality.good ||
+    final gpsStale = gpsStreamRecovering ||
+        gpsQuality != GpsHealthQuality.good ||
         (gpsAgeSeconds != null && gpsAgeSeconds! >= gpsStaleIndicatorSec);
-    final statusLabel = switch (gpsQuality) {
-      GpsHealthQuality.unusable =>
-        gpsAgeSeconds == null ? 'GPS捕捉中' : 'GPS再捕捉中 $gpsAgeSeconds秒前',
-      GpsHealthQuality.degraded => 'GPS精度低下',
-      GpsHealthQuality.good => gpsStale ? 'GPS $gpsAgeSeconds秒前' : null,
-    };
+    final statusLabel = gpsStreamRecovering
+        ? gpsAgeSeconds == null
+            ? 'GPSストリーム再接続中'
+            : 'GPSストリーム再接続中 $gpsAgeSeconds秒前'
+        : switch (gpsQuality) {
+            GpsHealthQuality.unusable =>
+              gpsAgeSeconds == null ? 'GPS捕捉中' : 'GPS測位なし $gpsAgeSeconds秒前',
+            GpsHealthQuality.degraded => 'GPS精度低下',
+            GpsHealthQuality.good => gpsStale ? 'GPS $gpsAgeSeconds秒前' : null,
+          };
     final degraded = positionSharingUnavailable ||
         otherBoatReceiveUnavailable ||
-        temporaryObstacleReceiveUnavailable ||
-        operationalCoverageLimited;
+        temporaryObstacleReceiveUnavailable;
 
     // SPMは実験機能。OFF時は値だけでなく表示領域ごと取り除く。
     final spmValueText = spm?.toStringAsFixed(0) ?? '--';
@@ -116,8 +123,6 @@ class NavStatusCard extends StatelessWidget {
         _CapabilityBadge(label: '自艇共有: 利用不可', color: colors.danger),
       if (temporaryObstacleReceiveUnavailable)
         _CapabilityBadge(label: '臨時危険区域: 受信不可', color: colors.danger),
-      if (operationalCoverageLimited)
-        _CapabilityBadge(label: '固定危険区域: 未検証水域', color: colors.warning),
     ];
 
     if (compact || portraitCompact) {
@@ -170,7 +175,7 @@ class NavStatusCard extends StatelessWidget {
                       Text(
                         _formatPace(paceSeconds),
                         style: TextStyle(
-                          fontSize: deemphasized ? 32 : 52,
+                          fontSize: 52,
                           height: 1.1,
                           fontWeight: FontWeight.bold,
                           color: onDark,
@@ -185,7 +190,7 @@ class NavStatusCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (spmMeasurementEnabled && !deemphasized) ...[
+              if (spmMeasurementEnabled) ...[
                 SizedBox(width: dimens.space3),
                 Expanded(
                   flex: 2,
@@ -362,7 +367,6 @@ class NavStatusCard extends StatelessWidget {
       if (otherBoatReceiveUnavailable) '他艇受信不可',
       if (positionSharingUnavailable) '自艇共有不可',
       if (temporaryObstacleReceiveUnavailable) '危険区域受信不可',
-      if (operationalCoverageLimited) '未検証水域',
       safetySettingsLabel,
     ];
 
@@ -419,10 +423,7 @@ class NavStatusCard extends StatelessWidget {
                           color: onDark,
                           // 縦向きは従来52pxから少しだけ縮め、主計器の
                           // 読みやすさを維持する。横向きだけ30pxにする。
-                          // 連続音の警告中はさらに落として警告へ譲る。
-                          fontSize: deemphasized
-                              ? (portrait ? 28 : 22)
-                              : (portrait ? 46 : 30),
+                          fontSize: portrait ? 46 : 30,
                           height: 1,
                           fontWeight: FontWeight.bold,
                           fontFeatures: _tabularFigures,
@@ -439,7 +440,7 @@ class NavStatusCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (spmMeasurementEnabled && !deemphasized) ...[
+              if (spmMeasurementEnabled) ...[
                 const SizedBox(width: 8),
                 Text(
                   '$spmValueText spm',
@@ -523,7 +524,8 @@ class _InlineMetric extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              // 補助情報。主計器(ペース52px・SPM44px)との差を明確にする。
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: onDark,
               fontFeatures: NavStatusCard._tabularFigures,

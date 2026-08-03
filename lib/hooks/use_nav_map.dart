@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -346,6 +348,55 @@ UseNavMap useNavMap() {
     return true;
   }
 
+  /// 指定した地点がすべて収まる位置へカメラを動かす。監視モード専用。
+  ///
+  /// 航行中は使わない。漕手の画面は自艇を追い続ける必要があり、勝手に
+  /// 引くと前方の見通しが失われる。
+  ///
+  /// 1点だけのとき、または全艇がほぼ同じ場所にいて範囲が潰れるときは、
+  /// bounds が面積を持たず Google Maps が最大倍率まで寄せてしまうため、
+  /// 単純な中心移動へ切り替える。
+  Future<void> fitBounds(
+    List<LatLng> points, {
+    double singlePointZoom = watchSingleBoatZoomLevel,
+    double paddingPixels = 64,
+  }) async {
+    final controller = mapController.value;
+    if (controller == null || points.isEmpty) return;
+    // 手動でカメラを動かすため、差分ゲートの記憶を捨てる。これを忘れると、
+    // 次の focus() が「もう描いた」と誤判定されて画面が動かなくなる。
+    cameraUpdateGate.reset();
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+    for (final point in points) {
+      south = min(south, point.latitude);
+      north = max(north, point.latitude);
+      west = min(west, point.longitude);
+      east = max(east, point.longitude);
+    }
+    // 約1m。これ未満の広がりは「1点」として扱う。
+    const degenerateSpanDegrees = 1e-5;
+    if (north - south < degenerateSpanDegrees &&
+        east - west < degenerateSpanDegrees) {
+      await controller.moveCamera(CameraUpdate.newLatLngZoom(
+        LatLng((north + south) / 2, (east + west) / 2),
+        singlePointZoom,
+      ));
+      return;
+    }
+    // south/west は最小、north/east は最大。逆にすると Google Maps が
+    // assert で落ちる。
+    await controller.animateCamera(CameraUpdate.newLatLngBounds(
+      LatLngBounds(
+        southwest: LatLng(south, west),
+        northeast: LatLng(north, east),
+      ),
+      paddingPixels,
+    ));
+  }
+
   useEffect(() {
     return () {
       markerRenderGate.invalidate();
@@ -373,6 +424,7 @@ UseNavMap useNavMap() {
     setPolylines: setPolylines,
     setPolygons: setPolygons,
     focus: focus,
+    fitBounds: fitBounds,
   );
 }
 
@@ -414,6 +466,11 @@ class UseNavMap {
     double zoomLevel, {
     bool force,
   }) focus;
+  final Future<void> Function(
+    List<LatLng> points, {
+    double singlePointZoom,
+    double paddingPixels,
+  }) fitBounds;
 
   UseNavMap({
     required this.mapController,
@@ -435,6 +492,7 @@ class UseNavMap {
     required this.setPolylines,
     required this.setPolygons,
     required this.focus,
+    required this.fitBounds,
   });
 }
 

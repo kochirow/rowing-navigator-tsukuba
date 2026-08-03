@@ -9,7 +9,7 @@ import '../../../widgets/app_state_views.dart';
 /// 各艇の艇種・速度・電池残量・最終更新・異常を一覧できる。
 ///
 /// 強調度は**異常の重さに合わせる**。
-/// - 長時間停止(沈の疑い)・水域外 → 行ごと赤系で強調し、岸から一目で気づける
+/// - 長時間停止(沈の疑い) → 行ごと赤系で強調し、岸から一目で気づける
 /// - 更新途絶([BoatAnomaly.isRoutine]) → 控えめ。停止中送信10秒 + 画面OFF +
 ///   通信ジッタで日常的に起こるため、赤枠で出すと一覧が常時赤くなり
 ///   本当にまずい艇が埋もれる(DESIGN_PRINCIPLES 原則4)
@@ -19,7 +19,13 @@ import '../../../widgets/app_state_views.dart';
 class BoatListPanel extends StatelessWidget {
   final List<BoatStatus> statuses;
 
-  const BoatListPanel({super.key, required this.statuses});
+  /// 行をタップしたときに、その艇へ地図を寄せるための通知。
+  ///
+  /// 監視者は陸上で端末を操作できるため確認ダイアログは挟まない。
+  /// null のときは行をタップできない(従来の表示専用パネル)。
+  final void Function(String boatId)? onTapBoat;
+
+  const BoatListPanel({super.key, required this.statuses, this.onTapBoat});
 
   Widget _row(BuildContext context, BoatStatus status) {
     final colors = context.colors;
@@ -34,7 +40,10 @@ class BoatListPanel extends StatelessWidget {
     final emphasized = hasAnomaly && !isRoutineAnomaly;
     final lowBattery = boat.battery != null && boat.battery! <= 20;
 
-    return Container(
+    final onTapBoat = this.onTapBoat;
+    final row = Container(
+      // 濡れた手・グローブでも押せる高さを確保する。
+      constraints: const BoxConstraints(minHeight: 44),
       margin: const EdgeInsets.symmetric(vertical: 3),
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       decoration: BoxDecoration(
@@ -130,6 +139,19 @@ class BoatListPanel extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: colors.textSecondary),
           ),
         ],
+      ),
+    );
+    if (onTapBoat == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onTapBoat(boat.boatId),
+        borderRadius: BorderRadius.circular(10),
+        child: Semantics(
+          button: true,
+          label: '${boat.displayName}。タップで地図をこの艇へ寄せる',
+          child: row,
+        ),
       ),
     );
   }

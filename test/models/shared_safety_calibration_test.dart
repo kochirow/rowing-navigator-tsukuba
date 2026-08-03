@@ -29,6 +29,8 @@ void main() {
       },
       dangerZoneSettings: dangerZones,
       disabledWarningSourceIds: const {'bridge_suigo'},
+      primaryWarningLeadSeconds: 11,
+      advanceWarningLeadSeconds: 15,
       revision: 3,
       updatedAt: DateTime.utc(2026, 7, 23),
       updatedBy: 'owner',
@@ -55,6 +57,8 @@ void main() {
       7.5,
     );
     expect(restored.disabledWarningSourceIds, {'bridge_suigo'});
+    expect(restored.primaryWarningLeadSeconds, 11);
+    expect(restored.advanceWarningLeadSeconds, 15);
     expect(cached.disabledWarningSourceIds, {'bridge_suigo'});
     expect(cached.baseProfileSha256, currentHazardProfileSha256);
     expect(cached.updatedAt, DateTime.utc(2026, 7, 23));

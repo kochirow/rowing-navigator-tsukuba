@@ -105,15 +105,13 @@ void main() {
     final reverseZone =
         zone(StaticObstacleKind.reverse, southNorth: 100, northNorth: 500);
     ChannelLane lane(
-      String id,
-      LaneDirection direction,
-      double west,
-      double east,
-    ) =>
+            String id, LaneDirection direction, double west, double east,
+            [String? centerlineId]) =>
         ChannelLane(
           id: id,
           name: id,
           direction: direction,
+          centerlineId: centerlineId,
           points: [
             at(east: west, north: 100),
             at(east: east, north: 100),
@@ -125,6 +123,221 @@ void main() {
       lane('lane_along', LaneDirection.along, 5, 25),
       lane('lane_against', LaneDirection.against, -25, -5),
     ]);
+
+    test('水域ごとに紐付いた中心線を選び、別水域の向きを流用しない', () {
+      final kasumigauraCenterline = ChannelCenterline.fromPolyline([
+        at(east: 100, north: 600),
+        at(east: 100, north: 0),
+      ])!;
+      final linkedResolver = ChannelLaneResolver(
+        [
+          lane(
+            'sakuragawa_outbound',
+            LaneDirection.along,
+            5,
+            25,
+            'sakuragawa_axis',
+          ),
+          lane(
+            'kasumigaura_outbound',
+            LaneDirection.along,
+            80,
+            120,
+            'kasumigaura_axis',
+          ),
+        ],
+        centerlines: {
+          'sakuragawa_axis': centerline,
+          'kasumigaura_axis': kasumigauraCenterline,
+        },
+      );
+
+      // 桜川中心線は北向きなので、北向きが規定。
+      expect(
+        evaluator.evaluateReverseGuidance(
+          boatAt(east: 10, north: 300, heading: 0),
+          null,
+          laneResolver: linkedResolver,
+        ),
+        ReverseGuidanceOutcome.compliant,
+      );
+      // 霞ヶ浦中心線は南向きに引いたので、同じalongでも南向きが規定。
+      expect(
+        evaluator.evaluateReverseGuidance(
+          boatAt(east: 100, north: 300, heading: 180),
+          null,
+          laneResolver: linkedResolver,
+        ),
+        ReverseGuidanceOutcome.compliant,
+      );
+      expect(
+        evaluator.evaluateReverseGuidance(
+          boatAt(east: 100, north: 300, heading: 0),
+          null,
+          laneResolver: linkedResolver,
+        ),
+        ReverseGuidanceOutcome.reverse,
+      );
+
+      // 旧ポリゴンが無くても、レーン全域で確認済み逆走を候補化する。
+      final withoutLegacyZone = evaluator.assessRisk(
+        boatAt(east: 100, north: 300, heading: 0),
+        const [],
+        const [],
+        centerline: null,
+        laneResolver: linkedResolver,
+      );
+      final linkedReverseThreats = withoutLegacyZone.threats
+          .where((threat) =>
+              threat.threat.obstacleKind == StaticObstacleKind.reverse)
+          .toList();
+      expect(linkedReverseThreats, hasLength(1));
+      expect(
+        linkedReverseThreats.single.threat.continuousIntersection?.reasonCodes,
+        contains('linked_centerline_guidance'),
+      );
+
+      // 旧逆走注意エリアがデータに残っていても、二重候補にはしない。
+      final withLegacyZone = evaluator.assessRisk(
+        boatAt(east: 10, north: 300, heading: 180),
+        const [],
+        [reverseZone],
+        centerline: null,
+        laneResolver: linkedResolver,
+      );
+      expect(
+        withLegacyZone.threats.where((threat) =>
+            threat.threat.obstacleKind == StaticObstacleKind.reverse),
+        hasLength(1),
+      );
+
+      // 規定方向なら、旧区域内にいても警告しない。
+      expect(
+        reverseThreat(
+          boatAt(east: 10, north: 300, heading: 0),
+          [reverseZone],
+          laneResolver: linkedResolver,
+        ),
+        isNull,
+      );
+    });
+
+    test('桜川河口と上流の間の移動水域で判定を中断し、上流で再開する', () {
+      final mouthCenterline = ChannelCenterline.fromPolyline([
+        at(east: 0, north: 0),
+        at(east: 0, north: 220),
+      ])!;
+      final upstreamCenterline = ChannelCenterline.fromPolyline([
+        at(east: 0, north: 300),
+        at(east: 0, north: 600),
+      ])!;
+
+      ChannelLane segmentLane({
+        required String id,
+        required LaneDirection direction,
+        required String centerlineId,
+        required double west,
+        required double east,
+        required double south,
+        required double north,
+      }) =>
+          ChannelLane(
+            id: id,
+            name: id,
+            direction: direction,
+            centerlineId: centerlineId,
+            points: [
+              at(east: west, north: south),
+              at(east: east, north: south),
+              at(east: east, north: north),
+              at(east: west, north: north),
+            ],
+          );
+
+      final segmentedResolver = ChannelLaneResolver(
+        [
+          segmentLane(
+            id: 'sakuragawa_mouth_outbound',
+            direction: LaneDirection.along,
+            centerlineId: 'sakuragawa_mouth_axis',
+            west: 5,
+            east: 25,
+            south: 50,
+            north: 200,
+          ),
+          segmentLane(
+            id: 'sakuragawa_mouth_return',
+            direction: LaneDirection.against,
+            centerlineId: 'sakuragawa_mouth_axis',
+            west: -25,
+            east: -5,
+            south: 50,
+            north: 200,
+          ),
+          segmentLane(
+            id: 'sakuragawa_upstream_outbound',
+            direction: LaneDirection.along,
+            centerlineId: 'sakuragawa_upstream_axis',
+            west: 5,
+            east: 25,
+            south: 350,
+            north: 550,
+          ),
+          segmentLane(
+            id: 'sakuragawa_upstream_return',
+            direction: LaneDirection.against,
+            centerlineId: 'sakuragawa_upstream_axis',
+            west: -25,
+            east: -5,
+            south: 350,
+            north: 550,
+          ),
+        ],
+        centerlines: {
+          'sakuragawa_mouth_axis': mouthCenterline,
+          'sakuragawa_upstream_axis': upstreamCenterline,
+        },
+      );
+
+      expect(segmentedResolver.hasLinkedCenterlines, isTrue);
+      expect(
+        reverseThreat(
+          boatAt(east: 10, north: 100, heading: 180),
+          const [],
+          laneResolver: segmentedResolver,
+        ),
+        isNotNull,
+        reason: '河口往路内では逆走を判定する',
+      );
+      expect(
+        reverseThreat(
+          boatAt(east: 10, north: 260, heading: 180),
+          const [],
+          laneResolver: segmentedResolver,
+        ),
+        isNull,
+        reason: '移動水域はどのレーンにも属さないため逆走判定を中断する',
+      );
+      expect(segmentedResolver.centerlineFor(at(east: 10, north: 260)), isNull);
+      expect(
+        reverseThreat(
+          boatAt(east: 10, north: 400, heading: 180),
+          const [],
+          laneResolver: segmentedResolver,
+        ),
+        isNotNull,
+        reason: '上流往路へ入ると逆走判定を再開する',
+      );
+      expect(
+        reverseThreat(
+          boatAt(east: 10, north: 400, heading: 0),
+          const [],
+          laneResolver: segmentedResolver,
+        ),
+        isNull,
+        reason: '上流往路を規定方向に進む場合は警告しない',
+      );
+    });
 
     test('右側通行どおりに漕いでいる艇は逆走にならない', () {
       // 東側(cross > 0)は北向きが規定。
@@ -415,7 +628,8 @@ void main() {
         useLocalFixedObstacleCalibrations: false,
       );
       final obstacles = await service.loadPresets();
-      final centerline = await service.loadChannelCenterline();
+      final centerline = (await service
+          .loadChannelCenterlines())['centerline_sakuragawa_estuary'];
       expect(centerline, isNotNull);
 
       final reverseZone = obstacles.firstWhere(

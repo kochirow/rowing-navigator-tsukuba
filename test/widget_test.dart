@@ -290,7 +290,7 @@ void main() {
     expect(find.byIcon(Icons.schedule_rounded), findsNothing);
   });
 
-  testWidgets('物理警告と別に通信・対応水域の能力低下を常時表示する', (tester) async {
+  testWidgets('物理警告と別に通信の能力低下を常時表示する', (tester) async {
     await tester.pumpWidget(
       wrap(
         const NavStatusCard(
@@ -299,14 +299,12 @@ void main() {
           elapsedTimeSeconds: 60,
           positionSharingUnavailable: true,
           otherBoatReceiveUnavailable: true,
-          operationalCoverageLimited: true,
         ),
       ),
     );
 
     expect(find.text('他艇受信: 利用不可'), findsOneWidget);
     expect(find.text('自艇共有: 利用不可'), findsOneWidget);
-    expect(find.text('固定危険区域: 未検証水域'), findsOneWidget);
   });
 
   testWidgets('SPM計測OFFでは表示領域を完全に取り除く', (tester) async {
@@ -425,7 +423,6 @@ void main() {
               positionSharingUnavailable: true,
               otherBoatReceiveUnavailable: true,
               temporaryObstacleReceiveUnavailable: true,
-              operationalCoverageLimited: true,
             ),
           ),
         ),
@@ -436,7 +433,6 @@ void main() {
     expect(find.text('他艇受信: 利用不可'), findsOneWidget);
     expect(find.text('自艇共有: 利用不可'), findsOneWidget);
     expect(find.text('臨時危険区域: 受信不可'), findsOneWidget);
-    expect(find.text('固定危険区域: 未検証水域'), findsOneWidget);
     expect(find.textContaining('周囲を目視確認'), findsOneWidget);
   });
 

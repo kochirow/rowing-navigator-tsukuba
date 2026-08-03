@@ -7,13 +7,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../config/coach_config.dart';
 import '../models/boat_model.dart';
-import '../services/preset_obstacle_service.dart';
-import '../utils/winding_algorithm.dart';
 
 /// 検知される異常の種類
 enum BoatAnomalyKind {
   stopped, // 長時間停止
-  outOfArea, // 練習水域から逸脱
   lost, // 更新途絶(電池切れ・アプリ終了・圏外)
 }
 
@@ -43,7 +40,7 @@ class BoatAnomaly {
   /// 日常的に起こる異常か。**表示の強調度だけ**に使う。
   ///
   /// 更新途絶は、停止中送信10秒 + 画面OFF + 通信ジッタで普通に起こる。
-  /// 沈の疑い(長時間停止)・水域外と同じ赤枠で出すと一覧が常時赤くなり、
+  /// 沈の疑い(長時間停止)と同じ赤枠で出すと一覧が常時赤くなり、
   /// 本当にまずい艇が埋もれる(DESIGN_PRINCIPLES 原則4)。
   /// 検知も表示も消さず、目立たせ方だけを下げるための区別である。
   bool get isRoutine => kind == BoatAnomalyKind.lost;
@@ -60,8 +57,6 @@ class BoatAnomaly {
     switch (kind) {
       case BoatAnomalyKind.stopped:
         return '長時間停止';
-      case BoatAnomalyKind.outOfArea:
-        return '水域外';
       case BoatAnomalyKind.lost:
         return '更新途絶';
     }
@@ -115,7 +110,7 @@ bool isAudibleCoachAnomalyKind(BoatAnomalyKind kind) =>
 
 /// コーチ(観察者)モードの監視機能フック。
 /// - 各艇の航跡を保持しポリラインとして提供
-/// - 長時間停止・水域外・更新途絶を検知して画面に表示
+/// - 長時間停止・更新途絶を検知して画面に表示
 /// - 一覧パネル用のステータスを提供
 UseCoachWatch useCoachWatch({
   required List<Boat> otherBoats,
@@ -127,36 +122,8 @@ UseCoachWatch useCoachWatch({
   final anomalies = useState<List<BoatAnomaly>>([]);
   final boatStatuses = useState<List<BoatStatus>>([]);
   final trailPolylines = useState<Set<Polyline>>({});
-  final practiceArea = useState<List<LatLng>?>(null);
-  // 練習水域が読めないと水域外の検知だけが黙って止まる。航行側の
-  // system fault と同じく、能力が欠けていることを画面へ出すために持つ。
-  final practiceAreaUnavailable = useState(false);
   final anomalyFirstDetectedAt = useRef<Map<String, DateTime>>({});
   final scanTimer = useState<Timer?>(null);
-  final presetService = useMemoized(PresetObstacleService.new);
-
-  // 練習水域の読み込み(初回のみ)
-  useEffect(() {
-    var cancelled = false;
-    unawaited(Future<void>(() async {
-      try {
-        final loaded = await presetService.loadPracticeArea();
-        if (cancelled) return;
-        practiceArea.value = loaded;
-        // 3点未満のポリゴンでは内外判定ができない。読めなかった場合と同じく
-        // 「水域外の検知が働いていない」状態として扱う。
-        practiceAreaUnavailable.value = loaded == null || loaded.length < 3;
-      } catch (e) {
-        if (!cancelled) {
-          practiceAreaUnavailable.value = true;
-          debugPrint('Failed to load practice area: $e');
-        }
-      }
-    }));
-    return () {
-      cancelled = true;
-    };
-  }, []);
 
   // 受信した艇情報を航跡に蓄積
   useEffect(() {
@@ -268,17 +235,6 @@ UseCoachWatch useCoachWatch({
           }
         }
 
-        // 3. 練習水域からの逸脱
-        // 水域が読めていないときは判定せず、能力低下として画面へ出す
-        // (practiceAreaUnavailable)。黙って無効化しない。
-        final area = practiceArea.value;
-        if (anomaly == null && area != null && area.length >= 3) {
-          final inside = isPointInPolygon(LatLng(boat.lat, boat.lng), area);
-          if (!inside) {
-            anomaly = makeAnomaly(BoatAnomalyKind.outOfArea);
-          }
-        }
-
         if (anomaly != null) {
           newAnomalies.add(anomaly);
         }
@@ -322,8 +278,6 @@ UseCoachWatch useCoachWatch({
     anomalies: anomalies,
     boatStatuses: boatStatuses,
     trailPolylines: trailPolylines,
-    practiceArea: practiceArea,
-    practiceAreaUnavailable: practiceAreaUnavailable,
   );
 }
 
@@ -331,16 +285,10 @@ class UseCoachWatch {
   final ValueNotifier<List<BoatAnomaly>> anomalies;
   final ValueNotifier<List<BoatStatus>> boatStatuses;
   final ValueNotifier<Set<Polyline>> trailPolylines;
-  final ValueNotifier<List<LatLng>?> practiceArea;
-
-  /// 練習水域を読み込めず、水域外の検知だけが働いていない状態。
-  final ValueNotifier<bool> practiceAreaUnavailable;
 
   UseCoachWatch({
     required this.anomalies,
     required this.boatStatuses,
     required this.trailPolylines,
-    required this.practiceArea,
-    required this.practiceAreaUnavailable,
   });
 }

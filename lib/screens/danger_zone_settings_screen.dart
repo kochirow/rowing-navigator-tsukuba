@@ -66,7 +66,13 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _sharedRevision = shared?.revision ?? 0;
-        if (shared != null) _settings = shared.dangerZoneSettings;
+        if (shared != null) {
+          _settings = shared.dangerZoneSettings;
+          _warningLeadTimes = WarningLeadTimes(
+            primaryWarningLeadSeconds: shared.primaryWarningLeadSeconds,
+            advanceWarningLeadSeconds: shared.advanceWarningLeadSeconds,
+          );
+        }
       });
     } catch (_) {
       if (!mounted) return;
@@ -147,14 +153,15 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       await _riskEvaluatorService.saveWarningLeadTimes(warningLeadTimes);
       final saved = await _sharedCalibrationService.publishDangerZones(
         dangerZoneSettings: settings,
+        warningLeadTimes: warningLeadTimes,
         expectedRevision: _sharedRevision,
       );
       if (!mounted) return;
       setState(() {
         _sharedRevision = saved.revision;
         _publishStatus = FixedObstacleCalibrationPublishStatus.success;
-        _publishMessage = '危険範囲をチームへ公開しました（版 ${saved.revision}）。'
-            '警告開始時間はこの端末だけに保存しました。';
+        _publishMessage = '危険範囲と警告開始時間をチームへ公開しました'
+            '（版 ${saved.revision}）。';
       });
     } on SharedSafetyCalibrationConflictException {
       if (!mounted) return;

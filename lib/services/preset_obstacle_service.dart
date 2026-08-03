@@ -143,8 +143,8 @@ class PresetObstacleService {
 
   Map<String, dynamic>? _cachedProfile;
   HazardProfileIntegrity? _cachedIntegrity;
-  ChannelCenterline? _cachedCenterline;
-  bool _centerlineResolved = false;
+  Map<String, ChannelCenterline>? _cachedCenterlines;
+  bool _centerlinesResolved = false;
   bool _centerlineDerivedFromShores = false;
   DangerZoneSettingsResolution? _lastDangerZoneSettingsResolution;
   List<String> _lastUnplottedBridgeIds = const [];
@@ -176,7 +176,10 @@ class PresetObstacleService {
   Future<Map<String, dynamic>> _loadProfile() async {
     final cached = _cachedProfile;
     if (cached != null) return cached;
-    final jsonStr = await rootBundle.loadString(presetAssetPath);
+    final bytes = await rootBundle.load(presetAssetPath);
+    final jsonStr = utf8.decode(
+      bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+    );
     final actualChecksum = sha256.convert(utf8.encode(jsonStr)).toString();
     final data = json.decode(jsonStr) as Map<String, dynamic>;
     // 構造の検証だけは失敗させる。解釈できない形状を安全判定へ渡さない。
@@ -282,29 +285,6 @@ class PresetObstacleService {
         proximity < 0 ||
         proximity > 100) {
       throw const FormatException('Invalid default obstacle proximity');
-    }
-    final practiceArea = data['practiceArea'];
-    if (practiceArea != null) {
-      if (practiceArea is! Map) {
-        throw const FormatException('practiceArea must be an object');
-      }
-      _validatePoints(
-        practiceArea['points'],
-        context: 'practiceArea',
-        minimum: 3,
-      );
-    }
-    final operationalCoverage = data['operationalCoveragePolygon'];
-    if (operationalCoverage != null) {
-      if (operationalCoverage is! Map) {
-        throw const FormatException(
-            'operationalCoveragePolygon must be an object');
-      }
-      _validatePoints(
-        operationalCoverage['points'],
-        context: 'operationalCoveragePolygon',
-        minimum: 3,
-      );
     }
   }
 
@@ -547,7 +527,8 @@ class PresetObstacleService {
       final sourceBaseline = DangerZoneBaseline.fromJson(raw);
       final calibration =
           calibrations[sourceBaseline.id] ?? const FixedObstacleCalibration();
-      if (sourceBaseline.kind == DangerZoneKind.driftwood) {
+      if (sourceBaseline.kind == DangerZoneKind.driftwood &&
+          sourceBaseline.id == ManagedHazardState.sourceId) {
         // 閉じた流木外周は辺ごとのリボンにせず、内側全体を1枚で塗る。
         ManagedHazardState? managedState;
         try {
@@ -639,7 +620,8 @@ class PresetObstacleService {
         continue;
       }
       var sourcePoints = baseline.points;
-      if (baseline.kind == DangerZoneKind.driftwood) {
+      if (baseline.kind == DangerZoneKind.driftwood &&
+          baseline.id == ManagedHazardState.sourceId) {
         ManagedHazardState? managedState;
         try {
           managedState = await _managedHazardService.loadCached();
@@ -708,11 +690,14 @@ class PresetObstacleService {
   /// [_deriveCenterlineFromShores] ごと削除してよい。
   bool get isChannelCenterlineDerivedFromShores => _centerlineDerivedFromShores;
 
-  /// 航路中心線を読み込む。
+  /// 航路中心線をID付きで読み込む。
   ///
-  /// 明示プロットした `channelCenterline` を最優先で使う。
+  /// 新形式の `channelCenterlines` を優先し、旧形式の単一
+  /// `channelCenterline` も読み込む。不正な中心線は1本ずつスキップし、
+  /// 他の中心線や固定危険区域まで巻き込まない。
   ///
-  /// 明示が無い間は、左右の岸基準線からの自動導出へ縮退する。
+  /// 明示中心線が1本も使えない場合だけ、左右の岸基準線からの自動導出へ
+  /// 縮退する。
   /// 自動導出は中州を貫通しうるので恒久的な手段ではないが、
   /// **中心線がまったく無い状態は直線予測になり、5m/sで7〜10秒先(35〜50m)が
   /// カーブで外岸へ5m以上膨らんで蛇行区間のたびに音が鳴る**(原則4)。
@@ -720,49 +705,121 @@ class PresetObstacleService {
   ///
   /// 明示プロットを同梱したら [isChannelCenterlineDerivedFromShores] が false に
   /// なる。全区間で false を確認できた時点で、この自動導出を削除すること。
-  Future<ChannelCenterline?> loadChannelCenterline() async {
-    final cached = _cachedCenterline;
+  Future<Map<String, ChannelCenterline>> loadChannelCenterlines() async {
+    final cached = _cachedCenterlines;
     if (cached != null) return cached;
-    if (_centerlineResolved) return null;
-    _centerlineResolved = true;
+    if (_centerlinesResolved) return const {};
+    _centerlinesResolved = true;
     try {
       final data = await _loadProfile();
+      final centerlines = <String, ChannelCenterline>{};
+      final explicitList = data['channelCenterlines'];
+      if (explicitList is List) {
+        for (var index = 0; index < explicitList.length; index++) {
+          try {
+            final raw = Map<String, dynamic>.from(explicitList[index] as Map);
+            final id = raw['id'];
+            if (id is! String ||
+                id.isEmpty ||
+                id.length > 128 ||
+                centerlines.containsKey(id)) {
+              throw const FormatException(
+                  'centerline id is missing, too long, or duplicated');
+            }
+            final parsed = _channelCenterlineFromRaw(raw);
+            if (parsed == null) {
+              throw const FormatException(
+                  'centerline needs at least two valid points and enough length');
+            }
+            centerlines[id] = parsed;
+          } catch (error) {
+            debugPrint('Invalid channelCenterlines[$index] skipped: $error');
+          }
+        }
+      } else if (explicitList != null) {
+        debugPrint('Invalid channelCenterlines array ignored.');
+      }
+
+      // 新形式が1本でも使えた場合、旧単一フィールドは重複なので読まない。
+      if (centerlines.isNotEmpty) {
+        _centerlineDerivedFromShores = false;
+        _cachedCenterlines = Map.unmodifiable(centerlines);
+        return _cachedCenterlines!;
+      }
+
       final explicit = data['channelCenterline'];
-      if (explicit is Map && explicit['points'] is List) {
-        final points = (explicit['points'] as List)
-            .whereType<Map>()
-            .where((point) => point['lat'] is num && point['lng'] is num)
-            .map((point) => LatLng(
-                  (point['lat'] as num).toDouble(),
-                  (point['lng'] as num).toDouble(),
-                ))
-            .toList(growable: false);
-        _cachedCenterline = ChannelCenterline.fromPolyline(points);
-        if (_cachedCenterline != null) {
+      if (explicit is Map) {
+        final raw = Map<String, dynamic>.from(explicit);
+        final parsed = _channelCenterlineFromRaw(raw);
+        if (parsed != null) {
+          final rawId = raw['id'];
+          final id = rawId is String && rawId.isNotEmpty && rawId.length <= 128
+              ? rawId
+              : 'channel_centerline';
+          _cachedCenterlines = Map.unmodifiable({id: parsed});
           _centerlineDerivedFromShores = false;
-          return _cachedCenterline;
+          return _cachedCenterlines!;
         }
       }
 
       final derived = _deriveCenterlineFromShores(data);
       if (derived != null) {
-        _cachedCenterline = derived;
+        _cachedCenterlines =
+            Map.unmodifiable({'derived_channel_centerline': derived});
         _centerlineDerivedFromShores = true;
         debugPrint('Channel centerline is not configured; '
             'falling back to shoreline-derived centerline. '
             'Plot channelCenterline explicitly.');
-        return derived;
+        return _cachedCenterlines!;
       }
 
       debugPrint('Channel centerline is not configured and cannot be derived; '
           'falling back to straight-line prediction.');
-      return null;
+      _cachedCenterlines = const {};
+      return _cachedCenterlines!;
     } catch (error) {
       // 中心線が作れなくても直線予測で警告は継続する。
       debugPrint('Channel centerline is unavailable; '
           'falling back to straight-line prediction: $error');
+      _cachedCenterlines = const {};
+      return _cachedCenterlines!;
+    }
+  }
+
+  /// 旧呼出側との互換用。中心線が1本のときだけ返す。
+  ///
+  /// 複数中心線から適当な1本を返すと、別水域へ投影して規定方位を誤るため、
+  /// 複数時は必ずレーンの `centerlineId` 経由で選ばせる。
+  Future<ChannelCenterline?> loadChannelCenterline() async {
+    final centerlines = await loadChannelCenterlines();
+    return centerlines.length == 1 ? centerlines.values.single : null;
+  }
+
+  ChannelCenterline? _channelCenterlineFromRaw(Map<String, dynamic> raw) {
+    final rawPoints = raw['points'];
+    if (rawPoints is! List ||
+        rawPoints.length < 2 ||
+        rawPoints.length > maxPolygonPoints) {
       return null;
     }
+    final points = <LatLng>[];
+    for (final rawPoint in rawPoints) {
+      if (rawPoint is! Map) return null;
+      final lat = rawPoint['lat'];
+      final lng = rawPoint['lng'];
+      if (lat is! num ||
+          lng is! num ||
+          !lat.isFinite ||
+          !lng.isFinite ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180) {
+        return null;
+      }
+      points.add(LatLng(lat.toDouble(), lng.toDouble()));
+    }
+    return ChannelCenterline.fromPolyline(points);
   }
 
   /// 左右の岸基準線から中心線を導出する暫定経路。
@@ -782,37 +839,6 @@ class PresetObstacleService {
       firstShore: shores[0],
       secondShore: shores[1],
     );
-  }
-
-  /// プリセットの練習水域(ジオフェンス)を読み込む。
-  /// JSONに practiceArea が定義されていない場合はnullを返す。
-  /// コーチモードでの「水域から出た艇」の検知に使用する。
-  Future<List<LatLng>?> loadPracticeArea() async {
-    final data = await _loadProfile();
-    final area = data['practiceArea'];
-    if (area == null) return null;
-    final points = ((area as Map<String, dynamic>)['points'] as List<dynamic>)
-        .map<LatLng>((p) => LatLng(
-              (p['lat'] as num).toDouble(),
-              (p['lng'] as num).toDouble(),
-            ))
-        .toList();
-    if (points.length < 3) return null;
-    return points;
-  }
-
-  /// 固定危険区域の網羅性を確認済みの運用対象水域を読み込む。
-  /// コーチ用の[loadPracticeArea]とは用途も承認基準も異なる。
-  Future<List<LatLng>?> loadOperationalCoverage() async {
-    final data = await _loadProfile();
-    final coverage = data['operationalCoveragePolygon'];
-    if (coverage == null) return null;
-    return ((coverage as Map<String, dynamic>)['points'] as List<dynamic>)
-        .map<LatLng>((point) => LatLng(
-              (point['lat'] as num).toDouble(),
-              (point['lng'] as num).toDouble(),
-            ))
-        .toList(growable: false);
   }
 
   /// 固定流木の変形プレビュー用に、同梱した未変形の閉じた外周を返す。

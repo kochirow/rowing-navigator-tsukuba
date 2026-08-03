@@ -19,8 +19,10 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
   final bool usesSharedSafetySettings;
   final int? appliedSharedSafetyRevision;
   final int? pendingSharedSafetyRevision;
-  final Future<void> Function(WarningLeadTimes previous)
-      onApplyWarningLeadTimes;
+  final Future<void> Function(
+    WarningLeadTimes previous,
+    int? sharedRevision,
+  ) onApplyWarningLeadTimes;
   final Future<bool> Function({
     required String key,
     required Object? from,
@@ -83,6 +85,10 @@ class _NavigationSafetySettingsSheetState
         // 下書きを見せると、確認ダイアログと実際に差し替える形状がずれる。
         final shared = await _sharedSafety.loadCached();
         if (shared != null) {
+          _leadTimes = WarningLeadTimes(
+            primaryWarningLeadSeconds: shared.primaryWarningLeadSeconds,
+            advanceWarningLeadSeconds: shared.advanceWarningLeadSeconds,
+          );
           zones = shared.dangerZoneSettings;
           warnings = FixedObstacleWarningSettings(
             disabledSourceIds: shared.disabledWarningSourceIds,
@@ -92,7 +98,7 @@ class _NavigationSafetySettingsSheetState
       }
       if (!mounted) return;
       setState(() {
-        _leadTimes = results[0] as WarningLeadTimes;
+        _leadTimes ??= results[0] as WarningLeadTimes;
         _zones = zones;
         _fixedWarnings = warnings;
         _targets = results[3] as List<FixedObstacleCalibrationTarget>;
@@ -158,6 +164,16 @@ class _NavigationSafetySettingsSheetState
     return saved.revision;
   }
 
+  Future<int?> _saveSharedLeadTimes(WarningLeadTimes leadTimes) async {
+    if (!widget.usesSharedSafetySettings) return null;
+    final saved = await _sharedSafety.publishWarningLeadTimes(
+      warningLeadTimes: leadTimes,
+      expectedRevision: _sharedRevision ?? 0,
+    );
+    _sharedRevision = saved.revision;
+    return saved.revision;
+  }
+
   void _showResult(bool applied) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -174,7 +190,8 @@ class _NavigationSafetySettingsSheetState
     setState(() => _busy = true);
     try {
       await _riskSettings.saveWarningLeadTimes(next);
-      await widget.onApplyWarningLeadTimes(previous);
+      final revision = await _saveSharedLeadTimes(next);
+      await widget.onApplyWarningLeadTimes(previous, revision);
       _showResult(true);
     } catch (error) {
       if (mounted) setState(() => _error = '警告時間を保存できませんでした: $error');

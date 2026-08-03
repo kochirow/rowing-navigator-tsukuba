@@ -22,16 +22,16 @@ void main() {
   Future<void> pumpChip(
     WidgetTester tester, {
     List<BoatAnomaly> anomalies = const [],
-    bool practiceAreaUnavailable = false,
     VoidCallback? onTap,
+    void Function(String boatId)? onFocusBoat,
   }) async {
     await tester.pumpWidget(MaterialApp(
       theme: buildAppTheme(),
       home: Scaffold(
         body: CoachAnomalyChip(
           anomalies: anomalies,
-          practiceAreaUnavailable: practiceAreaUnavailable,
           onTap: onTap,
+          onFocusBoat: onFocusBoat,
         ),
       ),
     ));
@@ -51,25 +51,6 @@ void main() {
     ]);
 
     expect(find.text('異常 2隻'), findsOneWidget);
-  });
-
-  testWidgets('練習水域を読めないことを併記する', (tester) async {
-    await pumpChip(
-      tester,
-      anomalies: [anomaly(kind: BoatAnomalyKind.lost)],
-      practiceAreaUnavailable: true,
-    );
-
-    expect(find.text('異常 1隻'), findsOneWidget);
-    expect(find.text('水域外の自動検知が停止中'), findsOneWidget);
-  });
-
-  testWidgets('異常が無くても水域外検知の停止だけで出す', (tester) async {
-    // 能力が欠けていることは消さない(DESIGN_PRINCIPLES 原則1)。
-    await pumpChip(tester, practiceAreaUnavailable: true);
-
-    expect(find.text('水域外の自動検知が停止中'), findsOneWidget);
-    expect(find.textContaining('隻'), findsNothing);
   });
 
   testWidgets('タップで艇一覧を開く', (tester) async {
@@ -107,7 +88,7 @@ void main() {
     expect(icon.icon, Icons.info_outline);
   });
 
-  testWidgets('長時間停止・水域外は danger の枠線で示す', (tester) async {
+  testWidgets('長時間停止は danger の枠線で示す', (tester) async {
     await pumpChip(tester, anomalies: [
       anomaly(kind: BoatAnomalyKind.lost, boatId: 'a'),
       anomaly(kind: BoatAnomalyKind.stopped, boatId: 'b'),
@@ -128,5 +109,38 @@ void main() {
       (decoration.border! as Border).top.color,
       AppColors.light.danger,
     );
+  });
+
+  testWidgets('タップで艇一覧を開き、同時に重い異常の艇へ寄せる', (tester) async {
+    var opened = 0;
+    final focused = <String>[];
+    await pumpChip(
+      tester,
+      anomalies: [
+        // 日常的に起こる更新途絶が先に並んでいても、沈の疑いを優先する。
+        anomaly(kind: BoatAnomalyKind.lost, boatId: 'routine'),
+        anomaly(kind: BoatAnomalyKind.stopped, boatId: 'serious'),
+      ],
+      onTap: () => opened++,
+      onFocusBoat: focused.add,
+    );
+
+    await tester.tap(find.byType(InkWell));
+    await tester.pump();
+
+    // 既存の「艇一覧を開く」動作は残す。
+    expect(opened, 1);
+    expect(focused, ['serious']);
+  });
+
+  test('重い異常が無ければ先頭の艇へ寄せる', () {
+    expect(
+      CoachAnomalyChip.focusTargetBoatId([
+        anomaly(kind: BoatAnomalyKind.lost, boatId: 'first'),
+        anomaly(kind: BoatAnomalyKind.lost, boatId: 'second'),
+      ]),
+      'first',
+    );
+    expect(CoachAnomalyChip.focusTargetBoatId(const []), isNull);
   });
 }

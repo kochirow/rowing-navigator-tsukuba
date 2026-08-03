@@ -33,13 +33,16 @@ import '../hooks/use_tracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
+import '../services/swept_outline_service.dart';
 import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
 import '../widgets/app_state_views.dart';
+import '../models/navigable_water.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
+import '../theme/map_layer_spec.dart';
 import '../utils/tactile_feedback.dart';
 import '../hooks/use_navigator.dart';
 import '../hooks/use_nav_map.dart';
@@ -174,11 +177,20 @@ class HomeMapScreen extends HookConsumerWidget {
     final showInfo = useState(false);
     final showBoatList = useState(false);
     final shipDomains = useState<Set<Polygon>>({});
+    // 停止距離の輪。ポリラインなので、監視モードの航跡と1つの集合へまとめて
+    // 地図へ渡す(片方を設定するともう片方が消える事故を防ぐ)。
+    final stoppingDistanceLines = useState<Set<Polyline>>({});
     final shipDomainRenderSnapshot = useRef<ShipDomainRenderSnapshot?>(null);
     final obstacles = useState<Set<Polygon>>({});
     // 開発者が明示的に有効化したときだけ判定形状を加える別レイヤー。
     // 通常の shipDomains はここへ判定用の拡張を混ぜない（不変条件6）。
     final developerSafetyShapeOverlay = useState<Set<Polygon>>({});
+    // 航路(往路・復路)の帯。**表示専用**なので use_navigator(安全経路の
+    // フック)へは通さず、画面側で直接読む。読めなくても航行・警告は
+    // 従来どおり動く(原則1)。
+    final navigableWaters = useState<List<NavigableWater>>(const []);
+    final showChannelLanes = useState(true); // 既定ON
+    final laneOverlay = useState<Set<Polygon>>({});
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     final showDeveloperSafetyShapeOverlay = useState(false);
@@ -194,7 +206,6 @@ class HomeMapScreen extends HookConsumerWidget {
     final permission = PermissionService();
     // Constants
     const locationAccuracy = LocationAccuracy.bestForNavigation;
-    const defaultZoomLevel = 18.0;
 
     void showNavigationStartFailure(Object error) {
       final recovery = _navigationStartRecoveryFor(error);
@@ -233,17 +244,22 @@ class HomeMapScreen extends HookConsumerWidget {
     }
 
     focusP14y(double lat, double lng, double heading,
-        {bool force = false}) async {
+        {bool force = false, double? overrideZoomLevel}) async {
       // Focus programatically
       tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
       try {
         final currentZoomLevel = await navMap.getZoomLevel();
         // 航行中に利用者が選んだ拡大・縮小倍率を保ったまま、現在地へ
         // 戻す。以前は縮小した場合に18へ戻ってしまっていた。
-        final zoomLevel = zoomForMapRefocus(
-          currentZoomLevel,
-          fallbackZoomLevel: defaultZoomLevel,
-        );
+        //
+        // [overrideZoomLevel] を渡すのは航行開始・監視開始の1回だけ。
+        // 毎秒の追従・ジェスチャー後の自動復帰では渡さないため、利用者が
+        // ピンチで選んだ倍率は上書きされない(原則2)。
+        final zoomLevel = overrideZoomLevel ??
+            zoomForMapRefocus(
+              currentZoomLevel,
+              fallbackZoomLevel: initialMapZoomLevel,
+            );
         final moved =
             await navMap.focus(lat, lng, heading, zoomLevel, force: force);
         // 微小更新を省略した場合はonCameraIdleが呼ばれない。
@@ -251,6 +267,55 @@ class HomeMapScreen extends HookConsumerWidget {
       } catch (_) {
         tracking.setProgFlag(false);
         rethrow;
+      }
+    }
+
+    /// 監視中の全艇が収まる位置へカメラを引く。
+    ///
+    /// 監視者は陸上にいて端末を操作できるため、確認ダイアログは挟まない
+    /// (誤操作しても自分でもう一度動かせる)。
+    Future<void> fitAllWatchedBoats() async {
+      final points = coachWatch.boatStatuses.value
+          .map((status) => LatLng(status.boat.lat, status.boat.lng))
+          .toList();
+      if (points.isEmpty) return;
+      // 自動追従に戻されないよう、プログラムによる操作として扱う。
+      tracking.setProgFlag(true);
+      try {
+        await navMap.fitBounds(points);
+      } catch (_) {
+        // 地図が準備できていないだけ。監視表示はそのまま続く。
+        tracking.setProgFlag(false);
+      }
+    }
+
+    /// 監視中に指定した艇へカメラを寄せる。艇一覧・異常チップから使う。
+    ///
+    /// 倍率は `max(現在の倍率, watchFocusMinimumZoomLevel)`。引きすぎている
+    /// ときだけ寄せ、すでに寄っているなら引き戻さない。
+    Future<void> focusOnWatchedBoat(String boatId) async {
+      final matches = coachWatch.boatStatuses.value
+          .where((status) => status.boat.boatId == boatId);
+      if (matches.isEmpty) return;
+      final boat = matches.first.boat;
+      double zoomLevel;
+      try {
+        final current = await navMap.getZoomLevel();
+        zoomLevel = current.isFinite && current > watchFocusMinimumZoomLevel
+            ? current
+            : watchFocusMinimumZoomLevel;
+      } catch (_) {
+        zoomLevel = watchFocusMinimumZoomLevel;
+      }
+      tracking.setProgFlag(true);
+      try {
+        // heading に 0 を渡して地図を北固定にする。監視者の見ている向きを
+        // 艇の向きで回すと、艇を選ぶたびに地図が回って読めなくなる。
+        final moved =
+            await navMap.focus(boat.lat, boat.lng, 0, zoomLevel, force: true);
+        if (!moved) tracking.setProgFlag(false);
+      } catch (_) {
+        tracking.setProgFlag(false);
       }
     }
 
@@ -418,6 +483,16 @@ class HomeMapScreen extends HookConsumerWidget {
         ),
         // 表示だけの切替なので航行中でも触れる。安全判定には影響しない。
         MapMenuAction(
+          icon: showChannelLanes.value ? Icons.route : Icons.route_outlined,
+          title: '航路を表示',
+          subtitle: showChannelLanes.value ? '往路・復路の帯を表示中' : '非表示',
+          onTap: () {
+            final next = !showChannelLanes.value;
+            showChannelLanes.value = next;
+            unawaited(mapDisplaySettings.saveShowChannelLanes(next));
+          },
+        ),
+        MapMenuAction(
           icon:
               highContrastMap.value ? Icons.contrast : Icons.contrast_outlined,
           title: '高コントラスト表示',
@@ -467,10 +542,6 @@ class HomeMapScreen extends HookConsumerWidget {
                       navigator.isDynamicReceiveUnavailable.value,
                   temporaryObstacleReceiveUnavailable:
                       navigator.isTemporaryObstacleReceiveUnavailable.value,
-                  operationalCoverageUnverified:
-                      navigator.isOperationalCoverageUnverified.value,
-                  outsideOperationalCoverage:
-                      navigator.isOutsideOperationalCoverage.value,
                   safetyRunMode: navigator.safetyRunMode.value,
                   otherBoatCount: navigator.otherBoats.value.length,
                   obstacleCount: navigator.obstacles.value.length,
@@ -555,8 +626,60 @@ class HomeMapScreen extends HookConsumerWidget {
         if (disposed) return;
         showDeveloperSafetyShapeOverlay.value = enabled;
       }));
+      unawaited(mapDisplaySettings.loadShowChannelLanes().then((enabled) {
+        if (disposed) return;
+        showChannelLanes.value = enabled;
+      }));
       return () => disposed = true;
     }, const []);
+
+    // 航路データを起動時に1回だけ読む。表示専用なので、読めなければ
+    // 帯を描かないだけで、航行も警告も従来どおり動く(原則1)。
+    useEffect(() {
+      var disposed = false;
+      unawaited(PresetObstacleService().loadNavigableWaters().then((waters) {
+        if (disposed) return;
+        navigableWaters.value = waters;
+      }).catchError((Object error) {
+        if (kDebugMode) debugPrint('Navigable waters not displayed: $error');
+      }));
+      return () => disposed = true;
+    }, const []);
+
+    // ##########################
+    // 航路(往路・復路)の帯を描く
+    // ##########################
+    // **主役は危険区域であって航路ではない。** レーンは川幅いっぱいの面積が
+    // あるため、塗りが少しでも濃いとその下の岸・橋脚・中州の色を全部濁らせる。
+    // 配色と重なり順は map_layer_spec.dart に集約している。
+    useEffect(() {
+      if (!showChannelLanes.value) {
+        if (laneOverlay.value.isNotEmpty) laneOverlay.value = {};
+        return null;
+      }
+      final isSatellite = navMap.mapType.value == MapType.hybrid;
+      final nextLanes = <Polygon>{};
+      for (final water in navigableWaters.value) {
+        final style = laneStyleFor(leg: water.leg, isSatellite: isSatellite);
+        nextLanes.add(Polygon(
+          polygonId: PolygonId('lane_${water.id}'),
+          points: water.points,
+          strokeWidth: style.strokeWidth,
+          strokeColor: style.strokeColor,
+          fillColor: style.fillColor,
+          zIndex: laneFillZIndex,
+          // 地図操作を邪魔しない。帯は川幅いっぱいを覆うため、タップを
+          // 奪うと危険区域や艇のタップが届かなくなる。
+          consumeTapEvents: false,
+        ));
+      }
+      laneOverlay.value = nextLanes;
+      return null;
+    }, [
+      navigableWaters.value,
+      showChannelLanes.value,
+      navMap.mapType.value,
+    ]);
 
     // 起動時は音を鳴らさず、対象別の警告音の準備状態だけ自動確認する。
     // 問題があっても画面に警告を出すだけで、航行開始は妨げない。
@@ -698,11 +821,6 @@ class HomeMapScreen extends HookConsumerWidget {
       coachWatch.anomalies.value,
     ]);
 
-    // 練習水域を読めないと「水域外」の検知だけが黙って止まる。能力が欠けた
-    // ことは必ず知らせるが(原則1)、8秒の赤い SnackBar ではなく
-    // `CoachAnomalyChip` へ小さく併記する。消えるバナーと違い常時出るので、
-    // 知らせる度合いはむしろ上がっている。
-
     // ##########################
     // 自艇および他艇を描画
     // ##########################
@@ -789,58 +907,78 @@ class HomeMapScreen extends HookConsumerWidget {
       )) {
         return null;
       }
-      Set<Polygon> newShipDomains = {};
+      // 1艇につき3つの図形だけを描く。
+      //   ① 船体領域(t=0)     … いま艇がある場所
+      //   ② 掃引外形(凸包)     … どこまで届くか
+      //   ③ 停止距離ライン     … どこまでなら止まれるか
+      // 以前はサンプルごとに2枚(最大48枚)を重ねていたが、中身は同じ
+      // 六角形の平行移動の繰り返しで、情報は増えないまま画面が埋まる。
+      final newShipDomains = <Polygon>{};
+      final newStoppingDistanceLines = <Polyline>{};
       for (final boat in allBoats) {
         final speed = boat.speed;
         final stoppingDistance = evalService.getStoppingDistance(boat);
-        final warningDistantce = max(
+        final warningDistance = max(
           stoppingDistance,
           navigator.warningTimeSeconds.value * speed,
         );
         final sampleDistances =
-            shipDomainDisplaySampleDistances(warningDistantce);
-        for (final distance in sampleDistances) {
+            shipDomainDisplaySampleDistances(warningDistance);
+
+        // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
+        // 描画すると停止のたびに領域が太って見え、意味を誤解させる(不変条件6)。
+        ShipDomains domainsAt(double distance) {
           final t = speed > 0 ? distance / speed : 0.0;
-          final futureBoat = evalService.predictPosition(boat, t);
-          // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
-          // 描画すると停止のたびに領域が太って見え、意味を誤解させる。
-          final futureDomains = shipDomainService.getShipDomains(
-            futureBoat,
+          return shipDomainService.getShipDomains(
+            evalService.predictPosition(boat, t),
             headingReliable: true,
           );
-          Polygon futureShipBodyDomain = futureDomains.shipBodyDomain;
-          Polygon futureExclusiveDomain = futureDomains.exclusiveDomain;
-          // 「塗り = 実在する危険」「線 = 自艇/他艇の予測」という規則を守る。
-          // 以前は予測の排他領域も危険区域と同じ赤50%で塗っていたため、
-          // そこに何かが在るのか、自分がこれから通るだけなのかが読めなかった。
-          final Color exclusiveOutline = distance <= stoppingDistance
-              ? const Color(0xFFD32F2F)
-              : distance <= warningDistantce
-                  ? const Color(0xFFF9A825)
-                  : const Color(0xFFD32F2F);
-          // 船体領域を描画
-          final shipBodyDomain = Polygon(
-            polygonId: PolygonId(
-                "${futureShipBodyDomain.polygonId.value}_${boat.boatId}_$t"),
-            points: futureShipBodyDomain.points,
-            strokeWidth: 2,
-            strokeColor: Colors.black.withValues(alpha: 0.45),
-            fillColor: Colors.black.withValues(alpha: 0.08),
-          );
-          newShipDomains.add(shipBodyDomain);
-          // 排他領域を描画
-          final exclusiveDomain = Polygon(
-            polygonId: PolygonId(
-                "${futureExclusiveDomain.polygonId.value}_${boat.boatId}_$t"),
-            points: futureExclusiveDomain.points,
+        }
+
+        // ① 船体領域。塗るのはここだけで、いま艇が在る場所を示す。
+        newShipDomains.add(Polygon(
+          polygonId: PolygonId('ship_body_${boat.boatId}'),
+          points: domainsAt(0).shipBodyDomain.points,
+          strokeWidth: 2,
+          strokeColor: Colors.black.withValues(alpha: 0.45),
+          fillColor: Colors.black.withValues(alpha: 0.08),
+          zIndex: predictionShapeZIndex,
+        ));
+
+        // ② 掃引外形。「塗り = 実在する危険」「線 = 予測」の規則を守り、
+        // 塗りはほぼ透明にして輪郭で伝える。
+        final sweptPoints = sweptOutline([
+          for (final distance in sampleDistances)
+            domainsAt(distance).exclusiveDomain.points,
+        ]);
+        if (sweptPoints.length >= 3) {
+          newShipDomains.add(Polygon(
+            polygonId: PolygonId('sweep_outline_${boat.boatId}'),
+            points: sweptPoints,
             strokeWidth: 3,
-            strokeColor: exclusiveOutline.withValues(alpha: 0.9),
-            fillColor: exclusiveOutline.withValues(alpha: 0.10),
-          );
-          newShipDomains.add(exclusiveDomain);
+            strokeColor: const Color(0xFFF9A825).withValues(alpha: 0.9),
+            fillColor: const Color(0xFFF9A825).withValues(alpha: 0.06),
+            zIndex: predictionShapeZIndex,
+          ));
+        }
+
+        // ③ 停止距離の位置での排他領域を、閉じた輪のポリラインで描く。
+        // 速度0のときは掃引そのものが無いので出さない。
+        if (speed > 0) {
+          final stopPoints = domainsAt(stoppingDistance).exclusiveDomain.points;
+          if (stopPoints.length >= 3) {
+            newStoppingDistanceLines.add(Polyline(
+              polylineId: PolylineId('stop_line_${boat.boatId}'),
+              points: [...stopPoints, stopPoints.first],
+              width: 2,
+              color: const Color(0xFFD32F2F),
+              zIndex: predictionShapeZIndex,
+            ));
+          }
         }
       }
       shipDomains.value = newShipDomains;
+      stoppingDistanceLines.value = newStoppingDistanceLines;
       shipDomainRenderSnapshot.value = nextRenderSnapshot;
       return null;
     }, [
@@ -908,6 +1046,8 @@ class HomeMapScreen extends HookConsumerWidget {
             category,
             isTemporary: obstacle.isTemporary,
           ),
+          // 実在する危険は、航路の帯と監視の航跡より必ず上に出す。
+          zIndex: hazardPolygonZIndex,
         ));
       }
       obstacles.value = newObstacles;
@@ -918,45 +1058,45 @@ class HomeMapScreen extends HookConsumerWidget {
     // Polygonsの統合
     // ##########################
     useEffect(() {
+      // 重なり順は zIndex が決めるが、集合へ入れる順序も意味の順に揃えて
+      // おく(帯 → 実在する危険 → 予測 → 開発用)。
       final newPolygons = {
+        ...laneOverlay.value,
         ...shipDomains.value,
         ...obstacles.value,
         // この集合は開発者トグルがONのときだけ非空。通常地図の描画形状を
         // 安全判定用のGPS帯・低速時拡張へ置き換えない。
         ...developerSafetyShapeOverlay.value,
       };
-      // 観察者(コーチ)モードでは練習水域の枠を表示
-      if (navigator.mode.value == NavMode.observer &&
-          coachWatch.practiceArea.value != null) {
-        newPolygons.add(Polygon(
-          polygonId: const PolygonId('practice_area'),
-          points: coachWatch.practiceArea.value!,
-          strokeWidth: 2,
-          strokeColor: Colors.blue,
-          fillColor: Colors.transparent,
-        ));
-      }
       navMap.setPolygons(newPolygons);
       return null;
     }, [
+      laneOverlay.value,
       shipDomains.value,
       obstacles.value,
       developerSafetyShapeOverlay.value,
-      coachWatch.practiceArea.value,
-      navigator.mode.value,
     ]);
 
     // ##########################
-    // 航跡(コーチモード)の描画
+    // ポリラインの統合(航跡 + 停止距離ライン)
     // ##########################
+    // 地図のポリラインは1つの集合しか持てない。航跡と停止距離ラインを
+    // 別々に setPolylines すると、片方を設定した瞬間にもう片方が消える。
     useEffect(() {
-      if (navigator.mode.value == NavMode.observer) {
-        navMap.setPolylines(coachWatch.trailPolylines.value);
-      } else {
-        navMap.setPolylines({});
-      }
+      navMap.setPolylines({
+        // 過去に通った線。危険区域より下に敷く。
+        if (navigator.mode.value == NavMode.observer)
+          for (final trail in coachWatch.trailPolylines.value)
+            trail.copyWith(zIndexParam: coachTrailZIndex),
+        // これから通る予測。危険区域の上に線だけ乗せる。
+        ...stoppingDistanceLines.value,
+      });
       return null;
-    }, [coachWatch.trailPolylines.value, navigator.mode.value]);
+    }, [
+      coachWatch.trailPolylines.value,
+      stoppingDistanceLines.value,
+      navigator.mode.value,
+    ]);
 
     return Scaffold(
       // 水上では地図が1pxでも広い方がよいためAppBarは置かず、マップを全画面に使う
@@ -976,52 +1116,72 @@ class HomeMapScreen extends HookConsumerWidget {
                 )
               : Stack(alignment: Alignment.center, children: <Widget>[
                   // ################ マップ ################
-                  GoogleMap(
-                    // 通常時も許可済みならOS標準の現在地アイコンを表示する。
-                    // 航行中の安全判定・位置共有とは別の地図表示専用レイヤーである。
-                    // 航行中はOS標準の現在地(生GPS)を出さない。Kalman推定で
-                    // 描く自艇マーカーと数m ずれた青丸が並ぶと、どちらが自分の
-                    // 位置なのか判断できなくなる。監視中は自艇マーカーが
-                    // 無いので、こちらだけ表示する。
-                    myLocationEnabled: locationPermissionGranted.value &&
-                        navigator.mode.value != NavMode.navigator,
-                    myLocationButtonEnabled: false,
-                    initialCameraPosition: CameraPosition(
-                      target: initLatLng.value!,
-                      zoom: defaultZoomLevel,
-                    ),
-                    mapType: navMap.mapType.value,
-                    // 航空写真ではスタイルが無視されるため、通常地図のときだけ
-                    // 適用する。適用に失敗しても通常表示のまま航行は続く。
-                    style: highContrastMap.value &&
-                            navMap.mapType.value == MapType.normal
-                        ? highContrastMapStyle
-                        : null,
-                    onMapCreated: (GoogleMapController controller) async {
-                      navMap.setController(controller);
-                    },
-                    onCameraMoveStarted: () {
-                      // プログラムによる操作以外はジェスチャーとして扱う。
-                      // ボタンでの明示解除は、ジェスチャーで上書きしない。
-                      if (!tracking.progFlag.value) {
-                        cancelGestureAutoRecenter();
-                        if (tracking.mode.value !=
-                            TrackingMode.untrackedByUser) {
-                          tracking.setMode(TrackingMode.untrackedByGesture);
+                  // 自艇を画面の下から1/3へ置くための上パディングを、実際の
+                  // 地図の高さから計算する。LayoutBuilder は制約をそのまま
+                  // 子へ渡すため、地図の大きさは従来と変わらない。
+                  LayoutBuilder(builder: (context, mapConstraints) {
+                    return GoogleMap(
+                      // 通常時も許可済みならOS標準の現在地アイコンを表示する。
+                      // 航行中の安全判定・位置共有とは別の地図表示専用レイヤーである。
+                      // 航行中はOS標準の現在地(生GPS)を出さない。Kalman推定で
+                      // 描く自艇マーカーと数m ずれた青丸が並ぶと、どちらが自分の
+                      // 位置なのか判断できなくなる。監視中は自艇マーカーが
+                      // 無いので、こちらだけ表示する。
+                      myLocationEnabled: locationPermissionGranted.value &&
+                          navigator.mode.value != NavMode.navigator,
+                      myLocationButtonEnabled: false,
+                      initialCameraPosition: CameraPosition(
+                        target: initLatLng.value!,
+                        zoom: initialMapZoomLevel,
+                      ),
+                      mapType: navMap.mapType.value,
+                      // 航空写真ではスタイルが無視されるため、通常地図のときだけ
+                      // 適用する。適用に失敗しても通常表示のまま航行は続く。
+                      style: highContrastMap.value &&
+                              navMap.mapType.value == MapType.normal
+                          ? highContrastMapStyle
+                          : null,
+                      onMapCreated: (GoogleMapController controller) async {
+                        navMap.setController(controller);
+                      },
+                      onCameraMoveStarted: () {
+                        // プログラムによる操作以外はジェスチャーとして扱う。
+                        // ボタンでの明示解除は、ジェスチャーで上書きしない。
+                        if (!tracking.progFlag.value) {
+                          cancelGestureAutoRecenter();
+                          if (tracking.mode.value !=
+                              TrackingMode.untrackedByUser) {
+                            tracking.setMode(TrackingMode.untrackedByGesture);
+                          }
                         }
-                      }
-                    },
-                    onCameraIdle: () {
-                      // カメラ更新完了までフラグを維持する。開始直後に解除すると
-                      // 同じアニメーションのコールバックで追跡が外れる端末がある。
-                      final wasProgrammatic = tracking.progFlag.value;
-                      tracking.setProgFlag(false);
-                      if (!wasProgrammatic) scheduleGestureAutoRecenter();
-                    },
-                    markers: navMap.markers.value,
-                    polygons: navMap.polygons.value,
-                    polylines: navMap.polylines.value,
-                  ),
+                      },
+                      onCameraIdle: () {
+                        // カメラ更新完了までフラグを維持する。開始直後に解除すると
+                        // 同じアニメーションのコールバックで追跡が外れる端末がある。
+                        final wasProgrammatic = tracking.progFlag.value;
+                        tracking.setProgFlag(false);
+                        if (!wasProgrammatic) scheduleGestureAutoRecenter();
+                      },
+                      markers: navMap.markers.value,
+                      polygons: navMap.polygons.value,
+                      polylines: navMap.polylines.value,
+                      // 進行方向が上に来る回転地図で自艇を下へ寄せ、前方の
+                      // 見通しを増やす。上パディング P のとき、カメラの
+                      // ターゲットは画面Y=(P+H)/2 に来る。下から1/3
+                      // (Y=0.667H)にしたいので P=(2*0.667-1)*H ≒ H/3。
+                      //
+                      // 監視中・待機中は入れない。監視者は艇を俯瞰したいので、
+                      // 中心をずらす理由がない。
+                      padding: navigator.mode.value == NavMode.navigator
+                          ? EdgeInsets.only(
+                              top: mapConstraints.maxHeight.isFinite
+                                  ? mapConstraints.maxHeight *
+                                      (2 * navigationSelfBoatScreenRatio - 1)
+                                  : 0,
+                            )
+                          : EdgeInsets.zero,
+                    );
+                  }),
                   // ################ マップ上のオーバーレイ ################
                   SafeArea(
                     child:
@@ -1032,10 +1192,6 @@ class HomeMapScreen extends HookConsumerWidget {
                       // 地図の大部分を計器で覆わない。
                       final topOverlayBudget = overlayConstraints.maxHeight *
                           (isLandscape ? 0.3 : 0.4);
-                      // 連続音が鳴っている警告があるか。計器の縮小に使う。
-                      final hasImminentWarning = SafetyBanner.hasImminent(
-                        navigator.activeWarnings.value,
-                      );
                       return Stack(
                           alignment: Alignment.center,
                           children: <Widget>[
@@ -1088,17 +1244,16 @@ class HomeMapScreen extends HookConsumerWidget {
                                         ],
                                       ),
                                     ),
-                                  // 監視異常と「水域外の自動検知が停止中」を
-                                  // 小さく常時表示する。赤い SnackBar の
-                                  // 置き換えで、消えないぶん見落としにくい。
+                                  // 監視異常を小さく常時表示する。
                                   // 詳細(艇名・継続時間)は艇一覧に出ており、
                                   // タップでそこへ辿れる。
                                   if (navigator.mode.value == NavMode.observer)
                                     CoachAnomalyChip(
                                       anomalies: coachWatch.anomalies.value,
-                                      practiceAreaUnavailable: coachWatch
-                                          .practiceAreaUnavailable.value,
                                       onTap: () => showBoatList.value = true,
+                                      onFocusBoat: (boatId) => unawaited(
+                                        focusOnWatchedBoat(boatId),
+                                      ),
                                     ),
                                   // 陸上と判定して警告音を止めている間は、
                                   // その事実を必ず画面へ出す。黙って音を
@@ -1166,6 +1321,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                               navigator.myBoat.value?.timestamp,
                                           gpsQuality:
                                               navigator.gpsQuality.value,
+                                          gpsStreamRecovering: navigator
+                                              .isGpsStreamRecovering.value,
                                           spm: navigator.spm.value,
                                           spmMeasurementEnabled: navigator
                                                   .config
@@ -1183,12 +1340,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                           temporaryObstacleReceiveUnavailable:
                                               navigator
                                                   .isTemporaryObstacleReceiveUnavailable
-                                                  .value,
-                                          operationalCoverageLimited: navigator
-                                                  .isOperationalCoverageUnverified
-                                                  .value ||
-                                              navigator
-                                                  .isOutsideOperationalCoverage
                                                   .value,
                                           safetySettingsLabel: navigator
                                               .safetySettingsLabel.value,
@@ -1257,9 +1408,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                             .applyPendingSharedSafetySettings());
                                                       }
                                                     },
-                                          // 連続音が鳴っている間だけ主計器を
-                                          // 縮め、警告バナーへ視線を譲る。
-                                          deemphasized: hasImminentWarning,
                                         ),
                                       ),
                                     ),
@@ -1276,6 +1424,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                           child: BoatListPanel(
                                             statuses:
                                                 coachWatch.boatStatuses.value,
+                                            onTapBoat: (boatId) => unawaited(
+                                              focusOnWatchedBoat(boatId),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1339,6 +1490,27 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 showBoatList.value =
                                                     !showBoatList.value;
                                               },
+                                            ),
+                                          ),
+                                        // コーチ用: 全艇が収まる位置へ引く。
+                                        // 監視者は陸上で端末を操作できるので、
+                                        // 確認ダイアログは挟まない。
+                                        if (navigator.mode.value ==
+                                                NavMode.observer &&
+                                            navigator.isWatching.value)
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(top: 12),
+                                            child: MapControlButton(
+                                              icon: Icons.fit_screen,
+                                              label: '全艇',
+                                              // 0隻のときは押せる見た目にしない。
+                                              // 押しても何も起きない操作を
+                                              // 有効に見せない。
+                                              onPressed: coachWatch.boatStatuses
+                                                      .value.isEmpty
+                                                  ? null
+                                                  : fitAllWatchedBoats,
                                             ),
                                           ),
                                         // 航行用: 自艇の追跡ON/OFF
@@ -1593,7 +1765,13 @@ class HomeMapScreen extends HookConsumerWidget {
                                                       // トラッキングモードに切り替え
                                                       tracking.setMode(
                                                           TrackingMode.track);
-                                                      // 現在位置をフォーカス
+                                                      // 現在位置をフォーカス。
+                                                      // 航行開始のこの1回だけ
+                                                      // 川幅の約2倍が入る倍率へ
+                                                      // 寄せる。以後の追従では
+                                                      // 渡さないので、利用者が
+                                                      // ピンチで変えた倍率は
+                                                      // 上書きされない。
                                                       final myBoat = navigator
                                                           .myBoat.value;
                                                       if (myBoat != null) {
@@ -1606,7 +1784,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                                                         .value
                                                                         ?.heading ??
                                                                     0.0),
-                                                            force: true);
+                                                            force: true,
+                                                            overrideZoomLevel:
+                                                                navigationStartZoomLevel);
                                                       }
                                                       if (!notificationGranted &&
                                                           context.mounted) {
@@ -1650,6 +1830,24 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 return;
                                               }
                                               await navigator.startWatching();
+                                              // 監視開始のこの1回だけ俯瞰へ引く。
+                                              // 現在地が取れなければ何もしない
+                                              // (監視の開始は妨げない)。
+                                              try {
+                                                final pos = await navigator
+                                                    .getCurrentPosition(
+                                                        locationAccuracy);
+                                                await focusP14y(
+                                                  pos.latitude,
+                                                  pos.longitude,
+                                                  0.0,
+                                                  force: true,
+                                                  overrideZoomLevel:
+                                                      watchStartZoomLevel,
+                                                );
+                                              } catch (_) {
+                                                // 位置が取れないだけ。監視は続く。
+                                              }
                                             } catch (e) {
                                               if (!context.mounted) return;
                                               ScaffoldMessenger.of(context)

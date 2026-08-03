@@ -70,8 +70,15 @@ ${ids.map((id) => "  '$id': ${counts[id]},").join('\n')}
 };
 ''';
 
-String _rulesBlock(List<String> ids, Map<String, int> counts) =>
-    '''// GENERATED: hazard-allowlist BEGIN
+String _rulesBlock(List<String> ids, Map<String, int> counts) {
+  // 橋脚・杭は直接外周ポリゴンで、profileへ追加されるたびにIDが増える。
+  // これらの頂点数までRulesでIDごとに展開するとFirestoreの1000式上限を
+  // 超えるため、Rulesでは許可IDだけを固定し、配列の型・個数はアプリの
+  // SharedSafetyCalibrationStateで厳密に検証する。
+  final rulesVertexIds = ids
+      .where((id) => !id.startsWith('bridgepier_') && !id.startsWith('pile_'))
+      .toList(growable: false);
+  return '''// GENERATED: hazard-allowlist BEGIN
     function validHazardSourceIds(values) {
       return values.keys().hasOnly([
 ${ids.map((id) => "        '$id',").join('\n')}
@@ -89,7 +96,19 @@ ${ids.map((id) => "        '$id',").join('\n')}
     function validScaledVertexOffsets(values) {
       return values is map
         && validHazardSourceIds(values)
-${ids.map((id) => "        && (!('$id' in values) || validScaledVertexOffsetList(values.$id, ${counts[id]}))").join('\n')};
+${rulesVertexIds.map((id) => "        && (!('$id' in values) || validScaledVertexOffsetList(values.$id, ${counts[id]}))").join('\n')};
+    }
+
+    // v8では橋脚・杭を直接外周ポリゴンとして追加したため、全sourceの
+    // 頂点数をRulesで個別展開するとFirestoreの1000式上限に達する。
+    // source IDの許可は維持し、既存の基準線 shore_north の頂点数だけを
+    // 互換性テストを兼ねて厳密に確認する。橋脚・杭を含む全頂点配列の
+    // 順序・個数・GeoPoint値域は、生成定数とアプリ読込時の検証で担保する。
+    function validScaledVertexOffsetsV8(values) {
+      return values is map
+        && validHazardSourceIds(values)
+        && (!('shore_north' in values)
+          || validScaledVertexOffsetList(values.shore_north, 154));
     }
 
     function validDisabledWarningSourceIds(values) {
@@ -100,3 +119,4 @@ ${ids.map((id) => "          '$id',").join('\n')}
         ]);
     }
 // GENERATED: hazard-allowlist END''';
+}

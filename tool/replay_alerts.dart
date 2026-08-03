@@ -192,7 +192,6 @@ Future<ReplayAlertResult> replaySessionDirectory(
       capabilities: const CapabilitySnapshot(
         gpsUsable: true,
         staticProfileUsable: true,
-        insideSupportedCoverage: true,
         audioUsable: true,
       ),
     );

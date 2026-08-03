@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val permissionChannel = "jp.kosei.rowingnavigator.tsukuba/permissions"
     private val audioDiagnosticsChannel = "jp.kosei.rowingnavigator.tsukuba/audio_diagnostics"
+    private val deviceDiagnosticsChannel = "jp.kosei.rowingnavigator.tsukuba/device_diagnostics"
     private val notificationPermissionRequestCode = 7012
     private var pendingNotificationResult: MethodChannel.Result? = null
 
@@ -42,6 +44,40 @@ class MainActivity : FlutterActivity() {
                         },
                         "bluetoothA2dpOn" to audioManager.isBluetoothA2dpOn,
                         "outputs" to outputs,
+                    ),
+                )
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceDiagnosticsChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "snapshot") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+                val thermalState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    when (powerManager.currentThermalStatus) {
+                        PowerManager.THERMAL_STATUS_NONE -> "nominal"
+                        PowerManager.THERMAL_STATUS_LIGHT -> "fair"
+                        PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                        PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                        PowerManager.THERMAL_STATUS_CRITICAL,
+                        PowerManager.THERMAL_STATUS_EMERGENCY,
+                        PowerManager.THERMAL_STATUS_SHUTDOWN -> "critical"
+                        else -> "unknown"
+                    }
+                } else {
+                    "unavailable"
+                }
+                result.success(
+                    mapOf(
+                        "deviceManufacturer" to Build.MANUFACTURER,
+                        "deviceModel" to Build.MODEL,
+                        "deviceModelIdentifier" to Build.DEVICE,
+                        "systemName" to "Android",
+                        "systemVersion" to Build.VERSION.RELEASE,
+                        "sdkInt" to Build.VERSION.SDK_INT,
+                        "thermalState" to thermalState,
+                        "lowPowerModeEnabled" to powerManager.isPowerSaveMode,
                     ),
                 )
             }

@@ -30,10 +30,10 @@ void main() {
 
   test('壊れたcacheは削除し、他チームへ波及させない', () async {
     SharedPreferences.setMockInitialValues({
-      'shared_safety_calibration_v1_team-a': '{"revision":"broken"}',
+      'shared_safety_calibration_v2_team-a': '{"revision":"broken"}',
       // 同梱プロファイルを更新するたびに書き換えずに済むよう、
       // checksumは設定値から取る(literalを置くと更新漏れで赤くなる)。
-      'shared_safety_calibration_v1_team-b':
+      'shared_safety_calibration_v2_team-b':
           '{"baseProfileVersion":$currentHazardProfileDataVersion,'
               '"baseProfileSha256":"$currentHazardProfileSha256",'
               '"calibrations":{},'
@@ -43,6 +43,8 @@ void main() {
               '"island":{"waterSideMeters":5,"landSideMeters":5},'
               '"driftwood":{"waterSideMeters":5,"landSideMeters":5},'
               '"testZone":{"waterSideMeters":5,"landSideMeters":5}},'
+              '"primaryWarningLeadSeconds":10,'
+              '"advanceWarningLeadSeconds":13,'
               '"revision":2}',
     });
 

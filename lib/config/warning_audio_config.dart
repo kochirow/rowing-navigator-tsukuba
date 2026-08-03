@@ -85,6 +85,7 @@ const warningAudioAssets = <String>[
   'audio/bridge_pier_warning.mp3',
   'audio/island_warning.mp3',
   'audio/driftwood_warning.mp3',
+  'audio/pile_warning.mp3',
   'audio/curve_warning.mp3',
   'audio/reverse_warning.mp3',
   'audio/test_warning.mp3',
@@ -120,6 +121,8 @@ String defaultWarningAudioAssetFor(StaticObstacleKind? kind) {
       return 'audio/island_warning.mp3';
     case StaticObstacleKind.driftwood:
       return 'audio/driftwood_warning.mp3';
+    case StaticObstacleKind.pile:
+      return 'audio/pile_warning.mp3';
     case StaticObstacleKind.curve:
       return 'audio/curve_warning.mp3';
     case StaticObstacleKind.reverse:

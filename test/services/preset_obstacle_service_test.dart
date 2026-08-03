@@ -22,7 +22,7 @@ void main() {
     final service = PresetObstacleService();
     final obstacles = await service.loadPresets();
     // 閉じた固定流木は5本の辺リボンではなく、1枚の塗りつぶしにする。
-    expect(obstacles, hasLength(346));
+    expect(obstacles, hasLength(370));
     expect(obstacles.every((obstacle) => obstacle.isDefault), isTrue);
     // 近接注意距離はkind別の既定値を使う。プロファイルの
     // defaultObstacleProximityCautionMeters が0のときは「指定なし」として
@@ -79,9 +79,27 @@ void main() {
     final driftwood = obstacles
         .where((obstacle) => obstacle.kind == StaticObstacleKind.driftwood)
         .toList();
-    expect(driftwood, hasLength(1));
-    expect(driftwood.single.isManaged, isTrue);
-    expect(driftwood.single.points, hasLength(5));
+    expect(driftwood, hasLength(7));
+    expect(driftwood.where((obstacle) => obstacle.isManaged), hasLength(1));
+    expect(
+      driftwood.singleWhere((obstacle) => obstacle.isManaged).points,
+      hasLength(5),
+    );
+    expect(driftwood.where((obstacle) => !obstacle.isManaged), hasLength(6));
+    final piles = obstacles
+        .where((obstacle) => obstacle.kind == StaticObstacleKind.pile)
+        .toList();
+    expect(piles, hasLength(3));
+    expect(
+      piles.any((obstacle) => obstacle.sourceId == 'pile_71ec1621'),
+      isTrue,
+    );
+    expect(piles.every((obstacle) => !obstacle.isManaged), isTrue);
+    expect(
+      piles
+          .every((obstacle) => obstacle.effectiveProximityCautionMeters == 6.0),
+      isTrue,
+    );
     expect(
       obstacles
           .where((obstacle) => obstacle.kind == StaticObstacleKind.reverse),
@@ -357,60 +375,6 @@ void main() {
       isTrue,
     );
   });
-
-  test('運用対象水域は10点のポリゴンを返す', () async {
-    final coverage = await PresetObstacleService().loadOperationalCoverage();
-
-    expect(coverage, isNotNull);
-    expect(coverage, hasLength(10));
-    expect(coverage!.first.latitude, closeTo(36.091934, 1e-6));
-    expect(coverage.first.longitude, closeTo(140.094594, 1e-6));
-    expect(coverage.last.latitude, closeTo(36.094629, 1e-6));
-    expect(coverage.last.longitude, closeTo(140.094594, 1e-6));
-  });
-
-  // 対応水域が同梱データを覆っていないと、桜川で漕いでいる間ずっと
-  // 「未検証水域」の無音system faultが立ち続ける(実機ログで216回primaryを占有)。
-  // 実データで覆えていることを不変条件として固定する。
-  test('運用対象水域は同梱の全危険区域を内側に含む', () async {
-    final service = PresetObstacleService();
-    final coverage = await service.loadOperationalCoverage();
-    final obstacles = await service.loadPresets();
-
-    expect(coverage, isNotNull);
-    for (final obstacle in obstacles) {
-      for (final point in obstacle.points) {
-        expect(
-          _containsPoint(coverage!, point),
-          isTrue,
-          reason: '${obstacle.id} の頂点 $point が対応水域の外側にある',
-        );
-      }
-    }
-  });
-}
-
-/// 平面近似(等距円筒図法)での ray casting。対応水域は数km規模で、
-/// この近似の誤差は判定に影響しない。
-bool _containsPoint(List<LatLng> polygon, LatLng target) {
-  double x(LatLng p) =>
-      p.longitude * 111320 * cos(target.latitude * pi / 180.0);
-  double y(LatLng p) => p.latitude * 110574;
-
-  var inside = false;
-  var j = polygon.length - 1;
-  for (var i = 0; i < polygon.length; i++) {
-    final yi = y(polygon[i]);
-    final yj = y(polygon[j]);
-    if ((yi > y(target)) != (yj > y(target))) {
-      final crossX =
-          (x(polygon[j]) - x(polygon[i])) * (y(target) - yi) / (yj - yi) +
-              x(polygon[i]);
-      if (x(target) < crossX) inside = !inside;
-    }
-    j = i;
-  }
-  return inside;
 }
 
 class _PolygonBufferCall {

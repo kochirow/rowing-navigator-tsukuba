@@ -67,7 +67,11 @@ void main() {
     expect(
       distinct,
       hasLength(assetsByKind.length),
-      reason: '種類ごとに別音声であること。重複: $assetsByKind',
+      reason: '専用音声を持つ種類ごとに別音声であること。重複: $assetsByKind',
+    );
+    expect(
+      defaultWarningAudioAssetFor(StaticObstacleKind.pile),
+      'audio/pile_warning.mp3',
     );
     // 他艇も静的区域のどれとも違う音であること。
     expect(distinct, isNot(contains(otherBoatWarningAudioAsset)));

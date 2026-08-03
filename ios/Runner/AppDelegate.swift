@@ -2,6 +2,7 @@ import UIKit
 import Flutter
 import GoogleMaps
 import AVFoundation
+import Darwin
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -72,6 +73,10 @@ import AVFoundation
           thermalState = "unknown"
         }
         result([
+          "deviceModel": UIDevice.current.model,
+          "deviceModelIdentifier": self.machineIdentifier(),
+          "systemName": UIDevice.current.systemName,
+          "systemVersion": UIDevice.current.systemVersion,
           "thermalState": thermalState,
           "lowPowerModeEnabled": processInfo.isLowPowerModeEnabled,
         ])
@@ -80,5 +85,15 @@ import AVFoundation
     
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func machineIdentifier() -> String {
+    var systemInfo = utsname()
+    uname(&systemInfo)
+    return withUnsafePointer(to: &systemInfo.machine) {
+      $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+        String(cString: $0)
+      }
+    }
   }
 }

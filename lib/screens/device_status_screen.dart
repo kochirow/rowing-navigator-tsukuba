@@ -19,8 +19,6 @@ class DeviceStatusScreen extends StatelessWidget {
   final bool positionSharingUnavailable;
   final bool otherBoatReceiveUnavailable;
   final bool temporaryObstacleReceiveUnavailable;
-  final bool operationalCoverageUnverified;
-  final bool outsideOperationalCoverage;
 
   /// 安全判定そのものが今どの状態で動いているか。
   /// 固定危険区域データの欠落や警告処理の停止は、ここへ集約されている。
@@ -44,8 +42,6 @@ class DeviceStatusScreen extends StatelessWidget {
     this.positionSharingUnavailable = false,
     this.otherBoatReceiveUnavailable = false,
     this.temporaryObstacleReceiveUnavailable = false,
-    this.operationalCoverageUnverified = false,
-    this.outsideOperationalCoverage = false,
     this.safetyRunMode = SafetyRunMode.stopped,
     this.otherBoatCount = 0,
     this.obstacleCount = 0,
@@ -98,8 +94,6 @@ class DeviceStatusScreen extends StatelessWidget {
               _Row.status('自艇の位置共有', !positionSharingUnavailable),
               _Row.status('他艇の受信', !otherBoatReceiveUnavailable),
               _Row.status('臨時危険区域の受信', !temporaryObstacleReceiveUnavailable),
-              _Row.status('対応水域の検証', !operationalCoverageUnverified),
-              _Row.status('対応水域の内側', !outsideOperationalCoverage),
               _Row('安全判定', _runModeLabel(safetyRunMode)),
             ],
           ),

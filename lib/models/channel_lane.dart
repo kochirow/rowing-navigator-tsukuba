@@ -11,12 +11,14 @@ class ChannelLane {
   final String id;
   final String name;
   final LaneDirection direction;
+  final String? centerlineId;
   final List<LatLng> points;
 
   const ChannelLane({
     required this.id,
     required this.name,
     required this.direction,
+    this.centerlineId,
     required this.points,
   });
 
@@ -25,6 +27,7 @@ class ChannelLane {
     final name = map['name'];
     final kind = map['kind'];
     final rawDirection = map['direction'];
+    final rawCenterlineId = map['centerlineId'];
     final rawPoints = map['points'];
     final direction = switch (rawDirection) {
       'along' => LaneDirection.along,
@@ -37,6 +40,10 @@ class ChannelLane {
         name is! String ||
         kind != 'lane' ||
         direction == null ||
+        (rawCenterlineId != null &&
+            (rawCenterlineId is! String ||
+                rawCenterlineId.isEmpty ||
+                rawCenterlineId.length > 128)) ||
         rawPoints is! List ||
         rawPoints.length < 3 ||
         rawPoints.length > 1000) {
@@ -65,6 +72,7 @@ class ChannelLane {
       id: id,
       name: name,
       direction: direction,
+      centerlineId: rawCenterlineId as String?,
       points: List.unmodifiable(points),
     );
   }

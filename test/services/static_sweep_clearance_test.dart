@@ -130,7 +130,9 @@ void main() {
       useLocalDangerZoneSettings: false,
       useLocalFixedObstacleCalibrations: false,
     );
-    final centerline = await service.loadChannelCenterline();
+    final centerline = (await service
+        .loadChannelCenterlines())['centerline_sakuragawa_estuary'];
+    expect(centerline, isNotNull);
     final targets = await service.loadCalibrationTargets();
     shoreBaseline = targets
         .firstWhere((target) => target.sourceId == 'shore_north')
@@ -225,8 +227,8 @@ void main() {
   group('静的危険区域の掃引クリアランス(実データ)', () {
     test('前提: 桜川の岸基準線に十分長い直線区間がある', () {
       expect(shoreBaseline.length, greaterThan(100));
-      expect(straight.lengthMeters, greaterThan(120),
-          reason: '「岸と平行に走る」を定義できる区間が要る');
+      expect(straight.lengthMeters, greaterThan(60),
+          reason: '明示した桜川河口中心線の範囲内に「岸と平行に走る」を定義できる区間が要る');
     });
 
     test('狭所レーン中央(岸の基準線から11.25m)を並走しても発報しない', () {

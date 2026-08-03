@@ -820,15 +820,15 @@ class CollisionRiskEvaluatorService {
     return threats.map((item) => item.threat).toList(growable: false);
   }
 
-  /// 逆走注意区域を、航路中心線と右側通行ルールから方向つきで判定する。
+  /// 航路レーンと中心線から、規定方向に対する逆走を判定する。
   ///
   /// 「区域内に現在地があるか」だけの判定では、1.2 の右側通行を守って
   /// 正しく漕いでいても区域を出入りするたびに鳴る(実機ログで77分に16回)。
   /// 原則4に反するため、その位置で進むべき向きと実際の進行方位を比べる。
   ///
-  /// 方向を確かめられないときは [ReverseGuidanceOutcome.unverified] を返し、
-  /// 呼び出し側は従来どおり「区域内なら発報」へ縮退すること(原則1)。
-  /// 黙って無効化してはいけない。
+  /// 明示的に紐付いたレーン・中心線が無い旧データでは、呼び出し側が
+  /// 従来の逆走注意区域を使う。明示データがある場合、旧区域は無効化し、
+  /// 確認済みの逆走だけを航路内の位置に関係なく候補化する。
   ///
   /// カーブ区域(`curve`)はこの判定の対象外。1カーブ1回で妥当に働いている。
   ReverseGuidanceOutcome evaluateReverseGuidance(
@@ -837,17 +837,34 @@ class CollisionRiskEvaluatorService {
     // ---- 縮退条件(原則1・原則3) ----
     // 方向が求まらない状況では従来の挙動を必ず残す。ここで compliant を
     // 返すと「中心線が無い水域では逆走注意が黙って消える」ことになる。
-    if (centerline == null) return ReverseGuidanceOutcome.unverified;
     if (!myBoat.lat.isFinite || !myBoat.lng.isFinite) {
       return ReverseGuidanceOutcome.unverified;
     }
-    final frame = centerline.project(LatLng(myBoat.lat, myBoat.lng));
+    final position = LatLng(myBoat.lat, myBoat.lng);
+
+    // 複数水域では、現在位置を含むレーンが明示参照する中心線だけを使う。
+    // 距離が近い中心線を推測すると、霞ヶ浦と桜川の接続部などで規定方位が
+    // 180度反転しうる。レーンの隙間・重なりは従来どおり判定保留にする。
+    final usesLinkedCenterlines = laneResolver?.hasLinkedCenterlines ?? false;
+    final matchedLane =
+        usesLinkedCenterlines ? laneResolver!.resolveLane(position) : null;
+    if (usesLinkedCenterlines && matchedLane == null) {
+      return ReverseGuidanceOutcome.laneUndetermined;
+    }
+    final effectiveCenterline = usesLinkedCenterlines
+        ? laneResolver!.centerlineFor(position)
+        : centerline;
+    if (effectiveCenterline == null) {
+      return ReverseGuidanceOutcome.unverified;
+    }
+
+    final frame = effectiveCenterline.project(position);
     if (!frame.isInsideCoverage) return ReverseGuidanceOutcome.unverified;
     if (!frame.crossMeters.isFinite ||
         frame.crossMeters.abs() > maxChannelProjectionOffsetMeters) {
       return ReverseGuidanceOutcome.unverified;
     }
-    final tangent = centerline.tangentBearingAt(frame.alongMeters);
+    final tangent = effectiveCenterline.tangentBearingAt(frame.alongMeters);
     if (!tangent.isFinite) return ReverseGuidanceOutcome.unverified;
 
     // ---- 入力が意味を持たない場合は助言しない ----
@@ -866,9 +883,11 @@ class CollisionRiskEvaluatorService {
     // レーン決定に使わない。境界の隙間や重なりは誤った180度反転ではなく
     // 「判定しない」にする。
     final hasCompleteLaneSet = laneResolver?.hasCompleteLaneSet ?? false;
-    final laneDirection = hasCompleteLaneSet
-        ? laneResolver!.resolve(LatLng(myBoat.lat, myBoat.lng))
-        : null;
+    final laneDirection = usesLinkedCenterlines
+        ? matchedLane!.direction
+        : hasCompleteLaneSet
+            ? laneResolver!.resolve(position)
+            : null;
     if (hasCompleteLaneSet && laneDirection == null) {
       return ReverseGuidanceOutcome.laneUndetermined;
     }
@@ -991,9 +1010,57 @@ class CollisionRiskEvaluatorService {
     final otherBoats =
         otherBoatsRaw.map(_usableBoat).whereType<Boat>().toList();
 
-    // カーブ／逆走注意は、現在地を含む全区域を個別候補にする。
+    // カーブは現在地を含む区域、逆走は下で新旧方式を切り替えて候補化する。
     final myPosition = LatLng(myBoat.lat, myBoat.lng);
+    // 逆走判定だけでなく、岸・橋・他艇への将来経路も同じ水域の中心線へ
+    // 揃える。複数中心線時の全体フォールバックはnullなので、レーン外では
+    // 安全に従来の直線予測へ縮退する。
+    final effectiveCenterline =
+        laneResolver?.centerlineFor(myPosition) ?? centerline;
     final obstacleIndex = _indexFor(obstacles);
+    final usesLinkedReverseGuidance =
+        laneResolver?.hasLinkedCenterlines ?? false;
+
+    // 明示レーン＋中心線が登録済みなら、旧「逆走注意エリア」をトリガーに
+    // せず、レーン全域で確認済みの逆走だけを候補化する。
+    //
+    // obstacleKindをreverseに保つことで、表示名・標準音声
+    // (audio/reverse_warning.mp3)・6秒音声確定・再武装は既存経路を流用する。
+    if (usesLinkedReverseGuidance) {
+      final outcome = evaluateReverseGuidance(
+        myBoat,
+        effectiveCenterline,
+        laneResolver: laneResolver,
+      );
+      if (outcome == ReverseGuidanceOutcome.reverse) {
+        final lane = laneResolver!.resolveLane(myPosition)!;
+        raiseLevel(
+          CollisionRiskLevel.lv1,
+          ThreatInfo(
+            kind: ThreatKind.obstacle,
+            position: myPosition,
+            confidence: ThreatConfidence.definite,
+            obstacleKind: StaticObstacleKind.reverse,
+            obstacleId: 'channel_reverse_${lane.id}',
+            obstacleSourceId: 'channel_reverse_${lane.id}',
+            obstacleName: '${lane.name} 逆走注意',
+            continuousIntersection: const ContinuousIntersection(
+              intersects: true,
+              currentOverlap: true,
+              firstEntryTimeSeconds: null,
+              firstExitTimeSeconds: null,
+              minimumSeparationMeters: 0,
+              confidence: 1.0,
+              reasonCodes: [
+                'reverse_direction_confirmed',
+                'linked_centerline_guidance',
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
     // 逆走の方向判定は区域ごとに変わらないので、区域ループの外で1度だけ求める。
     ReverseGuidanceOutcome? reverseOutcome;
     // 現在地を含むかどうかだけなので、索引は半径0で引けばよい。
@@ -1006,9 +1073,12 @@ class CollisionRiskEvaluatorService {
       // 逆走区域だけは進行方向も見る。カーブは従来どおり進入で1回。
       ContinuousIntersection? guidanceIntersection;
       if (obstacle.kind == StaticObstacleKind.reverse) {
+        // 明示レーン＋中心線方式では上で全航路を判定済み。旧区域を二重に
+        // 評価すると、区域境界で別の警告エピソードが発生するため無効化する。
+        if (usesLinkedReverseGuidance) continue;
         final outcome = reverseOutcome ??= evaluateReverseGuidance(
           myBoat,
-          centerline,
+          effectiveCenterline,
           laneResolver: laneResolver,
         );
         if (outcome == ReverseGuidanceOutcome.compliant ||
@@ -1098,7 +1168,7 @@ class CollisionRiskEvaluatorService {
           obstacle,
           horizonSeconds: staticHorizon,
           includeGpsGuard: false,
-          centerline: centerline,
+          centerline: effectiveCenterline,
         );
         separationMeters = definite.minimumSeparationMeters;
         if (definite.intersects) {
@@ -1108,7 +1178,7 @@ class CollisionRiskEvaluatorService {
             myBoat,
             obstacle,
             horizonSeconds: staticHorizon,
-            centerline: centerline,
+            centerline: effectiveCenterline,
           );
           if (guarded.intersects) {
             confidence = ThreatConfidence.uncertain;
@@ -1219,7 +1289,7 @@ class CollisionRiskEvaluatorService {
           horizonSeconds: horizon,
           includeGpsGuard: false,
           headingReliable: headingUncertain ? true : null,
-          centerline: centerline,
+          centerline: effectiveCenterline,
           now: now,
         );
         separationMeters = definite.minimumSeparationMeters;
@@ -1233,7 +1303,7 @@ class CollisionRiskEvaluatorService {
               otherBoat,
               horizonSeconds: horizon,
               includeGpsGuard: false,
-              centerline: centerline,
+              centerline: effectiveCenterline,
               now: now,
             );
             separationMeters =
@@ -1255,7 +1325,7 @@ class CollisionRiskEvaluatorService {
               myBoat,
               otherBoat,
               horizonSeconds: horizon,
-              centerline: centerline,
+              centerline: effectiveCenterline,
               now: now,
             );
             // GPS帯込みのほうが隙間は狭く出る。近接注意には保守的な側を使う。

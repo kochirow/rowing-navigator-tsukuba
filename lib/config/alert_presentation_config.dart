@@ -138,10 +138,11 @@ enum AlertUrgency {
 /// 近接注意(到達予測なし)でも単発音を鳴らすカテゴリ。
 ///
 /// 岸は川幅40mでは常に近く、鳴らすと確実に形骸化するため入れない。
-/// 流木・中州は水面下や視認しづらい位置にあり、帰結が最悪なので鳴らす。
+/// 流木・中州・杭は水面下や視認しづらい位置にあり、帰結が最悪なので鳴らす。
 const audibleProximityCategories = <String>{
   'driftwood',
   'island',
+  'pile',
   'bridgePier'
 };
 

@@ -1,0 +1,458 @@
+{
+  "layoutVersion": 1,
+  "profileVersion": 8,
+  "folders": [
+    {
+      "id": "fld_banks",
+      "name": "河岸",
+      "parentId": null,
+      "order": 0
+    },
+    {
+      "id": "fld_bridges",
+      "name": "橋",
+      "parentId": null,
+      "order": 1
+    },
+    {
+      "id": "fld_islands",
+      "name": "中州",
+      "parentId": null,
+      "order": 2
+    },
+    {
+      "id": "fld_driftwood",
+      "name": "流木",
+      "parentId": null,
+      "order": 3
+    },
+    {
+      "id": "fld_piles",
+      "name": "杭",
+      "parentId": null,
+      "order": 4
+    },
+    {
+      "id": "fld_curve",
+      "name": "カーブ",
+      "parentId": null,
+      "order": 5
+    },
+    {
+      "id": "fld_reverse",
+      "name": "逆走注意",
+      "parentId": null,
+      "order": 6
+    },
+    {
+      "id": "fld_test",
+      "name": "テスト区域",
+      "parentId": null,
+      "order": 7
+    },
+    {
+      "id": "fld_safety",
+      "name": "安全データ",
+      "parentId": null,
+      "order": 8
+    },
+    {
+      "id": "fld_imported",
+      "name": "臨時（取込）",
+      "parentId": null,
+      "order": 9
+    }
+  ],
+  "objects": {
+    "driftwood_estuary": {
+      "folderId": "fld_driftwood",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "island_sakuragawa_bridge": {
+      "folderId": "fld_islands",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "island_upstream": {
+      "folderId": "fld_islands",
+      "order": 2,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_suigo": {
+      "folderId": "fld_bridges",
+      "order": 3,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_railway": {
+      "folderId": "fld_bridges",
+      "order": 4,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_sakuragawa": {
+      "folderId": "fld_bridges",
+      "order": 5,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_nioi": {
+      "folderId": "fld_bridges",
+      "order": 6,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_zenigame": {
+      "folderId": "fld_bridges",
+      "order": 7,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_tsuchiura": {
+      "folderId": "fld_bridges",
+      "order": 8,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridge_gakuen": {
+      "folderId": "fld_bridges",
+      "order": 9,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "shore_north": {
+      "folderId": "fld_banks",
+      "order": 10,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "shore_south": {
+      "folderId": "fld_banks",
+      "order": 11,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "test_zone_land": {
+      "folderId": "fld_test",
+      "order": 12,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "shore_bd39c863": {
+      "folderId": "fld_banks",
+      "order": 13,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "driftwood_51534e52": {
+      "folderId": "fld_driftwood",
+      "order": 14,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "pile_3eacc519": {
+      "folderId": "fld_piles",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "pile_e14ff5c6": {
+      "folderId": "fld_piles",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_1": {
+      "folderId": "fld_curve",
+      "order": 2,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_2": {
+      "folderId": "fld_curve",
+      "order": 3,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_3": {
+      "folderId": "fld_curve",
+      "order": 4,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_4": {
+      "folderId": "fld_curve",
+      "order": 5,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_5": {
+      "folderId": "fld_curve",
+      "order": 6,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_6": {
+      "folderId": "fld_curve",
+      "order": 7,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "curve_7": {
+      "folderId": "fld_curve",
+      "order": 8,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "reverse_main_channel": {
+      "folderId": "fld_reverse",
+      "order": 9,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "bridgepier_a2c5433b": {
+      "folderId": "fld_bridges",
+      "order": 10,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_suigo"
+    },
+    "bridgepier_7a5ecc15": {
+      "folderId": "fld_bridges",
+      "order": 11,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_suigo"
+    },
+    "bridgepier_070a656c": {
+      "folderId": "fld_bridges",
+      "order": 12,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_suigo"
+    },
+    "bridgepier_636d911d": {
+      "folderId": "fld_bridges",
+      "order": 13,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_railway"
+    },
+    "bridgepier_860a0375": {
+      "folderId": "fld_bridges",
+      "order": 14,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_railway"
+    },
+    "bridgepier_205c3959": {
+      "folderId": "fld_bridges",
+      "order": 15,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_railway"
+    },
+    "bridgepier_601d9621": {
+      "folderId": "fld_bridges",
+      "order": 16,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_railway"
+    },
+    "bridgepier_201874a5": {
+      "folderId": "fld_bridges",
+      "order": 17,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_sakuragawa"
+    },
+    "bridgepier_5ca97dbb": {
+      "folderId": "fld_bridges",
+      "order": 18,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_sakuragawa"
+    },
+    "bridgepier_911fc593": {
+      "folderId": "fld_bridges",
+      "order": 19,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_nioi"
+    },
+    "bridgepier_b5c742b7": {
+      "folderId": "fld_bridges",
+      "order": 20,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_nioi"
+    },
+    "bridgepier_bec6898e": {
+      "folderId": "fld_bridges",
+      "order": 21,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_zenigame"
+    },
+    "bridgepier_7fdc56a4": {
+      "folderId": "fld_bridges",
+      "order": 22,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_zenigame"
+    },
+    "bridgepier_e7ea8ed4": {
+      "folderId": "fld_bridges",
+      "order": 23,
+      "description": "",
+      "verificationStatus": "draft",
+      "style": {},
+      "bridgeId": "bridge_tsuchiura"
+    },
+    "ashorearea_b672c8db": {
+      "folderId": "fld_safety",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "lane_kasumikagaura_outbound": {
+      "folderId": "fld_safety",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_kasumikagaura",
+      "direction": "along"
+    },
+    "lane_kasumikagaura_return": {
+      "folderId": "fld_safety",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_kasumikagaura",
+      "direction": "against"
+    },
+    "lane_sakuragawa_estuary_outbound": {
+      "folderId": "fld_safety",
+      "order": 2,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_sakuragawa_estuary",
+      "direction": "against"
+    },
+    "lane_sakuragawa_estuary_return": {
+      "folderId": "fld_safety",
+      "order": 3,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_sakuragawa_estuary",
+      "direction": "along"
+    },
+    "lane_sakuragawa_upstream_outbound": {
+      "folderId": "fld_safety",
+      "order": 4,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_sakuragawa_upstream",
+      "direction": "along"
+    },
+    "lane_sakuragawa_upstream_return": {
+      "folderId": "fld_safety",
+      "order": 5,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {},
+      "centerlineId": "centerline_sakuragawa_upstream",
+      "direction": "against"
+    },
+    "centerline_kasumikagaura": {
+      "folderId": "fld_safety",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "centerline_sakuragawa_estuary": {
+      "folderId": "fld_safety",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "centerline_sakuragawa_upstream": {
+      "folderId": "fld_safety",
+      "order": 2,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "practice_area": {
+      "folderId": "fld_safety",
+      "order": -1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "operational_coverage": {
+      "folderId": "fld_safety",
+      "order": -1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "pile_71ec1621": {
+      "folderId": "fld_piles",
+      "order": 1785628763806,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    }
+  }
+}

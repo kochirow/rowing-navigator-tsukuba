@@ -12,7 +12,6 @@ enum SafetyRunMode {
 class CapabilitySnapshot {
   final bool gpsUsable;
   final bool staticProfileUsable;
-  final bool insideSupportedCoverage;
   final bool audioUsable;
   final bool dynamicReceiveUsable;
   final bool positionSharingUsable;
@@ -21,7 +20,6 @@ class CapabilitySnapshot {
   const CapabilitySnapshot({
     required this.gpsUsable,
     required this.staticProfileUsable,
-    required this.insideSupportedCoverage,
     required this.audioUsable,
     this.dynamicReceiveUsable = true,
     this.positionSharingUsable = true,

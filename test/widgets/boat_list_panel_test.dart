@@ -82,19 +82,6 @@ void main() {
       expect(find.byIcon(Icons.warning), findsOneWidget);
     });
 
-    testWidgets('水域外も赤枠で強く出す', (tester) async {
-      await pumpPanel(tester, [
-        BoatStatus(
-          boat: makeBoat(),
-          ageSec: 4,
-          anomaly: makeAnomaly(BoatAnomalyKind.outOfArea),
-        ),
-      ]);
-
-      expect(rowBorderColor(tester), AppColors.light.danger);
-      expect(find.byIcon(Icons.warning), findsOneWidget);
-    });
-
     testWidgets('更新途絶は日常的なので控えめに出す', (tester) async {
       // 停止中送信10秒 + 画面OFF + ジッタで普通に起こる。赤枠で出すと
       // 一覧が常時赤くなり、本当にまずい艇が埋もれる(原則4)。
@@ -136,5 +123,50 @@ void main() {
         expect(find.text('80%'), findsOneWidget);
       });
     }
+  });
+
+  testWidgets('行をタップするとその艇のIDを返す', (tester) async {
+    final tapped = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildAppTheme(),
+      home: Scaffold(
+        body: BoatListPanel(
+          statuses: [
+            BoatStatus(boat: makeBoat(boatId: 'boat-a'), ageSec: 2),
+            BoatStatus(boat: makeBoat(boatId: 'boat-b'), ageSec: 3),
+          ],
+          onTapBoat: tapped.add,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byType(InkWell).last);
+    await tester.pump();
+
+    expect(tapped, ['boat-b']);
+  });
+
+  testWidgets('onTapBoat が無いときは従来どおり表示専用', (tester) async {
+    await pumpPanel(tester, [BoatStatus(boat: makeBoat(), ageSec: 2)]);
+
+    expect(find.byType(InkWell), findsNothing);
+  });
+
+  testWidgets('濡れた手でも押せる高さを行が確保する', (tester) async {
+    final tapped = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildAppTheme(),
+      home: Scaffold(
+        body: BoatListPanel(
+          statuses: [BoatStatus(boat: makeBoat(), ageSec: 2)],
+          onTapBoat: tapped.add,
+        ),
+      ),
+    ));
+
+    expect(
+      tester.getSize(find.byType(InkWell)).height,
+      greaterThanOrEqualTo(44),
+    );
   });
 }

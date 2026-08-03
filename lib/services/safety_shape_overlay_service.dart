@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/risk_evaluator_config.dart';
 import '../models/boat_model.dart';
 import '../models/static_obstacle_model.dart';
+import '../theme/map_layer_spec.dart';
 import '../utils/geo_math.dart';
 import 'channel_centerline.dart';
 import 'channel_path_predictor.dart';
@@ -58,7 +59,7 @@ class SafetyShapeOverlayService {
       strokeWidth: 3,
       strokeColor: const Color(0xFF212121),
       fillColor: Colors.transparent,
-      zIndex: 30,
+      zIndex: developerOverlayZIndex,
     ));
 
     final kinds = <StaticObstacleKind>{
@@ -97,7 +98,7 @@ class SafetyShapeOverlayService {
         strokeWidth: 2,
         strokeColor: const Color(0xFF00695C),
         fillColor: Colors.transparent,
-        zIndex: 29,
+        zIndex: developerOverlayZIndex - 1,
       ));
 
       for (var index = 0; index < segments.length; index++) {
@@ -130,7 +131,7 @@ class SafetyShapeOverlayService {
           strokeWidth: 2,
           strokeColor: const Color(0xFF1565C0),
           fillColor: Colors.transparent,
-          zIndex: 28,
+          zIndex: developerOverlayZIndex - 2,
         ));
       }
     }

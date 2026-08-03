@@ -103,11 +103,19 @@ class _UsageGuideScreenState extends State<UsageGuideScreen> {
                   ('bridgePier', '橋脚'),
                   ('island', '中州'),
                   ('driftwood', '流木'),
+                  ('pile', '杭'),
                   ('curve', 'カーブ'),
                   ('reverse', '逆走注意'),
                 ])
                   _LegendRow(category: entry.$1, label: entry.$2),
               ],
+            ),
+          ),
+          _Section(
+            title: '橋脚の登録',
+            description: '橋脚は、橋桁ではなく水中に立つ柱そのものを危険区域として登録します。',
+            child: const Text(
+              'プロットツールでは、橋脚の実際の外周を3点以上で直接囲みます。橋桁全体・影・周囲の余裕幅は含めません。形状が航空写真だけでは分からない場合は、現地確認まで下書きとして扱います。',
             ),
           ),
           _Section(
@@ -119,8 +127,10 @@ class _UsageGuideScreenState extends State<UsageGuideScreen> {
                 for (final entry in const [
                   ('audio/shore_warning.mp3', '岸'),
                   ('audio/bridge_warning.mp3', '橋'),
+                  ('audio/bridge_pier_warning.mp3', '橋脚'),
                   ('audio/island_warning.mp3', '中州'),
                   ('audio/driftwood_warning.mp3', '流木'),
+                  ('audio/pile_warning.mp3', '杭'),
                   ('audio/curve_warning.mp3', 'カーブ'),
                   ('audio/reverse_warning.mp3', '逆走注意'),
                   (otherBoatWarningAudioAsset, '他艇'),

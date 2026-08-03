@@ -137,24 +137,39 @@ void main() {
       );
     });
 
-    test('桜川の同梱プリセットから実際に中心線を導出できる', () async {
-      final centerline = await PresetObstacleService().loadChannelCenterline();
+    test('同梱プリセットから霞ヶ浦・桜川河口・桜川上流の明示中心線を読む', () async {
+      final service = PresetObstacleService();
+      final centerlines = await service.loadChannelCenterlines();
 
-      expect(centerline, isNotNull, reason: '中心線が作れないと直線予測へ縮退し、カーブ対応が効かない');
-      // 桜川の練習水域として現実的な長さであること。
-      expect(centerline!.lengthMeters, greaterThan(500));
-      expect(centerline.pointCount, greaterThan(10));
+      expect(service.isChannelCenterlineDerivedFromShores, isFalse);
+      expect(centerlines, hasLength(3));
+      expect(
+        centerlines.keys,
+        containsAll(<String>[
+          'centerline_kasumikagaura',
+          'centerline_sakuragawa_estuary',
+          'centerline_sakuragawa_upstream',
+        ]),
+      );
+      // 複数中心線から適当な1本を旧フォールバックへ渡してはいけない。
+      expect(await service.loadChannelCenterline(), isNull);
 
-      // 中心線上の点は、当然ながら cross ≒ 0 に投影される。
-      final middle = centerline.pointAt(centerline.lengthMeters / 2);
-      final frame = centerline.project(middle);
-      expect(frame.crossMeters.abs(), lessThan(1));
-      expect(frame.isInsideCoverage, isTrue);
+      for (final centerline in centerlines.values) {
+        expect(centerline.lengthMeters, greaterThan(500));
+        expect(centerline.pointCount, greaterThanOrEqualTo(6));
 
-      // 中心線から左右へ15mずらした点は、桜川の川幅(35〜50m)の内側。
-      final right =
-          centerline.toLatLng(alongMeters: frame.alongMeters, crossMeters: 15);
-      expect(distanceMeters(middle, right), closeTo(15, 1));
+        // 中心線上の点は、当然ながら cross ≒ 0 に投影される。
+        final middle = centerline.pointAt(centerline.lengthMeters / 2);
+        final frame = centerline.project(middle);
+        expect(frame.crossMeters.abs(), lessThan(1));
+        expect(frame.isInsideCoverage, isTrue);
+
+        final right = centerline.toLatLng(
+          alongMeters: frame.alongMeters,
+          crossMeters: 15,
+        );
+        expect(distanceMeters(middle, right), closeTo(15, 1));
+      }
     });
   });
 }

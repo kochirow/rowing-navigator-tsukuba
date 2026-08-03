@@ -14,6 +14,7 @@ class PresentationStateCodec {
     'shore': 's',
     'island': 'i',
     'driftwood': 'd',
+    'pile': 'k',
     'curve': 'c',
     'reverse': 'r',
   };

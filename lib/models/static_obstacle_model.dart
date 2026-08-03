@@ -12,6 +12,7 @@ enum StaticObstacleKind {
   bridgePier,
   island,
   driftwood,
+  pile,
   curve,
   reverse,
   testZone;
@@ -41,6 +42,9 @@ enum StaticObstacleKind {
         return islandProximityCautionDistanceMeters;
       case StaticObstacleKind.driftwood:
         return driftwoodProximityCautionDistanceMeters;
+      case StaticObstacleKind.pile:
+        // 杭は流木と同じく水面下・視認しづらく、局所的な衝突帰結が大きい。
+        return driftwoodProximityCautionDistanceMeters;
       case StaticObstacleKind.testZone:
         return testZoneProximityCautionDistanceMeters;
       case StaticObstacleKind.curve:
@@ -68,6 +72,7 @@ enum StaticObstacleKind {
       case StaticObstacleKind.bridgePier:
       case StaticObstacleKind.island:
       case StaticObstacleKind.driftwood:
+      case StaticObstacleKind.pile:
       case StaticObstacleKind.testZone:
       case StaticObstacleKind.curve:
       case StaticObstacleKind.reverse:
@@ -104,6 +109,8 @@ enum StaticObstacleKind {
         return '中州';
       case StaticObstacleKind.driftwood:
         return '流木';
+      case StaticObstacleKind.pile:
+        return '杭';
       case StaticObstacleKind.generic:
         return '危険区域';
     }
@@ -127,6 +134,8 @@ enum StaticObstacleKind {
         return '島';
       case StaticObstacleKind.driftwood:
         return '流木';
+      case StaticObstacleKind.pile:
+        return '杭';
       case StaticObstacleKind.generic:
         return '危険区域';
     }

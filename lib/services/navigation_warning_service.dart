@@ -93,28 +93,6 @@ class NavigationWarningService {
         urgency: urgency,
       );
     }
-    if (candidate.category == 'outside_operational_coverage') {
-      return NavigationWarning(
-        key: candidate.alertId,
-        category: candidate.category,
-        title: '対応水域の範囲外です',
-        message: 'この位置の固定危険区域は未検証です。通常の目視確認を継続してください',
-        audioAsset: candidate.audioAsset,
-        audioMode: audioMode,
-        urgency: urgency,
-      );
-    }
-    if (candidate.category == 'operational_coverage_unverified') {
-      return NavigationWarning(
-        key: candidate.alertId,
-        category: candidate.category,
-        title: '対応水域が未設定です',
-        message: '固定危険区域の網羅範囲は未検証です。警告は継続します',
-        audioAsset: candidate.audioAsset,
-        audioMode: audioMode,
-        urgency: urgency,
-      );
-    }
     if (candidate.category == 'audio_unavailable') {
       return NavigationWarning(
         key: candidate.alertId,
@@ -241,6 +219,7 @@ class NavigationWarningService {
         StaticObstacleKind.bridgePier => '橋脚に接近',
         StaticObstacleKind.island => '中洲に接近',
         StaticObstacleKind.driftwood => '流木に接近',
+        StaticObstacleKind.pile => '杭に接近',
         StaticObstacleKind.curve => 'カーブ注意',
         StaticObstacleKind.reverse => '逆走注意',
         StaticObstacleKind.testZone => 'テスト区域に接近',

@@ -76,7 +76,7 @@ function temporaryHazard(uid) {
 // `firestore.rules` の baseProfileSha256 に一致させること。
 // ずれると共有校正の書き込みが全て拒否され、このテストも通らない。
 const hazardProfileSha256 =
-  "15631cf1f94d0edf9c7608b85e16e7d29961a2fcc5d7c47c11976ac0988991da";
+  "b94e6f0afb23d153f50f63d8f43e020d62cb61fe8cbbe38777822a8e8671ed88";
 
 function dangerZoneOffsets() {
   return Object.fromEntries(
@@ -95,6 +95,7 @@ function sharedSafetyCalibration({
   revision = 1,
   calibrations = fixedCalibrations({
     bridge_suigo: {northMeters: 1.5, eastMeters: -2},
+    pile_3eacc519: {northMeters: 0.5, eastMeters: -0.5},
   }),
   scaledOffsets,
   scaledVertexOffsets = {},
@@ -103,12 +104,14 @@ function sharedSafetyCalibration({
 } = {}) {
   return {
     kind: "fixed_obstacle_calibrations",
-    baseProfileVersion: 5,
+    baseProfileVersion: 8,
     baseProfileSha256: hazardProfileSha256,
     scaledOffsets: scaledOffsets ?? fixedCalibrationOffsets(calibrations),
     scaledVertexOffsets,
     dangerZoneOffsets: dangerZoneOffsets(),
     disabledWarningSourceIds,
+    primaryWarningLeadSeconds: 9,
+    advanceWarningLeadSeconds: 12,
     revision,
     updatedAt: serverTimestamp(),
     updatedBy: uid,
@@ -122,7 +125,8 @@ const fixedCalibrationSourceIds = [
   "island_sakuragawa_bridge", "island_upstream", "bridge_suigo",
   "bridge_railway", "bridge_sakuragawa", "bridge_nioi", "bridge_zenigame",
   "bridge_tsuchiura", "bridge_gakuen", "shore_north", "shore_south",
-  "test_zone_land", "shore_bd39c863",
+  "test_zone_land", "shore_bd39c863", "pile_3eacc519", "pile_e14ff5c6",
+  "pile_71ec1621",
 ];
 
 function fixedCalibrations(overrides = {}) {
@@ -159,6 +163,8 @@ function previousSafetyState(
     scaledVertexOffsets,
     dangerZoneOffsets: dangerZoneOffsets(),
     disabledWarningSourceIds,
+    primaryWarningLeadSeconds: 9,
+    advanceWarningLeadSeconds: 12,
     revision,
   };
 }
@@ -745,7 +751,7 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v4",
+        "fixed_obstacle_calibrations_v8",
       );
       await assertSucceeds(
         setDoc(ownerDoc, sharedSafetyCalibration({uid: "u1"})),
@@ -757,7 +763,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v4",
+            "fixed_obstacle_calibrations_v8",
           ),
         ),
       );
@@ -768,7 +774,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v4",
+            "fixed_obstacle_calibrations_v8",
           ),
         ),
       );
@@ -779,7 +785,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v4",
+            "fixed_obstacle_calibrations_v8",
           ),
           sharedSafetyCalibration({
             uid: "u2",
@@ -787,6 +793,7 @@ async function run() {
             previousState: previousSafetyState(
               fixedCalibrations({
                 bridge_suigo: {northMeters: 1.5, eastMeters: -2},
+                pile_3eacc519: {northMeters: 0.5, eastMeters: -0.5},
               }),
               1,
             ),
@@ -801,11 +808,12 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v4",
+        "fixed_obstacle_calibrations_v8",
       );
       const previousState = previousSafetyState(
         fixedCalibrations({
           bridge_suigo: {northMeters: 1.5, eastMeters: -2},
+          pile_3eacc519: {northMeters: 0.5, eastMeters: -0.5},
         }),
         2,
       );
@@ -858,7 +866,7 @@ async function run() {
         "teams",
         teamB,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v4",
+        "fixed_obstacle_calibrations_v8",
       );
       await assertFails(
         setDoc(

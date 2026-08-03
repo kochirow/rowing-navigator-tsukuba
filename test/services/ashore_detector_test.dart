@@ -116,7 +116,7 @@ void main() {
       expect(unknownAccuracy.isAshore, isFalse);
     });
 
-    test('航路・練習水域を渡す入口が無く、陸上エリアだけが根拠になる', () {
+    test('航路・廃止済みの練習水域を渡す入口が無く、陸上エリアだけが根拠になる', () {
       final detector = AshoreDetector(ashoreAreas: _ashoreArea);
       expect(detector.areaCount, 1);
       // Constructor が受け取るのは ashoreAreas だけ。危険区域・航路を
