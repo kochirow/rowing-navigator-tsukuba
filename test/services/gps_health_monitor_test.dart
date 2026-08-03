@@ -3,6 +3,17 @@ import 'package:rowing_navigator/config/navigator_config.dart';
 import 'package:rowing_navigator/services/gps_health_monitor.dart';
 
 void main() {
+  test('unusable回復確認中の受理fixはdegradedで安全判定へ通す', () {
+    expect(
+      evaluationQualityForAcceptedFix(GpsHealthQuality.unusable),
+      GpsHealthQuality.degraded,
+    );
+    expect(
+      evaluationQualityForAcceptedFix(GpsHealthQuality.good),
+      GpsHealthQuality.good,
+    );
+  });
+
   final t0 = DateTime.utc(2026, 7, 15, 12);
 
   test('単発棄却はdegradedに留め、正常受理で戻る', () {

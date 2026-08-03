@@ -16,6 +16,7 @@ class ResilientStreamSupervisor<T> {
   Timer? _silenceTimer;
   var _retryAttempt = 0;
   var _generation = 0;
+  var _connectionGeneration = 0;
   var _running = false;
 
   ResilientStreamSupervisor({
@@ -53,6 +54,7 @@ class ResilientStreamSupervisor<T> {
   Future<void> stop() async {
     _running = false;
     _generation += 1;
+    _connectionGeneration += 1;
     _retryTimer?.cancel();
     _retryTimer = null;
     _silenceTimer?.cancel();
@@ -66,6 +68,10 @@ class ResilientStreamSupervisor<T> {
 
   Future<void> _connect(int generation) async {
     if (!_isCurrent(generation)) return;
+    // start/stopの世代とは別に、再購読ごとに古いcallbackを
+    // 無効化する。platform側のcancelがtimeoutしても、新旧streamの
+    // 測位が同じGPSフィルタへ混ざらないための境界である。
+    final connectionGeneration = ++_connectionGeneration;
     _retryTimer?.cancel();
     _retryTimer = null;
     final previous = _subscription;
@@ -77,7 +83,7 @@ class ResilientStreamSupervisor<T> {
       final stream = _streamFactory!.call();
       _subscription = stream.listen(
         (value) {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           _retryAttempt = 0;
           _retryTimer?.cancel();
           _retryTimer = null;
@@ -85,12 +91,12 @@ class ResilientStreamSupervisor<T> {
           _onData?.call(value);
         },
         onError: (Object error, StackTrace stackTrace) {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           _notifyError(error, stackTrace);
           _scheduleReconnect(generation);
         },
         onDone: () {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           final error = StateError('位置情報streamが終了しました。');
           _notifyError(error, StackTrace.current);
           _scheduleReconnect(generation);
@@ -104,6 +110,9 @@ class ResilientStreamSupervisor<T> {
       _scheduleReconnect(generation);
     }
   }
+
+  bool _isCurrentConnection(int generation, int connectionGeneration) =>
+      _isCurrent(generation) && connectionGeneration == _connectionGeneration;
 
   void _armSilenceTimer(int generation) {
     _silenceTimer?.cancel();

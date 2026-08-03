@@ -2196,7 +2196,11 @@ UseNavigator useNavigator() {
 
   /// 位置情報が更新されるたびに呼ばれるメイン処理。
   /// リスク評価と記録は毎回(≒毎秒)行い、送信だけを適応的に間引く。
-  Future<void> processPosition(Position rawPos, int generation) async {
+  Future<void> processPosition(
+    Position rawPos,
+    int generation, {
+    GpsHealthQuality? acceptedFixQuality,
+  }) async {
     if (!isCurrentNavigation(generation)) return;
     final now = DateTime.now();
     final processingStopwatch = Stopwatch()..start();
@@ -2393,7 +2397,11 @@ UseNavigator useNavigator() {
         (processingStopwatch.elapsed - collisionAssessmentStartedAt)
             .inMilliseconds;
     if (!isCurrentNavigation(generation)) return;
-    final ownGpsQuality = gpsHealth.value.snapshot(now).quality;
+    // unusableからの復旧確認中でも、フィルタを通った新鮮なfixは
+    // 低品質として最大限利用する。GPS capability自体は3観測・2秒の
+    // 回復確認までunusableのままで、表示を楽観的に戻さない。
+    final ownGpsQuality =
+        acceptedFixQuality ?? gpsHealth.value.snapshot(now).quality;
     final assessmentDataQuality = switch (ownGpsQuality) {
       GpsHealthQuality.good => AlertDataQuality.good,
       GpsHealthQuality.degraded => AlertDataQuality.degraded,
@@ -2608,22 +2616,22 @@ UseNavigator useNavigator() {
     );
     recordGpsQualityIfChanged(health, acceptedAt);
     lastValidGpsAt.value = acceptedAt;
+    final recoveryFixQuality = evaluationQualityForAcceptedFix(health.quality);
     if (health.quality == GpsHealthQuality.unusable) {
       clearAshoreForUnusableGps();
-      applySafetyAssessment(
-        RiskAssessment(level: CollisionRiskLevel.lv0),
-        acceptedAt,
-        AlertDataQuality.unusable,
-      );
-      return;
+    } else {
+      gpsLossAnnounced.value = false;
     }
-    gpsLossAnnounced.value = false;
     // ここから先のGPS入力だけが衝突評価の完了を期待する対象。品質不足で
     // 早期returnしたfixを数えると、GPS fault を評価停止と誤分類する。
     safetyEvaluationLiveness.value.recordSafetyInput(
       safetyClock.value.elapsed,
     );
-    await processPosition(position, generation);
+    await processPosition(
+      position,
+      generation,
+      acceptedFixQuality: recoveryFixQuality,
+    );
   }
 
   /// 高頻度のGPSストリームを有界メールボックスに集約する。

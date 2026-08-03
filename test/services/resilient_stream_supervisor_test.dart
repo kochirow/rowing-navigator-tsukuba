@@ -3,6 +3,55 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/services/resilient_stream_supervisor.dart';
 
+class _ManualStream<T> extends Stream<T> {
+  void Function(T value)? _onData;
+  void Function(Object error, StackTrace stackTrace)? _onError;
+
+  void add(T value) => _onData?.call(value);
+
+  void addError(Object error) => _onError?.call(error, StackTrace.current);
+
+  @override
+  StreamSubscription<T> listen(
+    void Function(T event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    _onData = onData;
+    _onError = (error, stackTrace) {
+      if (onError != null) onError(error, stackTrace);
+    };
+    return _UncancellableSubscription<T>();
+  }
+}
+
+class _UncancellableSubscription<T> implements StreamSubscription<T> {
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  void onData(void Function(T data)? handleData) {}
+
+  @override
+  void onDone(void Function()? handleDone) {}
+
+  @override
+  void onError(Function? handleError) {}
+
+  @override
+  void pause([Future<void>? resumeSignal]) {}
+
+  @override
+  void resume() {}
+
+  @override
+  bool get isPaused => false;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => Future<E>.value(futureValue as E);
+}
+
 void main() {
   group('ResilientStreamSupervisor', () {
     test('stream error後に再購読して次の値を届ける', () async {
@@ -86,6 +135,34 @@ void main() {
       expect(factoryCalls, 1);
       expect(dataCalls, 0);
       await controller.close();
+    });
+
+    test('再購読後はcancelできない古いstreamの値を無視する', () async {
+      final streams = <_ManualStream<int>>[];
+      final received = <int>[];
+      final supervisor = ResilientStreamSupervisor<int>(
+        retryBackoff: const [Duration(milliseconds: 5)],
+      );
+
+      await supervisor.start(
+        streamFactory: () {
+          final stream = _ManualStream<int>();
+          streams.add(stream);
+          return stream;
+        },
+        onData: received.add,
+      );
+      streams.first.add(1);
+      streams.first.addError(StateError('reconnect'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(streams, hasLength(2));
+
+      streams.first.add(99);
+      streams.last.add(2);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, [1, 2]);
+      await supervisor.stop();
     });
   });
 }
