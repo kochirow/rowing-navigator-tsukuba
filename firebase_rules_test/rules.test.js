@@ -35,6 +35,15 @@ const teamA = "team-a";
 const teamB = "team-b";
 const inviteA = "23456789ABCDEFGHJKMN";
 const inviteB = "98765432NMPKJHGFEDCB";
+const rotatedInviteA = "CDEFGHJKMNPQ";
+const termsVersion = "2026-08-03";
+
+function termsAcceptance() {
+  return {
+    termsVersion,
+    termsAcceptedAt: serverTimestamp(),
+  };
+}
 
 function livePosition({sequence = 1, updatedAt = Date.now(), session = "s-a"} = {}) {
   return {
@@ -47,6 +56,24 @@ function livePosition({sequence = 1, updatedAt = Date.now(), session = "s-a"} = 
     z: 3.5,
     c: 180,
     v: 4.2,
+  };
+}
+
+function strokeTrace({updatedAt = Date.now(), startedAt = null} = {}) {
+  return {
+    o: startedAt === null ? updatedAt - 2400 : startedAt,
+    d: 2400,
+    b: 420,
+    // 48点のint8波形をbase64にすると64文字。
+    w: "A".repeat(64),
+    r: 250,
+    c: 81,
+    l: 1010,
+    k: 42,
+    g: -13,
+    h: 76,
+    p: 380,
+    u: updatedAt,
   };
 }
 
@@ -182,6 +209,7 @@ async function seed(testEnv) {
         name: teamId,
         inviteCode: invite,
         createdBy: owner,
+        adminUid: owner,
         createdAt: now,
       });
       await setDoc(doc(firestore, "invite_codes", invite), {
@@ -195,10 +223,17 @@ async function seed(testEnv) {
       ["u2", teamA, inviteA],
       ["b1", teamB, inviteB],
     ]) {
-      await setDoc(doc(firestore, "users", uid), {teamId, joinedAt: now});
+      await setDoc(doc(firestore, "users", uid), {
+        teamId,
+        joinedAt: now,
+        termsVersion,
+        termsAcceptedAt: now,
+      });
       await setDoc(doc(firestore, "teams", teamId, "members", uid), {
         inviteCode: invite,
         joinedAt: now,
+        termsVersion,
+        termsAcceptedAt: now,
       });
       await set(ref(database, `team_users/${uid}`), {teamId, inviteCode: invite});
       await set(ref(database, `team_members/${teamId}/${uid}`), {
@@ -428,6 +463,85 @@ async function run() {
       );
     });
 
+    // 1ストロークの艇速波形。**位置とは別ノード**にしてあるのが要点で、
+    // 位置payloadへ混ぜると12x12のfan-outで転送量が跳ね上がる。
+    await check("a member publishes only their own stroke trace", async () => {
+      const updatedAt = Date.now();
+      await assertSucceeds(
+        set(
+          ref(u2.database(), `teams/${teamA}/stroke_traces/u2`),
+          strokeTrace({updatedAt}),
+        ),
+      );
+      // 他人の波形は書けない。
+      await assertFails(
+        set(
+          ref(u2.database(), `teams/${teamA}/stroke_traces/u1`),
+          strokeTrace({updatedAt: Date.now()}),
+        ),
+      );
+    });
+
+    // 監視者はどの艇を選ぶか事前に決められないため、ノード全体を読める。
+    // 実際の購読は選んだ1艇ぶんだけ。
+    await check("team members can watch any boat's stroke trace", async () => {
+      await assertSucceeds(get(ref(u1.database(), `teams/${teamA}/stroke_traces`)));
+      await assertSucceeds(
+        get(ref(u1.database(), `teams/${teamA}/stroke_traces/u2`)),
+      );
+      await assertFails(
+        get(ref(anonymous.database(), `teams/${teamA}/stroke_traces`)),
+      );
+    });
+
+    // 壊れた波形で監視表示を止めないよう、値域はRules側でも閉じておく。
+    await check("malformed stroke traces are rejected", async () => {
+      const invalid = [
+        {d: 120}, // 65spmより速い = ストロークではない
+        {d: 9000}, // 12spmより遅い
+        {b: -1}, // 負の艇速
+        {b: 5000}, // 30m/sを超える艇速
+        {w: ""}, // 波形なし
+        {w: "A".repeat(200)}, // 想定外の巨大payload
+        {w: 42}, // 非文字列
+      ];
+      for (const broken of invalid) {
+        await assertFails(
+          set(
+            ref(u2.database(), `teams/${teamA}/stroke_traces/u2`),
+            {...strokeTrace({updatedAt: Date.now()}), ...broken},
+          ),
+        );
+      }
+    });
+
+    // 位置と同じレート制限。1ストローク(約2.4秒)に1回を超えて送らせない。
+    await check("the stroke trace rate limit matches the position rule", async () => {
+      const base = Date.now();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await set(
+          ref(context.database(), `teams/${teamA}/stroke_traces/u2`),
+          strokeTrace({updatedAt: base}),
+        );
+      });
+      await assertSucceeds(
+        set(
+          ref(u2.database(), `teams/${teamA}/stroke_traces/u2`),
+          strokeTrace({updatedAt: base + 1800}),
+        ),
+      );
+      await assertFails(
+        set(
+          ref(u2.database(), `teams/${teamA}/stroke_traces/u2`),
+          strokeTrace({updatedAt: base + 1800 + 1699}),
+        ),
+      );
+      // 自分の波形はいつでも消せる(onDisconnect・共有停止)。
+      await assertSucceeds(
+        set(ref(u2.database(), `teams/${teamA}/stroke_traces/u2`), null),
+      );
+    });
+
     // 版番号や将来の艇種名だけで位置共有を拒否しない。
     await check("future versions can still publish profiles and positions", async () => {
       const updatedAt = Date.now();
@@ -511,26 +625,43 @@ async function run() {
       await assertSucceeds(getDoc(doc(u3.firestore(), "invite_codes", inviteA)));
       await assertFails(get(ref(u3.database(), "team_invites")));
       await assertSucceeds(get(ref(u3.database(), `team_invites/${inviteA}`)));
+      const withoutTerms = writeBatch(u3.firestore());
+      withoutTerms.set(doc(u3.firestore(), "users", "terms-missing"), {
+        teamId: teamA,
+        joinedAt: serverTimestamp(),
+      });
+      withoutTerms.set(
+        doc(u3.firestore(), "teams", teamA, "members", "terms-missing"),
+        {inviteCode: inviteA, joinedAt: serverTimestamp()},
+      );
+      await assertFails(withoutTerms.commit());
       const db = u3.firestore();
       const batch = writeBatch(db);
-      batch.set(doc(db, "users", "u3"), {teamId: teamA, joinedAt: serverTimestamp()});
+      batch.set(doc(db, "users", "u3"), {
+        teamId: teamA,
+        joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
+      });
       batch.set(doc(db, "teams", teamA, "members", "u3"), {
         inviteCode: inviteA,
         joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
       });
       await assertSucceeds(batch.commit());
     });
 
-    await check("membership IDs cannot be listed and only the own record is readable", async () => {
-      await assertFails(
+    await check("only the administrator can list member IDs", async () => {
+      await assertSucceeds(
         getDocs(collection(u1.firestore(), "teams", teamA, "members")),
       );
       await assertSucceeds(
         getDoc(doc(u1.firestore(), "teams", teamA, "members", "u1")),
       );
-      await assertFails(
+      await assertSucceeds(
         getDoc(doc(u1.firestore(), "teams", teamA, "members", "u2")),
       );
+      await assertFails(getDocs(collection(u2.firestore(), "teams", teamA, "members")));
+      await assertFails(getDoc(doc(u2.firestore(), "teams", teamA, "members", "u1")));
       await assertFails(get(ref(u1.database(), `team_members/${teamA}`)));
       await assertSucceeds(get(ref(u1.database(), `team_members/${teamA}/u1`)));
       await assertFails(get(ref(u1.database(), `team_members/${teamA}/u2`)));
@@ -567,6 +698,7 @@ async function run() {
         name: "new team",
         inviteCode: newInvite,
         createdBy: creatorId,
+        adminUid: creatorId,
         createdAt: serverTimestamp(),
       });
       createBatch.set(doc(creatorDb, "invite_codes", newInvite), {
@@ -577,10 +709,12 @@ async function run() {
       createBatch.set(doc(creatorDb, "users", creatorId), {
         teamId: newTeamId,
         joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
       });
       createBatch.set(doc(creatorDb, "teams", newTeamId, "members", creatorId), {
         inviteCode: newInvite,
         joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
       });
       await assertSucceeds(createBatch.commit());
       await assertSucceeds(
@@ -605,10 +739,12 @@ async function run() {
       joinBatch.set(doc(joinDb, "users", joinerId), {
         teamId: newTeamId,
         joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
       });
       joinBatch.set(doc(joinDb, "teams", newTeamId, "members", joinerId), {
         inviteCode: newInvite,
         joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
       });
       await assertSucceeds(joinBatch.commit());
       await assertSucceeds(
@@ -924,6 +1060,78 @@ async function run() {
       );
     });
 
+    await check("an administrator revokes a member and rotates the invite across Firebase", async () => {
+      const firestore = u1.firestore();
+      const revoke = writeBatch(firestore);
+      revoke.update(doc(firestore, "teams", teamA), {
+        inviteCode: rotatedInviteA,
+        adminUid: "u1",
+      });
+      revoke.set(doc(firestore, "invite_codes", rotatedInviteA), {
+        teamId: teamA,
+        createdBy: "u1",
+        createdAt: serverTimestamp(),
+      });
+      revoke.delete(doc(firestore, "invite_codes", inviteA));
+      revoke.delete(doc(firestore, "teams", teamA, "members", "u2"));
+      revoke.delete(doc(firestore, "users", "u2"));
+      await assertSucceeds(revoke.commit());
+
+      await assertFails(getDoc(doc(u2.firestore(), "teams", teamA)));
+      await assertFails(
+        setDoc(
+          doc(u2.firestore(), "teams", teamA, "temporary_obstacles", "after-revoke"),
+          temporaryHazard("u2"),
+        ),
+      );
+      const oldCodeRejoin = writeBatch(u2.firestore());
+      oldCodeRejoin.set(doc(u2.firestore(), "users", "u2"), {
+        teamId: teamA,
+        joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
+      });
+      oldCodeRejoin.set(doc(u2.firestore(), "teams", teamA, "members", "u2"), {
+        inviteCode: inviteA,
+        joinedAt: serverTimestamp(),
+        ...termsAcceptance(),
+      });
+      await assertFails(oldCodeRejoin.commit());
+      await assertFails(
+        updateDoc(doc(u3.firestore(), "teams", teamA), {
+          inviteCode: "DEFGHJKMNPQR",
+        }),
+      );
+
+      await assertSucceeds(
+        update(ref(u1.database()), {
+          [`team_meta/${teamA}/inviteCode`]: rotatedInviteA,
+          [`team_invites/${inviteA}`]: null,
+          [`team_invites/${rotatedInviteA}`]: {
+            teamId: teamA,
+            ownerUid: "u1",
+            createdAt: Date.now(),
+          },
+          [`teams/${teamA}/live_positions/u2`]: null,
+          [`teams/${teamA}/boat_profiles/u2`]: null,
+          "team_users/u2": null,
+          [`team_members/${teamA}/u2`]: null,
+        }),
+      );
+      await assertFails(get(ref(u2.database(), `teams/${teamA}/live_positions`)));
+      await assertFails(
+        set(
+          ref(u2.database(), `teams/${teamA}/live_positions/u2`),
+          livePosition({updatedAt: Date.now(), sequence: 50, session: "revoked"}),
+        ),
+      );
+      await assertFails(
+        set(ref(u2.database(), "team_users/u2"), {
+          teamId: teamA,
+          inviteCode: inviteA,
+        }),
+      );
+    });
+
     await check("account deletion atomically clears bridges and anonymizes ownership", async () => {
       await assertSucceeds(
         set(ref(u1.database(), `teams/${teamA}/boat_profiles/u1`), {
@@ -941,7 +1149,7 @@ async function run() {
         "team_users/u1": null,
         [`team_members/${teamA}/u1`]: null,
         [`team_meta/${teamA}/ownerUid`]: "deleted-account",
-        [`team_invites/${inviteA}/ownerUid`]: "deleted-account",
+        [`team_invites/${rotatedInviteA}/ownerUid`]: "deleted-account",
       };
       await assertSucceeds(update(ref(u1.database()), cleanup));
       // Unknown commit result can be retried without recreating partial state.
@@ -950,7 +1158,7 @@ async function run() {
       const db = u1.firestore();
       const batch = writeBatch(db);
       batch.update(doc(db, "teams", teamA), {createdBy: "deleted-account"});
-      batch.update(doc(db, "invite_codes", inviteA), {
+      batch.update(doc(db, "invite_codes", rotatedInviteA), {
         createdBy: "deleted-account",
       });
       batch.delete(doc(db, "teams", teamA, "members", "u1"));
@@ -966,7 +1174,7 @@ async function run() {
           get(ref(rtdb, "team_users/u1")),
           get(ref(rtdb, `team_members/${teamA}/u1`)),
           get(ref(rtdb, `team_meta/${teamA}/ownerUid`)),
-          get(ref(rtdb, `team_invites/${inviteA}/ownerUid`)),
+          get(ref(rtdb, `team_invites/${rotatedInviteA}/ownerUid`)),
         ]);
         for (const value of values.slice(0, 4)) {
           if (value.exists()) throw new Error("RTDB cleanup was partial");
@@ -976,7 +1184,7 @@ async function run() {
           throw new Error("RTDB owner was not anonymized");
         }
         const team = await getDoc(doc(firestore, "teams", teamA));
-        const invite = await getDoc(doc(firestore, "invite_codes", inviteA));
+        const invite = await getDoc(doc(firestore, "invite_codes", rotatedInviteA));
         if (team.data().createdBy !== "deleted-account" ||
             invite.data().createdBy !== "deleted-account") {
           throw new Error("Firestore owner was not anonymized");

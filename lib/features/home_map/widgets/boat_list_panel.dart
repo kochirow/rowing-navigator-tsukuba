@@ -25,7 +25,19 @@ class BoatListPanel extends StatelessWidget {
   /// null のときは行をタップできない(従来の表示専用パネル)。
   final void Function(String boatId)? onTapBoat;
 
-  const BoatListPanel({super.key, required this.statuses, this.onTapBoat});
+  /// その艇の1ストロークの艇速変化を開く。
+  ///
+  /// **行タップ(地図を寄せる)とは別のボタンにする。** 一覧で艇を探して
+  /// 地図を追う操作のほうが頻度が高く、そこにグラフが割り込むと邪魔になる。
+  /// グラフを見たい人だけがボタンを押す(設計原則2)。
+  final void Function(String boatId, String displayName)? onShowStrokeTrace;
+
+  const BoatListPanel({
+    super.key,
+    required this.statuses,
+    this.onTapBoat,
+    this.onShowStrokeTrace,
+  });
 
   Widget _row(BuildContext context, BoatStatus status) {
     final colors = context.colors;
@@ -138,6 +150,17 @@ class BoatListPanel extends StatelessWidget {
             '${status.ageSec.round()}秒前',
             style: TextStyle(fontSize: 12, color: colors.textSecondary),
           ),
+          if (onShowStrokeTrace != null)
+            IconButton(
+              icon: const Icon(Icons.show_chart, size: 20),
+              color: colors.primary,
+              visualDensity: VisualDensity.compact,
+              // 濡れた手でも押せるよう44pxを確保する。
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              tooltip: '1ストロークの艇速変化',
+              onPressed: () =>
+                  onShowStrokeTrace!(boat.boatId, boat.displayName),
+            ),
         ],
       ),
     );

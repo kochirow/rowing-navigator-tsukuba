@@ -70,4 +70,40 @@ void main() {
     await service.saveStrokeMotionDisplayEnabled(true);
     expect((await service.load())!.strokeMotionDisplayEnabled, isTrue);
   });
+
+  test('監視への共有は新規端末で既定ON、明示的なOFFは維持する', () async {
+    // 既定OFFにすると、艇側でスイッチを見つけた人の艇しか監視できず、
+    // 監視から艇を選ぶ機能が成立しない。共有先は位置と同じチーム内だけ。
+    SharedPreferences.setMockInitialValues({
+      'navigation_display_name_v1': '後藤',
+      'navigation_boat_type_v1': BoatType.r_1x.name,
+      'navigation_seat_position_v1': 1,
+    });
+    expect(
+      (await NavigationDefaultsService().load())!.strokeTraceSharingEnabled,
+      isTrue,
+    );
+
+    final service = NavigationDefaultsService();
+    await service.saveStrokeTraceSharingEnabled(false);
+    expect((await service.load())!.strokeTraceSharingEnabled, isFalse);
+    // 共有を切っても表示・計測の設定は動かさない。
+    expect((await service.load())!.strokeRateEnabled, isTrue);
+  });
+
+  test('共有の切替は表示の切替と独立に保存される', () async {
+    final service = NavigationDefaultsService();
+    await service.save(
+      displayName: '後藤',
+      boatType: BoatType.r_1x,
+      seatPosition: 1,
+      strokeMotionDisplayEnabled: false,
+      strokeTraceSharingEnabled: true,
+    );
+
+    await service.saveStrokeMotionDisplayEnabled(true);
+    final restored = await service.load();
+    expect(restored!.strokeMotionDisplayEnabled, isTrue);
+    expect(restored.strokeTraceSharingEnabled, isTrue);
+  });
 }

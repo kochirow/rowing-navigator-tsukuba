@@ -31,6 +31,39 @@ void main() {
       );
     });
 
+    test('艇速波形の共有は位置payloadの5%未満に収まる', () {
+      // 25spm = 2.4秒に1ストローク。監視端末が常時4隻ぶん開いている想定。
+      final traceBytes = FirebaseUsageBudget.monthlyStrokeTraceDownloadBytes(
+        strokeIntervalSeconds: 2,
+      );
+      final positionBytes = FirebaseUsageBudget.monthlyPositionDownloadBytes(
+        intervalSeconds: sendIntervalElevatedRiskSec,
+      );
+      expect(traceBytes, lessThan(positionBytes ~/ 20));
+      expect(
+        traceBytes + positionBytes,
+        lessThanOrEqualTo(
+          FirebaseUsageBudget.rtdbApplicationPayloadBudgetBytes,
+        ),
+      );
+    });
+
+    test('艇速波形にはfan-outが無い(監視が開いた艇のぶんだけ)', () {
+      // 位置は全12艇が全12艇ぶんを受け取る。波形は開いた艇のぶんだけ。
+      // 監視艇数に対して線形であることが、無料枠を守る根拠そのもの。
+      final one = FirebaseUsageBudget.monthlyStrokeTraceDownloadBytes(
+        strokeIntervalSeconds: 2,
+        watchedBoats: 1,
+      );
+      final twelve = FirebaseUsageBudget.monthlyStrokeTraceDownloadBytes(
+        strokeIntervalSeconds: 2,
+        watchedBoats: 12,
+      );
+      expect(twelve, one * 12);
+      // 万一12隻ぶん常時開いても無料枠の10%以内。
+      expect(twelve, lessThan(FirebaseUsageBudget.rtdbSparkDownloadBytes ~/ 10));
+    });
+
     test('同時接続と危険区域100件のFirestore読取に十分な余裕がある', () {
       expect(
         FirebaseUsageBudget.boats,

@@ -28,8 +28,10 @@ import '../features/home_map/widgets/map_type_switcher.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/rounded_button.dart';
 import '../features/home_map/widgets/safety_banner.dart';
+import '../features/home_map/widgets/stroke_trace_sheet.dart';
 import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
+import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
@@ -201,6 +203,16 @@ class HomeMapScreen extends HookConsumerWidget {
     final showDeveloperSafetyShapeOverlay = useState(false);
     // 計測と表示を分離する。表示OFFでもIMU融合とログは継続する。
     final strokeMotionDisplayEnabled = useState(false);
+    // 監視端末への共有は表示とさらに独立。手元に出さずに共有だけ、も選べる。
+    final strokeTraceSharingEnabled = useState(true);
+    useStrokeTraceSharing(
+      // 共有は安全経路の外側。ここが失敗しても位置共有・警告は動き続ける。
+      enabled: navigator.mode.value == NavMode.navigator &&
+          (navigator.config.value?.strokeRateEnabled ?? false) &&
+          strokeTraceSharingEnabled.value,
+      boatId: navigator.config.value?.boatId,
+      trace: navigator.latestStrokeTrace,
+    );
     final mapDisplaySettings = useMemoized(MapDisplaySettingsService.new);
     final navigationDefaults = useMemoized(NavigationDefaultsService.new);
     final safetyShapeOverlayService =
@@ -480,6 +492,30 @@ class HomeMapScreen extends HookConsumerWidget {
                   .saveStrokeMotionDisplayEnabled(next)
                   .catchError((Object error) {
                 debugPrint('Failed to save stroke analysis display: $error');
+              }),
+            );
+          },
+        ),
+        MapMenuAction(
+          icon: strokeTraceSharingEnabled.value
+              ? Icons.share
+              : Icons.share_outlined,
+          title: '艇速変化を監視へ共有',
+          subtitle: isObserver
+              ? '航行中の艇の設定です'
+              : strokeTraceSharingEnabled.value
+                  ? '共有中・タップで停止'
+                  : '停止中・タップで共有',
+          enabled: !isObserver,
+          disabledReason: '航行中の艇の設定です',
+          onTap: () {
+            final next = !strokeTraceSharingEnabled.value;
+            strokeTraceSharingEnabled.value = next;
+            unawaited(
+              navigationDefaults
+                  .saveStrokeTraceSharingEnabled(next)
+                  .catchError((Object error) {
+                debugPrint('Failed to save stroke trace sharing: $error');
               }),
             );
           },
@@ -1390,6 +1426,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                               : null,
                                           strokeMotionDisplayEnabled:
                                               strokeMotionDisplayEnabled.value,
+                                          strokeTraceWindowBuilder: (now) =>
+                                              navigator.strokeTraceWindow(
+                                                  now: now),
                                           spmMeasurementEnabled: navigator
                                                   .config
                                                   .value
@@ -1493,6 +1532,31 @@ class HomeMapScreen extends HookConsumerWidget {
                                             onTapBoat: (boatId) => unawaited(
                                               focusOnWatchedBoat(boatId),
                                             ),
+                                            // シートを閉じれば購読も止まる。
+                                            // 開いている1隻ぶんしか受信しない。
+                                            onShowStrokeTrace:
+                                                (boatId, displayName) {
+                                              unawaited(
+                                                showModalBottomSheet<void>(
+                                                  context: context,
+                                                  isScrollControlled: true,
+                                                  backgroundColor:
+                                                      context.colors.card,
+                                                  shape:
+                                                      const RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.vertical(
+                                                      top: Radius.circular(20),
+                                                    ),
+                                                  ),
+                                                  builder: (_) =>
+                                                      StrokeTraceSheet(
+                                                    boatId: boatId,
+                                                    displayName: displayName,
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ),
                                       ),
@@ -1763,7 +1827,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   },
                                                   onPressStartNav: (displayName,
                                                       strokeRateEnabled,
-                                                      showStrokeMotion) async {
+                                                      showStrokeMotion,
+                                                      shareStrokeMotion) async {
                                                     if (!navMap.isReady.value) {
                                                       ScaffoldMessenger.of(
                                                               context)
@@ -1813,6 +1878,10 @@ class HomeMapScreen extends HookConsumerWidget {
                                                               .value =
                                                           strokeRateEnabled &&
                                                               showStrokeMotion;
+                                                      strokeTraceSharingEnabled
+                                                              .value =
+                                                          strokeRateEnabled &&
+                                                              shareStrokeMotion;
                                                       try {
                                                         await navigator
                                                             .startNavigation(

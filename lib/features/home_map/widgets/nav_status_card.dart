@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../config/navigator_config.dart';
 import '../../../services/gps_health_monitor.dart';
 import '../../../services/rowing_motion_fusion.dart';
+import '../../../services/stroke_speed_trace.dart';
 import '../../../theme/app_theme.dart';
+import 'stroke_metrics_chips.dart';
+import 'stroke_speed_chart.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
@@ -30,6 +33,13 @@ class NavStatusCard extends StatelessWidget {
   final double? spm; // ストロークレート(計測不能時はnull)
   final RowingMotionMetrics? strokeMotion;
   final bool strokeMotionDisplayEnabled;
+
+  /// 艇速変化グラフ1画面ぶんの切り出し。
+  ///
+  /// **`ValueNotifier` ではなく関数で受ける。** 25Hzで値を配ると計器カード
+  /// 全体が毎フレーム再buildされ、ペース・SPMの文字まで作り直しになる。
+  /// グラフは自前のTickerでこの関数を引き、CustomPaintだけを描き直す。
+  final StrokeSpeedTraceWindow? Function(DateTime now)? strokeTraceWindowBuilder;
   final bool spmMeasurementEnabled; // ユーザーがSPM計測をONにしているか
   final bool compact; // 横向き用の省スペース表示
   final bool portraitCompact; // 縦向き用。主計器の可読性を保ちながら左上へ縮小
@@ -52,6 +62,7 @@ class NavStatusCard extends StatelessWidget {
     this.spm,
     this.strokeMotion,
     this.strokeMotionDisplayEnabled = false,
+    this.strokeTraceWindowBuilder,
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
@@ -227,9 +238,13 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
-          if (strokeMotionDisplayEnabled && strokeMotion != null) ...[
+          if (strokeMotionDisplayEnabled) ...[
             SizedBox(height: dimens.space2),
-            _StrokeMotionMetricsRow(metrics: strokeMotion!),
+            _StrokeMotionSection(
+              metrics: strokeMotion,
+              windowBuilder: strokeTraceWindowBuilder,
+              chartHeight: 82,
+            ),
           ],
           SizedBox(height: dimens.space2),
           Divider(height: 1, color: onDark.withValues(alpha: 0.2)),
@@ -464,10 +479,13 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
-          if (strokeMotionDisplayEnabled && strokeMotion != null) ...[
+          if (strokeMotionDisplayEnabled) ...[
             const SizedBox(height: 5),
-            _StrokeMotionMetricsRow(
-              metrics: strokeMotion!,
+            _StrokeMotionSection(
+              metrics: strokeMotion,
+              windowBuilder: strokeTraceWindowBuilder,
+              // 横向き・縦向き縮小時は地図の面積を優先し、グラフだけ残す。
+              chartHeight: 54,
               compact: true,
             ),
           ],
@@ -520,36 +538,43 @@ class NavStatusCard extends StatelessWidget {
   }
 }
 
-class _StrokeMotionMetricsRow extends StatelessWidget {
-  final RowingMotionMetrics metrics;
+/// 艇速変化グラフと、その下の1ストローク指標。
+///
+/// **指標が出せなくてもグラフは出す。** 解析が確定するのは数ストローク
+/// あとなので、そこまで何も出さないと「壊れている」ように見える(原則1)。
+class _StrokeMotionSection extends StatelessWidget {
+  final RowingMotionMetrics? metrics;
+  final StrokeSpeedTraceWindow? Function(DateTime now)? windowBuilder;
+  final double chartHeight;
   final bool compact;
 
-  const _StrokeMotionMetricsRow({required this.metrics, this.compact = false});
+  const _StrokeMotionSection({
+    required this.metrics,
+    required this.windowBuilder,
+    required this.chartHeight,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final onDark = context.colors.onDark;
-    final lateDriveText = metrics.lateDriveSpeedGainMetersPerSecond >= 0
-        ? '終盤加速 +${metrics.lateDriveSpeedGainMetersPerSecond.toStringAsFixed(2)}m/s'
-        : '終盤失速 −${metrics.lateDriveSpeedGainMetersPerSecond.abs().toStringAsFixed(2)}m/s';
-    final text = compact
-        ? '1漕 ${metrics.distancePerStrokeMeters.toStringAsFixed(1)}m '
-            'キャッチ −${metrics.catchSpeedLossMetersPerSecond.toStringAsFixed(2)}m/s '
-            '保持 ${(metrics.recoverySpeedRetention * 100).round()}%'
-        : 'ストローク艇速　1漕 ${metrics.distancePerStrokeMeters.toStringAsFixed(1)}m　'
-            'キャッチ減速 ${metrics.catchSpeedLossMetersPerSecond.toStringAsFixed(2)}m/s　'
-            '$lateDriveText　'
-            '艇速保持 ${(metrics.recoverySpeedRetention * 100).round()}%';
-    return Text(
-      text,
-      key: const ValueKey('stroke-motion-metrics'),
-      maxLines: compact ? 2 : 3,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: onDark.withValues(alpha: 0.82),
-        fontSize: compact ? 10 : 12,
-        fontWeight: FontWeight.w600,
-      ),
+    final windowBuilder = this.windowBuilder;
+    final metrics = this.metrics;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (windowBuilder != null)
+          StrokeSpeedChart(
+            key: const ValueKey('stroke-speed-chart'),
+            windowBuilder: windowBuilder,
+            height: chartHeight,
+            emptyLabel: 'ストロークの艇速変化を計測中',
+          ),
+        if (metrics != null) ...[
+          SizedBox(height: compact ? 4 : 6),
+          StrokeMetricsChips.fromMetrics(metrics, compact: compact),
+        ],
+      ],
     );
   }
 }

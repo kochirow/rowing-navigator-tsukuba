@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_status_card.dart';
 import 'package:rowing_navigator/services/gps_health_monitor.dart';
+import 'package:rowing_navigator/features/home_map/widgets/stroke_speed_chart.dart';
 import 'package:rowing_navigator/services/rowing_motion_fusion.dart';
+import 'package:rowing_navigator/services/stroke_speed_trace.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 
 /// 計器の大きさが状況で変わらないことを守るテスト。
@@ -20,6 +22,7 @@ void main() {
     bool degraded = false,
     RowingMotionMetrics? strokeMotion,
     bool showStrokeMotion = false,
+    StrokeSpeedTraceWindow? Function(DateTime now)? traceWindowBuilder,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -33,6 +36,7 @@ void main() {
             spmMeasurementEnabled: spmEnabled,
             strokeMotion: strokeMotion,
             strokeMotionDisplayEnabled: showStrokeMotion,
+            strokeTraceWindowBuilder: traceWindowBuilder,
             compact: compact,
             portraitCompact: portraitCompact,
             gpsQuality: quality,
@@ -126,8 +130,13 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
-    expect(find.textContaining('キャッチ減速 0.31m/s'), findsOneWidget);
-    expect(find.textContaining('艇速保持 84%'), findsOneWidget);
+    // 値はラベルと数値に分けて並べる。符号を隠さない。
+    expect(find.text('キャッチ減速'), findsOneWidget);
+    expect(find.text('−0.31'), findsOneWidget);
+    expect(find.text('艇速保持'), findsOneWidget);
+    expect(find.text('84%'), findsOneWidget);
+    expect(find.text('終盤加速'), findsOneWidget);
+    expect(find.text('+0.18'), findsOneWidget);
 
     await pumpCard(tester, strokeMotion: metrics);
     expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
@@ -169,4 +178,57 @@ void main() {
     final distanceY = tester.getTopLeft(find.text('1.00 km')).dy;
     expect(analysisY, lessThan(distanceY));
   });
+
+  testWidgets('終盤失速は符号ごとラベルを切り替えて出す', (tester) async {
+    await pumpCard(
+      tester,
+      strokeMotion: _metrics(lateDriveSpeedGainMetersPerSecond: -0.22),
+      showStrokeMotion: true,
+    );
+
+    expect(find.text('終盤失速'), findsOneWidget);
+    expect(find.text('−0.22'), findsOneWidget);
+    expect(find.text('終盤加速'), findsNothing);
+  });
+
+  testWidgets('解析が確定する前でもグラフの枠は出す(壊れて見せない)', (tester) async {
+    await pumpCard(
+      tester,
+      showStrokeMotion: true,
+      // 立ち上がり直後は窓を作れない。それでもグラフ領域は残す(原則1)。
+      traceWindowBuilder: (_) => null,
+    );
+
+    expect(find.byType(StrokeSpeedChart), findsOneWidget);
+    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
+  });
+
+  testWidgets('表示OFFならグラフごと領域を取り除く', (tester) async {
+    await pumpCard(tester, traceWindowBuilder: (_) => null);
+
+    expect(find.byType(StrokeSpeedChart), findsNothing);
+  });
 }
+
+RowingMotionMetrics _metrics({
+  double lateDriveSpeedGainMetersPerSecond = 0.18,
+}) =>
+    RowingMotionMetrics(
+      calculatedAt: DateTime(2026, 8, 3),
+      latestStrokeBoundary: DateTime(2026, 8, 3),
+      quality: RowingMotionQuality.good,
+      confidence: 0.9,
+      spm: 24,
+      fusedSpeedMetersPerSecond: 4,
+      fusedSpeedAccuracyMetersPerSecond: 0.5,
+      fusedHeadingDegrees: 90,
+      distancePerStrokeMeters: 10.2,
+      catchSpeedLossMetersPerSecond: 0.31,
+      lateDriveSpeedGainMetersPerSecond: lateDriveSpeedGainMetersPerSecond,
+      recoverySpeedRetention: 0.84,
+      strokeSpeedRangeMetersPerSecond: 0.8,
+      strokeDurationSeconds: 2.5,
+      finishPhaseFraction: 0.62,
+      accelerometerSampleCount: 125,
+      gyroscopeSampleCount: 125,
+    );

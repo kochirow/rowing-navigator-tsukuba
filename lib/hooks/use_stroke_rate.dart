@@ -5,13 +5,20 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../config/stroke_rate_config.dart';
+import '../models/shared_stroke_trace.dart';
 import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_rate_analyzer.dart';
+import '../services/stroke_speed_trace.dart';
 
 /// 加速度センサからストロークレート(SPM)を計測するフック。
 /// [active]かつ[enabled]がtrueの間だけセンサを購読する(電池への配慮)。
 /// SPM不要の運用では[enabled]をfalseにし、加速度センサと解析タイマーを
 /// 完全に停止できる。
+///
+/// グラフ用の連続波形は[enabled]と同時に動き出す。表示ON/OFFや監視共有の
+/// ON/OFFでは切らない。**1サンプルあたりの追加処理は積分1回**で、
+/// リングバッファも14秒ぶん(350点)しかない。ここを別スイッチにすると、
+/// 「計測はONなのにグラフだけ出ない」状態を作るだけで得るものがない。
 UseStrokeRate useStrokeRate({
   required bool active,
   bool enabled = false,
@@ -19,6 +26,7 @@ UseStrokeRate useStrokeRate({
 }) {
   final spm = useState<double?>(null);
   final motion = useState<RowingMotionMetrics?>(null);
+  final latestStrokeTrace = useState<SharedStrokeTrace?>(null);
   final accelerationSubscription = useState<StreamSubscription?>(null);
   final gravitySubscription = useState<StreamSubscription?>(null);
   final gyroscopeSubscription = useState<StreamSubscription?>(null);
@@ -26,6 +34,12 @@ UseStrokeRate useStrokeRate({
   final fusion = useMemoized(RowingMotionFusion.new);
   final lastLoggedStrokeBoundary = useRef<DateTime?>(null);
   final lastHealthLogAt = useRef<DateTime?>(null);
+
+  useEffect(() {
+    fusion.setTraceEnabled(active && enabled);
+    if (!(active && enabled)) latestStrokeTrace.value = null;
+    return null;
+  }, [active, enabled]);
 
   useEffect(() {
     if (!active || !enabled) {
@@ -40,6 +54,7 @@ UseStrokeRate useStrokeRate({
       fusion.reset();
       spm.value = null;
       motion.value = null;
+      latestStrokeTrace.value = null;
       return null;
     }
 
@@ -116,6 +131,10 @@ UseStrokeRate useStrokeRate({
             'stroke_motion_analyzed',
             estimate.toDiagnosticDetails(),
           );
+          // 新しい1ストロークが確定したときだけ共有候補を作る。
+          // 波形が切り出せなければ null のまま(欠測を捏造しない)。
+          final trace = fusion.buildSharedStrokeTrace(estimate);
+          if (trace != null) latestStrokeTrace.value = trace;
         }
       }
       if (lastHealthLogAt.value == null ||
@@ -145,6 +164,14 @@ UseStrokeRate useStrokeRate({
   return UseStrokeRate(
     spm: spm,
     motion: motion,
+    latestStrokeTrace: latestStrokeTrace,
+    // 描画フレームごとに呼ばれる。状態を変えず、リングから切り出すだけ。
+    traceWindow: ({required DateTime now, double? windowSeconds}) =>
+        fusion.traceWindow(
+      now: now,
+      windowSeconds:
+          windowSeconds ?? strokeTraceWindowSecondsFor(spm: spm.value),
+    ),
     observeGnss: ({
       required timestamp,
       required speedMetersPerSecond,
@@ -169,6 +196,18 @@ UseStrokeRate useStrokeRate({
 class UseStrokeRate {
   final ValueNotifier<double?> spm;
   final ValueNotifier<RowingMotionMetrics?> motion;
+
+  /// 直近に確定した1ストロークを、監視端末へ送れる形にしたもの。
+  /// **作るだけで送らない。** 送るかどうかは共有の設定が決める。
+  final ValueNotifier<SharedStrokeTrace?> latestStrokeTrace;
+
+  /// グラフ1画面ぶんの切り出し。**再buildを起こさない**ため
+  /// ValueNotifierではなく関数で渡す(描画側がフレームごとに引く)。
+  final StrokeSpeedTraceWindow? Function({
+    required DateTime now,
+    double? windowSeconds,
+  }) traceWindow;
+
   final void Function({
     required DateTime timestamp,
     required double speedMetersPerSecond,
@@ -179,6 +218,8 @@ class UseStrokeRate {
   UseStrokeRate({
     required this.spm,
     required this.motion,
+    required this.latestStrokeTrace,
+    required this.traceWindow,
     required this.observeGnss,
   });
 }

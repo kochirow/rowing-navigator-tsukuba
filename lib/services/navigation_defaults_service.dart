@@ -8,6 +8,7 @@ class NavigationDefaults {
   final int seatPosition;
   final bool strokeRateEnabled;
   final bool strokeMotionDisplayEnabled;
+  final bool strokeTraceSharingEnabled;
 
   const NavigationDefaults({
     required this.displayName,
@@ -15,6 +16,7 @@ class NavigationDefaults {
     required this.seatPosition,
     required this.strokeRateEnabled,
     required this.strokeMotionDisplayEnabled,
+    required this.strokeTraceSharingEnabled,
   });
 }
 
@@ -30,6 +32,8 @@ class NavigationDefaultsService {
   static const _strokeRateEnabledKey = 'navigation_stroke_rate_enabled_v1';
   static const _strokeMotionDisplayEnabledKey =
       'navigation_stroke_motion_display_enabled_v1';
+  static const _strokeTraceSharingEnabledKey =
+      'navigation_stroke_trace_sharing_enabled_v1';
 
   Future<NavigationDefaults?> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -60,6 +64,12 @@ class NavigationDefaultsService {
       // 艇速分析は補助表示なので、未選択の端末では表示しない。
       strokeMotionDisplayEnabled:
           prefs.getBool(_strokeMotionDisplayEnabledKey) ?? false,
+      // 監視への共有は既定ON。位置と同じチーム内だけへ、1ストロークに
+      // 1回、監視端末が開いた艇のぶんだけ送る。既定OFFにすると、艇側で
+      // スイッチを見つけた人の艇しか監視できず、機能として成立しない。
+      // 艇側で明示的にOFFにした選択は維持する。
+      strokeTraceSharingEnabled:
+          prefs.getBool(_strokeTraceSharingEnabledKey) ?? true,
     );
   }
 
@@ -69,6 +79,7 @@ class NavigationDefaultsService {
     required int seatPosition,
     bool strokeRateEnabled = true,
     bool strokeMotionDisplayEnabled = false,
+    bool strokeTraceSharingEnabled = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await Future.wait([
@@ -80,6 +91,10 @@ class NavigationDefaultsService {
         _strokeMotionDisplayEnabledKey,
         strokeMotionDisplayEnabled,
       ),
+      prefs.setBool(
+        _strokeTraceSharingEnabledKey,
+        strokeTraceSharingEnabled,
+      ),
     ]);
   }
 
@@ -87,5 +102,11 @@ class NavigationDefaultsService {
   Future<void> saveStrokeMotionDisplayEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_strokeMotionDisplayEnabledKey, enabled);
+  }
+
+  /// 航行中の共有切替だけを保存する。表示・計測のON/OFFは変えない。
+  Future<void> saveStrokeTraceSharingEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_strokeTraceSharingEnabledKey, enabled);
   }
 }

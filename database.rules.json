@@ -5,7 +5,7 @@
     "team_meta": {
       "$teamId": {
         ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
-        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && !root.child('team_members').child($teamId).exists()))",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && newData.exists() && data.child('ownerUid').val() === auth.uid && newData.child('ownerUid').val() === data.child('ownerUid').val() && newData.child('createdAt').val() === data.child('createdAt').val() && root.child('team_members').child($teamId).child(auth.uid).exists()) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && !root.child('team_members').child($teamId).exists()))",
         ".validate": "newData.hasChildren(['inviteCode','ownerUid','createdAt'])",
         "inviteCode": { ".validate": "newData.isString() && (newData.val().length === 12 || newData.val().length === 20)" },
         "ownerUid": {
@@ -19,7 +19,7 @@
     "team_invites": {
       "$inviteCode": {
         ".read": "auth != null",
-        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid && root.child('team_meta').child(newData.child('teamId').val()).child('ownerUid').val() === auth.uid && root.child('team_meta').child(newData.child('teamId').val()).child('inviteCode').val() === $inviteCode) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && root.child('team_meta').child(data.child('teamId').val()).child('ownerUid').val() === auth.uid && !root.child('team_members').child(data.child('teamId').val()).exists()))",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid && root.child('team_meta').child(newData.child('teamId').val()).child('ownerUid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('ownerUid').val() === auth.uid && root.child('team_meta').child(data.child('teamId').val()).child('ownerUid').val() === auth.uid))",
         ".validate": "newData.hasChildren(['teamId','ownerUid','createdAt']) && ($inviteCode.length === 12 || $inviteCode.length === 20)",
         "teamId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
         "ownerUid": {
@@ -33,7 +33,7 @@
     "team_users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_invites').child(newData.child('inviteCode').val()).child('teamId').val() === newData.child('teamId').val() && root.child('team_meta').child(newData.child('teamId').val()).child('inviteCode').val() === newData.child('inviteCode').val()) || !newData.exists())",
+        ".write": "auth != null && ((auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_invites').child(newData.child('inviteCode').val()).child('teamId').val() === newData.child('teamId').val() && root.child('team_meta').child(newData.child('teamId').val()).child('inviteCode').val() === newData.child('inviteCode').val()) || !newData.exists())) || (data.exists() && !newData.exists() && root.child('team_meta').child(data.child('teamId').val()).child('ownerUid').val() === auth.uid))",
         ".validate": "newData.hasChildren(['teamId','inviteCode'])",
         "teamId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
         "inviteCode": { ".validate": "newData.isString() && (newData.val().length === 12 || newData.val().length === 20)" },
@@ -44,7 +44,7 @@
       "$teamId": {
         "$uid": {
           ".read": "auth != null && auth.uid === $uid && root.child('team_users').child(auth.uid).child('teamId').val() === $teamId",
-          ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_users').child($uid).child('teamId').val() === $teamId) || !newData.exists())",
+          ".write": "auth != null && ((auth.uid === $uid && ((!data.exists() && newData.exists() && root.child('team_users').child($uid).child('teamId').val() === $teamId) || !newData.exists())) || (data.exists() && !newData.exists() && root.child('team_meta').child($teamId).child('ownerUid').val() === auth.uid))",
           ".validate": "newData.hasChildren(['joinedAt'])",
           "joinedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
           "$other": { ".validate": false }
@@ -56,7 +56,7 @@
         "live_positions": {
           ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
           "$boatId": {
-            ".write": "auth != null && auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())",
+            ".write": "auth != null && ((auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())) || (!newData.exists() && root.child('team_meta').child($teamId).child('ownerUid').val() === auth.uid))",
             ".validate": "newData.hasChildren(['s','q','u','o','x','y','z','c','v'])",
             "s": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128" },
             "q": { ".validate": "newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.parent().child('s').val() !== data.parent().child('s').val() || newData.val() > data.val())" },
@@ -87,10 +87,41 @@
             "$other": { ".validate": "newData.isNumber() || newData.isBoolean() || (newData.isString() && newData.val().length <= 256)" }
           }
         },
+        "stroke_traces": {
+          // 1ストロークの艇速波形。**表示専用**で、衝突判定にも地図描画にも
+          // 使わない。位置(live_positions)と別ノードにしてあるのは転送量の
+          // ため。位置は全艇が全艇ぶんを購読するので 12x12 の fan-out が
+          // あるが、こちらは監視端末が開いた1艇だけを購読する。
+          // 読取をノード全体に許すのは、監視者がどの艇を選ぶか事前に
+          // 決められないため。実際の購読は $boatId 単位で行う。
+          ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
+          "$boatId": {
+            ".write": "auth != null && ((auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())) || (!newData.exists() && root.child('team_meta').child($teamId).child('ownerUid').val() === auth.uid))",
+            ".validate": "newData.hasChildren(['o','d','b','w','u'])",
+            "o": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000" },
+            // 12〜65spm = 923〜5000ms。範囲外はストロークとして描けない。
+            "d": { ".validate": "newData.isNumber() && newData.val() >= 800 && newData.val() <= 5200" },
+            "b": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3000" },
+            // base64 の int8 波形。48点で64文字。上限は128点ぶん。
+            "w": { ".validate": "newData.isString() && newData.val().length >= 12 && newData.val().length <= 176" },
+            // 位置と同じ趣旨のレート制限。クライアントは1900ms間隔で
+            // 間引くので、200msのジッタを吸収できる 1700ms を下限にする。
+            "u": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 60000 && (!data.exists() || newData.val() >= data.val() + 1700)" },
+            "r": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" },
+            "c": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "l": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000" },
+            "k": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3000" },
+            "g": { ".validate": "newData.isNumber() && newData.val() >= -3000 && newData.val() <= 3000" },
+            "h": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "p": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" },
+            // 新版が足した任意スカラーは旧版が無視して読める。
+            "$other": { ".validate": "newData.isNumber() || newData.isBoolean() || (newData.isString() && newData.val().length <= 256)" }
+          }
+        },
         "boat_profiles": {
           ".read": "auth != null && root.child('team_members').child($teamId).child(auth.uid).exists()",
           "$boatId": {
-            ".write": "auth != null && auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())",
+            ".write": "auth != null && ((auth.uid === $boatId && (!newData.exists() || root.child('team_members').child($teamId).child(auth.uid).exists())) || (!newData.exists() && root.child('team_meta').child($teamId).child('ownerUid').val() === auth.uid))",
             ".validate": "newData.hasChildren(['displayName','boatType','protocolVersion','appVersion','profileVersion','updatedAt'])",
             "displayName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
             "boatType": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32" },

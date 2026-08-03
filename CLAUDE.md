@@ -112,6 +112,9 @@ flutter run
 | ---- | ---- |
 | `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過で音とバナーを出す。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
+| `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング |
+| `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
+| `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側 |
 | `lib/services/message_service.dart` | 位置共有。RTDB(既定)/Firestoreをフラグで切替。onDisconnect対応 |
 | `lib/services/other_boat_track_store.dart` | 受信メッセージの検証・順序付け・鮮度管理(純Dart) |
 | `lib/services/send_policy.dart` | 適応送信の間隔決定 |
@@ -283,6 +286,10 @@ flutter run
    `PracticeLogRecorder` だけが読む。他艇の警告は自艇の判断材料にならず、
    表示すれば画面が混み(原則4)、安全経路へ入れれば他艇のアプリの不具合が
    自艇の警告を汚染する
+13. **1ストロークの艇速波形は表示専用で、位置payloadへ混ぜない。** 衝突評価にも
+   地図描画にも渡さない(不変条件12と同じ理由)。共有の書込を位置の atomic update へ
+   入れると、波形側の validation 失敗で位置の書込ごと拒否され安全経路が巻き添えになる。
+   `onDisconnect` も位置とは独立に登録する
 
 ## 練習一括ログ(監視端末)
 
@@ -301,6 +308,10 @@ flutter run
 ## 通信バックエンド
 
 - 位置共有・シグナル: Realtime Database(転送量課金・無料枠内で運用可能)
+- **1ストロークの艇速波形は `stroke_traces` という別ノードへ置く。**
+  `live_positions` は全12艇が全12艇ぶんを購読するため、そこへ足したバイト数は
+  144倍で効く。波形は監視端末が開いた1艇だけが購読し、艇側は購読しない(送信のみ)。
+  詳細は [docs/design_notes/2026-08-03_艇速変化グラフと監視共有_設計.md](docs/design_notes/2026-08-03_艇速変化グラフと監視共有_設計.md)
 - 固定危険区域: アプリ内JSON。臨時危険区域だけFirestore(低頻度)
 - `useRealtimeDatabaseForPositions = false` でFirestoreに切り戻せる(コスト大・検証用)
 - RTDBのURLが `firebase_options.dart` にない場合は `realtimeDatabaseUrl` で指定

@@ -2,7 +2,9 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import '../config/stroke_rate_config.dart';
+import '../models/shared_stroke_trace.dart';
 import 'stroke_rate_analyzer.dart';
+import 'stroke_speed_trace.dart';
 
 /// 端末座標系の角速度サンプル [rad/s]。
 class RowingGyroscopeSample {
@@ -114,6 +116,11 @@ class RowingMotionFusion {
   final Queue<StrokeRateSample> _accelerometer = Queue();
   final Queue<RowingGyroscopeSample> _gyroscope = Queue();
 
+  /// 表示用の連続波形。**判定には使わない。**
+  /// グラフを出さない運用では [setTraceEnabled] で丸ごと止める。
+  final StrokeSpeedTraceRecorder _trace = StrokeSpeedTraceRecorder();
+  bool _traceEnabled = false;
+
   RowingGravitySample? _gravity;
   DateTime? _lastGyroscopeAt;
   double _yawSinceGnssRadians = 0;
@@ -137,12 +144,29 @@ class RowingMotionFusion {
     _baseHeading = null;
     _lastReliableRelativeVelocity = null;
     _lastAnalyzedStrokeBoundary = null;
+    _trace.reset();
+  }
+
+  /// グラフ表示・監視共有のどちらかが必要なときだけ true。
+  /// false のあいだは1サンプルごとの積分もリングバッファも動かさない。
+  void setTraceEnabled(bool enabled) {
+    if (_traceEnabled == enabled) return;
+    _traceEnabled = enabled;
+    if (!enabled) _trace.reset();
   }
 
   void addUserAcceleration(StrokeRateSample sample) {
     if (!_finite3(sample.x, sample.y, sample.z)) return;
     _accelerometer.addLast(sample);
     _trim(_accelerometer, sample.timestamp);
+    if (_traceEnabled) {
+      _trace.addSample(
+        timestamp: sample.timestamp,
+        x: sample.x,
+        y: sample.y,
+        z: sample.z,
+      );
+    }
   }
 
   void addGravity(RowingGravitySample sample) {
@@ -214,6 +238,7 @@ class RowingMotionFusion {
     _baseSpeed = _baseSpeed == null
         ? speedMetersPerSecond
         : _baseSpeed! + alpha * (speedMetersPerSecond - _baseSpeed!);
+    if (_traceEnabled) _trace.setBaseSpeed(_baseSpeed!);
     _lastGnssAt = timestamp;
     if (headingDegrees != null &&
         headingDegrees.isFinite &&
@@ -249,6 +274,18 @@ class RowingMotionFusion {
             sample.z * estimate.longitudinalAxisZ)
         .toList(growable: false);
     final bias = _timeWeightedMean(projectedAcceleration, strokeSamples);
+    if (_traceEnabled) {
+      // 連続波形は毎サンプル進むが、艇長軸とバイアスはここでしか
+      // 求まらない。1秒ごとに最新の推定値へ入れ替える。
+      _trace.setLongitudinalAxis(
+        x: estimate.longitudinalAxisX,
+        y: estimate.longitudinalAxisY,
+        z: estimate.longitudinalAxisZ,
+        bias: bias,
+      );
+      _trace.noteStrokeBoundary(start);
+      _trace.noteStrokeBoundary(end);
+    }
     // スマホ固定部の微小振動で加速度0交差が増えないようにする。
     // 遅延を招く長いローパスは使わず、50Hzで5点だけ平滑化する。
     final acceleration = _movingAverage(
@@ -377,6 +414,55 @@ class RowingMotionFusion {
   }
 
   bool get analyzedNewStroke => _lastAnalyzedStrokeBoundary != null;
+
+  /// 心電図のように流すグラフ1画面ぶん。**表示専用。**
+  ///
+  /// 描画のたびに呼ばれるため、状態は一切変えず、リングから切り出すだけ。
+  StrokeSpeedTraceWindow? traceWindow({
+    required DateTime now,
+    required double windowSeconds,
+  }) {
+    if (!_traceEnabled) return null;
+    return _trace.window(now: now, windowSeconds: windowSeconds);
+  }
+
+  /// 直近の完全な1ストロークを、監視端末へ送れる形へまとめる。
+  ///
+  /// 波形が切り出せない(欠測・軸未確定)ときは null を返す。
+  /// 平均艇速は1漕距離÷周期で、そのストロークの実測平均になる。
+  SharedStrokeTrace? buildSharedStrokeTrace(RowingMotionMetrics metrics) {
+    if (!_traceEnabled) return null;
+    if (metrics.strokeDurationSeconds <= 0) return null;
+    final end = metrics.latestStrokeBoundary;
+    final start = end.subtract(Duration(
+      microseconds: (metrics.strokeDurationSeconds *
+              Duration.microsecondsPerSecond)
+          .round(),
+    ));
+    final waveform = _trace.resampleStroke(start: start, end: end);
+    if (waveform == null) return null;
+    final meanSpeed =
+        metrics.distancePerStrokeMeters / metrics.strokeDurationSeconds;
+    if (!meanSpeed.isFinite || meanSpeed < 0) return null;
+    return SharedStrokeTrace(
+      strokeStartedAt: start,
+      strokeDuration: Duration(
+        milliseconds:
+            (metrics.strokeDurationSeconds * Duration.millisecondsPerSecond)
+                .round(),
+      ),
+      baseSpeedMetersPerSecond: meanSpeed,
+      relativeSpeeds: waveform,
+      spm: metrics.spm,
+      confidence: metrics.confidence,
+      distancePerStrokeMeters: metrics.distancePerStrokeMeters,
+      catchSpeedLossMetersPerSecond: metrics.catchSpeedLossMetersPerSecond,
+      lateDriveSpeedGainMetersPerSecond:
+          metrics.lateDriveSpeedGainMetersPerSecond,
+      recoverySpeedRetention: metrics.recoverySpeedRetention,
+      finishPhaseFraction: metrics.finishPhaseFraction,
+    );
+  }
 
   double? _currentRelativeVelocity({
     required StrokeRateEstimate estimate,

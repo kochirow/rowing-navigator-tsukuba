@@ -32,6 +32,7 @@ import '../models/navigation_warning.dart';
 import '../models/safety_snapshot.dart';
 import '../models/session_model.dart';
 import '../models/shared_safety_calibration.dart';
+import '../models/shared_stroke_trace.dart';
 import '../models/static_obstacle_model.dart';
 import '../services/ashore_detector.dart';
 import '../services/collision_risk_evaluator_service.dart';
@@ -57,6 +58,7 @@ import '../services/risk_evaluator_settings_service.dart';
 import '../services/resilient_stream_supervisor.dart';
 import '../services/robust_position_estimator.dart';
 import '../services/rowing_motion_fusion.dart';
+import '../services/stroke_speed_trace.dart';
 import '../services/safety_orchestrator.dart';
 import '../services/safety_evaluation_liveness.dart';
 import '../services/send_policy.dart';
@@ -3915,6 +3917,8 @@ UseNavigator useNavigator() {
     batteryLevel: currentBatteryLevel,
     spm: strokeRate.spm,
     strokeMotion: strokeRate.motion,
+    latestStrokeTrace: strokeRate.latestStrokeTrace,
+    strokeTraceWindow: strokeRate.traceWindow,
     audioError: alert.error,
     getCurrentPosition: getCurrentPosition,
     startNavigation: startNavigation,
@@ -3976,6 +3980,15 @@ class UseNavigator {
   final ValueNotifier<int?> batteryLevel;
   final ValueNotifier<double?> spm;
   final ValueNotifier<RowingMotionMetrics?> strokeMotion;
+
+  /// 直近1ストロークの共有用波形。監視共有がONのときだけ送られる。
+  final ValueNotifier<SharedStrokeTrace?> latestStrokeTrace;
+
+  /// 艇速変化グラフ1画面ぶんの切り出し。**表示専用**で、安全経路は読まない。
+  final StrokeSpeedTraceWindow? Function({
+    required DateTime now,
+    double? windowSeconds,
+  }) strokeTraceWindow;
   final ValueNotifier<String?> audioError;
   final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
   final Future<void> Function(NavConfig config) startNavigation;
@@ -4037,6 +4050,8 @@ class UseNavigator {
     required this.batteryLevel,
     required this.spm,
     required this.strokeMotion,
+    required this.latestStrokeTrace,
+    required this.strokeTraceWindow,
     required this.audioError,
     required this.getCurrentPosition,
     required this.startNavigation,
