@@ -123,6 +123,7 @@ flutter run
 | `lib/services/gpx_export_service.dart` | GPX/CSV出力 |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
 | `lib/theme/map_layer_spec.dart` | 地図の3層(航路＝帯／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。航路レーンの色は `laneStyleFor` だけが決める |
+| `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |
 | `lib/services/swept_outline_service.dart` | 予測掃引の外形(凸包)を1枚にまとめる(純Dart)。**表示専用で判定には使わない** |
 | `lib/services/static_obstacle_service.dart` | 臨時危険区域の CRUD(Firestore) |
 | `lib/config/` | 全設定値(コメント付き)。調整はここ |

@@ -10,6 +10,7 @@ import '../models/boat_model.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
 import '../services/observer_traffic_awareness_evaluator.dart';
+import '../theme/boat_palette.dart';
 
 /// 検知される異常の種類
 enum BoatAnomalyKind {
@@ -135,6 +136,21 @@ UseCoachWatch useCoachWatch({
     ObserverTrafficSnapshot.empty,
   );
   final trafficEvaluator = useMemoized(ObserverTrafficAwarenessEvaluator.new);
+  final boatColors = useState<Map<String, Color>>(const {});
+
+  /// 監視対象の艇集合が変わったときだけ識別色を割り当て直す。
+  ///
+  /// 航跡の蓄積(受信のたび)とスキャン(定期)の両方から呼ぶ。前者だけだと
+  /// 消えた艇の色が残り、後者だけだと新しく現れた艇の艇印が次のスキャンまで
+  /// 色なしで描かれる。
+  void syncBoatColors() {
+    final boatIds = <String>{...lastBoat.value.keys, ...trails.value.keys};
+    final current = boatColors.value;
+    if (boatIds.length == current.length && boatIds.every(current.containsKey)) {
+      return;
+    }
+    boatColors.value = assignBoatTrackColors(boatIds);
+  }
 
   // 受信した艇情報を航跡に蓄積
   useEffect(() {
@@ -160,6 +176,7 @@ UseCoachWatch useCoachWatch({
       trail
           .removeWhere((p) => now.difference(p.t).inSeconds > trailDurationSec);
     }
+    syncBoatColors();
     return null;
   }, [otherBoats, enabled]);
 
@@ -174,6 +191,7 @@ UseCoachWatch useCoachWatch({
       anomalies.value = [];
       boatStatuses.value = [];
       trailPolylines.value = {};
+      boatColors.value = const {};
       anomalyFirstDetectedAt.value.clear();
       trafficTimer.value?.cancel();
       trafficTimer.value = null;
@@ -267,14 +285,19 @@ UseCoachWatch useCoachWatch({
       boatStatuses.value = newStatuses;
 
       // 航跡ポリラインを更新
+      syncBoatColors();
       final polylines = HashSet<Polyline>();
       trails.value.forEach((boatId, trail) {
         if (trail.length < 2) return;
+        // 桜川では全艇がほぼ同じ線上を往復するため、航跡は必ず重なる。
+        // 全艇を同じ色にすると、重なった線から「この折り返しは誰か」を
+        // 復元できない。艇印も同じ色で描く(BoatMarkerRenderSpec.color)。
+        final color = boatColors.value[boatId] ?? BoatPalette.trackPalette.first;
         polylines.add(Polyline(
           polylineId: PolylineId('trail_$boatId'),
           points: trail.map((p) => p.position).toList(),
           width: 3,
-          color: Colors.blue.withValues(alpha: 0.6),
+          color: color.withValues(alpha: BoatPalette.trailOpacity),
         ));
       });
       trailPolylines.value = polylines;
@@ -330,6 +353,7 @@ UseCoachWatch useCoachWatch({
     boatStatuses: boatStatuses,
     trailPolylines: trailPolylines,
     trafficSnapshot: trafficSnapshot,
+    boatColors: boatColors,
   );
 }
 
@@ -339,10 +363,14 @@ class UseCoachWatch {
   final ValueNotifier<Set<Polyline>> trailPolylines;
   final ValueNotifier<ObserverTrafficSnapshot> trafficSnapshot;
 
+  /// 艇IDごとの識別色。航跡・艇印・艇一覧で同じ色を使う。**表示専用。**
+  final ValueNotifier<Map<String, Color>> boatColors;
+
   UseCoachWatch({
     required this.anomalies,
     required this.boatStatuses,
     required this.trailPolylines,
     required this.trafficSnapshot,
+    required this.boatColors,
   });
 }

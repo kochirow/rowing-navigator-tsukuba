@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/boat_config.dart';
 import '../config/map_style_config.dart';
 import '../services/map_render_update_policy.dart';
+import '../theme/boat_palette.dart';
 import '../types/marker_type.dart';
 import '../types/boat_type.dart';
 import '../utils/image2icon.dart';
@@ -114,8 +115,17 @@ UseNavMap useNavMap() {
       zoomLevel: zoomLevel,
       devicePixelRatio: dpr,
     );
+    // 監視モードは艇ごとに色を指定する。指定がなければ航行モードの
+    // 自艇=赤 / 他艇=濃い青みグレー。
+    final color = spec.color ??
+        (spec.type == MarkerType.myBoat
+            ? BoatPalette.myBoat
+            : BoatPalette.otherBoat);
     final cacheKey = [
       spec.type.name,
+      // 色が違えば別のビットマップになる。ここを落とすと、監視モードで
+      // 先に描いた艇の色が後の艇へそのまま使い回される。
+      color.toARGB32().toRadixString(16),
       spec.boatType.name,
       params.h.toStringAsFixed(3),
       boatConfig.displayHullWidthMeters.toStringAsFixed(3),
@@ -130,7 +140,7 @@ UseNavMap useNavMap() {
       // 判定用の幅(オーを含む6〜7.5m)ではなく、船体の実幅。
       // 安全ポリゴンと矢羽の役割を視覚的に分ける。
       widthMeters: boatConfig.displayHullWidthMeters,
-      color: spec.type == MarkerType.myBoat ? Colors.red : Colors.blue,
+      color: color,
       pixelsPerMeter: pixelsPerMeter,
       minPixels: (minBoatMarkerLengthPixels * dpr).round(),
       maxPixels: (maxBoatMarkerLengthPixels * dpr).round(),
@@ -521,6 +531,12 @@ class BoatMarkerRenderSpec {
   /// `null`の場合は名前ラベルを作らない。監視モードだけ指定する。
   final String? nameLabel;
 
+  /// 艇印の色。`null`なら [MarkerType] から決める(航行モード)。
+  ///
+  /// 監視モードだけが艇ごとの識別色を渡す。航跡ポリラインと同じ色を
+  /// 使うことで、地図上の線と艇が対応する。
+  final Color? color;
+
   const BoatMarkerRenderSpec({
     required this.markerId,
     required this.type,
@@ -531,6 +547,7 @@ class BoatMarkerRenderSpec {
     required this.title,
     required this.snippet,
     this.nameLabel,
+    this.color,
   });
 
   @override
@@ -544,7 +561,8 @@ class BoatMarkerRenderSpec {
         heading == other.heading &&
         title == other.title &&
         snippet == other.snippet &&
-        nameLabel == other.nameLabel;
+        nameLabel == other.nameLabel &&
+        color == other.color;
   }
 
   @override
@@ -558,6 +576,7 @@ class BoatMarkerRenderSpec {
         title,
         snippet,
         nameLabel,
+        color,
       );
 }
 

@@ -32,11 +32,17 @@ class BoatListPanel extends StatelessWidget {
   /// グラフを見たい人だけがボタンを押す(設計原則2)。
   final void Function(String boatId, String displayName)? onShowStrokeTrace;
 
+  /// 艇IDごとの識別色(地図の航跡・艇印と同じ)。
+  ///
+  /// 一覧と地図を色で対応づけるためだけに使う。渡さなくても一覧は成立する。
+  final Map<String, Color> boatColors;
+
   const BoatListPanel({
     super.key,
     required this.statuses,
     this.onTapBoat,
     this.onShowStrokeTrace,
+    this.boatColors = const {},
   });
 
   Widget _row(BuildContext context, BoatStatus status) {
@@ -68,6 +74,18 @@ class BoatListPanel extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // 地図の航跡・艇印と同じ識別色。一覧のどの行が地図のどの線かを
+          // 名前を読み比べずに追えるようにする。色が決まっていない艇では
+          // 幅だけ確保して、行の文字位置が揃うようにする。
+          Container(
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: boatColors[boat.boatId] ?? Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+          ),
           Icon(
             // 更新途絶は「通信が来ていない」ことであって、艇の異常とは限らない。
             // 警告アイコンではなく中立的な cloud_off で示す。

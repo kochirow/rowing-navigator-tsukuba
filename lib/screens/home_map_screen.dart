@@ -927,6 +927,9 @@ class HomeMapScreen extends HookConsumerWidget {
             // 他艇は受信鮮度で既に絞られている。航行中だけ名称を隠すと、
             // 警告対象が誰かを確認できないため、表示対象はすべてラベルを出す。
             nameLabel: boat.displayName,
+            // 監視モードだけ航跡と同じ識別色にする。航行中は色分けしない
+            // (`BoatPalette.otherBoat` の説明を参照)。
+            color: coachWatch.boatColors.value[boat.boatId],
           ));
         }
         final rendered = await navMap.renderBoatMarkers(markerSpecs);
@@ -1043,6 +1046,7 @@ class HomeMapScreen extends HookConsumerWidget {
       navigator.myBoat.value,
       navigator.otherBoats.value,
       coachWatch.boatStatuses.value, // 観察者モードでも定期的に再描画する
+      coachWatch.boatColors.value, // 識別色が決まったら艇印を描き直す
       tracking.mode.value,
       navMap.isReady.value,
       navigator.warningTimeSeconds.value,
@@ -1431,6 +1435,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                           child: BoatListPanel(
                                             statuses:
                                                 coachWatch.boatStatuses.value,
+                                            boatColors:
+                                                coachWatch.boatColors.value,
                                             onTapBoat: (boatId) => unawaited(
                                               focusOnWatchedBoat(boatId),
                                             ),
