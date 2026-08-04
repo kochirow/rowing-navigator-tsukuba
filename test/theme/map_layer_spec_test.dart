@@ -1,88 +1,61 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/theme/hazard_palette.dart';
 import 'package:rowing_navigator/theme/map_layer_spec.dart';
 
 void main() {
-  group('laneStyleFor', () {
-    test('往路と復路は線の色で区別する', () {
-      final outbound = laneStyleFor(leg: 'outbound', isSatellite: false);
-      final returnLeg = laneStyleFor(leg: 'return', isSatellite: false);
-      expect(outbound.strokeColor, isNot(returnLeg.strokeColor));
-      expect(outbound.fillColor, isNot(returnLeg.fillColor));
-    });
-
-    test('往路と復路の差は明度だけでつけ、太さ・濃さは揃える', () {
-      // 片方だけ太く・濃くすると、そちらが危険区域より目立ってしまう。
+  group('channelDividerStyleFor', () {
+    test('芯より縁取りが太い(縁取りが芯の下から食み出す)', () {
       for (final isSatellite in [false, true]) {
-        final outbound =
-            laneStyleFor(leg: 'outbound', isSatellite: isSatellite);
-        final returnLeg = laneStyleFor(leg: 'return', isSatellite: isSatellite);
-        expect(outbound.strokeWidth, returnLeg.strokeWidth);
-        expect(outbound.strokeColor.a, closeTo(returnLeg.strokeColor.a, 0.001));
-        expect(outbound.fillColor.a, closeTo(returnLeg.fillColor.a, 0.001));
+        final style = channelDividerStyleFor(isSatellite: isSatellite);
+        expect(style.casingWidth, greaterThan(style.coreWidth));
       }
     });
 
-    test('leg が無い・不正なレーンは無彩色で描く(消さない)', () {
-      // 表示用の付加情報1つで航路が1本まるごと消えるほうが害が大きい(原則1)。
-      for (final leg in <String?>[null, 'unknown', '', 'OUTBOUND', '往路']) {
-        for (final isSatellite in [false, true]) {
-          final style = laneStyleFor(leg: leg, isSatellite: isSatellite);
-          expect(
-            style.strokeColor.withValues(alpha: 1.0),
-            const Color(0xFF9E9E9E),
-            reason: 'leg=$leg は無彩色になること',
-          );
-          expect(style.fillColor, Colors.transparent);
-          expect(style.strokeWidth, greaterThan(0));
-        }
+    test('必ず破線として描ける', () {
+      // 実線は「実在するものの輪郭」、破線は「越えられるが越えない取り決め」。
+      // 中央線が実線になると、岸や橋脚と同じ意味に読めてしまう。
+      for (final isSatellite in [false, true]) {
+        final style = channelDividerStyleFor(isSatellite: isSatellite);
+        expect(style.dashLengthPixels, greaterThan(0));
+        expect(style.gapLengthPixels, greaterThan(0));
       }
     });
 
-    test('航空写真と通常地図で色が変わる', () {
-      for (final leg in ['outbound', 'return']) {
-        expect(
-          laneStyleFor(leg: leg, isSatellite: true).strokeColor,
-          isNot(laneStyleFor(leg: leg, isSatellite: false).strokeColor),
-        );
+    test('芯は下地によらず不透明寄りの白', () {
+      // 通常地図(淡い水色)でも航空写真(暗い)でも同じ見え方にする。
+      for (final isSatellite in [false, true]) {
+        final style = channelDividerStyleFor(isSatellite: isSatellite);
+        expect(style.coreColor.r, 1.0);
+        expect(style.coreColor.g, 1.0);
+        expect(style.coreColor.b, 1.0);
+        expect(style.coreColor.a, greaterThan(0.9));
       }
     });
 
-    test('航路の塗りは、いちばん薄い危険区域(岸)より必ず薄い', () {
-      // 危険区域より航路が目立つ配色を恒久的に禁止する。帯は川幅いっぱいの
-      // 面積があるため、少しでも濃いと岸・橋脚・中州の色を全部濁らせる。
-      final shoreFillOpacity = HazardPalette.fillOpacityOf('shore');
-      for (final leg in <String?>['outbound', 'return', null]) {
-        for (final isSatellite in [false, true]) {
-          expect(
-            laneStyleFor(leg: leg, isSatellite: isSatellite).fillColor.a,
-            lessThan(shoreFillOpacity),
-            reason: 'leg=$leg / isSatellite=$isSatellite の塗りが岸より濃い',
-          );
-        }
-      }
+    test('縁取りは下地に合わせて変える', () {
+      expect(
+        channelDividerStyleFor(isSatellite: true).casingColor,
+        isNot(channelDividerStyleFor(isSatellite: false).casingColor),
+      );
     });
 
-    test('航路の線は、橋脚の輪郭より必ず細い', () {
+    test('中央線は、実在する危険(橋脚)の輪郭より太くしない', () {
+      // 主役は危険区域である。中央線を目立たせるのは色と破線であって、
+      // 太さで危険区域を上回ってはいけない。
       final bridgePierWidth = HazardPalette.strokeWidthOf('bridgePier');
-      for (final leg in <String?>['outbound', 'return', null]) {
-        for (final isSatellite in [false, true]) {
-          expect(
-            laneStyleFor(leg: leg, isSatellite: isSatellite).strokeWidth,
-            lessThan(bridgePierWidth),
-            reason: 'leg=$leg / isSatellite=$isSatellite の線が橋脚より太い',
-          );
-        }
+      for (final isSatellite in [false, true]) {
+        expect(
+          channelDividerStyleFor(isSatellite: isSatellite).coreWidth,
+          lessThanOrEqualTo(bridgePierWidth),
+        );
       }
     });
   });
 
-  test('zIndex は 航路 < シェブロン < 航跡 < 危険区域 < 予測 < 開発者 の順', () {
-    // 「塗り = 実在する危険」が「帯 = 通ってよい場所」に沈まないことを守る。
+  test('zIndex は 中央線 < 航跡 < 危険区域 < 予測 < 開発者 の順', () {
+    // 「塗り = 実在する危険」が「破線 = 取り決め」に沈まないことを守る。
     final order = [
-      laneFillZIndex,
-      laneChevronZIndex,
+      channelDividerZIndex,
       coachTrailZIndex,
       hazardPolygonZIndex,
       predictionShapeZIndex,

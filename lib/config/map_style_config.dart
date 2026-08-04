@@ -78,6 +78,18 @@ const maxBoatMarkerLengthPixels = 56;
 /// 実寸のままで、この値は描画にしか効かない(不変条件6)。
 const minBoatMarkerAspectRatio = 0.34;
 
+/// 航路断面インジケータが目盛りとして描く、中央線から片側の距離 [m]。
+///
+/// 桜川の川幅は40〜50m・狭所35m(DESIGN_PRINCIPLES 1.1)なので、
+/// 中央線から岸までは片側20〜25mになる。25mにすると、通常の川区間では
+/// 目盛りの端がほぼ岸に対応する。
+///
+/// **この目盛りは岸を描いているのではない。** 河口・霞ヶ浦では片側100m以上
+/// あり、そこでは目盛りを振り切る。振り切った側は端に三角形を出し、実距離は
+/// 数値で必ず併記する。「端に張り付いた = 岸にいる」と読ませないこと
+/// (原則6: 表示できない量を、表示できる量で代用しない)。
+const laneCrossSectionHalfWidthMeters = 25.0;
+
 bool isValidMapAutoRecenterDelay(Duration value) =>
     value >= mapAutoRecenterMinimumDelay &&
     value <= mapAutoRecenterMaximumDelay;

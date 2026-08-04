@@ -24,6 +24,7 @@ import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
+import '../features/home_map/widgets/lane_cross_section_strip.dart';
 import '../features/home_map/widgets/map_type_switcher.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/rounded_button.dart';
@@ -33,6 +34,8 @@ import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
 import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
+import '../services/channel_centerline.dart';
+import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
@@ -42,7 +45,6 @@ import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
 import '../widgets/app_state_views.dart';
-import '../models/navigable_water.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
@@ -202,12 +204,16 @@ class HomeMapScreen extends HookConsumerWidget {
     // 開発者が明示的に有効化したときだけ判定形状を加える別レイヤー。
     // 通常の shipDomains はここへ判定用の拡張を混ぜない（不変条件6）。
     final developerSafetyShapeOverlay = useState<Set<Polygon>>({});
-    // 航路(往路・復路)の帯。**表示専用**なので use_navigator(安全経路の
-    // フック)へは通さず、画面側で直接読む。読めなくても航行・警告は
-    // 従来どおり動く(原則1)。
-    final navigableWaters = useState<List<NavigableWater>>(const []);
+    // 航路の中央線。**表示専用**なので use_navigator(安全経路のフック)へは
+    // 通さず、画面側で直接読む。読めなくても航行・警告は従来どおり動く
+    // (原則1)。
+    final channelCenterlines =
+        useState<Map<String, ChannelCenterline>>(const {});
     final showChannelLanes = useState(true); // 既定ON
-    final laneOverlay = useState<Set<Polygon>>({});
+    final channelDividerLines = useState<Set<Polyline>>({});
+    // レーンの左右はレーン形状から決まり、走っている間は変わらないので
+    // 1つのインスタンスで保持させる。
+    final laneCrossSectionService = useMemoized(ChannelCrossSectionService.new);
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     final showDeveloperSafetyShapeOverlay = useState(false);
@@ -525,8 +531,8 @@ class HomeMapScreen extends HookConsumerWidget {
         // 表示だけの切替なので航行中でも触れる。安全判定には影響しない。
         MapMenuAction(
           icon: showChannelLanes.value ? Icons.route : Icons.route_outlined,
-          title: '航路を表示',
-          subtitle: showChannelLanes.value ? '往路・復路の帯を表示中' : '非表示',
+          title: '航路の中央線を表示',
+          subtitle: showChannelLanes.value ? '白い破線で表示中' : '非表示',
           onTap: () {
             final next = !showChannelLanes.value;
             showChannelLanes.value = next;
@@ -691,50 +697,69 @@ class HomeMapScreen extends HookConsumerWidget {
       return () => disposed = true;
     }, const []);
 
-    // 航路データを起動時に1回だけ読む。表示専用なので、読めなければ
-    // 帯を描かないだけで、航行も警告も従来どおり動く(原則1)。
+    // 航路の中心線を起動時に1回だけ読む。表示専用なので、読めなければ
+    // 中央線を描かないだけで、航行も警告も従来どおり動く(原則1)。
     useEffect(() {
       var disposed = false;
-      unawaited(PresetObstacleService().loadNavigableWaters().then((waters) {
+      unawaited(
+          PresetObstacleService().loadChannelCenterlines().then((centerlines) {
         if (disposed) return;
-        navigableWaters.value = waters;
+        channelCenterlines.value = centerlines;
       }).catchError((Object error) {
-        if (kDebugMode) debugPrint('Navigable waters not displayed: $error');
+        if (kDebugMode) debugPrint('Channel centerline not displayed: $error');
       }));
       return () => disposed = true;
     }, const []);
 
     // ##########################
-    // 航路(往路・復路)の帯を描く
+    // 航路の中央線を描く
     // ##########################
-    // **主役は危険区域であって航路ではない。** レーンは川幅いっぱいの面積が
-    // あるため、塗りが少しでも濃いとその下の岸・橋脚・中州の色を全部濁らせる。
-    // 配色と重なり順は map_layer_spec.dart に集約している。
+    // **描くのは中央線1本だけで、レーンの外側の辺は描かない。**
+    // 漕手が知りたいのは「中央線のどちら側か」の1点で、外側の辺は岸の
+    // 危険区域と重なる冗長な線だった。廃止の経緯は map_layer_spec.dart。
+    //
+    // 中心線は予測(`ChannelPathPredictor`)が使うものと同じ線を描く。
+    // 別の線を「中央線」として見せると、地図と警告が食い違う。
     useEffect(() {
       if (!showChannelLanes.value) {
-        if (laneOverlay.value.isNotEmpty) laneOverlay.value = {};
+        if (channelDividerLines.value.isNotEmpty) channelDividerLines.value = {};
         return null;
       }
       final isSatellite = navMap.mapType.value == MapType.hybrid;
-      final nextLanes = <Polygon>{};
-      for (final water in navigableWaters.value) {
-        final style = laneStyleFor(leg: water.leg, isSatellite: isSatellite);
-        nextLanes.add(Polygon(
-          polygonId: PolygonId('lane_${water.id}'),
-          points: water.points,
-          strokeWidth: style.strokeWidth,
-          strokeColor: style.strokeColor,
-          fillColor: style.fillColor,
-          zIndex: laneFillZIndex,
-          // 地図操作を邪魔しない。帯は川幅いっぱいを覆うため、タップを
-          // 奪うと危険区域や艇のタップが届かなくなる。
+      final style = channelDividerStyleFor(isSatellite: isSatellite);
+      final pattern = <PatternItem>[
+        PatternItem.dash(style.dashLengthPixels.toDouble()),
+        PatternItem.gap(style.gapLengthPixels.toDouble()),
+      ];
+      final nextLines = <Polyline>{};
+      for (final entry in channelCenterlines.value.entries) {
+        final points = entry.value.vertices;
+        if (points.length < 2) continue;
+        // 縁取りと芯の2本で1本の線にする。縁取りにも同じ破線を使う
+        // (連続にすると、破線ではなく暗い実線の上の白い破線に見える)。
+        nextLines.add(Polyline(
+          polylineId: PolylineId('channel_divider_casing_${entry.key}'),
+          points: points,
+          color: style.casingColor,
+          width: style.casingWidth,
+          patterns: pattern,
+          zIndex: channelDividerZIndex,
+          consumeTapEvents: false,
+        ));
+        nextLines.add(Polyline(
+          polylineId: PolylineId('channel_divider_core_${entry.key}'),
+          points: points,
+          color: style.coreColor,
+          width: style.coreWidth,
+          patterns: pattern,
+          zIndex: channelDividerZIndex,
           consumeTapEvents: false,
         ));
       }
-      laneOverlay.value = nextLanes;
+      channelDividerLines.value = nextLines;
       return null;
     }, [
-      navigableWaters.value,
+      channelCenterlines.value,
       showChannelLanes.value,
       navMap.mapType.value,
     ]);
@@ -1122,9 +1147,8 @@ class HomeMapScreen extends HookConsumerWidget {
     // ##########################
     useEffect(() {
       // 重なり順は zIndex が決めるが、集合へ入れる順序も意味の順に揃えて
-      // おく(帯 → 実在する危険 → 予測 → 開発用)。
+      // おく(実在する危険 → 予測 → 開発用)。
       final newPolygons = {
-        ...laneOverlay.value,
         ...shipDomains.value,
         ...obstacles.value,
         // この集合は開発者トグルがONのときだけ非空。通常地図の描画形状を
@@ -1134,19 +1158,20 @@ class HomeMapScreen extends HookConsumerWidget {
       navMap.setPolygons(newPolygons);
       return null;
     }, [
-      laneOverlay.value,
       shipDomains.value,
       obstacles.value,
       developerSafetyShapeOverlay.value,
     ]);
 
     // ##########################
-    // ポリラインの統合(航跡 + 停止距離ライン)
+    // ポリラインの統合(中央線 + 航跡 + 停止距離ライン)
     // ##########################
-    // 地図のポリラインは1つの集合しか持てない。航跡と停止距離ラインを
+    // 地図のポリラインは1つの集合しか持てない。中央線・航跡・停止距離ラインを
     // 別々に setPolylines すると、片方を設定した瞬間にもう片方が消える。
     useEffect(() {
       navMap.setPolylines({
+        // 越えない取り決めの線。実在する危険と航跡より下に敷く。
+        ...channelDividerLines.value,
         // 過去に通った線。危険区域より下に敷く。
         if (navigator.mode.value == NavMode.observer)
           for (final trail in coachWatch.trailPolylines.value)
@@ -1156,10 +1181,32 @@ class HomeMapScreen extends HookConsumerWidget {
       });
       return null;
     }, [
+      channelDividerLines.value,
       coachWatch.trailPolylines.value,
       stoppingDistanceLines.value,
       navigator.mode.value,
     ]);
+
+    // ##########################
+    // 航路断面インジケータ(表示専用)
+    // ##########################
+    // 「中央線のどちら側にいるか」だけを計器カードの直下へ出す。地図と同じ
+    // 情報だが、地図は回転・拡大が変わるうえ視線コストが高い。警告には
+    // しない(レーン外は違反ではない: 原則4)。
+    final laneCrossSection = () {
+      final myBoat = navigator.myBoat.value;
+      if (navigator.mode.value != NavMode.navigator || myBoat == null) {
+        return ChannelCrossSection.unavailable;
+      }
+      return laneCrossSectionService.describe(
+        position: LatLng(myBoat.lat, myBoat.lng),
+        headingDegrees: myBoat.heading,
+        // 低速時の course-over-ground は最大90度ずれる。左右を誤って
+        // 出すくらいなら出さない(不変条件10)。
+        headingIsReliable: ShipDomainService.headingIsReliable(myBoat),
+        resolver: navigator.channelLaneResolver.value,
+      );
+    }();
 
     return Scaffold(
       // 水上では地図が1pxでも広い方がよいためAppBarは置かず、マップを全画面に使う
@@ -1421,6 +1468,23 @@ class HomeMapScreen extends HookConsumerWidget {
                                           compact: isLandscape,
                                           portraitCompact: !isLandscape,
                                         ),
+                                      ),
+                                    ),
+                                  // 航路断面インジケータ。**計器カードの外側**へ
+                                  // 置く。カードは高さ上限つきのスクロール領域
+                                  // なので、中へ入れると小型端末で下端が
+                                  // 隠れて「いつもの場所」でなくなる。
+                                  //
+                                  // 画面下部へ置かないのは、地図が
+                                  // `rowingMapBearing` で回っていて画面の
+                                  // 下半分が進行方向にあたるため
+                                  // (`navigationSelfBoatScreenRatio` 参照)。
+                                  if (navigator.mode.value == NavMode.navigator)
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: LaneCrossSectionStrip(
+                                        crossSection: laneCrossSection,
+                                        portrait: !isLandscape,
                                       ),
                                     ),
                                   // コーチモードの艇一覧パネル(同じく上部40%以内で内部スクロール)

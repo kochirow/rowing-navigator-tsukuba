@@ -1,19 +1,19 @@
 /// 地図に重ねる層の意味と重なり順を1か所へ集約する。
 ///
-/// 地図は3層で読む。**この対応が崩れると、地図から読み取れる意味が変わる。**
+/// 地図は層で読む。**この対応が崩れると、地図から読み取れる意味が変わる。**
 ///
 /// | 層 | 意味 | 描き方 | zIndex |
 /// | --- | --- | --- | --- |
-/// | 航路レーン(塗り・線) | そこを通ってよい帯 | ごく薄い帯 | 0 |
-/// | 航路シェブロン | 進行方向 | 点在する短い線 | 1 |
+/// | 航路の中央線 | **越えない取り決め** | 白い破線(暗い縁取り) | 2 |
 /// | 監視モードの航跡 | 過去に通った線 | 線 | 5 |
 /// | 危険区域(塗り) | **実在する危険** | 塗り | 10 |
 /// | 船体領域・掃引外形(線) | **これから通る予測** | 線 | 20 |
 /// | 開発者オーバーレイ | 判定形状の確認用 | 線 | 30 |
 ///
 /// - **塗り = 実在する危険。** そこに何かが在る。
-/// - **線 = 予測。** 自艇・他艇がこれから通るだけで、そこには何も無い。
-/// - **帯 = 通ってよい場所。** 主役ではない背景。
+/// - **実線 = 実在するものの輪郭。** 岸・橋脚・中州の縁。
+/// - **破線 = 取り決め。** 物理的には何も無く、越えられる。中央線がこれ。
+/// - **線(予測) = 自艇・他艇がこれから通るだけで、そこには何も無い。**
 ///
 /// マーカー(艇アイコン)は Google Maps の仕様上つねにポリゴンより上に出るため、
 /// zIndex の指定は不要。
@@ -22,20 +22,40 @@
 /// どれだけ手前で鳴らすかは従来どおり `lib/config/` と安全判定側が決める。
 /// 危険区域そのものの配色は [HazardPalette] が持ち続ける
 /// (このファイルからは参照しない)。
+///
+/// ## 往路・復路の帯(`laneStyleFor`)を廃止した記録
+///
+/// 以前は往路・復路のポリゴンを、明度差だけをつけたごく薄いグレーの帯として
+/// 敷いていた。**現地で「自分がどちら側にいるか分からない」**という判断で
+/// 取りやめた(2026-08-04)。理由は濃さではなく、情報の優先順位が
+/// 逆転していたことにある。
+///
+///   1. 漕手が知りたいのは「中央線のどちら側か」の1点だけなのに、
+///      いちばん重要な**共有辺(=中央線)**が、外側の辺と同じ太さ・同じ色で
+///      引かれていた。画面には縦にグレーの線が3本走り、どれが越えては
+///      いけない線か区別できなかった。
+///   2. 外側の辺は岸の危険区域(赤の輪郭)とほぼ重なる冗長な線だった。
+///   3. 無彩色は、basemap 自身のグレーの線(道路・水域の縁)と混ざった。
+///      「危険区域より目立たない」を無彩色で作った結果、地図のノイズに
+///      紛れてしまった。
+///   4. 面は「どちら側か」に答えられない。往路と復路は同じ形・同じ明度差
+///      なので、判断には**2本の境界と自艇の3者**を見比べる必要があった。
+///      漕手は後ろ向きで、地図は回転していて、視線を送れるのは1秒未満。
+///
+/// いまは**中央線を1本だけ**描き、外側の辺は描かない。二者比較
+/// (白い破線の左か右か)に落ちる。帯を復活させるなら、上の4点に
+/// どう答えるのかを先にここへ書くこと。
 library;
 
 import 'package:flutter/material.dart';
 
-/// 航路レーンの帯。いちばん下に敷く背景。
-const int laneFillZIndex = 0;
-
-/// 航路の進行方向シェブロン。帯のすぐ上。
-const int laneChevronZIndex = 1;
+/// 航路の中央線。取り決めの線なので、実在する危険と航跡より下に敷く。
+const int channelDividerZIndex = 2;
 
 /// 監視モードの航跡。過去の線なので危険区域より下。
 const int coachTrailZIndex = 5;
 
-/// 危険区域の塗り。**実在する危険**なので、帯と航跡より必ず上に出す。
+/// 危険区域の塗り。**実在する危険**なので、中央線と航跡より必ず上に出す。
 const int hazardPolygonZIndex = 10;
 
 /// 船体領域・掃引外形。予測の線であり、危険区域を隠さないよう上に線だけ乗せる。
@@ -44,89 +64,88 @@ const int predictionShapeZIndex = 20;
 /// 開発者が判定形状を確認するための一時レイヤー。通常は非表示。
 const int developerOverlayZIndex = 30;
 
-/// 航路レーン1本分の表示スタイル。
+/// 航路の中央線1本ぶんの表示スタイル。
 ///
-/// 表示専用の値であり、安全判定へは渡らない。
+/// 芯(白)と縁取り(暗色)の2本のポリラインで1本の線を作る。表示専用の値で
+/// あり、安全判定へは渡らない。
 @immutable
-class LaneStyle {
-  /// 輪郭線の色(不透明度込み)。
-  final Color strokeColor;
+class ChannelDividerStyle {
+  /// 芯の色。地図の下地が明るくても暗くても読める白。
+  final Color coreColor;
 
-  /// 塗りの色(不透明度込み)。`leg` 不明のときは完全な透明。
-  final Color fillColor;
+  /// 芯の太さ。
+  final int coreWidth;
 
-  /// 輪郭線の太さ。橋脚(3)より必ず細くする。
-  final int strokeWidth;
+  /// 縁取りの色。芯の下へ一回り太く敷く。
+  final Color casingColor;
 
-  const LaneStyle({
-    required this.strokeColor,
-    required this.fillColor,
-    required this.strokeWidth,
+  /// 縁取りの太さ。[coreWidth] より必ず太い。
+  final int casingWidth;
+
+  /// 破線1本の長さ [px]。
+  final int dashLengthPixels;
+
+  /// 破線どうしの間隔 [px]。
+  final int gapLengthPixels;
+
+  const ChannelDividerStyle({
+    required this.coreColor,
+    required this.coreWidth,
+    required this.casingColor,
+    required this.casingWidth,
+    required this.dashLengthPixels,
+    required this.gapLengthPixels,
   });
 
   @override
   bool operator ==(Object other) =>
-      other is LaneStyle &&
-      strokeColor == other.strokeColor &&
-      fillColor == other.fillColor &&
-      strokeWidth == other.strokeWidth;
+      other is ChannelDividerStyle &&
+      coreColor == other.coreColor &&
+      coreWidth == other.coreWidth &&
+      casingColor == other.casingColor &&
+      casingWidth == other.casingWidth &&
+      dashLengthPixels == other.dashLengthPixels &&
+      gapLengthPixels == other.gapLengthPixels;
 
   @override
-  int get hashCode => Object.hash(strokeColor, fillColor, strokeWidth);
+  int get hashCode => Object.hash(coreColor, coreWidth, casingColor,
+      casingWidth, dashLengthPixels, gapLengthPixels);
 }
 
-/// 航路レーンの表示色。[isSatellite] は `MapType.hybrid` のとき true。
+/// 航路中央線の表示色。[isSatellite] は `MapType.hybrid` のとき true。
 ///
-/// **この機能の主役は危険区域であって航路ではない。** レーンは川幅いっぱいの
-/// 面積があるため、塗りが少しでも濃いとその下の岸・橋脚・中州の色を全部
-/// 濁らせる。線も、危険区域の輪郭(岸 width 1、橋脚 width 3)より目立っては
-/// いけない。航路は「言われて初めて気づく程度の、うっすらした帯」に徹する。
+/// **色相では主張しない。** 赤・橙・青・紫は [HazardPalette] が
+/// 岸・橋・橋脚・カーブ・逆走に使い切っているので、中央線に色を割り当てると
+/// 「そこに何かが在る」と誤読される。かわりに**白い芯 + 暗い縁取り**という
+/// 組み合わせで主張する。これは basemap が水面の上に描かない組み合わせで、
+/// 通常地図(明るい水色)でも航空写真(暗い)でも同じ見え方になる。
 ///
-/// 往路・復路の差は**明度だけ**でつける(往路 = コントラストの強いグレー、
-/// 復路 = 弱いグレー)。片方だけ太く・濃くすると、そちらが危険区域より
-/// 目立ってしまう。赤は使わない(危険区域の danger 赤と衝突するため)。
+/// **破線にするのは意味の区別である。** 実線は実在するものの輪郭(岸・橋脚)、
+/// 破線は取り決め(越えられるが越えない線)。道路の中央線と同じ読み方で、
+/// 覚え直す必要がない。
 ///
-/// [leg] が null / 不明のときは**無彩色で描く**。描かないのではなく
-/// 「向きが不明な航路」として出す(原則1: 機能を止めない)。
-///
-/// `highContrastMapStyle` を有効にしているときも `normal` 用の色をそのまま
-/// 使う。このスタイルは地図側の彩度を落とすので、薄いグレーの帯でも
-/// 輪郭は追える。
-LaneStyle laneStyleFor({required String? leg, required bool isSatellite}) {
-  // 向きが分からないレーンは、往路とも復路とも読めない無彩色にする。
-  // 塗りを持たせると「どちらかの帯」に見えてしまうため線だけで示す。
-  if (leg != 'outbound' && leg != 'return') {
-    return const LaneStyle(
-      strokeColor: Color(0x4D9E9E9E), // #9E9E9E alpha 0.30
-      fillColor: Colors.transparent,
-      strokeWidth: 1,
+/// 太さは橋脚(width 3)と同等にとどめる。中央線は主役だが、**実在する危険
+/// より太くはしない**。
+ChannelDividerStyle channelDividerStyleFor({required bool isSatellite}) {
+  if (isSatellite) {
+    // 航空写真は下地が暗い。縁取りを黒寄りにして、白い芯を際立たせる。
+    return const ChannelDividerStyle(
+      coreColor: Color(0xF2FFFFFF), // 白 alpha 0.95
+      coreWidth: 3,
+      casingColor: Color(0x99000000), // 黒 alpha 0.60
+      casingWidth: 5,
+      dashLengthPixels: 18,
+      gapLengthPixels: 12,
     );
   }
-  final isOutbound = leg == 'outbound';
-  if (isSatellite) {
-    // 航空写真は背景が暗いので、往路を明るいグレーにするとコントラストが立つ。
-    return isOutbound
-        ? const LaneStyle(
-            strokeColor: Color(0x73ECEFF1), // #ECEFF1 alpha 0.45
-            fillColor: Color(0x0AECEFF1), // #ECEFF1 alpha 0.04
-            strokeWidth: 2,
-          )
-        : const LaneStyle(
-            strokeColor: Color(0x7378909C), // #78909C alpha 0.45
-            fillColor: Color(0x0A78909C), // #78909C alpha 0.04
-            strokeWidth: 2,
-          );
-  }
-  // 通常地図は背景が明るいので、往路を暗いグレーにするとコントラストが立つ。
-  return isOutbound
-      ? const LaneStyle(
-          strokeColor: Color(0x6637474F), // #37474F alpha 0.40
-          fillColor: Color(0x0D607D8B), // #607D8B alpha 0.05
-          strokeWidth: 2,
-        )
-      : const LaneStyle(
-          strokeColor: Color(0x6690A4AE), // #90A4AE alpha 0.40
-          fillColor: Color(0x0DB0BEC5), // #B0BEC5 alpha 0.05
-          strokeWidth: 2,
-        );
+  return const ChannelDividerStyle(
+    coreColor: Color(0xF2FFFFFF), // 白 alpha 0.95
+    coreWidth: 3,
+    // 通常地図の水面(淡い水色)に対しては、黒より青みの暗色のほうが
+    // 汚れて見えない。岸の赤とも混ざらない。
+    casingColor: Color(0xA6263238), // #263238 alpha 0.65
+    casingWidth: 5,
+    dashLengthPixels: 18,
+    gapLengthPixels: 12,
+  );
 }

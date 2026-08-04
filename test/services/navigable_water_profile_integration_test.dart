@@ -59,18 +59,67 @@ void main() {
     );
   });
 
-  test('実データのレーンに配色を割り当てられる', () async {
-    final waters = await PresetObstacleService().loadNavigableWaters();
+  test('実データの中心線を地図の中央線として描ける', () async {
+    // 地図に描く中央線は、予測が使う中心線そのものである
+    // （別の線を「中央線」として見せると、地図と警告が食い違う）。
+    final centerlines = await PresetObstacleService().loadChannelCenterlines();
 
-    for (final water in waters.where((water) => water.kind == 'lane')) {
-      for (final isSatellite in [false, true]) {
-        final style = laneStyleFor(leg: water.leg, isSatellite: isSatellite);
-        // 描ける形になっていること（見えない = 描かないと同じ）。
-        expect(style.strokeWidth, greaterThan(0));
-        expect(style.strokeColor.a, greaterThan(0));
+    expect(centerlines, isNotEmpty, reason: '中心線が1本も読めていない');
+    for (final entry in centerlines.entries) {
+      // 地図に線として出すには2点以上必要。
+      expect(
+        entry.value.vertices.length,
+        greaterThanOrEqualTo(2),
+        reason: '${entry.key} を線として描けない',
+      );
+    }
+    for (final isSatellite in [false, true]) {
+      final style = channelDividerStyleFor(isSatellite: isSatellite);
+      expect(style.coreWidth, greaterThan(0));
+      expect(style.coreColor.a, greaterThan(0));
+    }
+  });
+
+  test('中心線は、往路レーンと復路レーンの境界になっている', () async {
+    // 地図には中央線を1本だけ描き、レーンの外側の辺は描かない。
+    // 「中心線 = 2つのレーンの境目」が崩れると、描いた白い破線が
+    // 「越えない線」を指さなくなる。
+    final service = PresetObstacleService();
+    final lanes = await service.loadChannelLanes();
+    final centerlines = await service.loadChannelCenterlines();
+    final laneCross = <String, List<double>>{};
+
+    for (final lane in lanes) {
+      final centerline = centerlines[lane.centerlineId];
+      expect(centerline, isNotNull, reason: '${lane.id} の中心線が引けていない');
+      laneCross[lane.id] = [
+        for (final point in lane.points) centerline!.project(point).crossMeters,
+      ];
+    }
+
+    // 中心線を共有する2枚は、互いに反対側にある（平均の符号が逆）。
+    final byCenterline = <String, List<String>>{};
+    for (final lane in lanes) {
+      byCenterline.putIfAbsent(lane.centerlineId ?? '', () => []).add(lane.id);
+    }
+    for (final entry in byCenterline.entries) {
+      expect(entry.value.length, 2, reason: '${entry.key} のレーンが2枚ではない');
+      final means = entry.value.map((id) {
+        final values = laneCross[id]!;
+        return values.reduce((a, b) => a + b) / values.length;
+      }).toList();
+      expect(
+        means.first * means.last,
+        lessThan(0),
+        reason: '${entry.key} の2枚が中心線の同じ側にある',
+      );
+      for (final mean in means) {
+        expect(
+          mean.abs(),
+          greaterThan(1.0),
+          reason: '${entry.key} のレーンが中心線と縮退していて左右を決められない',
+        );
       }
-      // 地図に出すには3点以上必要。
-      expect(water.points.length, greaterThanOrEqualTo(3));
     }
   });
 }
