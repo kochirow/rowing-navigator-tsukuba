@@ -142,20 +142,26 @@ BoatPredictionBeamStyle boatPredictionBeamStyleFor({
   Color? warningColor,
 }) {
   if (warningColor != null) {
+    final core = _readableBeamColor(warningColor);
     return BoatPredictionBeamStyle(
-      strokeColor: warningColor.withValues(alpha: 0.95),
+      strokeColor: core.withValues(alpha: 0.95),
       strokeWidth: 4,
-      fillColor: warningColor.withValues(alpha: 0.22),
+      fillColor: core.withValues(alpha: 0.28),
     );
   }
   if (isMyBoat) {
     return BoatPredictionBeamStyle(
       // 航空写真は下地が暗いので、白をわずかに強める。
-      strokeColor: isSatellite ? const Color(0xF2FFFFFF) : const Color(0xE6FFFFFF),
+      strokeColor:
+          isSatellite ? const Color(0xF2FFFFFF) : const Color(0xE6FFFFFF),
       strokeWidth: 3,
+      // **通常地図では面を暗くする。** 下地が白い建物・砂地なので、
+      // 白い半透明を敷いても何も起きない(実機で面が見えなかった)。
+      // 暗い薄膜にすると「帯の内側が翳っている」ように見え、帯が面として
+      // 立つ。航空写真は下地が暗いので逆に白を敷く。
       fillColor: isSatellite
-          ? const Color(0x40FFFFFF) // 白 alpha 0.25
-          : const Color(0x33FFFFFF), // 白 alpha 0.20
+          ? const Color(0x3DFFFFFF) // 白 alpha 0.24
+          : const Color(0x2E263238), // #263238 alpha 0.18
     );
   }
   // 他艇は輪郭だけ。存在と向きが読めれば足りる。12艇ぶん塗ると地図が消える。
@@ -166,6 +172,20 @@ BoatPredictionBeamStyle boatPredictionBeamStyleFor({
   );
 }
 
+/// 暗すぎる警告色を、地図の上で読める明るさへ持ち上げる。
+///
+/// [HazardPalette] の色は**塗りつぶした区域**用に選ばれている。面なら
+/// 暗い色でも下地との差で見えるが、ビームは細い輪郭が主なので、暗い色は
+/// そのすぐ外側にある暗い縁取り([beamCasingColorFor])に溶けて消える。
+/// 実機では `generic`(#455A64)がまさにそうなり、警告色に染まっている
+/// はずの帯が縁取りと同じ灰色に見えていた。
+///
+/// **色相は変えない。** バナーのチップと同じ色として認識できることが
+/// この仕組みの目的なので、明度だけを上げる。
+Color _readableBeamColor(Color color) => color.computeLuminance() < 0.12
+    ? Color.lerp(color, const Color(0xFFFFFFFF), 0.35)!
+    : color;
+
 /// ビームの縁取り(casing)。中央線と同じく、芯の下へ一回り太く敷く。
 ///
 /// 白い帯だけだと、地図の白い建物・砂地の上で輪郭が消える。
@@ -175,6 +195,12 @@ Color beamCasingColorFor({required bool isSatellite}) => isSatellite
 
 /// 縁取りの太さは芯より一回り太い。
 const int beamCasingExtraWidth = 3;
+
+/// 芯は縁取りより必ず上に描く。
+///
+/// 同じ zIndex の Polygon どうしは描画順が決まらない。縁取りが芯を覆うと
+/// 帯が縁取りの色(暗い灰)一色に見えるので、芯だけ1段上げる。
+const int beamCoreZIndexOffset = 1;
 
 /// 開発者が判定形状を確認するための一時レイヤー。通常は非表示。
 const int developerOverlayZIndex = 30;

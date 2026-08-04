@@ -37,6 +37,21 @@ const double _beamTipWidthFraction = 0.3;
 /// 出さないほうが読みやすい。
 const double _beamMinimumLengthMeters = 3.0;
 
+/// 帯が「帯」に見える最小の縦横比(長さ ÷ 根元の幅)。
+///
+/// **根元の幅を排他領域の幅で固定してはいけない。** 長さは停止距離
+/// (速度に比例)なのに幅が固定だと、遅いときに幅が長さを追い越し、
+/// 先細りの帯ではなく**すぼまった器**に見える。実機では
+/// 0.9m/s(9:28/500m)で長さ6.1mに対して幅9mとなり、方向が読めなかった。
+///
+/// 根元の幅を `長さ ÷ この値` で頭打ちにすると、遅くなるほど帯が細く
+/// なるだけで、形の意味は変わらない。**閾値で消えたり現れたりしない**
+/// のも大事で、境目で図形が明滅すると、そのこと自体が読み取りを乱す。
+///
+/// 通常の漕行速度(4m/s、停止距離27.8m)では 27.8/2.5 = 11.1m > 9m なので
+/// 頭打ちに掛からず、根元は艇の幅のままになる。効くのは低速のときだけ。
+const double _beamMinimumAspectRatio = 2.5;
+
 /// 折れ線を作るときの最小分割数。カーブでもテーパーが滑らかに見える程度。
 const int _beamMinimumSamples = 6;
 
@@ -126,12 +141,19 @@ BoatPredictionBeam? buildBoatPredictionBeam({
   // 方位は辺ごとに1つなので、先頭の点には最初の辺の方位を使う。
   headings.insert(0, headings.first);
 
+  // 根元の幅は「艇の幅」と「長さ ÷ 最小縦横比」の小さいほう。
+  // 遅いときに幅が長さを追い越して器のように見えるのを防ぐ。
+  final rootHalfWidth = math.min(
+    halfWidthMeters,
+    total / (2 * _beamMinimumAspectRatio),
+  );
+
   final left = <LatLng>[];
   final right = <LatLng>[];
   for (var index = 0; index < centers.length; index++) {
     final progress = (cumulative[index] / total).clamp(0.0, 1.0);
     final halfWidth =
-        halfWidthMeters * (1 - progress * (1 - _beamTipWidthFraction));
+        rootHalfWidth * (1 - progress * (1 - _beamTipWidthFraction));
     final heading = headings[index];
     left.add(computeOffset(centers[index], halfWidth, heading - 90));
     right.add(computeOffset(centers[index], halfWidth, heading + 90));

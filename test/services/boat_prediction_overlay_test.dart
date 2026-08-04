@@ -87,6 +87,36 @@ void main() {
       expect(tipWidth, greaterThan(1.0));
     });
 
+    test('低速でも幅が長さを追い越さない(器に見えない)', () {
+      // 実機の 9:28/500m ≒ 0.88m/s。停止距離は約6mしかないのに、根元を
+      // 排他領域の幅(9m)で固定すると幅>長さになり、先細りの帯ではなく
+      // すぼまった器に見えて方向が読めない。
+      final beam = buildBoatPredictionBeam(
+        boat: _boat(heading: 0, speed: 0.88),
+        stoppingDistanceMeters: 6.1,
+        halfWidthMeters: 4.5,
+      )!;
+
+      final rootWidth = _widthAt(beam.outline, 0);
+      expect(
+        beam.lengthMeters / rootWidth,
+        greaterThanOrEqualTo(2.4),
+        reason: '低速で帯が器に見える縦横比になっている',
+      );
+    });
+
+    test('通常の漕行速度では根元が艇の幅のまま', () {
+      // 4m/s の 1x は停止距離27.8m。27.8/2.5 = 11.1m > 9m なので、
+      // 縦横比の頭打ちには掛からない。**効くのは低速のときだけ。**
+      final beam = buildBoatPredictionBeam(
+        boat: _boat(heading: 0, speed: 4),
+        stoppingDistanceMeters: 27.8,
+        halfWidthMeters: 4.5,
+      )!;
+
+      expect(_widthAt(beam.outline, 0), closeTo(9, 0.2));
+    });
+
     test('幅は根元から先端へ単調に細くなる', () {
       final beam = buildBoatPredictionBeam(
         boat: _boat(heading: 0, speed: 4),

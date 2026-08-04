@@ -1138,7 +1138,7 @@ class HomeMapScreen extends HookConsumerWidget {
           strokeWidth: style.strokeWidth,
           strokeColor: style.strokeColor,
           fillColor: style.fillColor,
-          zIndex: predictionShapeZIndex,
+          zIndex: predictionShapeZIndex + beamCoreZIndexOffset,
         ));
       }
       predictionBeams.value = newBeams;
