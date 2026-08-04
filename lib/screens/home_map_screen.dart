@@ -1978,6 +1978,23 @@ class HomeMapScreen extends HookConsumerWidget {
                                             );
                                           },
                                         ),
+                                      // 2つのスタートボタンを、色と重みと
+                                      // 間隔の3つで分ける。以前は同じ面色で
+                                      // 隙間なく積んでいたため、1つの帯に
+                                      // 見えて押し分けられなかった。
+                                      //
+                                      // 航行＝主操作なので濃いプライマリで
+                                      // 塗り、監視＝陸上の別役割なので、
+                                      // 地図の操作ボタンと同じ淡い面色に
+                                      // プライマリの文字を載せる。安全用の
+                                      // 色(danger/warning/caution/ok)は
+                                      // 状態を表すために取ってあるので、
+                                      // ここでは使わない。
+                                      if (!navigator.isTransitioning.value &&
+                                          navigator.mode.value ==
+                                              NavMode.observer &&
+                                          !navigator.isWatching.value)
+                                        SizedBox(height: context.dimens.space3),
                                       if (!navigator.isTransitioning.value &&
                                           navigator.mode.value ==
                                               NavMode.observer &&
@@ -1986,6 +2003,12 @@ class HomeMapScreen extends HookConsumerWidget {
                                           label: '監視スタート',
                                           icon: Icons.visibility,
                                           compact: true,
+                                          color: context
+                                              .colors.mapControlSurface,
+                                          foregroundColor:
+                                              context.colors.primary,
+                                          borderColor: context.colors.primary
+                                              .withValues(alpha: 0.45),
                                           onPressed: () async {
                                             try {
                                               if (auth.currentUser == null) {

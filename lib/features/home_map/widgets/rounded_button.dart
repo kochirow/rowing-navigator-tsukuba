@@ -12,6 +12,16 @@ class RoundedButton extends StatelessWidget {
   final String label;
   final IconData? icon;
   final Color? color;
+
+  /// 文字とアイコンの色。既定は白(濃い面色の上に置く前提)。
+  ///
+  /// 淡い面色を [color] に渡すときは必ず一緒に指定する。地図の上に置く
+  /// ボタンなので、面と文字のどちらかが背景と同化すると読めなくなる。
+  final Color? foregroundColor;
+
+  /// 面色が淡いときの輪郭。地図の明るい部分の上で面の境界を保つ。
+  final Color? borderColor;
+
   final bool compact;
   final VoidCallback onPressed;
 
@@ -20,6 +30,8 @@ class RoundedButton extends StatelessWidget {
     required this.label,
     this.icon,
     this.color,
+    this.foregroundColor,
+    this.borderColor,
     this.compact = false,
     required this.onPressed,
   });
@@ -32,17 +44,22 @@ class RoundedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final foreground = foregroundColor ?? Colors.white;
+    final border = borderColor;
+    final shape = border == null
+        ? const StadiumBorder()
+        : StadiumBorder(side: BorderSide(color: border, width: 1.5));
     return Material(
         color: color ?? Theme.of(context).primaryColor,
         elevation: 6.0,
-        shape: const StadiumBorder(),
+        shape: shape,
         child: InkWell(
           onTap: () {
             TactileFeedback.selection();
             onPressed();
           },
-          customBorder: const StadiumBorder(),
-          splashColor: Colors.white.withValues(alpha: 0.3),
+          customBorder: shape,
+          splashColor: foreground.withValues(alpha: 0.2),
           child: Padding(
             padding: EdgeInsets.symmetric(
               vertical: compact ? 12 : 20,
@@ -54,9 +71,9 @@ class RoundedButton extends StatelessWidget {
                 if (icon != null) ...[
                   Icon(
                     icon,
-                    color: Colors.white,
+                    color: foreground,
                     size: compact ? 22 : 26,
-                    shadows: _labelHalo,
+                    shadows: border == null ? _labelHalo : null,
                   ),
                   SizedBox(width: compact ? 8 : 10),
                 ],
@@ -65,8 +82,9 @@ class RoundedButton extends StatelessWidget {
                   style: TextStyle(
                     fontSize: compact ? 16 : 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    shadows: _labelHalo,
+                    color: foreground,
+                    // 淡い面のときに白いハローを敷くと文字が滲む。
+                    shadows: border == null ? _labelHalo : null,
                   ),
                 ),
               ],
