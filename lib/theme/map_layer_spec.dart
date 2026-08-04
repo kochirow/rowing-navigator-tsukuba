@@ -153,15 +153,22 @@ const int sweptOutlineStrokeWidth = 3;
 ///
 /// 掃引外形は「自艇の排他領域がこの先どこまで届くか」の面なので、
 /// **その面と相手が重なることが警告の理由になっている場合にだけ**意味を
-/// 持つ。以下は面を出しても理由を説明しないので出さない。
+/// 持つ。出さないのは次の2つ。
 ///
 ///   - `curve` / `reverse` … 区域へ入ったこと自体が理由(区域進入イベント)。
 ///     掃引の届く先とは無関係
-///   - system fault や `generic` … そもそも場所を持たない
+///   - system fault(`gps_unavailable` など) … 能力の欠如であって場所ではない
+///
+/// `generic` は**出す**。危険区域の種類が未設定の臨時区域(現地で登録した
+/// 流木など)と、相手を特定できなかった衝突評価の両方がこの分類に入るが、
+/// どちらも「掃引がどこまで届いているか」は理由の説明になる。とくに後者は
+/// 「後方を振り向いて目視確認」としか言えないので、面が届く先を出す価値が
+/// いちばん高い。
 ///
 /// 引数は [NavigationWarning.category](`StaticObstacleKind.name` と同じ
 /// 文字列、他艇は `other_boat`)。
 bool sweptOutlineExplainsWarning(String category) => switch (category) {
+      'generic' ||
       'shore' ||
       'bridge' ||
       'bridgePier' ||
