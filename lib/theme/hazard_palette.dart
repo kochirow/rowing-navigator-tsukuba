@@ -60,39 +60,6 @@ class HazardPalette {
         _ => 3,
       };
 
-  /// 停止距離ビームを染める色。染めないなら null。
-  ///
-  /// 警告が出ているあいだ、自艇のビームをその警告と同じ色にする。
-  /// **バナーが「橋に注意」と言っているとき、地図で光っている帯も
-  /// 同じ色になる**ので、図と言葉が結びつく。図形が何を指しているのかを
-  /// 記号の暗記ではなく、同時に出ている言葉で説明できる。
-  ///
-  /// null を返す(=白のまま)のは次の2つ。
-  ///
-  ///   - `curve` / `reverse` … 区域へ入ったこと自体が理由(区域進入イベント)。
-  ///     ビームの届く先とは無関係なので、染めると嘘になる
-  ///   - system fault(`gps_unavailable` など) … 能力の欠如であって場所ではない
-  ///
-  /// `generic` は染める。種類が未設定の臨時区域と、相手を特定できなかった
-  /// 衝突評価の両方がこの分類に入るが、どちらも場所を持つ判定である。
-  ///
-  /// 引数は [NavigationWarning.category](`StaticObstacleKind.name` と同じ
-  /// 文字列、他艇は `other_boat`)。
-  static Color? beamWarningColorFor(BuildContext context, String category) =>
-      switch (category) {
-        'generic' ||
-        'shore' ||
-        'bridge' ||
-        'bridgePier' ||
-        'island' ||
-        'driftwood' ||
-        'pile' ||
-        'testZone' ||
-        'other_boat' =>
-          colorOf(context, category),
-        _ => null,
-      };
-
   /// 地図ポリゴンの塗り色。
   static Color fillColorOf(
     BuildContext context,

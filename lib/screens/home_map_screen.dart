@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -34,13 +35,13 @@ import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
 import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
-import '../services/boat_prediction_overlay_service.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
 import '../services/rowing_motion_fusion.dart';
+import '../services/swept_outline_service.dart';
 import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
@@ -207,12 +208,10 @@ class HomeMapScreen extends HookConsumerWidget {
     final locationPermissionGranted = useState(false);
     final showInfo = useState(false);
     final showBoatList = useState(false);
-    // 停止距離ビーム(艇1隻につき1つ)。`map_layer_spec.dart` の記録を参照。
-    final predictionBeams = useState<Set<Polygon>>({});
-    // ビームを染めている警告色。**間引きを飛び越える判断にだけ使う。**
-    // 警告は出た瞬間に色を変える意味があるので、位置の間引き(2〜4秒)に
-    // 引きずられて遅れてはいけない。
-    final beamWarningColor = useRef<Color?>(null);
+    final shipDomains = useState<Set<Polygon>>({});
+    // 停止距離の輪。ポリラインなので、監視モードの航跡と1つの集合へまとめて
+    // 地図へ渡す(片方を設定するともう片方が消える事故を防ぐ)。
+    final stoppingDistanceLines = useState<Set<Polyline>>({});
     final shipDomainRenderSnapshot = useRef<ShipDomainRenderSnapshot?>(null);
     final obstacles = useState<Set<Polygon>>({});
     // 開発者が明示的に有効化したときだけ判定形状を加える別レイヤー。
@@ -1062,11 +1061,10 @@ class HomeMapScreen extends HookConsumerWidget {
       });
 
       // ###########################
-      // 停止距離ビームを可視化
+      // 船舶領域を可視化
       // ###########################
-      // 艇1隻につき**先細りの帯を1つ**だけ描く。長さは停止距離で、図が
-      // 伝えるのは1文だけ:「いま止まろうとしても、ここまでは行く」。
-      // 線+横棒・入れ子の六角形をやめた経緯は `map_layer_spec.dart` に記録がある。
+      final shipDomainService = ShipDomainService();
+      // 全艇の船舶領域を取得
       final myBoat = navigator.myBoat.value;
       final allBoats = [
         if (myBoat != null) myBoat,
@@ -1077,71 +1075,84 @@ class HomeMapScreen extends HookConsumerWidget {
         warningTimeSeconds: navigator.warningTimeSeconds.value,
         boats: allBoats.map(BoatRenderSnapshot.fromBoat),
       );
-      final isSatellite = navMap.mapType.value == MapType.hybrid;
-      // 警告が出ているあいだは自艇のビームをその色へ染める。バナーの言葉と
-      // 地図の図形を同じ色で結ぶ。`beamWarningColorFor` が対象外の分類
-      // (区域進入・system fault)を null で返すので、そこは白のまま。
-      final warning = navigator.currentWarning.value;
-      final warningColor = warning == null
-          ? null
-          : HazardPalette.beamWarningColorFor(context, warning.category);
-      // **色が変わるときは位置の間引きを飛び越える。** 間引きは電池のための
-      // もので、警告の見え方を遅らせる根拠にはならない。
-      if (warningColor == beamWarningColor.value &&
-          !shouldRefreshShipDomains(
-            previous: shipDomainRenderSnapshot.value,
-            next: nextRenderSnapshot,
-          )) {
+      if (!shouldRefreshShipDomains(
+        previous: shipDomainRenderSnapshot.value,
+        next: nextRenderSnapshot,
+      )) {
         return null;
       }
-      beamWarningColor.value = warningColor;
-      final newBeams = <Polygon>{};
+      // 1艇につき3つの図形だけを描く。
+      //   ① 船体領域(t=0)     … いま艇がある場所
+      //   ② 掃引外形(凸包)     … どこまで届くか
+      //   ③ 停止距離ライン     … どこまでなら止まれるか
+      // 以前はサンプルごとに2枚(最大48枚)を重ねていたが、中身は同じ
+      // 六角形の平行移動の繰り返しで、情報は増えないまま画面が埋まる。
+      final newShipDomains = <Polygon>{};
+      final newStoppingDistanceLines = <Polyline>{};
       for (final boat in allBoats) {
-        final isMine = myBoat != null && boat.boatId == myBoat.boatId;
-        // 根元の幅は排他領域の幅。艇種で帯の太さが変わるのは正しい。
-        // 低速時の横拡張は判定専用なので `headingReliable: true`(不変条件6)。
-        final halfWidth = ShipDomainService.effectiveParamsFor(
-              boat,
-              headingReliable: true,
-            ).exclusiveParam.w /
-            2;
-        final beam = buildBoatPredictionBeam(
-          boat: boat,
-          stoppingDistanceMeters: evalService.getStoppingDistance(boat),
-          halfWidthMeters: halfWidth,
-          // 判定器と同じ中心線を使う。中心線が無ければサービス側が直線1区間へ
-          // 縮退するので、表示だけ別の予測をすることはない。
-          centerline: navigator.channelCenterline.value,
+        final speed = boat.speed;
+        final stoppingDistance = evalService.getStoppingDistance(boat);
+        final warningDistance = max(
+          stoppingDistance,
+          navigator.warningTimeSeconds.value * speed,
         );
-        if (beam == null) continue;
+        final sampleDistances =
+            shipDomainDisplaySampleDistances(warningDistance);
 
-        final style = boatPredictionBeamStyleFor(
-          isSatellite: isSatellite,
-          isMyBoat: isMine,
-          // 警告色を使うのは自艇だけ。他艇のビームまで染めると、どの艇が
-          // 警告の対象なのか分からなくなる。
-          warningColor: isMine ? warningColor : null,
-        );
-        // 中央線と同じ「縁取りを先、芯を後」の2枚立て。白い帯が地図の
-        // 白い建物・砂地の上で消えないようにする。
-        newBeams.add(Polygon(
-          polygonId: PolygonId('beam_casing_${boat.boatId}'),
-          points: beam.outline,
-          strokeWidth: style.strokeWidth + beamCasingExtraWidth,
-          strokeColor: beamCasingColorFor(isSatellite: isSatellite),
-          fillColor: Colors.transparent,
+        // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
+        // 描画すると停止のたびに領域が太って見え、意味を誤解させる(不変条件6)。
+        ShipDomains domainsAt(double distance) {
+          final t = speed > 0 ? distance / speed : 0.0;
+          return shipDomainService.getShipDomains(
+            evalService.predictPosition(boat, t),
+            headingReliable: true,
+          );
+        }
+
+        // ① 船体領域。塗るのはここだけで、いま艇が在る場所を示す。
+        newShipDomains.add(Polygon(
+          polygonId: PolygonId('ship_body_${boat.boatId}'),
+          points: domainsAt(0).shipBodyDomain.points,
+          strokeWidth: 2,
+          strokeColor: Colors.black.withValues(alpha: 0.45),
+          fillColor: Colors.black.withValues(alpha: 0.08),
           zIndex: predictionShapeZIndex,
         ));
-        newBeams.add(Polygon(
-          polygonId: PolygonId('beam_${boat.boatId}'),
-          points: beam.outline,
-          strokeWidth: style.strokeWidth,
-          strokeColor: style.strokeColor,
-          fillColor: style.fillColor,
-          zIndex: predictionShapeZIndex + beamCoreZIndexOffset,
-        ));
+
+        // ② 掃引外形。「塗り = 実在する危険」「線 = 予測」の規則を守り、
+        // 塗りはほぼ透明にして輪郭で伝える。
+        final sweptPoints = sweptOutline([
+          for (final distance in sampleDistances)
+            domainsAt(distance).exclusiveDomain.points,
+        ]);
+        if (sweptPoints.length >= 3) {
+          newShipDomains.add(Polygon(
+            polygonId: PolygonId('sweep_outline_${boat.boatId}'),
+            points: sweptPoints,
+            strokeWidth: 3,
+            strokeColor: const Color(0xFFF9A825).withValues(alpha: 0.9),
+            fillColor: const Color(0xFFF9A825).withValues(alpha: 0.06),
+            zIndex: predictionShapeZIndex,
+          ));
+        }
+
+        // ③ 停止距離の位置での排他領域を、閉じた輪のポリラインで描く。
+        // 速度0のときは掃引そのものが無いので出さない。
+        if (speed > 0) {
+          final stopPoints = domainsAt(stoppingDistance).exclusiveDomain.points;
+          if (stopPoints.length >= 3) {
+            newStoppingDistanceLines.add(Polyline(
+              polylineId: PolylineId('stop_line_${boat.boatId}'),
+              points: [...stopPoints, stopPoints.first],
+              width: 2,
+              color: const Color(0xFFD32F2F),
+              zIndex: predictionShapeZIndex,
+            ));
+          }
+        }
       }
-      predictionBeams.value = newBeams;
+      shipDomains.value = newShipDomains;
+      stoppingDistanceLines.value = newStoppingDistanceLines;
       shipDomainRenderSnapshot.value = nextRenderSnapshot;
       return null;
     }, [
@@ -1151,8 +1162,6 @@ class HomeMapScreen extends HookConsumerWidget {
       coachWatch.boatColors.value, // 識別色が決まったら艇印を描き直す
       tracking.mode.value,
       navMap.isReady.value,
-      navMap.mapType.value,
-      navigator.currentWarning.value, // 警告が出た瞬間にビームの色を変える
       navigator.warningTimeSeconds.value,
     ]);
 
@@ -1228,9 +1237,8 @@ class HomeMapScreen extends HookConsumerWidget {
       // 重なり順は zIndex が決めるが、集合へ入れる順序も意味の順に揃えて
       // おく(実在する危険 → 予測 → 開発用)。
       final newPolygons = {
+        ...shipDomains.value,
         ...obstacles.value,
-        // 艇1隻につき1つの先細りの帯。
-        ...predictionBeams.value,
         // この集合は開発者トグルがONのときだけ非空。通常地図の描画形状を
         // 安全判定用のGPS帯・低速時拡張へ置き換えない。
         ...developerSafetyShapeOverlay.value,
@@ -1238,16 +1246,16 @@ class HomeMapScreen extends HookConsumerWidget {
       navMap.setPolygons(newPolygons);
       return null;
     }, [
-      predictionBeams.value,
+      shipDomains.value,
       obstacles.value,
       developerSafetyShapeOverlay.value,
     ]);
 
     // ##########################
-    // ポリラインの統合(中央線 + 航跡)
+    // ポリラインの統合(中央線 + 航跡 + 停止距離ライン)
     // ##########################
-    // 地図のポリラインは1つの集合しか持てない。中央線と航跡を別々に
-    // setPolylines すると、片方を設定した瞬間にもう片方が消える。
+    // 地図のポリラインは1つの集合しか持てない。中央線・航跡・停止距離ラインを
+    // 別々に setPolylines すると、片方を設定した瞬間にもう片方が消える。
     useEffect(() {
       navMap.setPolylines({
         // 越えない取り決めの線。実在する危険と航跡より下に敷く。
@@ -1256,11 +1264,14 @@ class HomeMapScreen extends HookConsumerWidget {
         if (navigator.mode.value == NavMode.observer)
           for (final trail in coachWatch.trailPolylines.value)
             trail.copyWith(zIndexParam: coachTrailZIndex),
+        // これから通る予測。危険区域の上に線だけ乗せる。
+        ...stoppingDistanceLines.value,
       });
       return null;
     }, [
       channelDividerLines.value,
       coachWatch.trailPolylines.value,
+      stoppingDistanceLines.value,
       navigator.mode.value,
     ]);
 
