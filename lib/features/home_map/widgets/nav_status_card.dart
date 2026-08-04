@@ -105,7 +105,6 @@ class NavStatusCard extends StatelessWidget {
       return _buildCompact(
         colors: colors,
         onDark: onDark,
-        onDarkSub: onDarkSub,
         spmValueText: spmValueText,
         portrait: portraitCompact,
       );
@@ -246,9 +245,32 @@ class NavStatusCard extends StatelessWidget {
   /// 幅が出ないため、同じ比でも小さく見える。かといって近づけすぎると
   /// 「主計器が2つある」ように見えて、視線がどちらへ行くか決まらない。
   static const double _paceBaseFontSize = 92;
-  static const double _paceUnitBaseFontSize = 18;
+  static const double _paceUnitBaseFontSize = 16;
   static const double _spmBaseFontSize = 71;
-  static const double _spmUnitBaseFontSize = 16;
+  static const double _spmUnitBaseFontSize = 14;
+
+  /// 計器の面どうしの間隔(基準寸法。[FittedBox] が一緒に縮小する)。
+  static const double _plateGap = 10;
+
+  /// 面の左右の余白(基準寸法)。
+  static const double _platePaddingHorizontal = 12;
+
+  /// 面の高さ(基準寸法)。
+  ///
+  /// **2枚を同じ高さにする。** ペースとレートは字の大きさが違うので、
+  /// 面を字なりに作ると高さの違う箱が2つ並び、「格の違う2つ」に見える。
+  /// 大きいほうの字([_paceBaseFontSize])に上下の余白を足した値で固定する。
+  ///
+  /// [FittedBox] の中は縦が無制限なので、`CrossAxisAlignment.stretch` では
+  /// 高さを揃えられない(レイアウトが解けない)。実寸で決め打つ。
+  static const double _plateHeight = _paceBaseFontSize + 12;
+
+  /// 面の角丸。
+  static const double _plateRadius = 14;
+
+  /// レート側の面の縁の太さ。[FittedBox] の縮小(実測で約0.75倍)を見込んで、
+  /// 実寸で1.5px程度になる値を置く。
+  static const double _plateBorderWidth = 2;
 
   /// 縮小カードで艇速グラフに与える高さ。
   ///
@@ -274,6 +296,16 @@ class NavStatusCard extends StatelessWidget {
   /// 計器には使わない(赤い数字は「異常」に見える)。
   static const Color _rateAccent = Color(0xFF8FD0EA);
 
+  /// レートの字面。面が水色に染まったぶん、字は一段明るくして面から離す。
+  static const Color _rateValueColor = Color(0xFFB8E4F5);
+
+  /// ペース側の面。カードの面(濃紺)より一段沈める。
+  ///
+  /// **暗くするのは、白い数字との明度差を稼ぐため。** 面の色そのものを
+  /// 読ませたいわけではない。レート側は水色に染めてあるので、この2枚は
+  /// 明度でも色相でも分かれる。
+  static const Color _pacePlateColor = Color(0x8C001E33);
+
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
 
@@ -295,6 +327,25 @@ class NavStatusCard extends StatelessWidget {
   static const double _outlineWidthRatio = 0.08;
 
   /// 白文字を「明るいにじみ + 黒のキーライン」の二重で縁取る影。
+  ///
+  /// **主計器(ペース・レート)はもうこれを使わない(2026-08-05)。**
+  /// 以下の設計は「文字の背後に濃色の面と透けた地図が混在する」ことが
+  /// 前提だった。その後カードの面を alpha 0.86 まで濃くしたので、
+  /// **下地は常に濃紺1種類に確定した**。すると、
+  ///   - 黒のキーライン(`_outlineColor`)は濃紺の上でほぼ不可視になり、
+  ///     字画の内側を `fontSize × 0.08`(ペース92pxなら7.4px)食うだけになる
+  ///   - 明るいにじみは、白い字のまわりに薄靄を作って輪郭を甘くする
+  /// という、コストだけが残る状態になっていた。実機でレートの数字が
+  /// ペースより鈍く見えたのはこれが理由(水色のほうが黒に食われる差が出る)。
+  ///
+  /// いまは主計器を **フィールドごとの面([_MetricPlate])** で分け、
+  /// 対比は面の明度差で作る。字には縁取りを掛けない。屋外ディスプレイの
+  /// 定石(明るい対象を暗い下地へ置く・要素を絞る)にも合う。
+  ///
+  /// **この関数はまだ補助情報(14px)が使っている。** 距離・経過時間・
+  /// 「分析」ラベルは、艇速グラフの上や地図が透ける端に掛かるため、
+  /// 下地が確定していない。戻すときは「下地が本当に混在するのか」を
+  /// 先に確かめること。
   ///
   /// **黒一色の縁取りだけでは足りない。** このカードは半透明なので、
   /// 文字の背後には「濃色の面」と「透けた地図」が混在する。
@@ -353,7 +404,6 @@ class NavStatusCard extends StatelessWidget {
   Widget _buildCompact({
     required AppColors colors,
     required Color onDark,
-    required Color onDarkSub,
     required String spmValueText,
     required bool portrait,
   }) {
@@ -370,7 +420,6 @@ class NavStatusCard extends StatelessWidget {
           return _compactCard(
             colors: colors,
             onDark: onDark,
-            onDarkSub: onDarkSub,
             spmValueText: spmValueText,
             portrait: true,
             width: cardWidth,
@@ -382,7 +431,6 @@ class NavStatusCard extends StatelessWidget {
     return _compactCard(
       colors: colors,
       onDark: onDark,
-      onDarkSub: onDarkSub,
       spmValueText: spmValueText,
       portrait: false,
       margin: const EdgeInsets.all(8),
@@ -392,7 +440,6 @@ class NavStatusCard extends StatelessWidget {
   Widget _compactCard({
     required AppColors colors,
     required Color onDark,
-    required Color onDarkSub,
     required String spmValueText,
     required bool portrait,
     required EdgeInsets margin,
@@ -448,51 +495,30 @@ class NavStatusCard extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      _formatPace(paceSeconds),
-                      style: TextStyle(
-                        color: onDark,
-                        fontSize: _paceBaseFontSize,
-                        height: 1,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: _tabularFigures,
-                        shadows: _outlineShadows(_paceBaseFontSize),
-                      ),
-                    ),
-                    Text(
-                      ' /500m',
-                      style: TextStyle(
-                        color: onDarkSub,
-                        fontSize: _paceUnitBaseFontSize,
-                        fontWeight: FontWeight.w600,
-                        shadows: _outlineShadows(_paceUnitBaseFontSize),
-                      ),
+                    _MetricPlate(
+                      plateColor: _pacePlateColor,
+                      borderColor: null,
+                      value: _formatPace(paceSeconds),
+                      valueColor: onDark,
+                      valueFontSize: _paceBaseFontSize,
+                      unit: '/500m',
+                      unitColor: onDark.withValues(alpha: 0.82),
+                      unitFontSize: _paceUnitBaseFontSize,
                     ),
                     if (spmMeasurementEnabled) ...[
-                      const SizedBox(width: 14),
-                      Text(
-                        spmValueText,
-                        key: const ValueKey('compact-spm'),
-                        style: TextStyle(
-                          color: _rateAccent,
-                          fontSize: _spmBaseFontSize,
-                          height: 1,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: _tabularFigures,
-                          shadows: _outlineShadows(_spmBaseFontSize),
-                        ),
-                      ),
-                      Text(
-                        ' spm',
-                        style: TextStyle(
-                          color: _rateAccent.withValues(alpha: 0.85),
-                          fontSize: _spmUnitBaseFontSize,
-                          fontWeight: FontWeight.w600,
-                          shadows: _outlineShadows(_spmUnitBaseFontSize),
-                        ),
+                      const SizedBox(width: _plateGap),
+                      _MetricPlate(
+                        plateColor: _rateAccent.withValues(alpha: 0.14),
+                        borderColor: _rateAccent.withValues(alpha: 0.75),
+                        value: spmValueText,
+                        valueKey: const ValueKey('compact-spm'),
+                        valueColor: _rateValueColor,
+                        valueFontSize: _spmBaseFontSize,
+                        unit: 'spm',
+                        unitColor: _rateValueColor.withValues(alpha: 0.85),
+                        unitFontSize: _spmUnitBaseFontSize,
                       ),
                     ],
                   ],
@@ -657,6 +683,92 @@ class _StrokeMotionSectionState extends State<_StrokeMotionSection> {
           StrokeMetricsChips.fromMetrics(metrics, compact: widget.compact),
         ],
       ],
+    );
+  }
+}
+
+/// 主計器1つぶんの「面」。数字と単位を1枚の面へ載せる。
+///
+/// **枠は文字の輪郭ではなく、計器の境界である。** 舶用計器や自転車用
+/// サイクルコンピュータがデータフィールドを箱で区切るのと同じで、
+/// 面が分かれていれば「計器が2つある」ことが色を読まなくても分かる。
+/// 面の色はそのうえで**どちらの計器か**を補助的に伝える。
+///
+/// 単位は数字の右下へベースライン揃えで置く。位置と単位が主で色は従、
+/// という [NavStatusCard._rateAccent] の方針をそのまま引き継ぐ。
+class _MetricPlate extends StatelessWidget {
+  final Color plateColor;
+  final Color? borderColor;
+  final String value;
+  final Key? valueKey;
+  final Color valueColor;
+  final double valueFontSize;
+  final String unit;
+  final Color unitColor;
+  final double unitFontSize;
+
+  const _MetricPlate({
+    required this.plateColor,
+    required this.borderColor,
+    required this.value,
+    required this.valueColor,
+    required this.valueFontSize,
+    required this.unit,
+    required this.unitColor,
+    required this.unitFontSize,
+    this.valueKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = borderColor;
+    return Container(
+      height: NavStatusCard._plateHeight,
+      padding: const EdgeInsets.symmetric(
+        horizontal: NavStatusCard._platePaddingHorizontal,
+      ),
+      decoration: BoxDecoration(
+        color: plateColor,
+        borderRadius: BorderRadius.circular(NavStatusCard._plateRadius),
+        border: border == null
+            ? null
+            : Border.all(
+                color: border,
+                width: NavStatusCard._plateBorderWidth,
+              ),
+      ),
+      // 高さを決め打つので、中身は面の中央へ置く。`widthFactor: 1` で
+      // 横幅だけは字なりに縮める(面の幅が字で決まる)。
+      child: Center(
+        widthFactor: 1,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              key: valueKey,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: valueFontSize,
+                height: 1,
+                fontWeight: FontWeight.bold,
+                fontFeatures: NavStatusCard._tabularFigures,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              unit,
+              style: TextStyle(
+                color: unitColor,
+                fontSize: unitFontSize,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

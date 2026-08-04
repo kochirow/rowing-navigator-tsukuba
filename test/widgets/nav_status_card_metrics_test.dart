@@ -96,26 +96,47 @@ void main() {
     expect(spm.right - pace.left, greaterThan(card.width * 0.8));
   });
 
-  testWidgets('主計器は黒で縁取る(半透明カードの上で白文字が溶けない)', (tester) async {
+  testWidgets('主計器はフィールドごとの面で分け、字には縁取りを掛けない', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
+    // 面はペースとレートで2枚。色が読めなくても「計器が2つある」ことが
+    // 形で分かる。カード自身の面は descendant に含まれない。
+    final plates = tester
+        .widgetList<Container>(find.descendant(
+          of: find.byKey(const ValueKey('nav-status-card-portrait-compact')),
+          matching: find.byType(Container),
+        ))
+        .where((container) {
+      final decoration = container.decoration;
+      return decoration is BoxDecoration && decoration.color != null;
+    }).toList();
+    expect(plates.length, 2, reason: '主計器の面が2枚でない');
+    // レート側だけが縁を持つ。**面の色と縁が背景と別の系統になる**ことが
+    // 「枠が効かない」への答えなので、縁を落とさないよう固定する。
+    expect(
+      plates
+          .where((p) => (p.decoration as BoxDecoration).border != null)
+          .length,
+      1,
+      reason: 'レートの面から縁が消えている',
+    );
+
+    // 下地が濃紺1種類に確定したので、字の縁取りはコストだけが残る。
+    // (字画の内側を食って数字を鈍らせる)。掛けないことを固定する。
     for (final text in ['2:00', '24']) {
-      final shadows = tester.widget<Text>(find.text(text)).style!.shadows!;
-      // ぼかさない黒を放射状に置いて輪郭を切る。方向数は縁の太さから
-      // 決まる(8方向のまま太くすると角が多角形に見える)ので、
-      // 大きな主計器では8より多くなければならない。
+      final style = tester.widget<Text>(find.text(text)).style!;
       expect(
-        shadows.where((s) => s.blurRadius == 0).length,
-        greaterThan(8),
-        reason: '$text の縁取りが粗い(角が多角形に見える)',
+        style.shadows ?? const [],
+        isEmpty,
+        reason: '$text に縁取りが戻っている(面で対比を作る設計に反する)',
       );
-      // その下に明るいにじみを1枚。暗い下地では黒の縁が沈むため、
-      // 明暗どちらの背景でもどこかの層が対比を作れるようにしている。
-      final glow = shadows.first;
-      expect(glow.blurRadius, greaterThan(0));
-      expect(glow.color.computeLuminance(), greaterThan(0.5),
-          reason: '明るいにじみが最下層に無い');
     }
+
+    // 2枚の面は同じ高さに揃える。字なりに作ると「格の違う2つ」に見える。
+    final paceHeight = tester.getRect(find.text('2:00')).height;
+    final spmHeight = tester.getRect(find.text('24')).height;
+    expect(paceHeight, greaterThan(spmHeight),
+        reason: '主計器はペースが主で、レートが従');
   });
 
   testWidgets('横向き小型でもSPMを消さない', (tester) async {

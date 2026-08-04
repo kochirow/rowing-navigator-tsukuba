@@ -393,7 +393,8 @@ void main() {
     // SPMの有無で幅は変えない(計器の位置が動くと読み取りが遅れる)。
     expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
     expect(find.text('18'), findsOneWidget);
-    expect(find.text(' spm'), findsOneWidget);
+    // 単位は面の中で数字の隣に置くので、前置きの空白を持たない。
+    expect(find.text('spm'), findsOneWidget);
   });
 
   testWidgets('SE相当・文字1.3倍でも計器が破綻しない', (tester) async {
