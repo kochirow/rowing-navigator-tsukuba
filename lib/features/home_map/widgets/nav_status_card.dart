@@ -296,15 +296,26 @@ class NavStatusCard extends StatelessWidget {
   /// 計器には使わない(赤い数字は「異常」に見える)。
   static const Color _rateAccent = Color(0xFF8FD0EA);
 
-  /// レートの字面。面が水色に染まったぶん、字は一段明るくして面から離す。
-  static const Color _rateValueColor = Color(0xFFB8E4F5);
+  /// レートの字面。ペースの白に対して、明度をできるだけ落とさずに色相で分ける。
+  static const Color _rateValueColor = Color(0xFFD6F2FF);
 
-  /// ペース側の面。カードの面(濃紺)より一段沈める。
+  /// 計器の面。**ペースもレートも同じ暗い面を使う。**
   ///
-  /// **暗くするのは、白い数字との明度差を稼ぐため。** 面の色そのものを
-  /// 読ませたいわけではない。レート側は水色に染めてあるので、この2枚は
-  /// 明度でも色相でも分かれる。
-  static const Color _pacePlateColor = Color(0x8C001E33);
+  /// 初版はレート側を水色 alpha 0.14 で染めていたが、**明るい文字の下に
+  /// 明るい面を敷いたことで対比を自分で削っていた**(実機で「レートが読み
+  /// にくい」)。カードの面の上に重ねた実効色で概算すると、
+  /// ペースの白が約15:1に対してレートは約7:1しかなかった。
+  ///
+  /// 面を暗いほうへ揃えると約12:1まで戻る。**色は面ではなく縁と字が持つ。**
+  /// 屋外の定石(明るい対象を暗い下地へ)にも、これが正しい向きである。
+  /// 面を染め直したくなったら、まず対比を計算すること。
+  static const Color _plateColor = Color(0x8C001E33);
+
+  /// レート側の面の縁。ここだけが背景と別の色系統を持つ。
+  ///
+  /// **枠の色分けは縁が担う。** 面を染めると字の対比を失うが、縁なら
+  /// 字に触れずに「別の計器だ」と言える。
+  static const Color _ratePlateBorderColor = Color(0xE68FD0EA);
 
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
@@ -498,7 +509,7 @@ class NavStatusCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     _MetricPlate(
-                      plateColor: _pacePlateColor,
+                      plateColor: _plateColor,
                       borderColor: null,
                       value: _formatPace(paceSeconds),
                       valueColor: onDark,
@@ -510,14 +521,14 @@ class NavStatusCard extends StatelessWidget {
                     if (spmMeasurementEnabled) ...[
                       const SizedBox(width: _plateGap),
                       _MetricPlate(
-                        plateColor: _rateAccent.withValues(alpha: 0.14),
-                        borderColor: _rateAccent.withValues(alpha: 0.75),
+                        plateColor: _plateColor,
+                        borderColor: _ratePlateBorderColor,
                         value: spmValueText,
                         valueKey: const ValueKey('compact-spm'),
                         valueColor: _rateValueColor,
                         valueFontSize: _spmBaseFontSize,
                         unit: 'spm',
-                        unitColor: _rateValueColor.withValues(alpha: 0.85),
+                        unitColor: _rateValueColor.withValues(alpha: 0.9),
                         unitFontSize: _spmUnitBaseFontSize,
                       ),
                     ],
