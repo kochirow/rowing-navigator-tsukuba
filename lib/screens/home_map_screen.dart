@@ -35,6 +35,7 @@ import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
 import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
+import '../services/boat_prediction_overlay_service.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
@@ -208,10 +209,11 @@ class HomeMapScreen extends HookConsumerWidget {
     final locationPermissionGranted = useState(false);
     final showInfo = useState(false);
     final showBoatList = useState(false);
-    final shipDomains = useState<Set<Polygon>>({});
-    // 停止距離の輪。ポリラインなので、監視モードの航跡と1つの集合へまとめて
-    // 地図へ渡す(片方を設定するともう片方が消える事故を防ぐ)。
-    final stoppingDistanceLines = useState<Set<Polyline>>({});
+    // 警告中だけ出す掃引外形。平常時は空(`map_layer_spec.dart` の記録を参照)。
+    final warningSweptOutline = useState<Set<Polygon>>({});
+    // 予測経路と停止距離の横棒。ポリラインなので、監視モードの航跡と1つの
+    // 集合へまとめて地図へ渡す(片方を設定するともう片方が消える事故を防ぐ)。
+    final predictionLines = useState<Set<Polyline>>({});
     final shipDomainRenderSnapshot = useRef<ShipDomainRenderSnapshot?>(null);
     final obstacles = useState<Set<Polygon>>({});
     // 開発者が明示的に有効化したときだけ判定形状を加える別レイヤー。
@@ -1061,10 +1063,12 @@ class HomeMapScreen extends HookConsumerWidget {
       });
 
       // ###########################
-      // 船舶領域を可視化
+      // 予測経路と停止距離を可視化
       // ###########################
-      final shipDomainService = ShipDomainService();
-      // 全艇の船舶領域を取得
+      // 艇1隻につき**線1本と横棒1つ**だけを描く。
+      //   ・予測経路   … この先どこを通るか(中心線があれば川なり)
+      //   ・停止距離   … どこまでなら止まれるか(経路と直交する横棒)
+      // 入れ子の六角形3枚をやめた経緯は `map_layer_spec.dart` に記録がある。
       final myBoat = navigator.myBoat.value;
       final allBoats = [
         if (myBoat != null) myBoat,
@@ -1081,78 +1085,68 @@ class HomeMapScreen extends HookConsumerWidget {
       )) {
         return null;
       }
-      // 1艇につき3つの図形だけを描く。
-      //   ① 船体領域(t=0)     … いま艇がある場所
-      //   ② 掃引外形(凸包)     … どこまで届くか
-      //   ③ 停止距離ライン     … どこまでなら止まれるか
-      // 以前はサンプルごとに2枚(最大48枚)を重ねていたが、中身は同じ
-      // 六角形の平行移動の繰り返しで、情報は増えないまま画面が埋まる。
-      final newShipDomains = <Polygon>{};
-      final newStoppingDistanceLines = <Polyline>{};
+      final isSatellite = navMap.mapType.value == MapType.hybrid;
+      final newPredictionLines = <Polyline>{};
       for (final boat in allBoats) {
-        final speed = boat.speed;
-        final stoppingDistance = evalService.getStoppingDistance(boat);
-        final warningDistance = max(
-          stoppingDistance,
-          navigator.warningTimeSeconds.value * speed,
+        final isMine = myBoat != null && boat.boatId == myBoat.boatId;
+        // 横棒の長さは排他領域の半幅。艇種で棒の長さが変わるのは正しい。
+        // 低速時の横拡張は判定専用なので `headingReliable: true`(不変条件6)。
+        final halfWidth = ShipDomainService.effectiveParamsFor(
+              boat,
+              headingReliable: true,
+            ).exclusiveParam.w /
+            2;
+        final overlay = buildBoatPredictionOverlay(
+          boat: boat,
+          horizonSeconds: navigator.warningTimeSeconds.value,
+          stoppingDistanceMeters: evalService.getStoppingDistance(boat),
+          tickHalfWidthMeters: halfWidth,
+          // 判定器と同じ中心線を使う。中心線が無ければサービス側が直線1区間へ
+          // 縮退するので、表示だけ別の予測をすることはない。
+          centerline: navigator.channelCenterline.value,
         );
-        final sampleDistances =
-            shipDomainDisplaySampleDistances(warningDistance);
+        if (overlay == null) continue;
 
-        // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
-        // 描画すると停止のたびに領域が太って見え、意味を誤解させる(不変条件6)。
-        ShipDomains domainsAt(double distance) {
-          final t = speed > 0 ? distance / speed : 0.0;
-          return shipDomainService.getShipDomains(
-            evalService.predictPosition(boat, t),
-            headingReliable: true,
-          );
-        }
-
-        // ① 船体領域。塗るのはここだけで、いま艇が在る場所を示す。
-        newShipDomains.add(Polygon(
-          polygonId: PolygonId('ship_body_${boat.boatId}'),
-          points: domainsAt(0).shipBodyDomain.points,
-          strokeWidth: 2,
-          strokeColor: Colors.black.withValues(alpha: 0.45),
-          fillColor: Colors.black.withValues(alpha: 0.08),
+        final style = boatPredictionStyleFor(
+          isSatellite: isSatellite,
+          isMyBoat: isMine,
+        );
+        // 中央線と同じ「縁取りを先、芯を後」の2本立て。順番を入れ替えると
+        // 縁取りが芯を覆う。
+        newPredictionLines.add(Polyline(
+          polylineId: PolylineId('prediction_casing_${boat.boatId}'),
+          points: overlay.pathPoints,
+          width: style.casingWidth,
+          color: style.casingColor,
+          zIndex: predictionShapeZIndex,
+        ));
+        newPredictionLines.add(Polyline(
+          polylineId: PolylineId('prediction_core_${boat.boatId}'),
+          points: overlay.pathPoints,
+          width: style.coreWidth,
+          color: style.coreColor,
           zIndex: predictionShapeZIndex,
         ));
 
-        // ② 掃引外形。「塗り = 実在する危険」「線 = 予測」の規則を守り、
-        // 塗りはほぼ透明にして輪郭で伝える。
-        final sweptPoints = sweptOutline([
-          for (final distance in sampleDistances)
-            domainsAt(distance).exclusiveDomain.points,
-        ]);
-        if (sweptPoints.length >= 3) {
-          newShipDomains.add(Polygon(
-            polygonId: PolygonId('sweep_outline_${boat.boatId}'),
-            points: sweptPoints,
-            strokeWidth: 3,
-            strokeColor: const Color(0xFFF9A825).withValues(alpha: 0.9),
-            fillColor: const Color(0xFFF9A825).withValues(alpha: 0.06),
+        final tick = overlay.stoppingTick;
+        if (tick != null) {
+          newPredictionLines.add(Polyline(
+            polylineId: PolylineId('stopping_tick_casing_${boat.boatId}'),
+            points: tick,
+            width: style.stoppingTickWidth + 3,
+            color: style.casingColor,
+            zIndex: predictionShapeZIndex,
+          ));
+          newPredictionLines.add(Polyline(
+            polylineId: PolylineId('stopping_tick_${boat.boatId}'),
+            points: tick,
+            width: style.stoppingTickWidth,
+            color: style.coreColor,
             zIndex: predictionShapeZIndex,
           ));
         }
-
-        // ③ 停止距離の位置での排他領域を、閉じた輪のポリラインで描く。
-        // 速度0のときは掃引そのものが無いので出さない。
-        if (speed > 0) {
-          final stopPoints = domainsAt(stoppingDistance).exclusiveDomain.points;
-          if (stopPoints.length >= 3) {
-            newStoppingDistanceLines.add(Polyline(
-              polylineId: PolylineId('stop_line_${boat.boatId}'),
-              points: [...stopPoints, stopPoints.first],
-              width: 2,
-              color: const Color(0xFFD32F2F),
-              zIndex: predictionShapeZIndex,
-            ));
-          }
-        }
       }
-      shipDomains.value = newShipDomains;
-      stoppingDistanceLines.value = newStoppingDistanceLines;
+      predictionLines.value = newPredictionLines;
       shipDomainRenderSnapshot.value = nextRenderSnapshot;
       return null;
     }, [
@@ -1162,6 +1156,75 @@ class HomeMapScreen extends HookConsumerWidget {
       coachWatch.boatColors.value, // 識別色が決まったら艇印を描き直す
       tracking.mode.value,
       navMap.isReady.value,
+      navMap.mapType.value,
+      navigator.warningTimeSeconds.value,
+    ]);
+
+    // ##########################
+    // 掃引外形(警告中だけ)
+    // ##########################
+    // 「いま鳴っている理由はこの形だ」を示す面。**平常時は出さない。**
+    // 常時出していた頃は橙の六角形が自艇に貼り付いたままになり、面が
+    // 何も意味しなくなっていた(視覚版の形骸化)。
+    //
+    // 上の予測経路と違って間引かない。警告は出た瞬間に見せる意味があり、
+    // 対象は自艇1隻だけなので、毎秒作り直しても負荷にならない。
+    useEffect(() {
+      final myBoat = navigator.myBoat.value;
+      final warning = navigator.currentWarning.value;
+      if (!navMap.isReady.value ||
+          myBoat == null ||
+          warning == null ||
+          !sweptOutlineExplainsWarning(warning.category)) {
+        if (warningSweptOutline.value.isNotEmpty) {
+          warningSweptOutline.value = {};
+        }
+        return null;
+      }
+      final evalService = CollisionRiskEvaluatorService();
+      final shipDomainService = ShipDomainService();
+      final speed = myBoat.speed;
+      final warningDistance = max(
+        evalService.getStoppingDistance(myBoat),
+        navigator.warningTimeSeconds.value * speed,
+      );
+      // 表示形状に判定用の拡張(GPS帯・低速時の横拡張)を混ぜない(不変条件6)。
+      final points = sweptOutline([
+        for (final distance
+            in shipDomainDisplaySampleDistances(warningDistance))
+          shipDomainService
+              .getShipDomains(
+                evalService.predictPosition(
+                  myBoat,
+                  speed > 0 ? distance / speed : 0.0,
+                ),
+                headingReliable: true,
+              )
+              .exclusiveDomain
+              .points,
+      ]);
+      if (points.length < 3) {
+        warningSweptOutline.value = {};
+        return null;
+      }
+      // 警告と同じ色で描く。バナーが「橋に注意」と言っているのに地図の面が
+      // 別の色、という食い違いを作らない。塗りは持たない(塗り = 実在する危険)。
+      final color = HazardPalette.colorOf(context, warning.category);
+      warningSweptOutline.value = {
+        Polygon(
+          polygonId: PolygonId('warning_swept_outline_${myBoat.boatId}'),
+          points: points,
+          strokeWidth: sweptOutlineStrokeWidth,
+          strokeColor: color.withValues(alpha: 0.95),
+          fillColor: Colors.transparent,
+          zIndex: predictionShapeZIndex,
+        ),
+      };
+      return null;
+    }, [
+      navMap.isReady.value,
+      navigator.myBoat.value,
+      navigator.currentWarning.value,
       navigator.warningTimeSeconds.value,
     ]);
 
@@ -1237,8 +1300,9 @@ class HomeMapScreen extends HookConsumerWidget {
       // 重なり順は zIndex が決めるが、集合へ入れる順序も意味の順に揃えて
       // おく(実在する危険 → 予測 → 開発用)。
       final newPolygons = {
-        ...shipDomains.value,
         ...obstacles.value,
+        // 警告が出ているあいだだけ非空。
+        ...warningSweptOutline.value,
         // この集合は開発者トグルがONのときだけ非空。通常地図の描画形状を
         // 安全判定用のGPS帯・低速時拡張へ置き換えない。
         ...developerSafetyShapeOverlay.value,
@@ -1246,15 +1310,15 @@ class HomeMapScreen extends HookConsumerWidget {
       navMap.setPolygons(newPolygons);
       return null;
     }, [
-      shipDomains.value,
+      warningSweptOutline.value,
       obstacles.value,
       developerSafetyShapeOverlay.value,
     ]);
 
     // ##########################
-    // ポリラインの統合(中央線 + 航跡 + 停止距離ライン)
+    // ポリラインの統合(中央線 + 航跡 + 予測経路)
     // ##########################
-    // 地図のポリラインは1つの集合しか持てない。中央線・航跡・停止距離ラインを
+    // 地図のポリラインは1つの集合しか持てない。中央線・航跡・予測経路を
     // 別々に setPolylines すると、片方を設定した瞬間にもう片方が消える。
     useEffect(() {
       navMap.setPolylines({
@@ -1265,13 +1329,13 @@ class HomeMapScreen extends HookConsumerWidget {
           for (final trail in coachWatch.trailPolylines.value)
             trail.copyWith(zIndexParam: coachTrailZIndex),
         // これから通る予測。危険区域の上に線だけ乗せる。
-        ...stoppingDistanceLines.value,
+        ...predictionLines.value,
       });
       return null;
     }, [
       channelDividerLines.value,
       coachWatch.trailPolylines.value,
-      stoppingDistanceLines.value,
+      predictionLines.value,
       navigator.mode.value,
     ]);
 
