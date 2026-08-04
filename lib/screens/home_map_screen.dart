@@ -1093,6 +1093,7 @@ class HomeMapScreen extends HookConsumerWidget {
     useEffect(() {
       final newObstacles = <Polygon>{};
       for (final obstacle in navigator.obstacles.value) {
+        if (!obstacle.isVisibleOnNavigationMap) continue;
         final points = obstacle.points
             .map((point) => LatLng(point.latitude, point.longitude))
             .toList();

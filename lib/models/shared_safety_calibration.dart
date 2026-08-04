@@ -16,11 +16,15 @@ class SharedSafetyCalibrationState {
   static const documentId = 'fixed_obstacle_calibrations_v8';
   static const kind = 'fixed_obstacle_calibrations';
 
-  /// 現地確認により、初期状態では島2（上流）を警告対象から外す。
+  /// 現地確認により、現在使っていない旧ポリゴン2件を初期状態で
+  /// 警告対象から外す。航路中心線ベースの逆走判定はこの設定とは別経路。
   ///
   /// 共有文書がまだないチームと、旧形式の共有文書を読む端末でも、安全側の
   /// 初期設定を一貫して使えるようここで定義する。
-  static const defaultDisabledWarningSourceIds = <String>{'island_upstream'};
+  static const defaultDisabledWarningSourceIds = <String>{
+    'reverse_main_channel',
+    'island_upstream',
+  };
 
   /// 現行プリセットに含まれる、校正可能なsourceId。
   ///

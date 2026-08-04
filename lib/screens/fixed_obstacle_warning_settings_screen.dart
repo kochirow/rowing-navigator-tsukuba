@@ -200,6 +200,16 @@ class _FixedObstacleWarningSettingsScreenState
   Widget build(BuildContext context) {
     final settings = _settings;
     final targets = _targets;
+    final orderedTargets = targets == null
+        ? const <FixedObstacleCalibrationTarget>[]
+        : [
+            ...targets.where((target) =>
+                !FixedObstacleWarningSettings.isSettingsLastSourceId(
+                    target.sourceId)),
+            ...targets.where((target) =>
+                FixedObstacleWarningSettings.isSettingsLastSourceId(
+                    target.sourceId)),
+          ];
     if (_loadError != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('固定対象物の警告')),
@@ -237,24 +247,11 @@ class _FixedObstacleWarningSettingsScreenState
                   child: const Padding(
                     padding: EdgeInsets.all(14),
                     child: Text(
-                      'オフにした対象物は、地図には表示したまま衝突判定・画面警告・音声警告から外れます。「保存」はこの端末だけに保存します。「チームに公開」を押すと、同じチームの端末にも反映されます。座標調整や危険範囲は変更しません。',
+                      'オフにした対象物は、通常は地図に表示したまま衝突判定・画面警告・音声警告から外れます。ただし現在未使用の逆走注意エリアと島2（上流）は、オフの間は航行地図からも非表示になります。「保存」はこの端末だけに保存します。「チームに公開」を押すと、同じチームの端末にも反映されます。座標調整や危険範囲は変更しません。',
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Card(
-                  child: SwitchListTile.adaptive(
-                    title: const Text('島2（上流）'),
-                    subtitle: const Text('現地確認により、初期状態ではオフです。'),
-                    value: settings.isEnabled('island_upstream'),
-                    onChanged: _busy
-                        ? null
-                        : (enabled) => _updateSettings(
-                              settings.withEnabled('island_upstream', enabled),
-                            ),
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Text(
                   '固定対象物ごとの警告',
                   style: Theme.of(context).textTheme.titleMedium,
@@ -262,29 +259,32 @@ class _FixedObstacleWarningSettingsScreenState
                 const SizedBox(height: 4),
                 const Text('オン: 警告対象　オフ: 警告しない'),
                 const SizedBox(height: 8),
-                for (final target in targets)
-                  if (target.sourceId != 'island_upstream')
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: SwitchListTile.adaptive(
-                        title: Text(target.name),
-                        subtitle: Text(target.kind.displayLabel),
-                        value: settings.isEnabled(target.sourceId),
-                        onChanged: _busy
-                            ? null
-                            : (enabled) => _updateSettings(
-                                  settings.withEnabled(
-                                      target.sourceId, enabled),
-                                ),
+                for (final target in orderedTargets)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: SwitchListTile.adaptive(
+                      title: Text(target.name),
+                      subtitle: Text(
+                        FixedObstacleWarningSettings.isSettingsLastSourceId(
+                                target.sourceId)
+                            ? '${target.kind.displayLabel}・現在は未使用（初期オフ）'
+                            : target.kind.displayLabel,
                       ),
+                      value: settings.isEnabled(target.sourceId),
+                      onChanged: _busy
+                          ? null
+                          : (enabled) => _updateSettings(
+                                settings.withEnabled(target.sourceId, enabled),
+                              ),
                     ),
+                  ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _busy
                       ? null
                       : () => _updateSettings(FixedObstacleWarningSettings()),
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('初期設定に戻す（島2（上流）のみオフ）'),
+                  label: const Text('初期設定に戻す（逆走注意エリア・島2（上流）をオフ）'),
                 ),
                 const SizedBox(height: 24),
                 FixedObstacleCalibrationPublishPanel(

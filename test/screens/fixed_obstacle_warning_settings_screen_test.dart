@@ -11,11 +11,22 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('島2（上流）は初期状態でオフ、設定画面からオンへ変更できる', (tester) async {
+  testWidgets('旧ポリゴン2件は一覧の末尾にあり、設定画面からオンへ変更できる', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: FixedObstacleWarningSettingsScreen()),
     );
     await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('逆走注意エリア'),
+      500,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('島2（上流）')).dy,
+      lessThan(tester.getTopLeft(find.text('逆走注意エリア')).dy),
+    );
 
     final islandSwitch = tester.widget<Switch>(
       find.descendant(
@@ -25,7 +36,17 @@ void main() {
     );
     expect(islandSwitch.value, isFalse);
 
+    final reverseSwitch = tester.widget<Switch>(
+      find.descendant(
+        of: find.widgetWithText(SwitchListTile, '逆走注意エリア'),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(reverseSwitch.value, isFalse);
+
     await tester.tap(find.widgetWithText(SwitchListTile, '島2（上流）'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(SwitchListTile, '逆走注意エリア'));
     await tester.pump();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
@@ -33,6 +54,11 @@ void main() {
     expect(
       (await FixedObstacleWarningSettingsService().load())
           .isEnabled('island_upstream'),
+      isTrue,
+    );
+    expect(
+      (await FixedObstacleWarningSettingsService().load())
+          .isEnabled('reverse_main_channel'),
       isTrue,
     );
   });

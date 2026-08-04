@@ -6,9 +6,18 @@ import 'shared_safety_calibration.dart';
 /// 対象外にする。存在しないことが現地で確認された対象を一時的に外す用途を
 /// 想定し、共有校正とは別の端末設定として扱う。
 class FixedObstacleWarningSettings {
-  /// 現地確認により、初回は島2（上流）を警告対象から外す。
+  /// 現地確認により、初回は現在使っていない旧ポリゴン2件を警告対象から外す。
   static const defaultDisabledSourceIds =
       SharedSafetyCalibrationState.defaultDisabledWarningSourceIds;
+
+  /// ほとんど触らない旧ポリゴンは、設定画面の一覧の末尾へ置く。
+  static const settingsLastSourceIds = <String>{
+    'reverse_main_channel',
+    'island_upstream',
+  };
+
+  static bool isSettingsLastSourceId(String sourceId) =>
+      settingsLastSourceIds.contains(sourceId);
 
   final Set<String> disabledSourceIds;
 

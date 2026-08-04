@@ -66,6 +66,20 @@ void main() {
     );
     expect(
       obstacles
+          .where((obstacle) => obstacle.sourceId == 'reverse_main_channel')
+          .every((obstacle) => !obstacle.isWarningEnabled),
+      isTrue,
+    );
+    expect(
+      obstacles
+          .where((obstacle) =>
+              obstacle.sourceId == 'island_upstream' ||
+              obstacle.sourceId == 'reverse_main_channel')
+          .every((obstacle) => !obstacle.isVisibleOnNavigationMap),
+      isTrue,
+    );
+    expect(
+      obstacles
           .where(
             (obstacle) => obstacle.sourceId == 'island_sakuragawa_bridge',
           )
@@ -139,11 +153,31 @@ void main() {
           .every((obstacle) => !obstacle.isWarningEnabled),
       isTrue,
     );
+    expect(
+      obstacles
+          .where((obstacle) => obstacle.sourceId == 'bridge_suigo')
+          .every((obstacle) => obstacle.isVisibleOnNavigationMap),
+      isTrue,
+    );
     // 明示保存後は、ユーザーが島2をオンにした状態もそのまま保持する。
     expect(
       obstacles
           .where((obstacle) => obstacle.sourceId == 'island_upstream')
           .every((obstacle) => obstacle.isWarningEnabled),
+      isTrue,
+    );
+    expect(
+      obstacles
+          .where((obstacle) => obstacle.sourceId == 'reverse_main_channel')
+          .every((obstacle) => obstacle.isWarningEnabled),
+      isTrue,
+    );
+    expect(
+      obstacles
+          .where((obstacle) =>
+              obstacle.sourceId == 'island_upstream' ||
+              obstacle.sourceId == 'reverse_main_channel')
+          .every((obstacle) => obstacle.isVisibleOnNavigationMap),
       isTrue,
     );
   });

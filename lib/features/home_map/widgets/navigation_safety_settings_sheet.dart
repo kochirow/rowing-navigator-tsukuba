@@ -320,6 +320,16 @@ class _NavigationSafetySettingsSheetState
     final zones = _zones;
     final warnings = _fixedWarnings;
     final targets = _targets;
+    final orderedTargets = targets == null
+        ? const <FixedObstacleCalibrationTarget>[]
+        : [
+            ...targets.where((target) =>
+                !FixedObstacleWarningSettings.isSettingsLastSourceId(
+                    target.sourceId)),
+            ...targets.where((target) =>
+                FixedObstacleWarningSettings.isSettingsLastSourceId(
+                    target.sourceId)),
+          ];
     final primaryMax = leadTimes == null
         ? primaryWarningLeadSeconds + primaryWarningLeadStepSeconds
         : leadTimes.advanceWarningLeadSeconds - primaryWarningLeadStepSeconds;
@@ -500,10 +510,16 @@ class _NavigationSafetySettingsSheetState
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
-                            for (final target in targets)
+                            for (final target in orderedTargets)
                               SwitchListTile.adaptive(
                                 title: Text(target.name),
-                                subtitle: Text(target.kind.displayLabel),
+                                subtitle: Text(
+                                  FixedObstacleWarningSettings
+                                          .isSettingsLastSourceId(
+                                              target.sourceId)
+                                      ? '${target.kind.displayLabel}・現在は未使用（初期オフ）'
+                                      : target.kind.displayLabel,
+                                ),
                                 value: warnings.isEnabled(target.sourceId),
                                 onChanged: _busy
                                     ? null
