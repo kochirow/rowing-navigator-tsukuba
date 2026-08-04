@@ -6,9 +6,9 @@ import '../../../theme/hazard_palette.dart';
 /// activeな警告を画面上部にカテゴリ色付きで並べる。
 ///
 /// 表示は2段構え。
-/// - 1行目: 対象(「岸」「他艇」)。走りながら一瞥で読める大きさ。
-/// - 2行目: 方向と残り秒数(「右 5秒」)。漕手は後ろ向きで前を見ていないため、
-///   振り向く側が分からないと判断に時間を失う。音を増やさずに足せる情報。
+/// - 1行目: 対象(「岸」「他艇」)。「〜に接近」とは書かない。接近したから
+///   鳴っているので、対象名だけで用は足りる。
+/// - 2行目: 残り秒数(「5秒」)だけ。**方向は出さない**(下記 `_detailLabel`)。
 ///
 /// 切迫度([NavigationWarning.urgency])で見た目を変える。風・後ろ向き・
 /// イヤホン無しでは音が届かないことがあり、そのとき「連続音が鳴っている」のか
@@ -139,7 +139,6 @@ class _WarningChip extends StatelessWidget {
     final detail = _detailLabel(warning);
     final semanticParts = [
       warning.title,
-      if (warning.directionLabel != null) warning.directionLabel!,
       if (predictionText != null) predictionText,
       if (count > 1) '$count件',
       if (warning.message.isNotEmpty) warning.message,
@@ -237,14 +236,15 @@ class _WarningChip extends StatelessWidget {
     );
   }
 
-  /// 「右 5秒」。方向も秒数も無ければ2行目を出さない。
-  static String? _detailLabel(NavigationWarning warning) {
-    final parts = <String>[
-      if (warning.directionLabel != null) warning.directionLabel!,
-      if (warning.secondsUntilDanger != null) '${warning.secondsUntilDanger}秒',
-    ];
-    return parts.isEmpty ? null : parts.join(' ');
-  }
+  /// 残り秒数だけ。秒数が無ければ2行目を出さない。
+  ///
+  /// **方向は出さない。** 漕手は後ろ向きで、地図も進行方位に合わせて回る。
+  /// そこへ「右」「前方」と文字で足しても、どちらの右かを翻訳する手間が
+  /// 増えるだけで、一瞥では読めない。振り向く先は地図と目視で決める。
+  static String? _detailLabel(NavigationWarning warning) =>
+      warning.secondsUntilDanger == null
+          ? null
+          : '${warning.secondsUntilDanger}秒';
 
   static String _displayLabel(NavigationWarning warning) =>
       switch (warning.category) {
@@ -258,6 +258,7 @@ class _WarningChip extends StatelessWidget {
         'curve' => 'カーブ',
         'reverse' => '逆走',
         'testZone' => 'テスト',
+        'generic' => '危険区域',
         'gps_unavailable' => 'GPS',
         'position_sharing_unavailable' => '位置共有',
         'other_boat_receive_unavailable' => '他艇受信',
@@ -265,8 +266,20 @@ class _WarningChip extends StatelessWidget {
         'static_profile_unavailable' => '危険区域',
         'audio_unavailable' => '警告音',
         'pipeline_unresponsive' => '警告停止',
-        _ => warning.title,
+        // 未知の種別は title を出すしかないが、「〜に接近」の語尾は落とす。
+        // 接近したから鳴っているのであって、対象名だけで用は足りる。
+        _ => _withoutApproachSuffix(warning.title),
       };
+
+  /// 「岸に接近」→「岸」。語尾が無ければそのまま返す。
+  static String _withoutApproachSuffix(String title) {
+    for (final suffix in const ['に接近', 'に注意', 'に接近中']) {
+      if (title.endsWith(suffix) && title.length > suffix.length) {
+        return title.substring(0, title.length - suffix.length);
+      }
+    }
+    return title;
+  }
 }
 
 /// 連続音が鳴っている警告のまわりだけ、白い縁を1秒周期で明滅させる。

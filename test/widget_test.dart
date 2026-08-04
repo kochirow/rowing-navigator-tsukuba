@@ -89,7 +89,7 @@ void main() {
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
   });
 
-  testWidgets('振り向く側と残り秒数を対象名の下に添える', (tester) async {
+  testWidgets('残り秒数だけを対象名の下に添え、方向は出さない', (tester) async {
     await tester.pumpWidget(
       wrap(
         const SafetyBanner(
@@ -109,7 +109,11 @@ void main() {
     );
 
     expect(find.text('他艇'), findsOneWidget);
-    expect(find.text('右 5秒'), findsOneWidget);
+    expect(find.text('5秒'), findsOneWidget);
+    // 漕手は後ろ向きで、地図も進行方位に合わせて回る。そこへ「右」と
+    // 文字で足しても、どちらの右かを翻訳する手間が増えるだけ。
+    expect(find.text('右 5秒'), findsNothing);
+    expect(find.textContaining('右'), findsNothing);
   });
 
   testWidgets('連続音が鳴っている警告は文字を大きくし脈動枠で囲む', (tester) async {
