@@ -20,6 +20,14 @@ class MapMenuAction {
   /// 無効な理由。`enabled` が false のときだけ [subtitle] の代わりに出す。
   final String? disabledReason;
 
+  /// この項目が属する塊の名前。直前の項目と変わったときだけ見出しを出す。
+  ///
+  /// 出艇前は行き先が9つ前後になるため、平らに並べると元の混在状態に
+  /// 戻ってしまう。塊に分けると、全部を読まなくても目的の物がどのあたりに
+  /// あるかを当てられる。塊の順番は固定なので、覚えた位置はずれない。
+  /// 航行中は5項目しかないので `null` のままにして見出しを出さない。
+  final String? section;
+
   const MapMenuAction({
     required this.icon,
     required this.title,
@@ -28,6 +36,7 @@ class MapMenuAction {
     this.iconColor,
     this.enabled = true,
     this.disabledReason,
+    this.section,
   });
 }
 
@@ -110,7 +119,36 @@ class MapMenuSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                for (final action in actions)
+                for (final (index, action) in actions.indexed) ...[
+                  // 塊が変わったところにだけ見出しを出す。
+                  if (action.section != null &&
+                      (index == 0 ||
+                          actions[index - 1].section != action.section))
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        dimens.space5,
+                        dimens.space4,
+                        dimens.space5,
+                        dimens.space1,
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            action.section!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                          SizedBox(width: dimens.space3),
+                          Expanded(
+                            child: Divider(height: 1, color: colors.canvas),
+                          ),
+                        ],
+                      ),
+                    ),
                   ListTile(
                     enabled: action.enabled,
                     minVerticalPadding: dimens.space3,
@@ -143,6 +181,7 @@ class MapMenuSheet extends StatelessWidget {
                           }
                         : null,
                   ),
+                ],
                 SizedBox(height: dimens.space2),
               ],
             ),

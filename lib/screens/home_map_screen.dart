@@ -23,7 +23,6 @@ import '../features/home_map/widgets/background_location_disclosure_dialog.dart'
 import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
-import '../features/home_map/home_shell_bridge.dart';
 import '../features/home_map/widgets/map_display_panel.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/lane_cross_section_strip.dart';
@@ -68,6 +67,7 @@ import 'app_entry_gate.dart';
 import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
 import 'device_status_screen.dart';
+import 'fixed_obstacle_calibration_screen.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
 import 'usage_guide_screen.dart';
@@ -164,14 +164,19 @@ void _returnToTeamEntry(BuildContext context) {
   );
 }
 
+/// アプリのホーム。起動から終了まで、地図が全画面のまま変わらない。
+///
+/// **導線は「地図」と「メニュー」の2つだけ。** 一時期は出艇前だけ
+/// 3つのタブ(出艇/記録/準備)を出していたが、地図の上のメニューと同じ高さに
+/// 2本目の導線ができ、どちらを見れば目的の物があるのか判断させることに
+/// なった。航行中は地図が全画面でなければならず、そこで触る項目を置く
+/// メニューは消せない。だから消したのはタブのほうである。
+///
+/// 姿勢(`HomePhase`)で操作を割るという考えはそのまま残っている。ただし
+/// 姿勢は状況によって勝手に変わるもので、利用者がタブで選ぶものではない。
+/// 姿勢は**メニューの中身**を決めるだけでよい。
 class HomeMapScreen extends HookConsumerWidget {
-  /// 出艇前のタブシェルとの連絡路。単体で開くときは渡さない。
-  ///
-  /// **この画面が状態の持ち主であることは変えない。** シェルへは
-  /// 「いまどの姿勢か」と、いくつかの呼び戻し関数だけを渡す。
-  final HomeShellBridge? shellBridge;
-
-  const HomeMapScreen({super.key, this.shellBridge});
+  const HomeMapScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -435,24 +440,6 @@ class HomeMapScreen extends HookConsumerWidget {
             ? HomePhase.watching
             : HomePhase.ashore;
 
-    // シェルへは姿勢と呼び戻し関数だけを渡す。状態の持ち主はこの画面のまま。
-    final bridge = shellBridge;
-    useEffect(() {
-      bridge?.phase.value = phase;
-      return null;
-    }, [bridge, phase]);
-    useEffect(() {
-      if (bridge == null) return null;
-      bridge.reloadObstacles = navigator.reloadDefaultObstacles;
-      bridge.reloadDeveloperOverlay = reloadDeveloperSafetyShapeOverlay;
-      bridge.buildDeviceStatusScreen = buildDeviceStatusScreen;
-      return () {
-        bridge.reloadObstacles = null;
-        bridge.reloadDeveloperOverlay = null;
-        bridge.buildDeviceStatusScreen = null;
-      };
-    });
-
     // 表示切替のパネル。メニュー(行き先の一覧)から出して、閉じずに続けて
     // 切り替えられる形にした。理由は `MapDisplayPanel` の説明を参照。
     //
@@ -500,23 +487,28 @@ class HomeMapScreen extends HookConsumerWidget {
     }
 
     // 副次操作は、マップ上に並べると小型端末でオーバーフローするため、
-    // 単一の「メニュー」からシートで開く。
+    // 単一の「メニュー」からシートで開く。**アプリの導線はこれ1本である。**
     //
-    // **中身はモードで別々に組む。** 以前は1本のリストに、行き先・設定・
+    // **中身は姿勢で組み替える。** 以前は1本のリストに、行き先・設定・
     // 道具・表示スイッチという性質の違う4種類が同居し、航行中は12項目の
     // うち4項目が「航行終了後に利用できます」で無効表示になっていた。
     // 決めるのは「その姿勢で操作できるのはどれか」であり、無効表示が
     // 消えるのはその結果である。
     //
-    // 航行中は漕ぎながらチラ見して押せる範囲だけを残す。監視者は陸上で
-    // 端末を操作できるので、読み物と設定を持たせたままにする。
-    // 先頭3つ(表示 / 危険区域を追加 / 警告の設定)と末尾2つ(端末とデータ /
-    // 使い方)は両モードで同じ位置に置き、覚えた位置がずれないようにする。
+    // 航行中は漕ぎながらチラ見して押せる5項目だけにし、見出しも出さない。
+    // 出艇前・監視中は行き先が増えるので、平らに並べず塊へ分ける
+    // (`MapMenuAction.section`)。塊の順番は固定なので覚えた位置はずれない。
     void openMapMenu() {
       final isObserver = navigator.mode.value == NavMode.observer;
+      final isAshore = phase == HomePhase.ashore;
+      // 出艇前・監視中だけ見出しを出す。航行中は5項目なので付けない。
+      final String? prepare = isObserver ? '準備' : null;
+      final String? records = isObserver ? '記録' : null;
+      final String? device = isObserver ? 'この端末' : null;
       final actions = <MapMenuAction>[
         // 先頭は無害な表示切替にする。艇上で誤って押しても地図の見え方が
         // 変わるだけで、危険区域の登録画面が開いたりはしない。
+        // 塊には入れず、見出し無しで一番上に置く。
         MapMenuAction(
           icon: Icons.layers_outlined,
           title: '表示',
@@ -527,6 +519,7 @@ class HomeMapScreen extends HookConsumerWidget {
           icon: Icons.add_location_alt_outlined,
           title: '危険区域を追加',
           subtitle: '流木を見つけたら、その場で登録',
+          section: prepare,
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
             // 背景の位置共有・警告処理は継続する。
@@ -553,6 +546,7 @@ class HomeMapScreen extends HookConsumerWidget {
           icon: Icons.shield_outlined,
           title: isObserver ? '警告の設定' : '航行中の警告設定',
           subtitle: isObserver ? 'いつ・どこまで近づいたら鳴らすか' : '地図と警告を見ながら、確認して反映',
+          section: prepare,
           onTap: () async {
             if (!isObserver) {
               await showModalBottomSheet<void>(
@@ -592,16 +586,46 @@ class HomeMapScreen extends HookConsumerWidget {
             await reloadDeveloperSafetyShapeOverlay();
           },
         ),
-        // ここから下は監視中だけ。いずれも読むだけか、陸上で腰を据えて
-        // 行う操作で、漕ぎながら触れるものではない。
-        //
-        // 「既設危険区域を位置合わせ」はここに置かない。成功すると
-        // チーム全員の警告位置が動くため、出艇前の準備タブへ集約した。
+        // 位置合わせは出艇前だけ。成功するとチーム全員の警告位置が動くので、
+        // 艇を出している最中(自分の監視対象が水上にいる最中)には出さない。
+        // 「危険区域を追加」とは別の操作なので、名前もまとめない。
+        if (isAshore)
+          MapMenuAction(
+            icon: Icons.straighten,
+            title: '既設危険区域を位置合わせ',
+            subtitle: '橋・岸・中州を0.5m単位で校正し、チームへ公開',
+            section: prepare,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const FixedObstacleCalibrationScreen(),
+                ),
+              );
+              await navigator.reloadDefaultObstacles();
+            },
+          ),
+        if (isObserver)
+          MapMenuAction(
+            icon: Icons.groups_outlined,
+            title: 'チーム',
+            subtitle: '招待コードの確認・共有',
+            section: prepare,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TeamScreen()),
+              );
+            },
+          ),
+        // 記録は読むだけなので、監視中でも開ける。航行中は艇の上で
+        // 過去の記録を読む場面がないので出さない。
         if (isObserver)
           MapMenuAction(
             icon: Icons.timeline_outlined,
             title: '練習記録',
             subtitle: '距離・スプリット・ピース',
+            section: records,
             onTap: () {
               Navigator.push(
                 context,
@@ -614,24 +638,13 @@ class HomeMapScreen extends HookConsumerWidget {
             icon: Icons.folder_zip_outlined,
             title: '練習一括ログ',
             subtitle: '監視端末に記録した全艇の位置・警告状態',
+            section: records,
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => const PracticeLogListScreen(),
                 ),
-              );
-            },
-          ),
-        if (isObserver)
-          MapMenuAction(
-            icon: Icons.groups_outlined,
-            title: 'チーム',
-            subtitle: '招待コードの確認・共有',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TeamScreen()),
               );
             },
           ),
@@ -644,6 +657,7 @@ class HomeMapScreen extends HookConsumerWidget {
           icon: Icons.monitor_heart_outlined,
           title: '端末とデータ',
           subtitle: 'GPS精度・最終測位・安全機能の状態',
+          section: device,
           onTap: () {
             Navigator.push(
               context,
@@ -655,6 +669,7 @@ class HomeMapScreen extends HookConsumerWidget {
           icon: Icons.help_outline,
           title: '使い方',
           subtitle: '警告の3段階・地図の色・警告音の試聴',
+          section: device,
           onTap: () {
             Navigator.push(
               context,
@@ -667,6 +682,7 @@ class HomeMapScreen extends HookConsumerWidget {
             icon: Icons.article_outlined,
             title: '詳細（開発用）',
             subtitle: '緯度経度・処理時刻などの内部情報',
+            section: device,
             onTap: () {
               showInfo.value = !showInfo.value;
             },
