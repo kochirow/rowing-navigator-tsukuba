@@ -53,7 +53,9 @@ class LaneCrossSectionStrip extends StatelessWidget {
   /// 縦向きカードが使う画面幅の割合。[NavStatusCard] と揃える。
   static const double _portraitWidthFactor = 0.9;
 
-  static const double _trackHeight = 22;
+  /// 帯の高さ。**文字を持たないので、目盛りが読める最小限まで詰める。**
+  /// ここは計器カードと警告バナーの下にあり、削った分だけ水面が広くなる。
+  static const double _trackHeight = 14;
 
   @override
   Widget build(BuildContext context) {
@@ -85,79 +87,24 @@ class LaneCrossSectionStrip extends StatelessWidget {
     final colors = context.colors;
     return Container(
       key: const ValueKey('lane-cross-section-strip'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: colors.mapPanelScrim.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: _trackHeight,
-            child: CustomPaint(
-              painter: _CrossSectionPainter(
-                crossSection: crossSection,
-                expectedSideColor: colors.ok,
-              ),
-            ),
+      // 文字は持たない。「航路の外」「自分のレーン側」「中央線から◯m」は
+      // すべて外した。帯が示しているのは中央線からの位置だけで、それは
+      // 形を見れば分かる。読ませる文字を増やすほど、チラ見では読めなくなる。
+      child: SizedBox(
+        height: _trackHeight,
+        child: CustomPaint(
+          painter: _CrossSectionPainter(
+            crossSection: crossSection,
+            expectedSideColor: colors.ok,
           ),
-          const SizedBox(height: 6),
-          _caption(context),
-        ],
+        ),
       ),
-    );
-  }
-
-  Widget _caption(BuildContext context) {
-    final colors = context.colors;
-    final onDark = colors.onDark;
-    final distance = crossSection.distanceFromCenterMeters;
-    final distanceText =
-        distance == null ? null : '中央線から ${distance.round()}m';
-
-    final (String label, Color labelColor) = switch (crossSection.status) {
-      ChannelCrossSectionStatus.unavailable => ('航路の外', onDark.withValues(alpha: 0.6)),
-      ChannelCrossSectionStatus.distanceOnly => (
-          '左右は方位が定まってから',
-          onDark.withValues(alpha: 0.6),
-        ),
-      ChannelCrossSectionStatus.available =>
-        crossSection.isInExpectedLane == true
-            // 「正しい」ではなく事実だけを言う。レーン外が違反ではない以上、
-            // レーン内を合格として演出しない。
-            ? ('自分のレーン側', onDark)
-            : ('対向レーン側にいます', colors.warning),
-    };
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.1,
-              fontWeight: FontWeight.bold,
-              color: labelColor,
-            ),
-          ),
-        ),
-        if (distanceText != null)
-          Text(
-            distanceText,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.1,
-              color: onDark.withValues(alpha: 0.75),
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-      ],
     );
   }
 }
@@ -255,12 +202,12 @@ class _CrossSectionPainter extends CustomPainter {
     final clampedX = dotX.clamp(6.0, size.width - 6);
     canvas.drawCircle(
       Offset(clampedX, dotY),
-      7,
+      6,
       Paint()..color = Colors.white,
     );
     canvas.drawCircle(
       Offset(clampedX, dotY),
-      5,
+      4,
       Paint()..color = BoatPalette.myBoat,
     );
   }

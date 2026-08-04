@@ -232,6 +232,10 @@ class HomeMapScreen extends HookConsumerWidget {
     final showDeveloperSafetyShapeOverlay = useState(false);
     // 計測と表示を分離する。表示OFFでもIMU融合とログは継続する。
     final strokeMotionDisplayEnabled = useState(false);
+    // 航路の断面インジケータは補助表示。既定は非表示で、航行開始時の設定か
+    // 「表示」パネルで出す。中央線からの位置は地図でも読めるので、
+    // 必要な人だけが出す。
+    final laneCrossSectionEnabled = useState(false);
     useStrokeTraceSharing(
       // 監視への共有は計測と一体で、切替を持たない。オプションにするのは
       // 「自分の画面に出すか」だけ。共有先は位置共有と同じチーム内で、
@@ -467,6 +471,20 @@ class HomeMapScreen extends HookConsumerWidget {
             highContrastMap.value = next;
             unawaited(mapDisplaySettings.saveHighContrast(next));
           },
+          laneCrossSection: isNavigating ? laneCrossSectionEnabled : null,
+          onLaneCrossSectionChanged: isNavigating
+              ? (next) {
+                  laneCrossSectionEnabled.value = next;
+                  unawaited(
+                    navigationDefaults
+                        .saveLaneCrossSectionEnabled(next)
+                        .catchError((Object error) {
+                      debugPrint('Failed to save lane cross section display: '
+                          '$error');
+                    }),
+                  );
+                }
+              : null,
           // 監視端末は自艇の波形を持たないので、行ごと出さない。
           strokeMotion: isNavigating ? strokeMotionDisplayEnabled : null,
           onStrokeMotionChanged: isNavigating
@@ -512,7 +530,9 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.layers_outlined,
           title: '表示',
-          subtitle: '中央線・高コントラスト・地図種別',
+          subtitle: isObserver
+              ? '地図種別・航路の中央線・高コントラスト'
+              : '地図種別・航路の中央線・高コントラスト・航路の断面・艇速',
           onTap: openDisplayPanel,
         ),
         MapMenuAction(
@@ -545,7 +565,11 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.shield_outlined,
           title: isObserver ? '警告の設定' : '航行中の警告設定',
-          subtitle: isObserver ? 'いつ・どこまで近づいたら鳴らすか' : '地図と警告を見ながら、確認して反映',
+          // 1階層目のサブタイトルには、その中にある項目を並べる。
+          // 開かないと何が入っているのか分からない状態にしない。
+          subtitle: isObserver
+              ? '警告のタイミング・障害物の当たり判定・警告対象の選択'
+              : '地図と警告を見ながら、確認して反映',
           section: prepare,
           onTap: () async {
             if (!isObserver) {
@@ -592,7 +616,7 @@ class HomeMapScreen extends HookConsumerWidget {
         if (isAshore)
           MapMenuAction(
             icon: Icons.straighten,
-            title: '既設危険区域を位置合わせ',
+            title: '既設危険区域の位置の調整',
             subtitle: '橋・岸・中州を0.5m単位で校正し、チームへ公開',
             section: prepare,
             onTap: () async {
@@ -656,7 +680,7 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.monitor_heart_outlined,
           title: '端末とデータ',
-          subtitle: 'GPS精度・最終測位・安全機能の状態',
+          subtitle: 'GPS精度・最終測位・安全機能の状態・プライバシー',
           section: device,
           onTap: () {
             Navigator.push(
@@ -1382,11 +1406,16 @@ class HomeMapScreen extends HookConsumerWidget {
                                     ? CrossAxisAlignment.start
                                     : CrossAxisAlignment.center,
                                 children: [
-                                  // いまが出艇前・航行中・監視中のどれかを
-                                  // 3状態そろえて示す。以前は監視中だけ
-                                  // 出しており、残る2つは同じ地図で
-                                  // 見分けられなかった。
-                                  NavPhaseChip(phase: phase),
+                                  // いまが出艇前か監視中かを示す。
+                                  //
+                                  // **航行中は出さない。** 航行中は計器カード・
+                                  // 警告バナー・断面インジケータが同じ上部に
+                                  // 積み上がり、水面を削る側の影響が大きい。
+                                  // しかも航行中であることは、経過時間が
+                                  // 進んでいることと「航行終了」ボタンが
+                                  // 出ていることで既に分かる。
+                                  if (phase != HomePhase.navigating)
+                                    NavPhaseChip(phase: phase),
                                   // 監視者が即時に読むべき逆走・対向接近だけを
                                   // 地図上部に最大2本で表示する。既存衝突警報や
                                   // 音声経路には接続しない。
@@ -1513,7 +1542,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                   // `rowingMapBearing` で回っていて画面の
                                   // 下半分が進行方向にあたるため
                                   // (`navigationSelfBoatScreenRatio` 参照)。
-                                  if (navigator.mode.value == NavMode.navigator)
+                                  if (navigator.mode.value ==
+                                          NavMode.navigator &&
+                                      laneCrossSectionEnabled.value)
                                     SizedBox(
                                       width: double.infinity,
                                       child: LaneCrossSectionStrip(
@@ -1820,7 +1851,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   },
                                                   onPressStartNav: (displayName,
                                                       strokeRateEnabled,
-                                                      showStrokeMotion) async {
+                                                      showStrokeMotion,
+                                                      showLaneCrossSection) async {
                                                     if (!navMap.isReady.value) {
                                                       ScaffoldMessenger.of(
                                                               context)
@@ -1870,6 +1902,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                                               .value =
                                                           strokeRateEnabled &&
                                                               showStrokeMotion;
+                                                      laneCrossSectionEnabled
+                                                              .value =
+                                                          showLaneCrossSection;
                                                       try {
                                                         await navigator
                                                             .startNavigation(

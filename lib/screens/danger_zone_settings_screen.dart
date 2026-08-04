@@ -229,7 +229,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 // 設定を「時間」と「距離」と「対象」の3つの問いへ分ける。
                 // どれも警告の設定だが、答えている問いが違う。
                 const _SectionHeader(
-                  'いつ鳴らすか',
+                  '警告のタイミングの調整',
                   '到達までの残り時間で、音が上がる段階を決めます。',
                 ),
                 Card(
@@ -328,7 +328,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 ),
                 const SizedBox(height: 24),
                 const _SectionHeader(
-                  'どこまで近づいたら鳴らすか',
+                  '障害物の当たり判定の調整',
                   '基準線から片側へ広げる実距離です。既定は岸が水上側5m・陸側15m、'
                       '橋は内外5m、その他は片側5m。カーブ・逆走区域は別管理です。',
                 ),
@@ -389,14 +389,14 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 ),
                 const SizedBox(height: 24),
                 const _SectionHeader(
-                  '何に対して鳴らすか',
+                  '警告対象となる障害物の選択',
                   '対象物ごとに警告を止められます。距離を0にして止めないこと。',
                 ),
                 Card(
                   margin: const EdgeInsets.only(top: 12),
                   child: ListTile(
                     leading: const Icon(Icons.notifications_off_outlined),
-                    title: const Text('何に対して鳴らすか'),
+                    title: const Text('警告対象となる障害物の選択'),
                     subtitle: const Text('橋・岸・中州・流木ごとに警告のオン・オフ'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {

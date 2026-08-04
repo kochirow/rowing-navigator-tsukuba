@@ -22,6 +22,7 @@ class NavSettingModal extends HookConsumerWidget {
     String displayName,
     bool strokeRateEnabled,
     bool strokeMotionDisplayEnabled,
+    bool laneCrossSectionEnabled,
   ) onPressStartNav;
   final Future<void> Function()? onPressTestAudio;
 
@@ -86,6 +87,7 @@ class NavSettingModal extends HookConsumerWidget {
     final nameError = useState<String?>(null);
     final strokeRateEnabled = useState(true);
     final strokeMotionDisplayEnabled = useState(false);
+    final laneCrossSectionEnabled = useState(false);
     final isStarting = useState(false);
     final defaultsService = useMemoized(NavigationDefaultsService.new);
     // 前回設定を復元できたかどうか。復元できたときだけ、スクロールなしで
@@ -110,6 +112,7 @@ class NavSettingModal extends HookConsumerWidget {
           strokeRateEnabled.value = defaults.strokeRateEnabled;
           strokeMotionDisplayEnabled.value =
               defaults.strokeMotionDisplayEnabled;
+          laneCrossSectionEnabled.value = defaults.laneCrossSectionEnabled;
           ref.read(boatTypeProvider.notifier).state = defaults.boatType;
           ref.read(seatPositionProvider.notifier).state = seat;
           restoredSummary.value =
@@ -147,6 +150,7 @@ class NavSettingModal extends HookConsumerWidget {
             seatPosition: seatPosision.position,
             strokeRateEnabled: strokeRateEnabled.value,
             strokeMotionDisplayEnabled: strokeMotionDisplayEnabled.value,
+            laneCrossSectionEnabled: laneCrossSectionEnabled.value,
           )
               .catchError((Object error) {
             debugPrint('Failed to save navigation defaults: $error');
@@ -156,6 +160,7 @@ class NavSettingModal extends HookConsumerWidget {
           displayName,
           strokeRateEnabled.value,
           strokeMotionDisplayEnabled.value,
+          laneCrossSectionEnabled.value,
         );
       } finally {
         if (context.mounted) isStarting.value = false;
@@ -382,6 +387,35 @@ class NavSettingModal extends HookConsumerWidget {
                         ? null
                         : (value) => strokeMotionDisplayEnabled.value = value,
                   ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _sectionTitle(
+                context,
+                '航路の断面インジケータ',
+                '中央線のどちら側を走っているかを、計器のすぐ下に帯で出す',
+              ),
+              const SizedBox(height: 8),
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    '航路の断面を表示する',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  // 警告ではないことを毎回明示する。レーンを外れても
+                  // 音は鳴らない(岸沿い・橋の下・桟橋寄せはいずれも正常)。
+                  subtitle: const Text('警告ではありません。外れても音は鳴りません'),
+                  secondary: Icon(
+                    laneCrossSectionEnabled.value
+                        ? Icons.straighten
+                        : Icons.straighten_outlined,
+                  ),
+                  value: laneCrossSectionEnabled.value,
+                  onChanged: isStarting.value
+                      ? null
+                      : (value) => laneCrossSectionEnabled.value = value,
                 ),
               ),
               const SizedBox(height: 16),

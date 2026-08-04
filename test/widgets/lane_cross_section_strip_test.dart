@@ -12,7 +12,11 @@ void main() {
         ),
       );
 
-  testWidgets('自分のレーン側にいるときは、状態と距離を出す', (tester) async {
+  Finder strip() => find.byKey(const ValueKey('lane-cross-section-strip'));
+
+  testWidgets('帯だけを描き、文字は一切持たない', (tester) async {
+    // 「自分のレーン側」「中央線から◯m」といった読ませる文字は外した。
+    // 帯が示すのは中央線からの位置だけで、それは形を見れば分かる。
     await tester.pumpWidget(wrap(const ChannelCrossSection(
       status: ChannelCrossSectionStatus.available,
       distanceFromCenterMeters: 12.4,
@@ -20,11 +24,11 @@ void main() {
       expectedSide: RowerSide.left,
     )));
 
-    expect(find.text('自分のレーン側'), findsOneWidget);
-    expect(find.text('中央線から 12m'), findsOneWidget);
+    expect(strip(), findsOneWidget);
+    expect(find.byType(Text), findsNothing);
   });
 
-  testWidgets('対向レーン側は言葉で言う(色だけに頼らない)', (tester) async {
+  testWidgets('対向レーン側でも文字は増やさない', (tester) async {
     await tester.pumpWidget(wrap(const ChannelCrossSection(
       status: ChannelCrossSectionStatus.available,
       distanceFromCenterMeters: 8,
@@ -32,23 +36,23 @@ void main() {
       expectedSide: RowerSide.left,
     )));
 
-    expect(find.text('対向レーン側にいます'), findsOneWidget);
-    expect(find.text('中央線から 8m'), findsOneWidget);
+    expect(strip(), findsOneWidget);
+    expect(find.byType(Text), findsNothing);
   });
 
-  testWidgets('方位が不安定でも距離は消さない(原則6)', (tester) async {
+  testWidgets('方位が不安定でも帯は消さない(原則6)', (tester) async {
     await tester.pumpWidget(wrap(const ChannelCrossSection(
       status: ChannelCrossSectionStatus.distanceOnly,
       distanceFromCenterMeters: 5.2,
     )));
 
-    expect(find.text('左右は方位が定まってから'), findsOneWidget);
-    expect(find.text('中央線から 5m'), findsOneWidget);
+    expect(strip(), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('目盛りを振り切っても実距離は数値で必ず出す', (tester) async {
+  testWidgets('目盛りを振り切っても破綻しない', (tester) async {
     // 河口・霞ヶ浦は片側100m以上ある。端に張り付いた印を「岸にいる」と
-    // 読ませないため、数値を消さない。
+    // 読ませないため、振り切りは丸印ではなく矢印で描く。
     await tester.pumpWidget(wrap(const ChannelCrossSection(
       status: ChannelCrossSectionStatus.available,
       distanceFromCenterMeters: 120,
@@ -56,7 +60,7 @@ void main() {
       expectedSide: RowerSide.right,
     )));
 
-    expect(find.text('中央線から 120m'), findsOneWidget);
+    expect(strip(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -65,10 +69,7 @@ void main() {
     // 毎回変わり、探す動作が増える。
     await tester.pumpWidget(wrap(ChannelCrossSection.unavailable));
 
-    expect(
-      find.byKey(const ValueKey('lane-cross-section-strip')),
-      findsOneWidget,
-    );
-    expect(find.text('航路の外'), findsOneWidget);
+    expect(strip(), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -897,7 +897,7 @@ class _FixedObstacleCalibrationScreenState
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('既設危険区域を位置合わせ'),
+          title: const Text('既設危険区域の位置の調整'),
           leading: IconButton(
             tooltip: '戻る',
             icon: const Icon(Icons.arrow_back),

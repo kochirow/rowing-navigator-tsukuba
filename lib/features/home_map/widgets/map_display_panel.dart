@@ -37,6 +37,10 @@ class MapDisplayPanel extends StatelessWidget {
   final ValueListenable<bool>? strokeMotion;
   final ValueChanged<bool>? onStrokeMotionChanged;
 
+  /// 航路の断面インジケータ。航行中だけ渡す。
+  final ValueListenable<bool>? laneCrossSection;
+  final ValueChanged<bool>? onLaneCrossSectionChanged;
+
   const MapDisplayPanel({
     super.key,
     required this.mapType,
@@ -47,6 +51,8 @@ class MapDisplayPanel extends StatelessWidget {
     required this.onHighContrastChanged,
     this.strokeMotion,
     this.onStrokeMotionChanged,
+    this.laneCrossSection,
+    this.onLaneCrossSectionChanged,
   });
 
   @override
@@ -55,6 +61,8 @@ class MapDisplayPanel extends StatelessWidget {
     final dimens = context.dimens;
     final strokeMotion = this.strokeMotion;
     final onStrokeMotionChanged = this.onStrokeMotionChanged;
+    final laneCrossSection = this.laneCrossSection;
+    final onLaneCrossSectionChanged = this.onLaneCrossSectionChanged;
 
     return Material(
       color: colors.card,
@@ -178,6 +186,15 @@ class MapDisplayPanel extends StatelessWidget {
                   onChanged: onHighContrastChanged,
                 ),
               ),
+              if (laneCrossSection != null &&
+                  onLaneCrossSectionChanged != null)
+                _DisplaySwitch(
+                  icon: Icons.straighten,
+                  title: '航路の断面',
+                  description: '中央線のどちら側かを帯で出します（警告ではありません）',
+                  value: laneCrossSection,
+                  onChanged: onLaneCrossSectionChanged,
+                ),
               if (strokeMotion != null && onStrokeMotionChanged != null)
                 _DisplaySwitch(
                   icon: Icons.insights,
