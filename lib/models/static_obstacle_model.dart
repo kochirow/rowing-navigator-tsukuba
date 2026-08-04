@@ -202,8 +202,13 @@ class StaticObstacle {
   final bool isWarningEnabled;
 
   bool get isVisibleOnNavigationMap =>
-      isWarningEnabled ||
-      !navigationMapHiddenWhenDisabledSourceIds.contains(sourceId);
+      // カーブは川の形そのものなので、地図を見れば分かる。塗りを重ねても
+      // 水面を隠すだけで新しい情報にならない。**警告音・画面警告は従来どおり
+      // 出す**(区域進入イベントとして評価は続く)。地図に描かないだけである。
+      // 位置合わせの画面では従来どおり描く(そこでは形を見て校正する)。
+      kind != StaticObstacleKind.curve &&
+      (isWarningEnabled ||
+          !navigationMapHiddenWhenDisabledSourceIds.contains(sourceId));
 
   /// Firestoreの変形値で更新できる永続障害物かどうか。
   final bool isManaged;
