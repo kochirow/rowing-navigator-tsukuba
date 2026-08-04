@@ -43,102 +43,113 @@ ChannelCenterline _arcCenterline({double radius = 150, double sweep = 100}) {
   return ChannelCenterline.fromPolyline(points)!;
 }
 
-/// 折れ線の全長 [m]。
-double _pathLength(List<LatLng> points) {
-  var total = 0.0;
-  for (var index = 1; index < points.length; index++) {
-    total += distanceMeters(points[index - 1], points[index]);
-  }
-  return total;
+/// 帯の左右の辺を、頂点列から取り出す。
+/// [outline] は「左辺を順に + 右辺を逆順に」なので、前半と後半に割れる。
+(List<LatLng>, List<LatLng>) _sides(List<LatLng> outline) {
+  final half = outline.length ~/ 2;
+  return (outline.sublist(0, half), outline.sublist(half).reversed.toList());
+}
+
+/// 位置 [index] における帯の幅 [m]。
+double _widthAt(List<LatLng> outline, int index) {
+  final (left, right) = _sides(outline);
+  return distanceMeters(left[index], right[index]);
 }
 
 void main() {
-  group('buildBoatPredictionOverlay', () {
-    test('中心線が無ければ直線1区間の2点へ縮退する', () {
-      final overlay = buildBoatPredictionOverlay(
+  group('buildBoatPredictionBeam', () {
+    test('帯の長さは停止距離に一致する', () {
+      final beam = buildBoatPredictionBeam(
         boat: _boat(heading: 0, speed: 4),
-        horizonSeconds: 10,
-        stoppingDistanceMeters: 12,
-        tickHalfWidthMeters: 4.5,
-      );
+        stoppingDistanceMeters: 28,
+        halfWidthMeters: 4.5,
+      )!;
 
-      expect(overlay, isNotNull);
-      expect(overlay!.pathPoints.length, 2);
-      // 4 m/s × 10s = 40m
-      expect(_pathLength(overlay.pathPoints), closeTo(40, 1));
-      // 真北へ進むので、終点は始点より北にある。
-      expect(
-        overlay.pathPoints.last.latitude,
-        greaterThan(overlay.pathPoints.first.latitude),
-      );
+      // 「いま止まろうとしても、ここまでは行く」が図の唯一の意味なので、
+      // 長さが停止距離からずれてはいけない。
+      expect(beam.lengthMeters, closeTo(28, 0.5));
     });
 
-    test('中心線があれば川なりの折れ線になる', () {
-      final overlay = buildBoatPredictionOverlay(
+    test('根元は排他領域の幅、先端は絞られる', () {
+      final beam = buildBoatPredictionBeam(
         boat: _boat(heading: 0, speed: 4),
-        horizonSeconds: 10,
-        stoppingDistanceMeters: 12,
-        tickHalfWidthMeters: 4.5,
+        stoppingDistanceMeters: 28,
+        halfWidthMeters: 4.5,
+      )!;
+
+      final rootWidth = _widthAt(beam.outline, 0);
+      final tipWidth = _widthAt(beam.outline, beam.outline.length ~/ 2 - 1);
+      // 根元 = 半幅4.5m の両側で9m。艇の幅と一致するので帯が艇から生えて見える。
+      expect(rootWidth, closeTo(9, 0.2));
+      // 先細りが方向を伝える。先端が根元より明確に細いこと。
+      expect(tipWidth, lessThan(rootWidth * 0.5));
+      // ただし0にはしない(先端が消えると長さが読めない)。
+      expect(tipWidth, greaterThan(1.0));
+    });
+
+    test('幅は根元から先端へ単調に細くなる', () {
+      final beam = buildBoatPredictionBeam(
+        boat: _boat(heading: 0, speed: 4),
+        stoppingDistanceMeters: 28,
+        halfWidthMeters: 4.5,
+      )!;
+
+      final half = beam.outline.length ~/ 2;
+      var previous = double.infinity;
+      for (var index = 0; index < half; index++) {
+        final width = _widthAt(beam.outline, index);
+        expect(width, lessThanOrEqualTo(previous + 1e-6),
+            reason: '$index 番目で帯が太くなっている');
+        previous = width;
+      }
+    });
+
+    test('中心線があれば川なりに曲がる', () {
+      final straight = buildBoatPredictionBeam(
+        boat: _boat(heading: 0, speed: 4),
+        stoppingDistanceMeters: 28,
+        halfWidthMeters: 4.5,
+      )!;
+      final curved = buildBoatPredictionBeam(
+        boat: _boat(heading: 0, speed: 4),
+        stoppingDistanceMeters: 28,
+        halfWidthMeters: 4.5,
         centerline: _arcCenterline(),
-      );
+      )!;
 
-      expect(overlay, isNotNull);
-      // 曲がる = 3点以上、かつ終点が直線予測より東へ寄る。
-      expect(overlay!.pathPoints.length, greaterThan(2));
+      final (straightLeft, _) = _sides(straight.outline);
+      final (curvedLeft, _) = _sides(curved.outline);
+      // 右カーブなので、曲がったほうが先端が東へ寄る。
       expect(
-        overlay.pathPoints.last.longitude,
-        greaterThan(overlay.pathPoints.first.longitude),
+        curvedLeft.last.longitude,
+        greaterThan(straightLeft.last.longitude),
       );
-      // 折れ線でも全長は予測地平ぶんのまま(速度×時間)。
-      expect(_pathLength(overlay.pathPoints), closeTo(40, 2));
+      // 曲がっても長さは停止距離のまま。
+      expect(curved.lengthMeters, closeTo(28, 1));
     });
 
-    test('停止距離の横棒は経路上に立ち、長さは排他領域の幅になる', () {
-      final overlay = buildBoatPredictionOverlay(
-        boat: _boat(heading: 0, speed: 4),
-        horizonSeconds: 10,
-        stoppingDistanceMeters: 12,
-        tickHalfWidthMeters: 4.5,
-      );
-
-      final tick = overlay!.stoppingTick!;
-      expect(tick.length, 2);
-      // 半幅4.5m → 棒の全長9m
-      expect(distanceMeters(tick.first, tick.last), closeTo(9, 0.2));
-      // 中点が始点から停止距離ぶん進んだ位置にある。
-      final middle = LatLng(
-        (tick.first.latitude + tick.last.latitude) / 2,
-        (tick.first.longitude + tick.last.longitude) / 2,
-      );
+    test('停止中は帯を出さない', () {
+      // 速度0では「行ってしまう先」が存在しない。艇印と重なる短い帯は
+      // 団子に見えるだけで、何も伝えない。
       expect(
-        distanceMeters(overlay.pathPoints.first, middle),
-        closeTo(12, 0.3),
+        buildBoatPredictionBeam(
+          boat: _boat(heading: 0, speed: 0),
+          stoppingDistanceMeters: 0,
+          halfWidthMeters: 4.5,
+        ),
+        isNull,
       );
     });
 
-    test('停止距離が予測地平より先なら横棒を出さない', () {
-      // 「地平に張り付いた棒 = ここで止まれる」と誤読させないこと。
-      final overlay = buildBoatPredictionOverlay(
-        boat: _boat(heading: 0, speed: 4),
-        horizonSeconds: 10,
-        stoppingDistanceMeters: 500,
-        tickHalfWidthMeters: 4.5,
+    test('極低速で停止距離が数mなら帯を出さない', () {
+      expect(
+        buildBoatPredictionBeam(
+          boat: _boat(heading: 0, speed: 0.3),
+          stoppingDistanceMeters: 2.0,
+          halfWidthMeters: 4.5,
+        ),
+        isNull,
       );
-
-      expect(overlay, isNotNull);
-      expect(overlay!.stoppingTick, isNull);
-    });
-
-    test('停止中は経路そのものを出さない', () {
-      // 短い線は「ごく手前で止まる」という別の意味に読める。
-      final overlay = buildBoatPredictionOverlay(
-        boat: _boat(heading: 0, speed: 0),
-        horizonSeconds: 10,
-        stoppingDistanceMeters: 0,
-        tickHalfWidthMeters: 4.5,
-      );
-
-      expect(overlay, isNull);
     });
 
     test('座標が壊れていれば何も描かない', () {
@@ -153,11 +164,10 @@ void main() {
       );
 
       expect(
-        buildBoatPredictionOverlay(
+        buildBoatPredictionBeam(
           boat: broken,
-          horizonSeconds: 10,
-          stoppingDistanceMeters: 12,
-          tickHalfWidthMeters: 4.5,
+          stoppingDistanceMeters: 28,
+          halfWidthMeters: 4.5,
         ),
         isNull,
       );

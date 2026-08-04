@@ -7,7 +7,7 @@
 /// | 航路の中央線 | **越えない取り決め** | 白い破線(暗い縁取り) | 2 |
 /// | 監視モードの航跡 | 過去に通った線 | 線 | 5 |
 /// | 危険区域(塗り) | **実在する危険** | 塗り | 10 |
-/// | 予測経路・停止距離・掃引外形 | **これから通る予測** | 線 | 20 |
+/// | 停止距離ビーム | **止まろうとしても行ってしまう先** | 先細りの帯 | 20 |
 /// | 開発者オーバーレイ | 判定形状の確認用 | 線 | 30 |
 ///
 /// - **塗り = 実在する危険。** そこに何かが在る。
@@ -46,30 +46,43 @@
 /// (白い破線の左か右か)に落ちる。帯を復活させるなら、上の4点に
 /// どう答えるのかを先にここへ書くこと。
 ///
-/// ## 入れ子の六角形3枚をやめた記録(2026-08-05)
+/// ## 自艇まわりの図形を「ビーム1本」へ絞った記録(2026-08-05)
 ///
-/// 以前は艇ごとに「船体領域(塗り) + 掃引外形の凸包(橙) + 停止距離の
-/// 閉じた輪(赤)」を同心に重ねていた。**実機で「何を見ているのか分から
-/// ない」**という判断で取りやめた。理由は濃さではなく文法にある。
+/// もとは艇ごとに「船体領域(塗り) + 掃引外形の凸包(橙) + 停止距離の
+/// 閉じた輪(赤)」を同心に重ねていた。実機で**「何を見ているのか分から
+/// ない」**という判断で、まず「均一な太さの予測経路 + 停止距離の横棒」へ
+/// 置き換え、**それでも読めなかった**ので、いまの形へ作り直した。
+///
+/// 3枚重ねが読めなかった理由:
 ///
 ///   1. 3枚とも「艇を中心とした六角形」で、**区別が形になっていない**。
 ///      どれが何かは大きさの順序を暗記しないと読めない。
 ///   2. ①②が塗りを持っていた。上表の「塗り = 実在する危険」に反する。
-///      薄くても、危険区域と同じ文法で読まれる。
 ///   3. 停止距離が `danger` の赤だった。**正常に漕いでいる間ずっと赤い輪が
 ///      自艇に付いてくる**のは、視覚版の形骸化した警告である(原則4)。
 ///   4. 他艇ぶんも同じ3枚が出るため、12艇では36枚の六角形が重なった。
 ///
-/// いまは舶用の衝突回避表示(ECDIS / ARPA)と同じ作法を採る。
-/// **自船は面ではなく「進行方向のベクトル」で描き、面は実際に危険と
-/// 判定された場所にだけ使う。**
+/// 「線 + 横棒」でも読めなかった理由:
 ///
-///   - 平常時: 予測経路の折れ線1本 + 停止距離の横棒1つ。**長さで読める**
-///   - 警告中: 自艇の掃引外形の輪郭を、その警告の色([HazardPalette])で
-///     重ねる。面が出ている = いま鳴っている理由がこれ、という意味を持つ
+///   5. **均一な太さの線は方向を伝えない。** 経路可視化の比較研究では、
+///      先細り(tapered)の帯が経路の向きを伝える性能で他を上回る。
+///   6. **横棒1本には意味の手がかりが無い。** 「停止距離」という読み方は
+///      記号を覚えていないと出てこない。
+///   7. 警告時の掃引外形は `generic` の青灰(#455A64)で、地図の灰色に
+///      完全に埋もれた。色が状態を表すはずが、何も表していなかった。
+///
+/// いまは**図形を1つだけにし、その長さ自体に意味を持たせる**。
+///
+///   - 自艇・他艇から前へ伸びる**先細りのビーム**を1本だけ描く
+///   - 長さ = **停止距離**。「いま止まろうとしても、ここまでは行く」
+///   - 幅 = 排他領域の幅から先端へ絞る。根元が艇の幅と一致するので、
+///     帯が艇から生えて見える(Google マップの位置ビームと同じ比喩)
+///   - **警告中はその警告の色に染まる。** バナーが「橋に注意」と言っている
+///     とき、光っている帯も同じ色になるので、図と言葉が結びつく
+///   - 停止距離の横棒・掃引外形・予測地平の線はすべて廃止した
 ///
 /// 形状は `boat_prediction_overlay_service.dart` が作る(表示専用・純Dart)。
-/// 3枚へ戻すなら、上の4点にどう答えるのかを先にここへ書くこと。
+/// 図形を増やすなら、上の7点にどう答えるのかを先にここへ書くこと。
 library;
 
 import 'package:flutter/material.dart';
@@ -83,103 +96,85 @@ const int coachTrailZIndex = 5;
 /// 危険区域の塗り。**実在する危険**なので、中央線と航跡より必ず上に出す。
 const int hazardPolygonZIndex = 10;
 
-/// 予測経路・停止距離・掃引外形。予測の線であり、危険区域を隠さないよう
-/// 上に線だけ乗せる。
+/// 停止距離ビーム。予測の形であり、危険区域を隠さないよう上に乗せる。
 const int predictionShapeZIndex = 20;
 
-/// 予測経路1本ぶんの表示スタイル。
+/// 自艇・他艇の「止まれない距離」ビーム1本ぶんの表示スタイル。
 ///
-/// 中央線と同じ「芯 + 縁取り」の2本立てにする。**作法を覚え直させない**
-/// ためで、色と破線の有無だけが意味の差になる。
+/// **色相では主張しない。** 中央線と同じ理由で、色相は [HazardPalette] が
+/// 危険の種類に使い切っている。平常時のビームに赤や橙を割り当てると
+/// 「そこに何かが在る」「異常だ」と誤読される。**白の半透明**にする。
+/// 危険区域は必ず色相を持つので、無彩色のビームと混ざることはない。
+///
+/// 自艇と他艇の差は**色相ではなく明度と塗りの有無**でつける。航行中は
+/// 艇を色分けしない方針([BoatPalette] 参照)と揃うだけでなく、他艇が
+/// 12本並んでも画面が色で埋まらない。
 @immutable
-class BoatPredictionStyle {
-  final Color coreColor;
-  final int coreWidth;
-  final Color casingColor;
-  final int casingWidth;
+class BoatPredictionBeamStyle {
+  /// 輪郭の色。
+  final Color strokeColor;
 
-  /// 停止距離の横棒。芯と同色・同幅で、経路と直交する短い線として引く。
-  final int stoppingTickWidth;
+  /// 輪郭の太さ。
+  final int strokeWidth;
 
-  const BoatPredictionStyle({
-    required this.coreColor,
-    required this.coreWidth,
-    required this.casingColor,
-    required this.casingWidth,
-    required this.stoppingTickWidth,
+  /// 面の色。**自艇だけが薄く塗られる。**
+  ///
+  /// 「塗り = 実在する危険」の規則は色相を持つ層の話である。無彩色の
+  /// 半透明はビームが艇から生えていることを示すための光であって、
+  /// 危険区域として読まれる余地がない。
+  final Color fillColor;
+
+  const BoatPredictionBeamStyle({
+    required this.strokeColor,
+    required this.strokeWidth,
+    required this.fillColor,
   });
 }
 
-/// 予測経路の表示色。[isSatellite] は `MapType.hybrid` のとき true。
+/// ビームの表示色。[isSatellite] は `MapType.hybrid` のとき true。
 ///
-/// **色相では主張しない。** 中央線と同じ理由で、色相は [HazardPalette] が
-/// 危険の種類に使い切っている。自艇の予測経路に赤や橙を割り当てると
-/// 「そこに何かが在る」「異常だ」と誤読される。かわりに
-/// **明るい芯 + 暗い縁取り**で主張する。
-///
-/// 自艇と他艇の差は**色相ではなく明度と太さ**でつける。艇の色分けを
-/// しない航行中の方針([BoatPalette] 参照)と揃うだけでなく、他艇が
-/// 12本並んでも画面が色で埋まらない。
-BoatPredictionStyle boatPredictionStyleFor({
+/// [warningColor] に色を渡すと、その色でビームを染める。警告が出ている
+/// あいだだけ呼出元が渡す。**バナーが「橋に注意」と言っているとき、
+/// 地図で光っている帯も同じ色になる**ので、図と言葉が結びつく。
+BoatPredictionBeamStyle boatPredictionBeamStyleFor({
   required bool isSatellite,
   required bool isMyBoat,
+  Color? warningColor,
 }) {
-  final casing = isSatellite
-      ? const Color(0xB3000000) // 黒 alpha 0.70
-      : const Color(0xA6263238); // #263238 alpha 0.65。中央線と同じ暗色
-  if (isMyBoat) {
-    return BoatPredictionStyle(
-      coreColor: const Color(0xF2FFFFFF), // 白 alpha 0.95
-      coreWidth: 4,
-      casingColor: casing,
-      casingWidth: 7,
-      stoppingTickWidth: 5,
+  if (warningColor != null) {
+    return BoatPredictionBeamStyle(
+      strokeColor: warningColor.withValues(alpha: 0.95),
+      strokeWidth: 4,
+      fillColor: warningColor.withValues(alpha: 0.22),
     );
   }
-  // 他艇は自艇より一段沈める。存在と向きが読めれば足りる。
-  return BoatPredictionStyle(
-    coreColor: const Color(0x99FFFFFF), // 白 alpha 0.60
-    coreWidth: 3,
-    casingColor: casing,
-    casingWidth: 5,
-    stoppingTickWidth: 3,
+  if (isMyBoat) {
+    return BoatPredictionBeamStyle(
+      // 航空写真は下地が暗いので、白をわずかに強める。
+      strokeColor: isSatellite ? const Color(0xF2FFFFFF) : const Color(0xE6FFFFFF),
+      strokeWidth: 3,
+      fillColor: isSatellite
+          ? const Color(0x40FFFFFF) // 白 alpha 0.25
+          : const Color(0x33FFFFFF), // 白 alpha 0.20
+    );
+  }
+  // 他艇は輪郭だけ。存在と向きが読めれば足りる。12艇ぶん塗ると地図が消える。
+  return const BoatPredictionBeamStyle(
+    strokeColor: Color(0x99FFFFFF), // 白 alpha 0.60
+    strokeWidth: 2,
+    fillColor: Color(0x00000000),
   );
 }
 
-/// 警告中だけ出す掃引外形の輪郭。塗りは持たない(塗り = 実在する危険)。
-const int sweptOutlineStrokeWidth = 3;
+/// ビームの縁取り(casing)。中央線と同じく、芯の下へ一回り太く敷く。
+///
+/// 白い帯だけだと、地図の白い建物・砂地の上で輪郭が消える。
+Color beamCasingColorFor({required bool isSatellite}) => isSatellite
+    ? const Color(0xB3000000) // 黒 alpha 0.70
+    : const Color(0xA6263238); // #263238 alpha 0.65。中央線と同じ暗色
 
-/// この警告に対して掃引外形を出す意味があるか。
-///
-/// 掃引外形は「自艇の排他領域がこの先どこまで届くか」の面なので、
-/// **その面と相手が重なることが警告の理由になっている場合にだけ**意味を
-/// 持つ。出さないのは次の2つ。
-///
-///   - `curve` / `reverse` … 区域へ入ったこと自体が理由(区域進入イベント)。
-///     掃引の届く先とは無関係
-///   - system fault(`gps_unavailable` など) … 能力の欠如であって場所ではない
-///
-/// `generic` は**出す**。危険区域の種類が未設定の臨時区域(現地で登録した
-/// 流木など)と、相手を特定できなかった衝突評価の両方がこの分類に入るが、
-/// どちらも「掃引がどこまで届いているか」は理由の説明になる。とくに後者は
-/// 「後方を振り向いて目視確認」としか言えないので、面が届く先を出す価値が
-/// いちばん高い。
-///
-/// 引数は [NavigationWarning.category](`StaticObstacleKind.name` と同じ
-/// 文字列、他艇は `other_boat`)。
-bool sweptOutlineExplainsWarning(String category) => switch (category) {
-      'generic' ||
-      'shore' ||
-      'bridge' ||
-      'bridgePier' ||
-      'island' ||
-      'driftwood' ||
-      'pile' ||
-      'testZone' ||
-      'other_boat' =>
-        true,
-      _ => false,
-    };
+/// 縁取りの太さは芯より一回り太い。
+const int beamCasingExtraWidth = 3;
 
 /// 開発者が判定形状を確認するための一時レイヤー。通常は非表示。
 const int developerOverlayZIndex = 30;

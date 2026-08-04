@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/boat_model.dart';
@@ -5,60 +7,72 @@ import '../utils/geo_math.dart';
 import 'channel_centerline.dart';
 import 'channel_path_predictor.dart';
 
-/// 地図に出す「この先どこへ行くか」の表示形状(純Dart)。
+/// 自艇・他艇から前方へ伸びる「止まれない距離」のビーム(純Dart)。
 ///
-/// **表示専用。** ここで作る折れ線は安全判定にも他艇へも一切渡らない。
+/// **表示専用。** ここで作る形は安全判定にも他艇へも一切渡らない。
 /// 判定は従来どおり [ChannelPathPredictor] の区間を連続掃引(SAT)へ渡す
 /// 経路で行い、この描画が失敗しても警告は一切変わらない(不変条件4)。
-class BoatPredictionOverlay {
-  /// 予測経路の折れ線。先頭が艇の現在位置、末尾が予測地平。
-  ///
-  /// 中心線があれば川なりに曲がり、無ければ2点の直線へ縮退する
-  /// ([ChannelPathPredictor] の縮退規則をそのまま受け継ぐ)。
-  final List<LatLng> pathPoints;
+class BoatPredictionBeam {
+  /// 閉じたテーパー多角形。艇の位置で最も広く、先端へ向かって細くなる。
+  final List<LatLng> outline;
 
-  /// 停止距離の位置に立てる横棒(2点)。
-  ///
-  /// 速度0で経路が作れないとき、または停止距離が予測地平より先にある
-  /// ときは null。「棒が見えない = そこまでの範囲では止まれる保証が無い」
-  /// ではなく「棒を置ける経路が無い」を意味するので、棒の欠如を
-  /// 安全の根拠にしないこと(原則6)。
-  final List<LatLng>? stoppingTick;
+  /// ビームの長さ [m]。= 停止距離。ログと表示の説明に使う。
+  final double lengthMeters;
 
-  const BoatPredictionOverlay({
-    required this.pathPoints,
-    required this.stoppingTick,
+  const BoatPredictionBeam({
+    required this.outline,
+    required this.lengthMeters,
   });
 }
 
-/// 艇の予測経路と停止距離の印を作る。
+/// ビーム先端の幅が、艇の位置での幅に対して占める割合。
 ///
-/// 以前は「船体領域の六角形 + 掃引外形の凸包 + 停止距離の閉じた輪」の
-/// 3枚を艇のまわりへ入れ子に描いていた。**入れ子の同心図形は、大きさの
-/// 順序を暗記しないと読めない。** 漕手は後ろ向きで、地図は回転していて、
-/// 視線を送れるのは1秒未満である(`map_layer_spec.dart` の帯を廃止した
-/// 記録と同じ論拠)。
+/// 0にすると尖った三角形になり、地図上では先端が消えて長さが読めなくなる。
+/// 少し残して「細くなっていく帯」に見せる。
+const double _beamTipWidthFraction = 0.3;
+
+/// これ未満の長さなら描かない [m]。
 ///
-/// 舶用の衝突回避表示(ECDIS / ARPA)は、自船を面ではなく
-/// **「船首方位線 + 速度ベクトル」**で描き、面は実際に危険と判定された
-/// 場所にだけ使う。ここでも同じ作法を採り、
-///   - 平常時は**線1本と横棒1つ**(長さで読める)
-///   - 掃引の面は**警告が出ているあいだだけ**、その警告の色で
-/// とする。`map_layer_spec.dart` の「塗り = 実在する危険 / 線 = 予測」
-/// という規則とも一致する。
+/// 停止中や極低速では、ごく短いビームが艇印と重なって団子になる。
+/// 出さないほうが読みやすい。
+const double _beamMinimumLengthMeters = 3.0;
+
+/// 折れ線を作るときの最小分割数。カーブでもテーパーが滑らかに見える程度。
+const int _beamMinimumSamples = 6;
+
+/// 「いま止まろうとしても、ここまでは行ってしまう」範囲を作る。
 ///
-/// [stoppingDistanceMeters] は `CollisionRiskEvaluatorService` が返す値を
-/// そのまま渡す。ここでは判定に使わず、経路上の位置を決めるだけ。
-/// [tickHalfWidthMeters] は排他領域の半幅を渡す(横棒が排他領域の幅を
-/// 表すので、艇種で棒の長さが変わる)。
-BoatPredictionOverlay? buildBoatPredictionOverlay({
+/// ## なぜ線ではなく先細りの帯なのか
+///
+/// 初版は「均一な太さの折れ線 + 停止距離の位置に横棒」だった。実機で
+/// **「何を示している図なのか分からない」**という判断で作り直した。
+///
+///   1. **均一な太さの線は方向を伝えない。** 経路可視化の比較研究では、
+///      先細り(tapered)の帯が経路の向きを伝える性能で他を上回る。
+///      線はどちらが起点かを形で示せず、艇印との位置関係を毎回読み直す
+///      ことになる。
+///   2. **横棒1本には意味の手がかりが無い。** 「止まれる距離」という
+///      読み方は、記号を覚えていないと出てこない。
+///   3. Google マップの位置ビーム(懐中電灯の比喩)が広く理解されるのは、
+///      精度が高いからではなく**比喩が身についているから**である。
+///      「前へ光が伸びている」は説明が要らない。
+///
+/// そこで**図形を1つに減らし、その長さ自体に意味を持たせた**。
+/// ビームの長さ = 停止距離なので、横棒で位置を指す必要がない。
+/// 図が伝えるのは1文だけ:「いま止まろうとしても、ここまでは行く」。
+///
+/// 幅は排他領域の幅から始めて先端で [_beamTipWidthFraction] まで絞る。
+/// 根元の幅が艇の占める幅と一致するので、帯が艇から生えて見える。
+///
+/// **長さに予測地平(10秒)を使わない。** 10秒先は「app が何秒先まで見て
+/// いるか」という内部事情であって、漕手が行動に移せる量ではない。
+/// 停止距離は物理量で、艇を止める判断に直結する。
+BoatPredictionBeam? buildBoatPredictionBeam({
   required Boat boat,
-  required double horizonSeconds,
   required double stoppingDistanceMeters,
-  required double tickHalfWidthMeters,
+  required double halfWidthMeters,
   ChannelCenterline? centerline,
   ChannelPathPredictor predictor = const ChannelPathPredictor(),
-  double minimumPathLengthMeters = 1.0,
 }) {
   if (!boat.lat.isFinite ||
       !boat.lng.isFinite ||
@@ -66,85 +80,65 @@ BoatPredictionOverlay? buildBoatPredictionOverlay({
       boat.lng.abs() > 180) {
     return null;
   }
+  if (!halfWidthMeters.isFinite || halfWidthMeters <= 0) return null;
+  if (!stoppingDistanceMeters.isFinite ||
+      stoppingDistanceMeters < _beamMinimumLengthMeters) {
+    return null;
+  }
+  final speed = boat.speed.isFinite && boat.speed > 0 ? boat.speed : 0.0;
+  if (speed <= 0) return null;
+
+  // 予測地平を「停止するまでの時間」にすると、経路の全長がそのまま
+  // 停止距離になる。中心線があれば川なりに曲がる。
   final segments = predictor.predict(
     boat: boat,
-    horizonSeconds: horizonSeconds,
+    horizonSeconds: stoppingDistanceMeters / speed,
     centerline: centerline,
   );
   if (segments.isEmpty) return null;
 
-  // 折れ線を組む。区間は「開始位置 + 方位 + 長さ」なので、各区間の終点を
-  // 順に足していく。区間長が0(停止中)なら点が重なるだけで害は無い。
-  final points = <LatLng>[segments.first.origin];
-  final segmentLengths = <double>[];
+  // 経路上の点・その点での進行方位・始点からの累積距離を集める。
+  //
+  // 1区間が長いと、テーパーが折れ線の節でしか変わらず角ばって見える。
+  // 区間を等分して、幅が滑らかに絞られるようにする。
+  final centers = <LatLng>[segments.first.origin];
+  final headings = <double>[];
+  final cumulative = <double>[0];
+  var total = 0.0;
+  final stepsPerSegment =
+      math.max(1, (_beamMinimumSamples / segments.length).ceil());
   for (final segment in segments) {
     final length = segment.lengthMeters;
-    if (!length.isFinite || length <= 0) {
-      segmentLengths.add(0);
-      continue;
+    if (!length.isFinite || length <= 0) continue;
+    final stepLength = length / stepsPerSegment;
+    for (var step = 0; step < stepsPerSegment; step++) {
+      centers.add(computeOffset(
+        centers.last,
+        stepLength,
+        segment.headingDegrees,
+      ));
+      headings.add(segment.headingDegrees);
+      total += stepLength;
+      cumulative.add(total);
     }
-    points.add(computeOffset(
-      points.last,
-      length,
-      segment.headingDegrees,
-    ));
-    segmentLengths.add(length);
+  }
+  if (centers.length < 2 || total < _beamMinimumLengthMeters) return null;
+  // 方位は辺ごとに1つなので、先頭の点には最初の辺の方位を使う。
+  headings.insert(0, headings.first);
+
+  final left = <LatLng>[];
+  final right = <LatLng>[];
+  for (var index = 0; index < centers.length; index++) {
+    final progress = (cumulative[index] / total).clamp(0.0, 1.0);
+    final halfWidth =
+        halfWidthMeters * (1 - progress * (1 - _beamTipWidthFraction));
+    final heading = headings[index];
+    left.add(computeOffset(centers[index], halfWidth, heading - 90));
+    right.add(computeOffset(centers[index], halfWidth, heading + 90));
   }
 
-  final totalLength = segmentLengths.fold<double>(0, (sum, v) => sum + v);
-  // 停止中は進行方向を示すベクトルが存在しない。無理に短い線を出すと
-  // 「ごく手前で止まる」という別の意味に読めるので、何も描かない。
-  if (points.length < 2 || totalLength < minimumPathLengthMeters) return null;
-
-  return BoatPredictionOverlay(
-    pathPoints: points,
-    stoppingTick: _stoppingTick(
-      points: points,
-      segments: segments,
-      segmentLengths: segmentLengths,
-      totalLength: totalLength,
-      stoppingDistanceMeters: stoppingDistanceMeters,
-      halfWidthMeters: tickHalfWidthMeters,
-    ),
+  return BoatPredictionBeam(
+    outline: [...left, ...right.reversed],
+    lengthMeters: total,
   );
-}
-
-/// 経路上を [stoppingDistanceMeters] だけ進んだ点に、進行方向と直交する
-/// 横棒を立てる。停止距離が予測地平より先なら null(棒を地平へ張り付けて
-/// 「ここで止まれる」と誤読させない)。
-List<LatLng>? _stoppingTick({
-  required List<LatLng> points,
-  required List<PredictedMotionSegment> segments,
-  required List<double> segmentLengths,
-  required double totalLength,
-  required double stoppingDistanceMeters,
-  required double halfWidthMeters,
-}) {
-  if (!stoppingDistanceMeters.isFinite || stoppingDistanceMeters <= 0) {
-    return null;
-  }
-  if (!halfWidthMeters.isFinite || halfWidthMeters <= 0) return null;
-  if (stoppingDistanceMeters > totalLength) return null;
-
-  var remaining = stoppingDistanceMeters;
-  var pointIndex = 0;
-  for (var index = 0; index < segmentLengths.length; index++) {
-    final length = segmentLengths[index];
-    if (length <= 0) continue;
-    if (remaining <= length || index == segmentLengths.length - 1) {
-      final heading = segments[index].headingDegrees;
-      final center = computeOffset(
-        points[pointIndex],
-        remaining.clamp(0.0, length),
-        heading,
-      );
-      return [
-        computeOffset(center, halfWidthMeters, heading - 90),
-        computeOffset(center, halfWidthMeters, heading + 90),
-      ];
-    }
-    remaining -= length;
-    pointIndex++;
-  }
-  return null;
 }
