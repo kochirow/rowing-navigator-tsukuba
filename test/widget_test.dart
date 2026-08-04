@@ -46,7 +46,9 @@ void main() {
     await tester.pumpWidget(wrap(const SafetyBanner(warning: warning)));
     expect(find.text('橋'), findsOneWidget);
     expect(find.text('桜川橋に接近'), findsNothing);
-    expect(tester.widget<Text>(find.text('橋')).style?.fontSize, 22);
+    // 漕いでいる最中に文字は読まない。読むのは止まってからなので、
+    // チップは小さくてよい(従来22px)。気づかせるのは色・枠・脈動が担う。
+    expect(tester.widget<Text>(find.text('橋')).style?.fontSize, 15);
     expect(
       tester.widget<Text>(find.text('橋')).style?.color,
       const Color(0xFF241A1A),
@@ -129,7 +131,8 @@ void main() {
     );
 
     final label = tester.widget<Text>(find.text('岸'));
-    expect(label.style?.fontSize, 26);
+    // 連続音の段階だけは他より大きい(15 < 17)。比が保たれていればよい。
+    expect(label.style?.fontSize, 17);
 
     // 脈動は無限に繰り返すため pumpAndSettle は使わない。
     // 2フレーム進めて枠の色が変化することだけを確かめる。

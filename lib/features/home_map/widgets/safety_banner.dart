@@ -80,11 +80,11 @@ class SafetyBanner extends StatelessWidget {
     if (activeWarnings.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       child: Wrap(
         alignment: WrapAlignment.center,
-        spacing: 6,
-        runSpacing: 5,
+        spacing: 5,
+        runSpacing: 4,
         children: [
           for (final group in _groupByCategory(activeWarnings))
             _WarningChip(warning: group.representative, count: group.count),
@@ -123,12 +123,16 @@ class _WarningChip extends StatelessWidget {
         ? const Color(0xFF241A1A)
         : Colors.white;
     final borderWidth = switch (urgency) {
-      WarningDisplayUrgency.imminent => 3.0,
-      WarningDisplayUrgency.action => 2.0,
-      WarningDisplayUrgency.monitoring => 1.5,
+      WarningDisplayUrgency.imminent => 2.5,
+      WarningDisplayUrgency.action => 1.8,
+      WarningDisplayUrgency.monitoring => 1.2,
     };
-    final labelSize = urgency == WarningDisplayUrgency.imminent ? 26.0 : 22.0;
-    final minHeight = urgency == WarningDisplayUrgency.imminent ? 46.0 : 38.0;
+    // **チップは小さくてよい。** 漕いでいる最中に文字は読まない(読めない)。
+    // 読むのは止まってからで、そのときは近づいて見られる。走行中に必要な
+    // のは「何かが出た」ことに気づくことで、それは色・枠・脈動が担う。
+    // 従来の 26/22px から約3割落とし、その分を計器と地図へ返す。
+    final labelSize = urgency == WarningDisplayUrgency.imminent ? 17.0 : 15.0;
+    final minHeight = urgency == WarningDisplayUrgency.imminent ? 30.0 : 25.0;
     final seconds = warning.secondsUntilDanger;
     final predictionText = seconds == null ? null : '約$seconds秒後に危険';
     final displayLabel = _displayLabel(warning);
@@ -151,10 +155,10 @@ class _WarningChip extends StatelessWidget {
         child: Container(
           key: ValueKey('safety-warning-${warning.key}'),
           constraints: BoxConstraints(minHeight: minHeight),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(7),
             border: Border.all(
               color: isQuiet ? baseColor.withValues(alpha: 0.75) : Colors.white,
               width: borderWidth,
@@ -162,7 +166,7 @@ class _WarningChip extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.24),
-                blurRadius: 4,
+                blurRadius: 3,
                 offset: const Offset(0, 1),
               ),
             ],
@@ -175,9 +179,9 @@ class _WarningChip extends StatelessWidget {
                     ? Icons.schedule_rounded
                     : Icons.warning_amber_rounded,
                 color: foreground,
-                size: 18,
+                size: 13,
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +208,7 @@ class _WarningChip extends StatelessWidget {
                           '×$count',
                           style: TextStyle(
                             color: foreground,
-                            fontSize: 13,
+                            fontSize: 11,
                             height: 1.05,
                             fontWeight: FontWeight.w700,
                           ),
@@ -219,7 +223,7 @@ class _WarningChip extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: foreground,
-                        fontSize: 14,
+                        fontSize: 11,
                         height: 1.1,
                         fontWeight: FontWeight.w700,
                       ),
@@ -333,9 +337,9 @@ class _PulseFrameState extends State<_PulseFrame>
       animation: _controller,
       child: widget.child,
       builder: (context, child) => Container(
-        padding: const EdgeInsets.all(3),
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(9),
           color:
               Colors.white.withValues(alpha: 0.15 + 0.55 * _controller.value),
         ),
