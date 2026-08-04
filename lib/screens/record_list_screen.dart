@@ -15,6 +15,7 @@ import '../services/session_analyzer_service.dart';
 import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_state_views.dart';
+import 'practice_log_list_screen.dart';
 
 // # 練習記録機能
 // ナビゲーション終了時に自動保存されたセッションを一覧・詳細表示する。
@@ -54,10 +55,18 @@ class RecordListScreen extends HookConsumerWidget {
   final Future<List<Session>> Function()? sessionsLoader;
   final DateTime Function()? clock;
 
+  /// 出艇前の「記録」タブとして開かれているか。
+  ///
+  /// タブの中には戻る先がないので戻るボタンを出さない。代わりに、
+  /// 監視端末の練習一括ログをここから開けるようにする(記録はすべて
+  /// 「記録」の下にある、という一貫性を保つため)。
+  final bool embedded;
+
   const RecordListScreen({
     super.key,
     this.sessionsLoader,
     this.clock,
+    this.embedded = false,
   });
 
   @override
@@ -86,11 +95,27 @@ class RecordListScreen extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        automaticallyImplyLeading: false,
+        leading: embedded
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
         title: const Text('練習記録'),
+        actions: [
+          if (embedded)
+            IconButton(
+              tooltip: '練習一括ログ',
+              icon: const Icon(Icons.folder_zip_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PracticeLogListScreen(),
+                ),
+              ),
+            ),
+        ],
       ),
       body: loading.value
           ? const AppLoadingView(message: '練習記録を読み込んでいます…')

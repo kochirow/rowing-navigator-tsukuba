@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/team_model.dart';
 import '../services/team_service.dart';
 import '../widgets/app_state_views.dart';
-import 'home_map_screen.dart';
+import 'home_shell.dart';
 import 'team_onboarding_screen.dart';
 
 /// Firebase初期化後に、匿名アカウントのチーム所属を1回だけ復元する。
@@ -116,7 +116,7 @@ class _AppEntryGateState extends State<AppEntryGate> {
             onCompleted: _openMap,
           );
         }
-        return const HomeMapScreen();
+        return const HomeShell();
       },
     );
   }

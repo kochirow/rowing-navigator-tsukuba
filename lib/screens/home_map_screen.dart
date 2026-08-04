@@ -23,9 +23,11 @@ import '../features/home_map/widgets/background_location_disclosure_dialog.dart'
 import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
+import '../features/home_map/home_shell_bridge.dart';
+import '../features/home_map/widgets/map_display_panel.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/lane_cross_section_strip.dart';
-import '../features/home_map/widgets/map_type_switcher.dart';
+import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/rounded_button.dart';
 import '../features/home_map/widgets/safety_banner.dart';
@@ -59,12 +61,12 @@ import '../services/navigation_defaults_service.dart';
 import '../services/permission_service.dart';
 import '../services/preset_obstacle_service.dart';
 import '../services/team_service.dart';
+import '../types/home_phase.dart';
 import '../types/marker_type.dart';
 import '../types/nav_mode.dart';
 import 'app_entry_gate.dart';
 import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
-import 'fixed_obstacle_calibration_screen.dart';
 import 'device_status_screen.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
@@ -163,7 +165,13 @@ void _returnToTeamEntry(BuildContext context) {
 }
 
 class HomeMapScreen extends HookConsumerWidget {
-  const HomeMapScreen({super.key});
+  /// 出艇前のタブシェルとの連絡路。単体で開くときは渡さない。
+  ///
+  /// **この画面が状態の持ち主であることは変えない。** シェルへは
+  /// 「いまどの姿勢か」と、いくつかの呼び戻し関数だけを渡す。
+  final HomeShellBridge? shellBridge;
+
+  const HomeMapScreen({super.key, this.shellBridge});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -388,44 +396,137 @@ class HomeMapScreen extends HookConsumerWidget {
       return cancelGestureAutoRecenter;
     }, const []);
 
-    // 副次操作(チーム/記録/障害物の追加/安全設定/詳細)は、マップ上に並べると
-    // 小型端末でオーバーフローするため、単一の「メニュー」からシートで開く。
+    // 端末とデータ画面の組み立て。メニューからも準備タブからも同じ値を
+    // 出すため、組み立ては1か所に置いてシェルへ関数ごと渡す。
+    DeviceStatusScreen buildDeviceStatusScreen() {
+      final boat = navigator.myBoat.value;
+      return DeviceStatusScreen(
+        latitude: boat?.lat,
+        longitude: boat?.lng,
+        accuracyMeters: boat?.accuracy,
+        speedMetersPerSecond: boat?.speed,
+        headingDegrees: boat?.heading,
+        lastFixAt: boat?.timestamp,
+        batteryPercent: navigator.batteryLevel.value,
+        positionSharingUnavailable:
+            navigator.isPositionSharingUnavailable.value,
+        otherBoatReceiveUnavailable: navigator.isDynamicReceiveUnavailable.value,
+        temporaryObstacleReceiveUnavailable:
+            navigator.isTemporaryObstacleReceiveUnavailable.value,
+        safetyRunMode: navigator.safetyRunMode.value,
+        otherBoatCount: navigator.otherBoats.value.length,
+        obstacleCount: navigator.obstacles.value.length,
+        navigating: navigator.mode.value == NavMode.navigator,
+      );
+    }
+
+    // 開発者用の判定形状オーバーレイ設定を読み直す。判定そのものは変えない
+    // 表示設定なので、設定画面から戻ったときにだけ復元すればよい。
+    Future<void> reloadDeveloperSafetyShapeOverlay() async {
+      showDeveloperSafetyShapeOverlay.value =
+          await mapDisplaySettings.loadDeveloperSafetyShapeOverlay();
+    }
+
+    // いまどの姿勢にいるか。`NavMode.observer` は出艇前と監視中の両方を
+    // 含むので、そのままでは画面の出し分けに使えない。
+    final phase = navigator.mode.value == NavMode.navigator
+        ? HomePhase.navigating
+        : navigator.isWatching.value
+            ? HomePhase.watching
+            : HomePhase.ashore;
+
+    // シェルへは姿勢と呼び戻し関数だけを渡す。状態の持ち主はこの画面のまま。
+    final bridge = shellBridge;
+    useEffect(() {
+      bridge?.phase.value = phase;
+      return null;
+    }, [bridge, phase]);
+    useEffect(() {
+      if (bridge == null) return null;
+      bridge.reloadObstacles = navigator.reloadDefaultObstacles;
+      bridge.reloadDeveloperOverlay = reloadDeveloperSafetyShapeOverlay;
+      bridge.buildDeviceStatusScreen = buildDeviceStatusScreen;
+      return () {
+        bridge.reloadObstacles = null;
+        bridge.reloadDeveloperOverlay = null;
+        bridge.buildDeviceStatusScreen = null;
+      };
+    });
+
+    // 表示切替のパネル。メニュー(行き先の一覧)から出して、閉じずに続けて
+    // 切り替えられる形にした。理由は `MapDisplayPanel` の説明を参照。
+    //
+    // 高さの上限を画面の55%にしているのは、上部の計器カードと警告バナーを
+    // 覆わないため。警告表示はメニュー・パネルより常に優先する。
+    void openDisplayPanel() {
+      final isNavigating = navigator.mode.value == NavMode.navigator;
+      unawaited(showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+        ),
+        builder: (_) => MapDisplayPanel(
+          mapType: navMap.mapType,
+          onMapTypeChanged: navMap.setMapType,
+          showChannelCenterline: showChannelLanes,
+          onShowChannelCenterlineChanged: (next) {
+            showChannelLanes.value = next;
+            unawaited(mapDisplaySettings.saveShowChannelLanes(next));
+          },
+          highContrast: highContrastMap,
+          onHighContrastChanged: (next) {
+            highContrastMap.value = next;
+            unawaited(mapDisplaySettings.saveHighContrast(next));
+          },
+          // 監視端末は自艇の波形を持たないので、行ごと出さない。
+          strokeMotion: isNavigating ? strokeMotionDisplayEnabled : null,
+          onStrokeMotionChanged: isNavigating
+              ? (next) {
+                  strokeMotionDisplayEnabled.value = next;
+                  unawaited(
+                    navigationDefaults
+                        .saveStrokeMotionDisplayEnabled(next)
+                        .catchError((Object error) {
+                      debugPrint('Failed to save stroke analysis display: '
+                          '$error');
+                    }),
+                  );
+                }
+              : null,
+        ),
+      ));
+    }
+
+    // 副次操作は、マップ上に並べると小型端末でオーバーフローするため、
+    // 単一の「メニュー」からシートで開く。
+    //
+    // **中身はモードで別々に組む。** 以前は1本のリストに、行き先・設定・
+    // 道具・表示スイッチという性質の違う4種類が同居し、航行中は12項目の
+    // うち4項目が「航行終了後に利用できます」で無効表示になっていた。
+    // 決めるのは「その姿勢で操作できるのはどれか」であり、無効表示が
+    // 消えるのはその結果である。
+    //
+    // 航行中は漕ぎながらチラ見して押せる範囲だけを残す。監視者は陸上で
+    // 端末を操作できるので、読み物と設定を持たせたままにする。
+    // 先頭3つ(表示 / 危険区域を追加 / 警告の設定)と末尾2つ(端末とデータ /
+    // 使い方)は両モードで同じ位置に置き、覚えた位置がずれないようにする。
     void openMapMenu() {
       final isObserver = navigator.mode.value == NavMode.observer;
-      // 航行中に使えない項目は消さず、無効表示のまま同じ位置に残す。
-      // 項目が減ると並びが変わり、覚えた位置が毎回ずれる。
-      const duringNavigation = '航行終了後に利用できます';
       final actions = <MapMenuAction>[
+        // 先頭は無害な表示切替にする。艇上で誤って押しても地図の見え方が
+        // 変わるだけで、危険区域の登録画面が開いたりはしない。
         MapMenuAction(
-          icon: Icons.groups_outlined,
-          title: 'チーム',
-          subtitle: '招待コードの確認・共有',
-          enabled: isObserver,
-          disabledReason: duringNavigation,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const TeamScreen()),
-            );
-          },
+          icon: Icons.layers_outlined,
+          title: '表示',
+          subtitle: '中央線・高コントラスト・地図種別',
+          onTap: openDisplayPanel,
         ),
         MapMenuAction(
-          icon: Icons.history,
-          title: '記録',
-          subtitle: '過去の練習ログ',
-          enabled: isObserver,
-          disabledReason: duringNavigation,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RecordListScreen()),
-            );
-          },
-        ),
-        MapMenuAction(
-          icon: Icons.edit_location_alt,
-          title: '障害物の追加',
-          subtitle: '臨時危険区域・固定流木の編集',
+          icon: Icons.add_location_alt_outlined,
+          title: '危険区域を追加',
+          subtitle: '流木を見つけたら、その場で登録',
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
             // 背景の位置共有・警告処理は継続する。
@@ -444,11 +545,14 @@ class HomeMapScreen extends HookConsumerWidget {
             await navigator.reloadDefaultObstacles();
           },
         ),
+        // 名前を「警告の設定」へ揃えないのは、安全上の契約が違うため。
+        // 航行中のシートは共有安全設定の保留版を持ち、「確認して反映」を
+        // 押すまで足元の危険区域を変えない。監視中の設定画面にはこの
+        // 仕組みがない。同名にすると同じものだと誤解させる。
         MapMenuAction(
           icon: Icons.shield_outlined,
-          title: isObserver ? '警告設定' : '航行中の警告設定',
-          subtitle:
-              isObserver ? '危険区域の幅・警告開始時間・プライバシー' : '地図と警告を見ながら、確認して安全設定を反映',
+          title: isObserver ? '警告の設定' : '航行中の警告設定',
+          subtitle: isObserver ? 'いつ・どこまで近づいたら鳴らすか' : '地図と警告を見ながら、確認して反映',
           onTap: () async {
             if (!isObserver) {
               await showModalBottomSheet<void>(
@@ -483,76 +587,70 @@ class HomeMapScreen extends HookConsumerWidget {
             );
             await navigator.reloadDefaultObstacles();
             // 開発者トグルは設定画面の最下部で変更する。判定そのものを
-            // 変更しない表示設定なので、ここでだけ復元すればよい。
-            showDeveloperSafetyShapeOverlay.value =
-                await mapDisplaySettings.loadDeveloperSafetyShapeOverlay();
+            // 変更しない表示設定なので、戻ったときに復元すればよい。
+            // 準備タブから開いたときも同じ処理を通る(シェル経由)。
+            await reloadDeveloperSafetyShapeOverlay();
           },
         ),
+        // ここから下は監視中だけ。いずれも読むだけか、陸上で腰を据えて
+        // 行う操作で、漕ぎながら触れるものではない。
+        //
+        // 「既設危険区域を位置合わせ」はここに置かない。成功すると
+        // チーム全員の警告位置が動くため、出艇前の準備タブへ集約した。
+        if (isObserver)
+          MapMenuAction(
+            icon: Icons.timeline_outlined,
+            title: '練習記録',
+            subtitle: '距離・スプリット・ピース',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RecordListScreen()),
+              );
+            },
+          ),
+        if (isObserver)
+          MapMenuAction(
+            icon: Icons.folder_zip_outlined,
+            title: '練習一括ログ',
+            subtitle: '監視端末に記録した全艇の位置・警告状態',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PracticeLogListScreen(),
+                ),
+              );
+            },
+          ),
+        if (isObserver)
+          MapMenuAction(
+            icon: Icons.groups_outlined,
+            title: 'チーム',
+            subtitle: '招待コードの確認・共有',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TeamScreen()),
+              );
+            },
+          ),
+        // 端末とデータ・使い方は航行中でも開ける。航行を止めず、
+        // 安全経路へは何も書き込まない。
+        //
+        // リリースでも見られるようにする。現地で「鳴らない」と言われたとき、
+        // 何が落ちているのかを開発ビルド無しで確かめられる必要がある。
         MapMenuAction(
-          icon: strokeMotionDisplayEnabled.value
-              ? Icons.insights
-              : Icons.insights_outlined,
-          title: '1ストロークの艇速分析',
-          subtitle: isObserver
-              ? '航行開始画面で選択できます'
-              : strokeMotionDisplayEnabled.value
-                  ? '表示中・タップで非表示'
-                  : '非表示・タップで表示',
-          enabled: !isObserver,
-          disabledReason: '航行開始画面で選択できます',
+          icon: Icons.monitor_heart_outlined,
+          title: '端末とデータ',
+          subtitle: 'GPS精度・最終測位・安全機能の状態',
           onTap: () {
-            final next = !strokeMotionDisplayEnabled.value;
-            strokeMotionDisplayEnabled.value = next;
-            unawaited(
-              navigationDefaults
-                  .saveStrokeMotionDisplayEnabled(next)
-                  .catchError((Object error) {
-                debugPrint('Failed to save stroke analysis display: $error');
-              }),
-            );
-          },
-        ),
-        MapMenuAction(
-          icon: Icons.edit_location_alt_outlined,
-          title: '固定障害物の位置調整',
-          subtitle: '位置を調整・チームに公開',
-          enabled: isObserver,
-          disabledReason: duringNavigation,
-          onTap: () async {
-            await Navigator.push(
+            Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const FixedObstacleCalibrationScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => buildDeviceStatusScreen()),
             );
-            await navigator.reloadDefaultObstacles();
           },
         ),
-        // 表示だけの切替なので航行中でも触れる。安全判定には影響しない。
-        MapMenuAction(
-          icon: showChannelLanes.value ? Icons.route : Icons.route_outlined,
-          title: '航路の中央線を表示',
-          subtitle: showChannelLanes.value ? '白い破線で表示中' : '非表示',
-          onTap: () {
-            final next = !showChannelLanes.value;
-            showChannelLanes.value = next;
-            unawaited(mapDisplaySettings.saveShowChannelLanes(next));
-          },
-        ),
-        MapMenuAction(
-          icon:
-              highContrastMap.value ? Icons.contrast : Icons.contrast_outlined,
-          title: '高コントラスト表示',
-          subtitle: highContrastMap.value
-              ? 'オン: 地図を淡いグレーにし、危険区域を目立たせる'
-              : 'オフ: 通常の地図配色',
-          onTap: () {
-            final next = !highContrastMap.value;
-            highContrastMap.value = next;
-            unawaited(mapDisplaySettings.saveHighContrast(next));
-          },
-        ),
-        // 使い方・端末情報は航行中でも開ける。航行を止めず、書き込みもしない。
         MapMenuAction(
           icon: Icons.help_outline,
           title: '使い方',
@@ -561,40 +659,6 @@ class HomeMapScreen extends HookConsumerWidget {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const UsageGuideScreen()),
-            );
-          },
-        ),
-        // リリースでも見られるようにする。現地で「鳴らない」と言われたとき、
-        // 何が落ちているのかを開発ビルド無しで確かめられる必要がある。
-        MapMenuAction(
-          icon: Icons.monitor_heart_outlined,
-          title: '端末情報',
-          subtitle: 'GPS精度・最終測位・安全機能の状態',
-          onTap: () {
-            final boat = navigator.myBoat.value;
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DeviceStatusScreen(
-                  latitude: boat?.lat,
-                  longitude: boat?.lng,
-                  accuracyMeters: boat?.accuracy,
-                  speedMetersPerSecond: boat?.speed,
-                  headingDegrees: boat?.heading,
-                  lastFixAt: boat?.timestamp,
-                  batteryPercent: navigator.batteryLevel.value,
-                  positionSharingUnavailable:
-                      navigator.isPositionSharingUnavailable.value,
-                  otherBoatReceiveUnavailable:
-                      navigator.isDynamicReceiveUnavailable.value,
-                  temporaryObstacleReceiveUnavailable:
-                      navigator.isTemporaryObstacleReceiveUnavailable.value,
-                  safetyRunMode: navigator.safetyRunMode.value,
-                  otherBoatCount: navigator.otherBoats.value.length,
-                  obstacleCount: navigator.obstacles.value.length,
-                  navigating: navigator.mode.value == NavMode.navigator,
-                ),
-              ),
             );
           },
         ),
@@ -607,22 +671,6 @@ class HomeMapScreen extends HookConsumerWidget {
               showInfo.value = !showInfo.value;
             },
           ),
-        // 通常の航行・監視には使わない端末内ログなので、メニューの最後に置く。
-        MapMenuAction(
-          icon: Icons.folder_zip_outlined,
-          title: '練習一括ログ',
-          subtitle: '監視端末に記録した全艇の位置・警告状態',
-          enabled: isObserver,
-          disabledReason: duringNavigation,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const PracticeLogListScreen(),
-              ),
-            );
-          },
-        ),
       ];
       showModalBottomSheet<void>(
         context: context,
@@ -1318,41 +1366,11 @@ class HomeMapScreen extends HookConsumerWidget {
                                     ? CrossAxisAlignment.start
                                     : CrossAxisAlignment.center,
                                 children: [
-                                  // 監視中であることを表示する。
-                                  //
-                                  // 航行していない待機状態は observer だが、
-                                  // それを「監視モード」と出すと、画面下に
-                                  // 「監視スタート」が並んで矛盾して見える。
-                                  // 実際に監視しているときだけ出す。
-                                  if (navigator.mode.value ==
-                                          NavMode.observer &&
-                                      navigator.isWatching.value)
-                                    Container(
-                                      margin: const EdgeInsets.only(top: 8),
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: context.colors.chipScrim,
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.visibility,
-                                              size: 18, color: Colors.white),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            '監視モード',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  // いまが出艇前・航行中・監視中のどれかを
+                                  // 3状態そろえて示す。以前は監視中だけ
+                                  // 出しており、残る2つは同じ地図で
+                                  // 見分けられなかった。
+                                  NavPhaseChip(phase: phase),
                                   // 監視者が即時に読むべき逆走・対向接近だけを
                                   // 地図上部に最大2本で表示する。既存衝突警報や
                                   // 音声経路には接続しない。
@@ -1554,26 +1572,12 @@ class HomeMapScreen extends HookConsumerWidget {
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                     vertical: 48, horizontal: 17),
+                                // 左側にあった地図種別の切替タイルは
+                                // 「表示」パネルへ移した。地図の上に常時
+                                // 置くボタンを減らすほど水面が広く見える。
                                 child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    // ################ 左側 ################
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        MapTypeSwitcher(
-                                          mapType: navMap.mapType.value,
-                                          onTap: () {
-                                            navMap.setMapType(
-                                                navMap.mapType.value ==
-                                                        MapType.normal
-                                                    ? MapType.hybrid
-                                                    : MapType.normal);
-                                          },
-                                        ),
-                                      ],
-                                    ),
                                     // ################ 右側 ################
                                     Column(
                                       mainAxisAlignment: MainAxisAlignment.end,

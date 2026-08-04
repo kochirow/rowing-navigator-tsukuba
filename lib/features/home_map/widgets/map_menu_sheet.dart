@@ -56,8 +56,14 @@ class MapMenuSheet extends StatelessWidget {
     final dimens = context.dimens;
     // ListTile はインク/背景を最近傍の Material に描くため、色付き
     // DecoratedBox ではなく Material をルートにする(色が隠れる警告を防ぐ)。
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * heightFactor,
+    //
+    // 高さは中身に合わせ、[heightFactor] は上限としてだけ使う。固定高だと
+    // 航行中の5項目でシートの下半分が空白になり、項目が途中で切れている
+    // ように見える。項目が増えたときだけスクロールする。
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * heightFactor,
+      ),
       child: Material(
         color: colors.card,
         clipBehavior: Clip.antiAlias,
