@@ -176,17 +176,20 @@ class NavStatusCard extends StatelessWidget {
                       children: [
                         Text(
                           spmValueText,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 44,
                             height: 1.1,
                             fontWeight: FontWeight.bold,
-                            color: onDark,
+                            color: _rateAccent,
                             fontFeatures: _tabularFigures,
                           ),
                         ),
                         Text(
                           ' spm',
-                          style: TextStyle(fontSize: 18, color: onDarkSub),
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: _rateAccent.withValues(alpha: 0.8),
+                          ),
                         ),
                       ],
                     ),
@@ -253,9 +256,23 @@ class NavStatusCard extends StatelessWidget {
   /// なったので、その分をここへ回している。
   static const double _compactChartHeight = 84;
 
-  /// グラフ左の細い列の幅。`12:34` と `12.3 km` が入る最小限。
+  /// グラフ左の細い列の幅。
+  ///
+  /// アイコンを外し、数値を列の左端へ寄せてある。アイコンぶんの18pxを
+  /// 削れたので、空きは数値とグラフのあいだ(=ふつうの余白)に見える。
   /// これ以上広げるとグラフの横(=時間軸)が痩せて、2ストロークが詰まる。
-  static const double _compactMetricRailWidth = 68;
+  static const double _compactMetricRailWidth = 58;
+
+  /// 主計器のうち、レートだけに与える色。
+  ///
+  /// ペースとレートは同じ大きさ帯の数字が2つ並ぶので、白一色だと視線が
+  /// どちらへ行くか決まらない。ペースは白のまま(いちばん明るい=主)にし、
+  /// レートはアプリの寒色系の明るい方へ振る。**色は補助チャネルで、
+  /// 位置と単位が主。** 色が読めなくても意味は失われない。
+  ///
+  /// danger/warning/caution/ok は状態を表す色として取ってあるので、
+  /// 計器には使わない(赤い数字は「異常」に見える)。
+  static const Color _rateAccent = Color(0xFF8FD0EA);
 
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
@@ -398,12 +415,14 @@ class NavStatusCard extends StatelessWidget {
             : null,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          // 地図と他艇が透けて見える程度に薄くする。文字側は影で輪郭を作る
-          // (`_outlineShadows`)ので、面を濃くして読ませる必要がない。
-          color: colors.mapPanelScrim.withValues(alpha: 0.42),
+          // 文字の輪郭影(`_outlineShadows`)だけでは、地図の明るい部分
+          // (建物・砂地・白い橋)の上で数字が沈む。実機では日光下で読めない
+          // 場面があったため、面をほぼ不透明まで濃くする。地図はカードの
+          // 外側に十分残っており、ここを透かして得るものはない。
+          color: colors.mapPanelScrim.withValues(alpha: 0.86),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.16),
+            color: Colors.white.withValues(alpha: 0.24),
             width: 1,
           ),
           boxShadow: [
@@ -458,7 +477,7 @@ class NavStatusCard extends StatelessWidget {
                         spmValueText,
                         key: const ValueKey('compact-spm'),
                         style: TextStyle(
-                          color: onDark,
+                          color: _rateAccent,
                           fontSize: _spmBaseFontSize,
                           height: 1,
                           fontWeight: FontWeight.bold,
@@ -469,7 +488,7 @@ class NavStatusCard extends StatelessWidget {
                       Text(
                         ' spm',
                         style: TextStyle(
-                          color: onDarkSub,
+                          color: _rateAccent.withValues(alpha: 0.85),
                           fontSize: _spmUnitBaseFontSize,
                           fontWeight: FontWeight.w600,
                           shadows: _outlineShadows(_spmUnitBaseFontSize),
@@ -501,14 +520,8 @@ class NavStatusCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _CompactMetric(
-                          icon: Icons.timer_outlined,
-                          value: _formatTime(elapsedTimeSeconds),
-                        ),
-                        _CompactMetric(
-                          icon: Icons.straighten,
-                          value: _formatDistance(distanceMeters),
-                        ),
+                        _RailMetric(value: _formatTime(elapsedTimeSeconds)),
+                        _RailMetric(value: _formatDistance(distanceMeters)),
                       ],
                     ),
                   ),
@@ -716,6 +729,58 @@ class _CompactMetric extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 艇速グラフの左に置く、経過時間と距離。
+///
+/// **アイコンを持たない。** `0:14` は時計、`120 m` は距離だと形で分かる
+/// (コロンと単位が印になる)。アイコンを外したぶん列を18px細くでき、
+/// その分がグラフの時間軸へ回る。
+class _RailMetric extends StatelessWidget {
+  final String value;
+
+  const _RailMetric({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final onDark = context.colors.onDark;
+    // 「12.35 km」の単位側だけを小さくする。数字が主で単位は従。
+    final spaceIndex = value.indexOf(' ');
+    final number = spaceIndex < 0 ? value : value.substring(0, spaceIndex);
+    final unit = spaceIndex < 0 ? null : value.substring(spaceIndex);
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            number,
+            style: TextStyle(
+              color: onDark,
+              fontSize: 15,
+              height: 1,
+              fontWeight: FontWeight.bold,
+              fontFeatures: NavStatusCard._tabularFigures,
+              shadows: NavStatusCard._smallOutlineShadows,
+            ),
+          ),
+          if (unit != null)
+            Text(
+              unit,
+              style: TextStyle(
+                color: onDark.withValues(alpha: 0.75),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: NavStatusCard._smallOutlineShadows,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
