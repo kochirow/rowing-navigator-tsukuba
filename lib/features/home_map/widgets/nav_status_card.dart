@@ -247,6 +247,16 @@ class NavStatusCard extends StatelessWidget {
   static const double _spmBaseFontSize = 71;
   static const double _spmUnitBaseFontSize = 16;
 
+  /// 縮小カードで艇速グラフに与える高さ。
+  ///
+  /// 経過時間・距離をグラフの左へ畳んだぶん、独立した行(約26px)が不要に
+  /// なったので、その分をここへ回している。
+  static const double _compactChartHeight = 84;
+
+  /// グラフ左の細い列の幅。`12:34` と `12.3 km` が入る最小限。
+  /// これ以上広げるとグラフの横(=時間軸)が痩せて、2ストロークが詰まる。
+  static const double _compactMetricRailWidth = 68;
+
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
 
@@ -470,35 +480,69 @@ class NavStatusCard extends StatelessWidget {
                 ),
               ),
             ),
+            // グラフを出すときは、経過時間と距離をグラフの左へ寄せる。
+            //
+            // 両者はグラフより1段低い情報なので、下に独立した行を持たせると
+            // 高さだけを取って読まれない。左端の細い列へ畳むと、空いた分を
+            // そのままグラフの縦幅へ回せる(65 → 84px、約3割増)。
+            // 波形は上下の振れ幅を読むものなので、縦が効く。
             if (strokeMotionDisplayEnabled) ...[
               const SizedBox(height: 5),
-              _StrokeMotionSection(
-                metrics: strokeMotion,
-                windowBuilder: strokeTraceWindowBuilder,
-                // 横向き・縦向き縮小時は地図の面積を優先し、グラフだけ残す。
-                // 波形の上下が読める下限として65px(従来54pxから約2割増)。
-                chartHeight: 65,
-                compact: true,
+              // 高さは固定しない。1ストローク指標を開くとグラフの下へ
+              // 行が増えるので、外側を固定すると溢れる。左の列だけを
+              // グラフと同じ高さにして、上端を揃える。
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: _compactMetricRailWidth,
+                    height: _compactChartHeight,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CompactMetric(
+                          icon: Icons.timer_outlined,
+                          value: _formatTime(elapsedTimeSeconds),
+                        ),
+                        _CompactMetric(
+                          icon: Icons.straighten,
+                          value: _formatDistance(distanceMeters),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _StrokeMotionSection(
+                      metrics: strokeMotion,
+                      windowBuilder: strokeTraceWindowBuilder,
+                      chartHeight: _compactChartHeight,
+                      compact: true,
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: _CompactMetric(
+                      icon: Icons.timer_outlined,
+                      value: _formatTime(elapsedTimeSeconds),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CompactMetric(
+                      icon: Icons.straighten,
+                      value: _formatDistance(distanceMeters),
+                    ),
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: _CompactMetric(
-                    icon: Icons.timer_outlined,
-                    value: _formatTime(elapsedTimeSeconds),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _CompactMetric(
-                    icon: Icons.straighten,
-                    value: _formatDistance(distanceMeters),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
