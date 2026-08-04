@@ -230,7 +230,7 @@ class AreaSettingScreen extends HookConsumerWidget {
     final warnings = navigationWarnings;
     return Scaffold(
       appBar: AppBar(
-        title: Text(warnings == null ? '危険区域を追加・編集' : '危険区域を追加・編集(航行中)'),
+        title: Text(warnings == null ? '危険区域を追加' : '危険区域を追加(航行中)'),
         bottom: warnings == null
             ? null
             : PreferredSize(
@@ -278,7 +278,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           ),
           if (!kReleaseMode)
             IconButton(
-              tooltip: '安全設定',
+              tooltip: '警告の設定',
               icon: const Icon(Icons.tune),
               onPressed: () async {
                 final changed = await Navigator.push<bool>(

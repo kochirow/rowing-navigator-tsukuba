@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../models/safety_snapshot.dart';
 import '../theme/app_theme.dart';
+import 'privacy_data_screen.dart';
 
-/// 現地でのトラブルシュート用の読み取り専用画面。
+/// 端末の今の状態と、この端末が持っているデータの行き先をまとめた画面。
 ///
 /// これまで内部状態は `kReleaseMode` で完全に隠れていたため、「警告が鳴らない」
 /// 「他艇が出ない」と現地で言われても、開発ビルドを配り直さないと何も
-/// 確かめられなかった。設定は何も変えず、今どうなっているかだけを見せる。
+/// 確かめられなかった。上半分は設定を何も変えず、今どうなっているかだけを見せる。
+///
+/// 下半分の「データとプライバシー」は、以前は警告の設定画面の末尾に
+/// 埋まっていた。警告の設定ではないので、端末そのものの話であるここへ移した。
 class DeviceStatusScreen extends StatelessWidget {
   final double? latitude;
   final double? longitude;
@@ -71,7 +75,7 @@ class DeviceStatusScreen extends StatelessWidget {
         : now.difference(lastFixAt!).inSeconds.clamp(0, 99999);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('端末情報')),
+      appBar: AppBar(title: const Text('端末とデータ')),
       body: ListView(
         padding: EdgeInsets.all(dimens.space4),
         children: [
@@ -112,8 +116,47 @@ class DeviceStatusScreen extends StatelessWidget {
               border: Border.all(color: colors.caution),
             ),
             child: const Text(
-              'この画面は現在の状態を表示するだけです。'
-              'ここから設定を変更することはできません。',
+              '上の値は現在の状態を表示するだけです。'
+              'ここから警告の設定を変更することはできません。',
+            ),
+          ),
+          SizedBox(height: dimens.space5),
+          Text(
+            'データとプライバシー',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+          ),
+          SizedBox(height: dimens.space2),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('プライバシーとデータ'),
+                  subtitle: const Text('取得データの確認、ポリシー、アカウント削除'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PrivacyDataScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('オープンソースライセンス'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showLicensePage(
+                    context: context,
+                    applicationName: 'Rowing Navigator',
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(height: dimens.space5),

@@ -212,7 +212,7 @@ class _FixedObstacleWarningSettingsScreenState
           ];
     if (_loadError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('固定対象物の警告')),
+        appBar: AppBar(title: const Text('何に対して鳴らすか')),
         body: AppErrorView(
           title: '警告対象を読み込めませんでした',
           message: _loadError!,
@@ -226,7 +226,7 @@ class _FixedObstacleWarningSettingsScreenState
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('固定対象物の警告'),
+        title: const Text('何に対して鳴らすか'),
         actions: [
           TextButton(
             onPressed: settings == null || _busy ? null : _save,

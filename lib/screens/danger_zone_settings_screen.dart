@@ -9,11 +9,10 @@ import '../services/map_display_settings_service.dart';
 import '../services/risk_evaluator_settings_service.dart';
 import '../services/shared_safety_calibration_service.dart';
 import '../services/team_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_state_views.dart';
 import '../widgets/fixed_obstacle_calibration_controls.dart';
-import 'fixed_obstacle_calibration_screen.dart';
 import 'fixed_obstacle_warning_settings_screen.dart';
-import 'privacy_data_screen.dart';
 
 class DangerZoneSettingsScreen extends StatefulWidget {
   const DangerZoneSettingsScreen({super.key});
@@ -211,7 +210,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
             .toDouble();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('安全設定'),
+        title: const Text('警告の設定'),
         actions: [
           TextButton(
             onPressed: settings == null || _busy ? null : _save,
@@ -223,20 +222,16 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
         ],
       ),
       body: settings == null || warningLeadTimes == null
-          ? const AppLoadingView(message: '安全設定を読み込んでいます…')
+          ? const AppLoadingView(message: '警告の設定を読み込んでいます…')
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: Text(
-                      '表示値は基準線から片側へ広げる実距離です。既定は岸が水上側5m・陸側15m、橋は内外5m、その他は片側5mです。カーブ・逆走区域は別管理です。変更後は「保存」を押してください。',
-                    ),
-                  ),
+                // 設定を「時間」と「距離」と「対象」の3つの問いへ分ける。
+                // どれも警告の設定だが、答えている問いが違う。
+                const _SectionHeader(
+                  'いつ鳴らすか',
+                  '到達までの残り時間で、音が上がる段階を決めます。',
                 ),
-                const SizedBox(height: 8),
                 Card(
                   margin: const EdgeInsets.only(top: 12),
                   child: Padding(
@@ -331,7 +326,13 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                   icon: const Icon(Icons.restore),
                   label: const Text('警告時間をデフォルトに戻す（本警告10秒前・予告13秒前）'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 24),
+                const _SectionHeader(
+                  'どこまで近づいたら鳴らすか',
+                  '基準線から片側へ広げる実距離です。既定は岸が水上側5m・陸側15m、'
+                      '橋は内外5m、その他は片側5m。カーブ・逆走区域は別管理です。',
+                ),
+                const SizedBox(height: 4),
                 _zoneCard(
                   kind: DangerZoneKind.shore,
                   title: '岸',
@@ -387,66 +388,36 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                   onPublish: _publishDangerZones,
                 ),
                 const SizedBox(height: 24),
+                const _SectionHeader(
+                  '何に対して鳴らすか',
+                  '対象物ごとに警告を止められます。距離を0にして止めないこと。',
+                ),
                 Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.notifications_off_outlined),
-                        title: const Text('固定対象物の警告'),
-                        subtitle: const Text('対象物ごとに警告のオン・オフを設定'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          final changed = await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const FixedObstacleWarningSettingsScreen(),
-                            ),
-                          );
-                          if (changed != true || !context.mounted) return;
-                          Navigator.pop(context, true);
-                        },
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.edit_location_alt_outlined),
-                        title: const Text('固定障害物の位置調整'),
-                        subtitle: const Text('橋・岸・中州・案内区域を0.5m単位で校正'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const FixedObstacleCalibrationScreen(),
-                          ),
+                  margin: const EdgeInsets.only(top: 12),
+                  child: ListTile(
+                    leading: const Icon(Icons.notifications_off_outlined),
+                    title: const Text('何に対して鳴らすか'),
+                    subtitle: const Text('橋・岸・中州・流木ごとに警告のオン・オフ'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final changed = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const FixedObstacleWarningSettingsScreen(),
                         ),
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.privacy_tip_outlined),
-                        title: const Text('プライバシーとデータ'),
-                        subtitle: const Text('取得データの確認、ポリシー、アカウント削除'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PrivacyDataScreen(),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.description_outlined),
-                        title: const Text('オープンソースライセンス'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => showLicensePage(
-                          context: context,
-                          applicationName: 'Rowing Navigator',
-                        ),
-                      ),
-                    ],
+                      );
+                      if (changed != true || !context.mounted) return;
+                      Navigator.pop(context, true);
+                    },
                   ),
                 ),
+                // 「既設危険区域を位置合わせ」「プライバシーとデータ」
+                // 「オープンソースライセンス」はここから外した。
+                // 位置合わせは同じ画面への経路が2本あり、どちらが正なのか
+                // 判断できなかった(準備タブ/監視中メニューの1本に集約)。
+                // プライバシーとライセンスは警告の設定ではないので
+                // 「端末とデータ」へ移した。
                 const SizedBox(height: 12),
                 Card(
                   child: SwitchListTile(
@@ -538,6 +509,43 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
           onChanged: _busy ? null : onChanged,
         ),
       ],
+    );
+  }
+}
+
+/// 設定の塊の頭に置く見出し。
+///
+/// この画面には「時間」「距離」「対象」という答えている問いの違う設定が
+/// 並ぶ。見出しがないと、上から順に読んでも何を決めているのか分からない。
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String description;
+
+  const _SectionHeader(this.title, this.description);
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: TextStyle(fontSize: 13, color: colors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
