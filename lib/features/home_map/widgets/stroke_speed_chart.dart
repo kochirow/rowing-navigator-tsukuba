@@ -17,7 +17,14 @@ import '../../../theme/app_theme.dart';
 ///   - 右端が「いま」。新しい点が右から入り、古い点が左へ流れて消える
 ///   - 縦の細い線がキャッチ(ストローク境界)。2本見えていれば2ストローク
 ///   - 破線が窓の平均艇速。線がその上にあるあいだが「速い区間」
-///   - 右肩の数字が窓内の最高・最低艇速
+///
+/// **縦軸の目盛りは持たない(2026-08-05に廃止)。** 縦軸は窓内の最高・最低
+/// へ自動追従する([_StrokeChartModel])ので、数字を出しても絶対値としては
+/// 読めない。読み取るのは**波の形**であって値ではない。目盛りを外すと
+/// 右肩の余白(46px)がそのまま時間軸へ回り、縮小カードでプロット幅が
+/// 約2割増える。1ストロークの形が読みやすくなるのはこちらの効果が大きい。
+/// 唯一の基準は破線の平均線で、これは残す。**戻すなら「自動追従する軸の
+/// 数字を何に使うのか」を先にここへ書くこと。**
 ///
 /// **性能上の約束**: このウィジェットは再buildされない。時間の進みは
 /// [Ticker] から [_StrokeChartModel] へ入り、[CustomPaint] の repaint
@@ -47,6 +54,15 @@ class StrokeSpeedChart extends StatefulWidget {
     this.onDarkSurface = true,
     this.emptyLabel = '波形を計測中',
   });
+
+  /// 濃色スクリムの上で使う波形の色。
+  ///
+  /// レートの数字([NavStatusCard] の `_rateAccent` 系)と**同じ水色に
+  /// しない**。艇速とSPMは別の量なので、同じ色だと「同じものの2つの表示」
+  /// に見える。緑寄りへ振ることで、寒色系の一員のまま区別がつく。
+  /// `ok`(#2E7D32 / #66BB6A)や `caution` とも重ならないので、
+  /// 状態を表す色を侵さない。
+  static const Color _speedLineColor = Color(0xFF7FE0D0);
 
   @override
   State<StrokeSpeedChart> createState() => _StrokeSpeedChartState();
@@ -104,7 +120,14 @@ class _StrokeSpeedChartState extends State<StrokeSpeedChart>
     final colors = context.colors;
     final foreground =
         widget.onDarkSurface ? colors.onDark : colors.textPrimary;
-    final accent = widget.onDarkSurface ? colors.primaryLight : colors.primary;
+    // **濃色スクリムの上では波形の色をテーマから引かない。**
+    // `colors.primaryLight` は端末のテーマで #4D9CBF(ライト)と
+    // #8FD0EA(ダーク)に変わるのに、下地はどちらでも同じ暗い面である。
+    // ライトテーマの端末だけ線が一段暗く引かれ、日光下で沈んでいた。
+    // 下地が確定しているなら、線は明るいほうへ固定するのが正しい。
+    final accent = widget.onDarkSurface
+        ? StrokeSpeedChart._speedLineColor
+        : colors.primary;
     return RepaintBoundary(
       child: SizedBox(
         height: widget.height,
@@ -114,10 +137,10 @@ class _StrokeSpeedChartState extends State<StrokeSpeedChart>
             model: _model,
             foreground: foreground,
             accent: accent,
-            // 濃色スクリムのカードは半透明で地図が透ける。グラフだけは
-            // 自前の暗い下地を敷いて、波形が建物や水面に紛れないようにする。
+            // グラフ自前の暗い下地。カードの面が濃くなったいまは地図が
+            // 透けないので、これは純粋に波形とのコントラストのためにある。
             plotBackground: widget.onDarkSurface
-                ? Colors.black.withValues(alpha: 0.42)
+                ? Colors.black.withValues(alpha: 0.55)
                 : foreground.withValues(alpha: 0.06),
             // 線の縁取りは下地の反対色。濃色スクリムでは黒、
             // 明色カード(監視シート)では白で縁を取る。
@@ -205,9 +228,8 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     canvas.save();
     canvas.clipRRect(radius);
 
-    // 右端に数値を置くぶんだけ描画領域を空ける。
-    const rightGutter = 46.0;
-    final plotWidth = math.max(1.0, size.width - rightGutter);
+    // 目盛りを持たないので、幅はすべて時間軸へ使う。
+    final plotWidth = math.max(1.0, size.width);
     final spanMs = math.max(1.0, window.endMs - window.startMs);
     final range = math.max(1e-3, model.scaleMax - model.scaleMin);
 
@@ -217,9 +239,10 @@ class _StrokeSpeedChartPainter extends CustomPainter {
         ((speed - model.scaleMin) / range).clamp(0.0, 1.0) * size.height;
 
     // ---- キャッチ(ストローク境界) ----
+    // 「2本見えていれば2ストローク」が読み取りの核なので、細くしすぎない。
     final catchPaint = Paint()
-      ..color = foreground.withValues(alpha: 0.34)
-      ..strokeWidth = 1;
+      ..color = foreground.withValues(alpha: 0.5)
+      ..strokeWidth = 1.5;
     for (final catchMs in window.catchTimesMs) {
       final x = dx(catchMs);
       if (x < 0 || x > plotWidth) continue;
@@ -227,9 +250,10 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     }
 
     // ---- 平均艇速の基準線 ----
+    // 目盛りを外したので、これが唯一の縦方向の基準になる。そのぶん濃くする。
     final meanY = dy(window.meanSpeed);
     final dashPaint = Paint()
-      ..color = foreground.withValues(alpha: 0.35)
+      ..color = foreground.withValues(alpha: 0.45)
       ..strokeWidth = 1;
     for (var x = 0.0; x < plotWidth; x += 7) {
       canvas.drawLine(Offset(x, meanY), Offset(x + 3.5, meanY), dashPaint);
@@ -280,7 +304,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
       Paint()
         ..color = lineOutline
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 5.4
+        ..strokeWidth = 7
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round,
     );
@@ -289,7 +313,7 @@ class _StrokeSpeedChartPainter extends CustomPainter {
       Paint()
         ..color = accent
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
+        ..strokeWidth = 4.2
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round,
     );
@@ -300,37 +324,25 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     final headY = dy(window.speeds[window.length - 1]);
     canvas.drawCircle(
       Offset(lastX, headY),
-      6.5,
+      8,
       Paint()..color = accent.withValues(alpha: 0.22),
     );
     canvas.drawCircle(
       Offset(lastX, headY),
-      4.6,
+      6,
       Paint()..color = lineOutline,
     );
     canvas.drawCircle(
       Offset(lastX, headY),
-      3.2,
+      4.2,
       Paint()..color = accent,
     );
 
     canvas.restore();
-
-    // ---- 右肩の目盛り ----
-    _paintScaleLabel(
-      canvas,
-      Offset(size.width - 4, 2),
-      model.scaleMax.toStringAsFixed(1),
-    );
-    _paintScaleLabel(
-      canvas,
-      Offset(size.width - 4, size.height - 15),
-      '${model.scaleMin.toStringAsFixed(1)} m/s',
-    );
   }
 
-  /// 目盛り・注記用の縁取り。計器カードの縁取りより弱い簡易版で足りる
-  /// (小さい文字は8方向でも角の多角形が目に見えない)。
+  /// 注記(計測中の一言)用の縁取り。計器カードの縁取りより弱い簡易版で
+  /// 足りる(小さい文字は8方向でも角の多角形が目に見えない)。
   static const _labelShadows = <Shadow>[
     Shadow(color: Color(0xE6000000), offset: Offset(-1, 0)),
     Shadow(color: Color(0xE6000000), offset: Offset(1, 0)),
@@ -341,25 +353,6 @@ class _StrokeSpeedChartPainter extends CustomPainter {
     Shadow(color: Color(0xE6000000), offset: Offset(-0.7, 0.7)),
     Shadow(color: Color(0xE6000000), offset: Offset(0.7, 0.7)),
   ];
-
-  void _paintScaleLabel(Canvas canvas, Offset topRight, String text) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: foreground.withValues(alpha: 0.85),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          // 目盛りはグラフの下地の外(右肩)にも掛かる。地図が透ける
-          // ぶん、影が無いと白い建物の上で消える。
-          shadows: _labelShadows,
-        ),
-      ),
-      textDirection: textDirection,
-    )..layout();
-    painter.paint(canvas, Offset(topRight.dx - painter.width, topRight.dy));
-  }
 
   void _paintLabel(Canvas canvas, Size size, String text) {
     final painter = TextPainter(
