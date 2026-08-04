@@ -14,6 +14,7 @@ void main() {
 
   test('アップデート時に安全数値と共有cacheを一度だけ既定値へ戻す', () async {
     SharedPreferences.setMockInitialValues({
+      'safety_defaults_generation': 1,
       'risk_primary_warning_lead_seconds_v2': 11.0,
       'risk_advance_warning_lead_seconds_v2': 15.0,
       'danger_zone_offset_v1_shore_water': 9.0,

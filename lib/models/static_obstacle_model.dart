@@ -143,6 +143,13 @@ enum StaticObstacleKind {
 }
 
 class StaticObstacle {
+  /// 現在は運用していない旧ポリゴン。警告設定をオンに戻したときだけ、
+  /// 航行地図にも戻す。航路中心線ベースの逆走判定はこの一覧とは別経路。
+  static const navigationMapHiddenWhenDisabledSourceIds = <String>{
+    'reverse_main_channel',
+    'island_upstream',
+  };
+
   final String id;
 
   /// 同梱プリセット上の元ID。
@@ -189,8 +196,14 @@ class StaticObstacle {
   final double? circleRadiusMeters;
 
   /// falseなら地図には表示するが、衝突判定・音声・画面警告の対象にしない。
+  /// ただし現在未使用の旧ポリゴン2件だけは、警告をオフにした間は
+  /// 航行地図からも隠す。設定をオンに戻すと、警告と地図表示を同時に戻す。
   /// 臨時危険区域は常にtrueで作成する。
   final bool isWarningEnabled;
+
+  bool get isVisibleOnNavigationMap =>
+      isWarningEnabled ||
+      !navigationMapHiddenWhenDisabledSourceIds.contains(sourceId);
 
   /// Firestoreの変形値で更新できる永続障害物かどうか。
   final bool isManaged;

@@ -14,7 +14,7 @@ import 'risk_evaluator_settings_service.dart';
 /// 固定プロフィール本体はアプリassetがsource of truthで、ここではそのassetへ
 /// 重ねる数値だけをリセットする。
 class SafetyDefaultsMigrationService {
-  static const currentGeneration = 1;
+  static const currentGeneration = 2;
   static const _appliedGenerationKey = 'safety_defaults_generation';
   static const _sharedCachePrefix = 'shared_safety_calibration_';
 
