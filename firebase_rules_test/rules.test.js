@@ -103,9 +103,9 @@ function temporaryHazard(uid) {
 // `firestore.rules` の baseProfileSha256 に一致させること。
 // ずれると共有校正の書き込みが全て拒否され、このテストも通らない。
 const hazardProfileSha256 =
-  "aaafbf67b64c5b50aa401c77d849f52b1db4fe2a5bc122e5b09bc989d3572b33";
+  "962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5";
 const legacyHazardProfileSha256 =
-  "b94e6f0afb23d153f50f63d8f43e020d62cb61fe8cbbe38777822a8e8671ed88";
+  "aaafbf67b64c5b50aa401c77d849f52b1db4fe2a5bc122e5b09bc989d3572b33";
 
 function dangerZoneOffsets() {
   return Object.fromEntries(
@@ -130,7 +130,7 @@ function sharedSafetyCalibration({
   scaledVertexOffsets = {},
   disabledWarningSourceIds = ["island_upstream"],
   previousState,
-  baseProfileVersion = 9,
+  baseProfileVersion = 10,
   baseProfileSha256 = hazardProfileSha256,
 } = {}) {
   return {
@@ -891,7 +891,7 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v8",
+        "fixed_obstacle_calibrations_v9",
       );
       await testEnv.withSecurityRulesDisabled(async (context) => {
         await setDoc(
@@ -900,11 +900,11 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v8",
+            "fixed_obstacle_calibrations_v9",
           ),
           sharedSafetyCalibration({
             uid: "u1",
-            baseProfileVersion: 8,
+            baseProfileVersion: 9,
             baseProfileSha256: legacyHazardProfileSha256,
           }),
         );
@@ -915,7 +915,7 @@ async function run() {
           legacyDoc,
           sharedSafetyCalibration({
             uid: "u1",
-            baseProfileVersion: 8,
+            baseProfileVersion: 9,
             baseProfileSha256: legacyHazardProfileSha256,
           }),
         ),
@@ -926,7 +926,7 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v9",
+        "fixed_obstacle_calibrations_v10",
       );
       await assertSucceeds(
         setDoc(ownerDoc, sharedSafetyCalibration({uid: "u1"})),
@@ -938,7 +938,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v9",
+            "fixed_obstacle_calibrations_v10",
           ),
         ),
       );
@@ -949,7 +949,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v9",
+            "fixed_obstacle_calibrations_v10",
           ),
         ),
       );
@@ -960,7 +960,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v9",
+            "fixed_obstacle_calibrations_v10",
           ),
           sharedSafetyCalibration({
             uid: "u2",
@@ -983,7 +983,7 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v9",
+        "fixed_obstacle_calibrations_v10",
       );
       const previousState = previousSafetyState(
         fixedCalibrations({
@@ -1041,7 +1041,7 @@ async function run() {
         "teams",
         teamB,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v9",
+        "fixed_obstacle_calibrations_v10",
       );
       await assertFails(
         setDoc(

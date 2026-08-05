@@ -540,6 +540,42 @@ service cloud.firestore {
         && data.updatedBy is string;
     }
 
+    function validSharedSafetyCalibrationV9(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 10
+        && data.baseProfileSha256 ==
+          '962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsetsV8(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
     function validPreviousSafetyCalibration(previous, current) {
       return previous is map
         && previous.keys().hasAll([
@@ -918,17 +954,24 @@ service cloud.firestore {
       }
 
       match /managed_hazards/fixed_obstacle_calibrations_v9 {
-        // v9は桟橋エリア追加を含むprofile v9専用。v8以前の共有校正を
-        // 新しい座標へ誤適用せず、新しいrevision 1から共有を開始する。
+        // v9は前回profile v9専用。座標更新後のv10へ旧共有校正を
+        // 混ぜないよう、既存文書は読み取りだけ残す。
+        allow read: if isTeamMember(teamId);
+        allow create, update, delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v10 {
+        // v10は座標更新と陸上エリア追加を含むprofile v10専用。v9以前の
+        // 共有校正を新しい座標へ誤適用せず、新しいrevision 1から開始する。
         allow read: if isTeamMember(teamId);
         allow create: if canPublishTeamSafety(teamId)
-          && validSharedSafetyCalibrationV8(request.resource.data)
+          && validSharedSafetyCalibrationV9(request.resource.data)
           && !request.resource.data.keys().hasAny(['previousState'])
           && request.resource.data.revision == 1
           && request.resource.data.updatedAt == request.time
           && request.resource.data.updatedBy == request.auth.uid;
         allow update: if canPublishTeamSafety(teamId)
-          && validSharedSafetyCalibrationV8(request.resource.data)
+          && validSharedSafetyCalibrationV9(request.resource.data)
           && request.resource.data.kind == resource.data.kind
           && request.resource.data.baseProfileVersion
             == resource.data.baseProfileVersion

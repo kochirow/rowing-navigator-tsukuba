@@ -1,6 +1,6 @@
 {
   "layoutVersion": 1,
-  "profileVersion": 9,
+  "profileVersion": 10,
   "folders": [
     {
       "id": "fld_banks",
@@ -371,6 +371,20 @@
       "verificationStatus": "aerial_only",
       "style": {}
     },
+    "mooringarea_efb61f15": {
+      "folderId": "fld_mooring",
+      "order": 0,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
+    "mooringarea_51219154": {
+      "folderId": "fld_mooring",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
     "lane_kasumikagaura_outbound": {
       "folderId": "fld_safety",
       "order": 0,
@@ -466,16 +480,9 @@
       "verificationStatus": "aerial_only",
       "style": {}
     },
-    "mooringarea_efb61f15": {
-      "folderId": "fld_mooring",
-      "order": 1785915681958,
-      "description": "",
-      "verificationStatus": "draft",
-      "style": {}
-    },
-    "mooringarea_51219154": {
-      "folderId": "fld_mooring",
-      "order": 1785915878162,
+    "ashorearea_8bfefca3": {
+      "folderId": "fld_safety",
+      "order": 1785925547245,
       "description": "",
       "verificationStatus": "draft",
       "style": {}
