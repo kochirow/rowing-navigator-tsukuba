@@ -136,14 +136,25 @@ class OtherBoatTrackStore {
   }) {
     var ageAtReceipt = serverNow.difference(message.serverUpdatedAt);
     if (ageAtReceipt.isNegative) {
-      return OtherBoatTrackUpdateResult(
-        status: OtherBoatTrackUpdateStatus.rejectedInvalidMessage,
-        boatId: message.boatId,
-        validationFailure: const RemoteBoatMessageValidationFailure(
-          field: 'serverUpdatedAt',
-          code: RemoteBoatMessageValidationCode.futureTimestamp,
-        ),
-      );
+      // [serverNow] はサーバー時刻の推定値である。推定がわずかに遅れただけの
+      // 正常なレコードを「未来から来た」として捨てない。許容を超えたものだけ
+      // 棄却し、許容内は age = 0 として鮮度の階層へ渡す
+      // (`freshUntil` < `boatPredictionTimeoutSeconds` < `boatStaleTimeoutSeconds`)。
+      //
+      // **外挿(`extrapolateToNow`)の基準は `serverUpdatedAt` のままにする。**
+      // ここで丸めるのは鮮度判定に使う age だけで、位置の外挿量は変えない。
+      // 取り違えると他艇が実際より先へ描かれる。
+      if (ageAtReceipt.abs() > RemoteBoatMessage.maxFutureTimestampSkew) {
+        return OtherBoatTrackUpdateResult(
+          status: OtherBoatTrackUpdateStatus.rejectedInvalidMessage,
+          boatId: message.boatId,
+          validationFailure: const RemoteBoatMessageValidationFailure(
+            field: 'serverUpdatedAt',
+            code: RemoteBoatMessageValidationCode.futureTimestamp,
+          ),
+        );
+      }
+      ageAtReceipt = Duration.zero;
     }
 
     final monotonicReceivedAt = _monotonicNow();

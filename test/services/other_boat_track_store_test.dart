@@ -86,15 +86,38 @@ void main() {
       }
     });
 
-    test('server時刻の未来値は拒否し、observedAtはRules同等の5秒差まで許容する', () {
-      final futureServer = RemoteBoatMessage.tryParse(
+    test('serverUpdatedAtの未来値もobservedAtと同じ5秒差まで許容する', () {
+      // estimatedServerNow はサーバー時刻の推定値でしかない。推定が数十ms
+      // 遅れただけで正常なレコードを捨てると、他艇が間欠的に評価から消える
+      // (2026-08-05 実機ログで693件)。許容は observedAt と同一にする。
+      final slightlyFuture = RemoteBoatMessage.tryParse(
         messageJson(
           serverUpdatedAt: baseTime.add(const Duration(milliseconds: 1)),
         ),
         estimatedServerNow: baseTime,
       );
-      expect(futureServer.isValid, isFalse);
-      expect(futureServer.failure!.field, 'serverUpdatedAt');
+      expect(slightlyFuture.isValid, isTrue);
+
+      final toleratedServer = RemoteBoatMessage.tryParse(
+        messageJson(
+          serverUpdatedAt: baseTime.add(const Duration(milliseconds: 4900)),
+        ),
+        estimatedServerNow: baseTime,
+      );
+      expect(toleratedServer.isValid, isTrue);
+
+      final excessiveServer = RemoteBoatMessage.tryParse(
+        messageJson(
+          serverUpdatedAt: baseTime.add(const Duration(milliseconds: 5001)),
+        ),
+        estimatedServerNow: baseTime,
+      );
+      expect(excessiveServer.isValid, isFalse);
+      expect(excessiveServer.failure!.field, 'serverUpdatedAt');
+      expect(
+        excessiveServer.failure!.code,
+        RemoteBoatMessageValidationCode.futureTimestamp,
+      );
 
       final toleratedObservedAt = RemoteBoatMessage.tryParse(
         messageJson(
@@ -112,6 +135,54 @@ void main() {
       );
       expect(excessiveObservedAt.isValid, isFalse);
       expect(excessiveObservedAt.failure!.field, 'observedAt');
+    });
+
+    test('許容内の未来serverUpdatedAtはage=0で受理し、超過分だけ棄却する', () {
+      var now = baseTime;
+      var monotonic = Duration.zero;
+      final store = OtherBoatTrackStore(
+        estimatedServerNow: () => now,
+        monotonicNow: () => monotonic,
+      );
+
+      // 推定サーバー時刻より2秒先のレコード。棄却せず age = 0 で受け入れる。
+      final accepted = store.ingestJson(messageJson(
+        sequence: 1,
+        serverUpdatedAt: baseTime.add(const Duration(seconds: 2)),
+      ));
+      expect(accepted.accepted, isTrue);
+      final snapshot = store.snapshot('boat-a')!;
+      expect(snapshot.age, Duration.zero);
+      expect(snapshot.freshness, OtherBoatTrackFreshness.fresh);
+      // 外挿の基準は丸めない。serverUpdatedAt はそのまま保持する。
+      expect(
+        snapshot.message.serverUpdatedAt,
+        baseTime.add(const Duration(seconds: 2)),
+      );
+
+      // age=0 から鮮度の階層が正しく進む(不変条件2)。
+      monotonic = OtherBoatTrackStore.freshUntil;
+      expect(
+        store.snapshot('boat-a')!.freshness,
+        OtherBoatTrackFreshness.degraded,
+      );
+      monotonic = OtherBoatTrackStore.degradedUntil;
+      expect(
+        store.snapshot('boat-a')!.freshness,
+        OtherBoatTrackFreshness.lostForPrediction,
+      );
+
+      // 許容を超えた未来値は従来どおり棄却する。時計の壊れた端末が
+      // 未来の位置を送り続けても評価を汚染しない。
+      final rejected = store.ingestJson(messageJson(
+        sequence: 2,
+        serverUpdatedAt: baseTime.add(const Duration(seconds: 6)),
+      ));
+      expect(rejected.accepted, isFalse);
+      expect(
+        rejected.validationFailure!.code,
+        RemoteBoatMessageValidationCode.futureTimestamp,
+      );
     });
 
     test('同一sessionのobservedAtが時計補正で戻ってもsequence順で受理する', () {
