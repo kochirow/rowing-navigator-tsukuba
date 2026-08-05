@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
@@ -108,6 +109,9 @@ class MessageService {
   final _rtdbApi = LivePositionAPI();
   late final OtherBoatTrackStore _trackStore;
   int _serverTimeOffsetMillis = 0;
+  int _acceptedFutureTimestampRecordCount = 0;
+  int _maxAcceptedFutureTimestampSkewMillis = 0;
+  DateTime? _serverTimeOffsetUpdatedAt;
   String? _publishedProfileFingerprint;
   StreamSubscription<DatabaseEvent>? _publisherConnectionSubscription;
   String? _publishingBoatId;
@@ -132,6 +136,35 @@ class MessageService {
   /// ずれが大きいまま気づけないと、正常なレコードを未来扱いで捨てる
   /// (2026-08-05 実機ログで693件)。次回ログで確認できるよう残す。
   int get serverTimeOffsetMillis => _serverTimeOffsetMillis;
+
+  /// 今回の航行で受理した未来時刻レコードの件数。**診断専用**。
+  int get acceptedFutureTimestampRecordCount =>
+      _acceptedFutureTimestampRecordCount;
+
+  /// 今回の航行で受理した未来時刻の最大ずれ [ms]。**診断専用**。
+  int get maxAcceptedFutureTimestampSkewMillis =>
+      _maxAcceptedFutureTimestampSkewMillis;
+
+  /// `.info/serverTimeOffset` の最新値を受け取った端末時刻。**診断専用**。
+  DateTime? get serverTimeOffsetUpdatedAt => _serverTimeOffsetUpdatedAt;
+
+  /// 航行単位の時計ずれカウンタを開始時にリセットする。
+  void resetClockSkewDiagnostics() {
+    _acceptedFutureTimestampRecordCount = 0;
+    _maxAcceptedFutureTimestampSkewMillis = 0;
+  }
+
+  void _recordAcceptedFutureTimestamp(OtherBoatTrackUpdateResult result) {
+    final skew = result.acceptedFutureTimestampSkew;
+    if (!result.accepted || skew == null) return;
+    _acceptedFutureTimestampRecordCount++;
+    _maxAcceptedFutureTimestampSkewMillis = math.max(
+      _maxAcceptedFutureTimestampSkewMillis,
+      // serverUpdatedAtはms精度で、estimatedServerNowはus精度なので、
+      // 1ms未満の正のずれも「発生した」と読めるよう1msへ丸め上げる。
+      math.max(1, skew.inMilliseconds),
+    );
+  }
 
   Future<void> sendMessage(Message message) async {
     if (useRealtimeDatabaseForPositions) {
@@ -270,6 +303,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
+      _recordAcceptedFutureTimestamp(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -312,6 +346,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
+      _recordAcceptedFutureTimestamp(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -348,6 +383,7 @@ class MessageService {
         final expanded = positionJoiner.takeExpanded(boatId);
         if (expanded == null) continue;
         final result = _trackStore.ingestJson(expanded);
+        _recordAcceptedFutureTimestamp(result);
         if (result.status ==
                 OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
             result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
@@ -369,6 +405,7 @@ class MessageService {
             final value = event.snapshot.value;
             if (value is num) {
               _serverTimeOffsetMillis = value.toInt();
+              _serverTimeOffsetUpdatedAt = DateTime.now().toUtc();
             }
             serverOffsetReady = true;
             offsetFallbackTimer?.cancel();

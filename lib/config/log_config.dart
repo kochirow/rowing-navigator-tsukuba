@@ -160,7 +160,9 @@ const diagnosticEventCatalog = <String, dynamic>{
         '直近の完全な1ストロークから、融合艇速・ストローク距離・キャッチ減速・ドライブ後半加速・リカバリー保持を算出した。実験指標であり技術評価を断定しない。',
     'imu_fusion_health': '加速度・ジャイロのサンプル充足と融合信頼度を10秒ごとに記録する。',
     'imu_sensor_error': '加速度またはジャイロの購読失敗。GNSS単独経路へ縮退する。',
-    'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。',
+    'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。'
+        'serverTimeOffsetUpdatedAt、acceptedFutureTimestampRecordCount、'
+        'maxAcceptedFutureTimestampSkewMs は時計ずれ診断用。',
     'safety_timer_stalled': '1秒安全監視タイマー自身の実行間隔が上限を超えた。GPS入力途絶や評価停止とは別に記録する。',
     'safety_evaluation_stalled': 'GPS入力は新しいが、衝突評価の正常完了時刻が上限より古い。',
     'session_summary': 'セッション終了時の件数・欠落数・最終状態の集計。',

@@ -84,6 +84,7 @@ import 'package:rowing_navigator/types/boat_type.dart';
 const _logDir = String.fromEnvironment('LOG_DIR');
 const _scenarioPath = String.fromEnvironment('SCENARIO');
 const _outPath = String.fromEnvironment('OUT');
+const _defaultScenarioPath = 'test/replay/mooring_scenario.json';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -138,7 +139,9 @@ void main() {
     final ashoreDetector = AshoreDetector(
       ashoreAreas: ashoreAreas.map((area) => area.points).toList(),
     );
-    final scenario = _readScenario(_scenarioPath);
+    final scenario = _readScenario(
+      _scenarioPath.isEmpty ? _defaultScenarioPath : _scenarioPath,
+    );
     final evaluator = CollisionRiskEvaluatorService();
     final orchestrator = SafetyOrchestrator(
       sessionId: 'replay',
@@ -157,10 +160,18 @@ void main() {
     final iSpeed = col('speed_mps');
     final iHeading = col('heading_deg');
     final iAccuracy = col('gnss_accuracy_m');
-    final iElapsed = col('elapsed_ms');
-    final iQuality = col('gnss_quality');
+    final iElapsed = header.indexOf('elapsed_ms');
+    final iTimestamp = header.indexOf('timestamp');
+    if (iElapsed < 0 && iTimestamp < 0) {
+      markTestSkipped(
+        'replay skipped: track.csv に elapsed_ms も timestamp もありません',
+      );
+      return;
+    }
+    final iQuality = header.indexOf('gnss_quality');
 
     final origin = DateTime.utc(2026, 1, 1);
+    DateTime? legacyOrigin;
     final presentationSamples = <String, int>{};
     final playsByCategory = <String, int>{};
     final cuesByCategory = <String, int>{};
@@ -179,8 +190,30 @@ void main() {
     for (final line in rows.skip(1)) {
       if (line.trim().isEmpty) continue;
       final f = line.split(',');
-      final elapsedMs = int.parse(f[iElapsed]);
-      final at = origin.add(Duration(milliseconds: elapsedMs));
+      DateTime? timestamp;
+      if (iTimestamp >= 0 && f[iTimestamp].trim().isNotEmpty) {
+        timestamp = DateTime.tryParse(f[iTimestamp].trim())?.toUtc();
+        if (timestamp == null) {
+          markTestSkipped('replay skipped: timestamp を解釈できない行があります');
+          return;
+        }
+      }
+      final rowTimestamp = timestamp;
+      final elapsedMs = iElapsed >= 0
+          ? int.tryParse(f[iElapsed].trim())
+          : rowTimestamp == null
+              ? null
+              : () {
+                  final start = legacyOrigin ??= rowTimestamp;
+                  return rowTimestamp.difference(start).inMilliseconds;
+                }();
+      if (elapsedMs == null) {
+        markTestSkipped(
+          'replay skipped: elapsed_ms のない行に timestamp がありません',
+        );
+        return;
+      }
+      final at = timestamp ?? origin.add(Duration(milliseconds: elapsedMs));
       final quality = iQuality >= 0 ? f[iQuality] : 'good';
       // track.csv は「採用された測位」の列なので、`unusable` は
       // 「この測位の時点でGPS品質監視が利用不可と判定していた」を意味する。
@@ -209,6 +242,7 @@ void main() {
       ));
       if (ashore.isAshore) ashoreSamples++;
       final otherBoats = scenario.boatsAt(elapsedMs, at);
+      final otherBoatSpeedById = scenario.speedsAt(elapsedMs);
       final assessment = evaluator.assessRisk(
         boat,
         otherBoats,
@@ -222,9 +256,7 @@ void main() {
         dataQuality: dataQuality,
         ownSpeedMetersPerSecond: boat.speed,
         ownPosition: LatLng(boat.lat, boat.lng),
-        otherBoatSpeedById: {
-          for (final other in otherBoats) other.boatId: other.speed,
-        },
+        otherBoatSpeedById: otherBoatSpeedById,
         healthyBoatIds: otherBoats.map((other) => other.boatId).toSet(),
         capabilities: CapabilitySnapshot(
           gpsUsable: gpsUsable,
@@ -293,6 +325,7 @@ void main() {
       'gpsUnusableSamples': unusableSamples,
       'ashoreSamples': ashoreSamples,
       'otherBoatsInjected': scenario.boatCount,
+      'scenarioCases': scenario.cases,
       'mooringAreasInjected': scenario.mooringAreas.length,
       'audioStarts': playsByCategory,
       'audioStartTimeline': audioStartTimeline,
@@ -368,7 +401,8 @@ BoatType _boatTypeFrom(Map<String, dynamic> manifest) {
 /// `DangerZoneSettings.defaults()` は岸の水面側も15mで実運用と別物なので、
 /// manifest が無い場合だけ実機で使っている 5m / 15m へ寄せる。
 DangerZoneSettings _dangerZoneSettingsFrom(Map<String, dynamic> manifest) {
-  final raw = (manifest['settings'] as Map<String, dynamic>?)?['dangerZoneOffsets'];
+  final raw =
+      (manifest['settings'] as Map<String, dynamic>?)?['dangerZoneOffsets'];
   var settings = DangerZoneSettings.defaults();
   for (final kind in DangerZoneKind.values) {
     final entry = raw is Map<String, dynamic> ? raw[kind.name] : null;
@@ -423,8 +457,9 @@ _Scenario _readScenario(String path) {
   final mooringAreas = <List<LatLng>>[];
   for (final item in (raw['mooringAreas'] as List<dynamic>? ?? const [])) {
     final points = <LatLng>[];
-    for (final p in ((item as Map<String, dynamic>)['points'] as List<dynamic>?
-        ?? const [])) {
+    for (final p
+        in ((item as Map<String, dynamic>)['points'] as List<dynamic>? ??
+            const [])) {
       final point = p as Map<String, dynamic>;
       points.add(LatLng(
         (point['lat'] as num).toDouble(),
@@ -444,13 +479,14 @@ _Scenario _readScenario(String path) {
         lat: (sample['lat'] as num).toDouble(),
         lng: (sample['lng'] as num).toDouble(),
         heading: (sample['heading'] as num?)?.toDouble() ?? 0,
-        speed: (sample['speed'] as num?)?.toDouble() ?? 0,
+        speed: (sample['speed'] as num?)?.toDouble(),
       ));
     }
     samples.sort((a, b) => a.elapsedMs.compareTo(b.elapsedMs));
     if (samples.isEmpty) continue;
     boats.add(_ScenarioBoat(
       boatId: map['boatId'] as String? ?? 'other',
+      caseName: map['case'] as String?,
       boatType: BoatType.values.firstWhere(
         (type) => type.name == map['boatType'],
         orElse: () => BoatType.r_1x,
@@ -469,6 +505,11 @@ class _Scenario {
 
   int get boatCount => boats.length;
 
+  List<String> get cases => boats
+      .map((boat) => boat.caseName)
+      .whereType<String>()
+      .toList(growable: false);
+
   List<Boat> boatsAt(int elapsedMs, DateTime at) {
     if (boats.isEmpty) return const [];
     final result = <Boat>[];
@@ -481,10 +522,21 @@ class _Scenario {
         lat: sample.lat,
         lng: sample.lng,
         heading: sample.heading,
-        speed: sample.speed,
+        // Boatの安全評価モデルは速度を必須とするため、速度不明は幾何計算
+        // では0へ縮退する。ただし提示判定へは下記speedsAtでnullを渡す。
+        speed: sample.speed ?? 0,
         timestamp: at,
         serverUpdatedAt: at,
       ));
+    }
+    return result;
+  }
+
+  Map<String, double?> speedsAt(int elapsedMs) {
+    final result = <String, double?>{};
+    for (final boat in boats) {
+      final sample = boat.sampleAt(elapsedMs);
+      if (sample != null) result[boat.boatId] = sample.speed;
     }
     return result;
   }
@@ -492,11 +544,13 @@ class _Scenario {
 
 class _ScenarioBoat {
   final String boatId;
+  final String? caseName;
   final BoatType boatType;
   final List<_ScenarioSample> samples;
 
   const _ScenarioBoat({
     required this.boatId,
+    required this.caseName,
     required this.boatType,
     required this.samples,
   });
@@ -511,12 +565,15 @@ class _ScenarioBoat {
       if (elapsedMs < a.elapsedMs || elapsedMs > b.elapsedMs) continue;
       final span = b.elapsedMs - a.elapsedMs;
       final t = span == 0 ? 0.0 : (elapsedMs - a.elapsedMs) / span;
+      final speed = a.speed != null && b.speed != null
+          ? a.speed! + (b.speed! - a.speed!) * t
+          : null;
       return _ScenarioSample(
         elapsedMs: elapsedMs,
         lat: a.lat + (b.lat - a.lat) * t,
         lng: a.lng + (b.lng - a.lng) * t,
         heading: a.heading + (b.heading - a.heading) * t,
-        speed: a.speed + (b.speed - a.speed) * t,
+        speed: speed,
       );
     }
     return samples.last;
@@ -528,7 +585,7 @@ class _ScenarioSample {
   final double lat;
   final double lng;
   final double heading;
-  final double speed;
+  final double? speed;
 
   const _ScenarioSample({
     required this.elapsedMs,

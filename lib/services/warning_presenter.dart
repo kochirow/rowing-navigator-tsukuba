@@ -63,14 +63,18 @@ class WarningPresenter {
   ///
   /// [directive] が null、または [ashore] が true なら停止する。
   /// [category] は診断ログ用で、判断には使わない。
-  void apply(
+  /// 新しい再生要求を出したときだけ `true` を返す。
+  ///
+  /// `alertId` が同じでも `eventId` が変われば新しいエピソードなので、
+  /// 呼び出し側は `presentedWarningKey` の変化ではなくこの戻り値を使う。
+  bool apply(
     AudioDirective? directive, {
     required bool ashore,
     String? category,
   }) {
     if (directive == null || ashore) {
       _clear(reason: ashore ? 'ashore' : 'no_audio_directive');
-      return;
+      return false;
     }
 
     final eventId = directive.eventId ?? directive.alertId;
@@ -80,7 +84,7 @@ class WarningPresenter {
         _presentedAsset == directive.asset &&
         _presentedMode == directive.mode &&
         _presentedEventId == eventId) {
-      return;
+      return false;
     }
 
     _presentedWarningKey = directive.alertId;
@@ -104,6 +108,7 @@ class WarningPresenter {
         onPlayOnce(directive.asset, eventId);
         break;
     }
+    return true;
   }
 
   /// 航行終了などで、指示の有無に関係なく確実に止める。

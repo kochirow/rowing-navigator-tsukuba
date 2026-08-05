@@ -1,12 +1,78 @@
 {
   "schemaVersion": 1,
   "sessions": {
+    "rowing_diagnostics_1785016687070": {
+      "sessionId": "1785016687070",
+      "boatType": "r_1x",
+      "episodeCountInsideMooring": {},
+      "episodeCountOutsideMooring": {
+        "shore": 25,
+        "curve": 14,
+        "bridge": 11,
+        "bridgePier": 7,
+        "island": 1,
+        "pile": 1,
+        "reverse": 4,
+        "driftwood": 1
+      }
+    },
+    "rowing_diagnostics_20260726": {
+      "sessionId": "1785016929392",
+      "boatType": "r_1x",
+      "episodeCountInsideMooring": {
+        "shore": 1,
+        "curve": 3
+      },
+      "episodeCountOutsideMooring": {
+        "shore": 11,
+        "curve": 8,
+        "bridge": 8,
+        "bridgePier": 5,
+        "reverse": 3
+      }
+    },
+    "rowing_diagnostics_1785361036997": {
+      "sessionId": "1785361036997",
+      "boatType": "r_8p",
+      "episodeCountInsideMooring": {
+        "shore": 1
+      },
+      "episodeCountOutsideMooring": {
+        "shore": 1
+      }
+    },
+    "rowing_diagnostics_1785361334955": {
+      "sessionId": "1785361334955",
+      "boatType": "r_1x",
+      "episodeCountInsideMooring": {
+        "shore": 5
+      },
+      "episodeCountOutsideMooring": {
+        "shore": 33,
+        "pile": 1
+      }
+    },
+    "rowing_diagnostics_20260725": {
+      "sessionId": "1784929691889",
+      "boatType": "r_2x",
+      "episodeCountInsideMooring": {},
+      "episodeCountOutsideMooring": {
+        "reverse": 1,
+        "driftwood": 2
+      }
+    },
     "rowing_diagnostics_1785186811432": {
       "sessionId": "1785186811432",
       "boatType": "r_1x",
       "sampleCount": 6012,
       "episodeCount": {
         "shore": 28
+      },
+      "episodeCountInsideMooring": {
+        "shore": 2
+      },
+      "episodeCountOutsideMooring": {
+        "shore": 18
       },
       "alertingSeconds": {
         "shore": 784
@@ -61,6 +127,12 @@
       "sampleCount": 4284,
       "episodeCount": {
         "shore": 6
+      },
+      "episodeCountInsideMooring": {
+        "shore": 1
+      },
+      "episodeCountOutsideMooring": {
+        "shore": 2
       },
       "alertingSeconds": {
         "shore": 265

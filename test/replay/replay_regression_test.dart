@@ -6,34 +6,44 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../tool/replay_alerts.dart';
 
 const _captureBaseline = bool.fromEnvironment('CAPTURE_REPLAY_BASELINE');
+const _captureBaselineOutput = String.fromEnvironment('REPLAY_BASELINE_OUT');
+const _replayLogsRoot = '../実機テストログデータ';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('2026-07-28 実機ログの警告エピソードは激変しない', () async {
-    final logs = Directory('../実機テストログデータ/2026_07_28');
+  test('過去7ログの警告エピソードは桟橋外で減少しない', () async {
+    final logs = Directory(_replayLogsRoot);
     if (!logs.existsSync()) {
       markTestSkipped('個人航跡を含む実機ログが作業ツリーにないためスキップ');
       return;
     }
+    final sessionDirectories = _sessionDirectories(logs);
+    if (sessionDirectories.isEmpty) {
+      markTestSkipped('replay対象のセッションディレクトリが見つからないためスキップ');
+      return;
+    }
     if (_captureBaseline) {
       final captured = <String, dynamic>{};
-      for (final directory in logs.listSync().whereType<Directory>()) {
-        final manifest = File('${directory.path}/manifest.json');
-        if (!manifest.existsSync()) continue;
+      for (final directory in sessionDirectories) {
         final result = await replaySessionDirectory(directory);
-        captured[directory.uri.pathSegments
-            .where((segment) => segment.isNotEmpty)
-            .last] = result.toJson();
+        captured[_sessionDirectoryName(directory)] = {
+          'sessionId': result.sessionId,
+          'boatType': result.boatType,
+          'episodeCountInsideMooring': result.episodeCountInsideMooring,
+          'episodeCountOutsideMooring': result.episodeCountOutsideMooring,
+        };
       }
-      // `dart run` cannot load this Flutter plugin graph on the VM in some
-      // local SDKs, so this explicit Flutter-test route is also available for
-      // writing the checked-in snapshot. It touches no application logic.
-      // ignore: avoid_print
-      print(const JsonEncoder.withIndent('  ').convert({
+      final snapshot = {
         'schemaVersion': 1,
         'sessions': captured,
-      }));
+      };
+      final encoded = const JsonEncoder.withIndent('  ').convert(snapshot);
+      if (_captureBaselineOutput.isNotEmpty) {
+        File(_captureBaselineOutput).writeAsStringSync(encoded);
+      }
+      // ignore: avoid_print
+      print(encoded);
       return;
     }
     final baselineFile = File('test/replay/baseline_2026-07-28.json');
@@ -42,35 +52,50 @@ void main() {
     );
     final sessions = Map<String, dynamic>.from(baseline['sessions'] as Map);
     for (final entry in sessions.entries) {
-      final result = await replaySessionDirectory(
-        Directory('${logs.path}/${entry.key}'),
+      final directory = sessionDirectories.firstWhere(
+        (candidate) => _sessionDirectoryName(candidate) == entry.key,
+        orElse: () => throw StateError(
+          'baselineのreplay対象が見つかりません: ${entry.key}',
+        ),
       );
+      final result = await replaySessionDirectory(directory);
       final expected = Map<String, dynamic>.from(entry.value as Map);
       final actual = result.toJson();
       // 差分は数値調整時のレビュー材料であり、通常の失敗条件ではない。
       // ignore: avoid_print
       print(_formatDiff(entry.key, expected, actual));
 
-      final baselineEpisodes = _episodeTotal(expected['episodeCount']);
-      final actualEpisodes = result.episodeTotal;
-      expect(
-        actualEpisodes <= baselineEpisodes * 2 &&
-            actualEpisodes * 2 >= baselineEpisodes,
-        isTrue,
-        reason: '$entry.key: warning episodes changed from '
-            '$baselineEpisodes to $actualEpisodes (more than 2x)',
+      // 桟橋内の意図した静音と、航行中の警告漏れを分ける。既存baseline
+      // に領域別集計が無い版も、桟橋未導入時の全件=桟橋外として読む。
+      final expectedOutside = Map<String, dynamic>.from(
+        (expected['episodeCountOutsideMooring'] ?? expected['episodeCount'])
+            as Map,
       );
+      final actualOutside = result.episodeCountOutsideMooring;
+      for (final outside in expectedOutside.entries) {
+        expect(
+          actualOutside[outside.key] ?? 0,
+          greaterThanOrEqualTo((outside.value as num).toInt()),
+          reason: '$entry.key: ${outside.key} episodes outside mooring area '
+              'decreased from ${outside.value} to '
+              '${actualOutside[outside.key] ?? 0}',
+        );
+      }
     }
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
 
-int _episodeTotal(Object? raw) {
-  final counts = Map<String, dynamic>.from(raw as Map);
-  return counts.values.fold<int>(
-    0,
-    (total, value) => total + (value as num).toInt(),
-  );
-}
+List<Directory> _sessionDirectories(Directory root) => root
+    .listSync(recursive: true)
+    .whereType<Directory>()
+    .where((directory) => directory.uri.pathSegments.any(
+          (segment) => RegExp(r'^2026_07_\d{2}$').hasMatch(segment),
+        ))
+    .where((directory) => File('${directory.path}/manifest.json').existsSync())
+    .toList(growable: false);
+
+String _sessionDirectoryName(Directory directory) =>
+    directory.uri.pathSegments.where((segment) => segment.isNotEmpty).last;
 
 String _formatDiff(
   String session,

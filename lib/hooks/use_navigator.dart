@@ -997,6 +997,12 @@ UseNavigator useNavigator() {
       ...positionRateSnapshot(tick),
       // サーバー時計とのずれ。他艇の受理・棄却の判断根拠そのもの。
       'serverTimeOffsetMs': messageService.serverTimeOffsetMillis,
+      'serverTimeOffsetUpdatedAt':
+          messageService.serverTimeOffsetUpdatedAt?.toUtc().toIso8601String(),
+      'acceptedFutureTimestampRecordCount':
+          messageService.acceptedFutureTimestampRecordCount,
+      'maxAcceptedFutureTimestampSkewMs':
+          messageService.maxAcceptedFutureTimestampSkewMillis,
       // バックグラウンド中に音声指示が出ていたか。提示層が描画に依存して
       // いた頃は、ここが伸び続けて再生要求がゼロのままだった。
       'audioDirectiveWhilePausedCount': audioDirectiveWhilePausedCount.value,
@@ -2270,21 +2276,18 @@ UseNavigator useNavigator() {
     // 走る。iOS はアプリが `paused` の間フレームを回さないため、
     // 判定が「鳴らせ」を出しても実行されなかった(2026-08-05 実機ログ:
     // 96回の指示に対し再生要求1回)。詳細は `WarningPresenter`。
-    final paused = WidgetsBinding.instance.lifecycleState ==
-            AppLifecycleState.paused ||
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.hidden;
+    final paused =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused ||
+            WidgetsBinding.instance.lifecycleState == AppLifecycleState.hidden;
     if (paused && directive != null) {
       audioDirectiveWhilePausedCount.value += 1;
     }
-    final presentedBefore = warningPresenter.value.presentedWarningKey;
-    warningPresenter.value.apply(
+    final playbackRequested = warningPresenter.value.apply(
       directive,
       ashore: isAshore.value,
       category: audioDirectiveCategory.value,
     );
-    if (paused &&
-        directive != null &&
-        warningPresenter.value.presentedWarningKey != presentedBefore) {
+    if (paused && directive != null && playbackRequested) {
       audioPresentationWhilePausedCount.value += 1;
     }
 
@@ -3113,6 +3116,7 @@ UseNavigator useNavigator() {
         sharedCalibrationSyncPolicy.markApplied(appliedRevision);
       }
       // 固定流木は直前に取得済みのため、ここでは再取得しない。
+      messageService.resetClockSkewDiagnostics();
       await startWatching(
         refreshManagedHazards: false,
         navigationOwned: true,

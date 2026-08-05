@@ -39,28 +39,33 @@ void main() {
       );
 
   test('ループ指示で再生要求を1回だけ出す', () {
-    presenter.apply(directive(), ashore: false);
+    expect(presenter.apply(directive(), ashore: false), isTrue);
     expect(commands, ['loop:audio/shore_warning.mp3']);
     expect(diagnostics, contains('warning_presentation_requested:event-1'));
   });
 
   test('同じ指示が何度来ても再生要求は増えない', () {
     // 判定は1秒ごとに走る。呼び出し頻度に依存しない冪等性が要る。
-    for (var i = 0; i < 10; i++) {
-      presenter.apply(directive(), ashore: false);
+    expect(presenter.apply(directive(), ashore: false), isTrue);
+    for (var i = 1; i < 10; i++) {
+      expect(presenter.apply(directive(), ashore: false), isFalse);
     }
     expect(commands, ['loop:audio/shore_warning.mp3']);
   });
 
   test('eventIdが変われば鳴らし直す', () {
-    presenter.apply(
-      directive(mode: AudioDirectiveMode.playOnce, eventId: 'event-1'),
-      ashore: false,
-    );
-    presenter.apply(
-      directive(mode: AudioDirectiveMode.playOnce, eventId: 'event-2'),
-      ashore: false,
-    );
+    expect(
+        presenter.apply(
+          directive(mode: AudioDirectiveMode.playOnce, eventId: 'event-1'),
+          ashore: false,
+        ),
+        isTrue);
+    expect(
+        presenter.apply(
+          directive(mode: AudioDirectiveMode.playOnce, eventId: 'event-2'),
+          ashore: false,
+        ),
+        isTrue);
     expect(commands, [
       'once:audio/shore_warning.mp3:event-1',
       'once:audio/shore_warning.mp3:event-2',
@@ -81,27 +86,31 @@ void main() {
   });
 
   test('陸上判定中は鳴らさず、水上へ戻れば鳴り直す', () {
-    presenter.apply(directive(), ashore: true);
+    expect(presenter.apply(directive(), ashore: true), isFalse);
     expect(commands, isEmpty, reason: '一度も鳴っていなければ停止も要らない');
 
-    presenter.apply(directive(), ashore: false);
+    expect(presenter.apply(directive(), ashore: false), isTrue);
     expect(commands, ['loop:audio/shore_warning.mp3']);
 
     commands.clear();
-    presenter.apply(directive(), ashore: true);
+    expect(presenter.apply(directive(), ashore: true), isFalse);
     expect(commands, ['stop']);
     expect(diagnostics, contains('warning_presentation_cleared:ashore'));
   });
 
   test('eventIdが無い指示はalertIdを重複排除キーにする', () {
-    presenter.apply(
-      directive(mode: AudioDirectiveMode.playOnce, eventId: null),
-      ashore: false,
-    );
-    presenter.apply(
-      directive(mode: AudioDirectiveMode.playOnce, eventId: null),
-      ashore: false,
-    );
+    expect(
+        presenter.apply(
+          directive(mode: AudioDirectiveMode.playOnce, eventId: null),
+          ashore: false,
+        ),
+        isTrue);
+    expect(
+        presenter.apply(
+          directive(mode: AudioDirectiveMode.playOnce, eventId: null),
+          ashore: false,
+        ),
+        isFalse);
     expect(commands, [
       'once:audio/shore_warning.mp3:static_collision/shore/v:shore_north/-',
     ]);
@@ -114,14 +123,16 @@ void main() {
 
   test('別の警告へ切り替わったら新しい方を鳴らす', () {
     presenter.apply(directive(), ashore: false);
-    presenter.apply(
-      directive(
-        alertId: 'relative_boat_collision/other_boat/t:boat-2/-',
-        asset: 'audio/other_boat_warning.mp3',
-        eventId: 'event-9',
-      ),
-      ashore: false,
-    );
+    expect(
+        presenter.apply(
+          directive(
+            alertId: 'relative_boat_collision/other_boat/t:boat-2/-',
+            asset: 'audio/other_boat_warning.mp3',
+            eventId: 'event-9',
+          ),
+          ashore: false,
+        ),
+        isTrue);
     expect(commands, [
       'loop:audio/shore_warning.mp3',
       'loop:audio/other_boat_warning.mp3',

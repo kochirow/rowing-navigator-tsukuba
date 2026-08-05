@@ -24,8 +24,18 @@ import 'package:rowing_navigator/services/legacy_danger_zone_generator.dart';
 import 'package:rowing_navigator/services/safety_orchestrator.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/utils/metric_polygon_buffer.dart';
+import 'package:rowing_navigator/utils/winding_algorithm.dart';
 
 const _defaultHazardProfilePath = 'assets/data/sakuragawa_obstacles.json';
+
+class ReplaySkipped implements Exception {
+  final String reason;
+
+  const ReplaySkipped(this.reason);
+
+  @override
+  String toString() => reason;
+}
 
 Future<void> main(List<String> args) async {
   final sessionPath = _readSessionArgument(args);
@@ -39,6 +49,9 @@ Future<void> main(List<String> args) async {
   try {
     final result = await replaySessionDirectory(Directory(sessionPath));
     stdout.writeln(const JsonEncoder.withIndent('  ').convert(result.toJson()));
+  } on ReplaySkipped catch (error) {
+    stdout.writeln('Replay skipped: ${error.reason}');
+    exitCode = 0;
   } on FormatException catch (error) {
     stderr.writeln('Replay input is invalid: $error');
     exitCode = 65;
@@ -65,6 +78,8 @@ class ReplayAlertResult {
   final String boatType;
   final int sampleCount;
   final Map<String, int> episodeCount;
+  final Map<String, int> episodeCountInsideMooring;
+  final Map<String, int> episodeCountOutsideMooring;
   final Map<String, int> alertingSeconds;
   final Map<String, int> bandHistogram;
   final double currentOverlapRatio;
@@ -76,6 +91,8 @@ class ReplayAlertResult {
     required this.boatType,
     required this.sampleCount,
     required this.episodeCount,
+    required this.episodeCountInsideMooring,
+    required this.episodeCountOutsideMooring,
     required this.alertingSeconds,
     required this.bandHistogram,
     required this.currentOverlapRatio,
@@ -91,6 +108,8 @@ class ReplayAlertResult {
         'boatType': boatType,
         'sampleCount': sampleCount,
         'episodeCount': _sortedCounts(episodeCount),
+        'episodeCountInsideMooring': _sortedCounts(episodeCountInsideMooring),
+        'episodeCountOutsideMooring': _sortedCounts(episodeCountOutsideMooring),
         'alertingSeconds': _sortedCounts(alertingSeconds),
         'bandHistogram': {
           for (final band in const ['imminent', 'approaching', 'monitoring'])
@@ -129,7 +148,15 @@ Future<ReplayAlertResult> replaySessionDirectory(
   final session = _requiredObject(manifest, 'session');
   final settings = _requiredObject(manifest, 'settings');
   final sessionId = _requiredString(session, 'id');
-  final boatTypeName = _requiredString(settings, 'boatType');
+  // 旧形式(7/25)はsettingsではなくsessionへboatTypeを保存している。
+  // 形式差だけでログ全体を落とさず、両方の位置を読む。
+  final boatTypeValue = settings['boatType'] ?? session['boatType'];
+  if (boatTypeValue is! String || boatTypeValue.isEmpty) {
+    throw ReplaySkipped(
+      'manifest ${sessionDirectory.path} に boatType がありません',
+    );
+  }
+  final boatTypeName = boatTypeValue;
   final boatType = _boatTypeFromName(boatTypeName);
   final startedAt =
       DateTime.parse(_requiredString(session, 'startedAt')).toUtc();
@@ -138,6 +165,7 @@ Future<ReplayAlertResult> replaySessionDirectory(
   final profile = _readJsonObject(File(hazardProfilePath));
   final obstacles = _buildReplayObstacles(profile, settings);
   final centerline = _buildCenterline(profile);
+  final mooringAreas = _mooringAreasFromProfile(profile);
   final samples = _readOneHertzSamples(
     File('${sessionDirectory.path}/track.csv'),
     startedAt: startedAt,
@@ -147,8 +175,11 @@ Future<ReplayAlertResult> replaySessionDirectory(
   final orchestrator = SafetyOrchestrator(
     sessionId: 'replay-$sessionId',
     sessionGeneration: 1,
+    mooringAreas: mooringAreas,
   );
   final episodeCount = <String, int>{};
+  final episodeCountInsideMooring = <String, int>{};
+  final episodeCountOutsideMooring = <String, int>{};
   final alertingSeconds = <String, int>{};
   final bandHistogram = <String, int>{
     'imminent': 0,
@@ -208,6 +239,14 @@ Future<ReplayAlertResult> replaySessionDirectory(
       final alert = candidatesById[transition.alertId];
       if (alert == null) continue;
       _increment(episodeCount, alert.category);
+      final inMooring = _isInMooringArea(
+        LatLng(sample.latitude, sample.longitude),
+        mooringAreas,
+      );
+      _increment(
+        inMooring ? episodeCountInsideMooring : episodeCountOutsideMooring,
+        alert.category,
+      );
       final band = _presentationBand(alert.behavior);
       if (band != null) _increment(bandHistogram, band);
       final distance = alert.distanceMeters;
@@ -224,6 +263,8 @@ Future<ReplayAlertResult> replaySessionDirectory(
     boatType: boatTypeName,
     sampleCount: samples.length,
     episodeCount: episodeCount,
+    episodeCountInsideMooring: episodeCountInsideMooring,
+    episodeCountOutsideMooring: episodeCountOutsideMooring,
     alertingSeconds: alertingSeconds,
     bandHistogram: bandHistogram,
     currentOverlapRatio: samples.isEmpty ? 0 : overlapSamples / samples.length,
@@ -279,8 +320,13 @@ List<_ReplaySample> _readOneHertzSamples(
     return index;
   }
 
-  final elapsedColumn = column('elapsed_ms');
   final timestampColumn = header.indexOf('timestamp');
+  final elapsedColumn = header.indexOf('elapsed_ms');
+  if (elapsedColumn < 0 && timestampColumn < 0) {
+    throw const ReplaySkipped(
+      'track.csv has neither elapsed_ms nor timestamp',
+    );
+  }
   final latColumn = column('filtered_lat');
   final lngColumn = column('filtered_lng');
   final speedColumn = column('speed_mps');
@@ -294,13 +340,27 @@ List<_ReplaySample> _readOneHertzSamples(
     if (fields.length != header.length) {
       throw const FormatException('track.csv contains an invalid CSV row');
     }
-    final elapsedMs = int.parse(fields[elapsedColumn]);
+    final timestamp =
+        timestampColumn >= 0 && fields[timestampColumn].trim().isNotEmpty
+            ? DateTime.tryParse(fields[timestampColumn].trim())?.toUtc()
+            : null;
+    if (timestampColumn >= 0 &&
+        fields[timestampColumn].trim().isNotEmpty &&
+        timestamp == null) {
+      throw FormatException(
+          'invalid timestamp at track row ${samples.length + 2}');
+    }
+    final elapsedMs = elapsedColumn >= 0
+        ? int.tryParse(fields[elapsedColumn].trim())
+        : timestamp?.difference(startedAt).inMilliseconds;
+    if (elapsedMs == null) {
+      throw FormatException(
+          'invalid elapsed_ms at track row ${samples.length + 2}');
+    }
     final second = elapsedMs ~/ 1000;
     if (second == lastSecond) continue;
     lastSecond = second;
-    final at = timestampColumn >= 0 && fields[timestampColumn].isNotEmpty
-        ? DateTime.parse(fields[timestampColumn]).toUtc()
-        : startedAt.add(Duration(milliseconds: elapsedMs));
+    final at = timestamp ?? startedAt.add(Duration(milliseconds: elapsedMs));
     samples.add(_ReplaySample(
       at: at,
       latitude: double.parse(fields[latColumn]),
@@ -492,6 +552,35 @@ List<LatLng> _pointsFromJson(Object? raw) {
     }
     return LatLng(lat, lng);
   }).toList(growable: false);
+}
+
+List<List<LatLng>> _mooringAreasFromProfile(Map<String, dynamic> profile) {
+  final rawAreas = profile['mooringAreas'];
+  if (rawAreas == null) return const [];
+  if (rawAreas is! List) {
+    throw const FormatException('mooringAreas must be an array');
+  }
+  final areas = <List<LatLng>>[];
+  for (final raw in rawAreas) {
+    if (raw is! Map) {
+      // プロファイル読込と同じく、不正な1件は残りの運用を止めない。
+      continue;
+    }
+    try {
+      final points = _pointsFromJson(raw['points']);
+      if (points.length >= 3) areas.add(points);
+    } on FormatException {
+      // 不正な桟橋だけをスキップする。空配列は従来動作への縮退。
+    }
+  }
+  return List.unmodifiable(areas);
+}
+
+bool _isInMooringArea(LatLng position, List<List<LatLng>> areas) {
+  for (final polygon in areas) {
+    if (polygon.length >= 3 && isPointInPolygon(position, polygon)) return true;
+  }
+  return false;
 }
 
 BoatType _boatTypeFromName(String value) {

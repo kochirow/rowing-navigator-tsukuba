@@ -151,6 +151,7 @@ void main() {
         serverUpdatedAt: baseTime.add(const Duration(seconds: 2)),
       ));
       expect(accepted.accepted, isTrue);
+      expect(accepted.acceptedFutureTimestampSkew, const Duration(seconds: 2));
       final snapshot = store.snapshot('boat-a')!;
       expect(snapshot.age, Duration.zero);
       expect(snapshot.freshness, OtherBoatTrackFreshness.fresh);
@@ -179,6 +180,7 @@ void main() {
         serverUpdatedAt: baseTime.add(const Duration(seconds: 6)),
       ));
       expect(rejected.accepted, isFalse);
+      expect(rejected.acceptedFutureTimestampSkew, isNull);
       expect(
         rejected.validationFailure!.code,
         RemoteBoatMessageValidationCode.futureTimestamp,
