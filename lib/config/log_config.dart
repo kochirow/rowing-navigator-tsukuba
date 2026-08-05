@@ -39,8 +39,21 @@ const maxSessionDiagnosticEvents = 20000;
 /// 既存イベントは残したまま、因果追跡用のseq・elapsedMsを追加する。
 const diagnosticEventSchemaVersion = 4;
 
+/// 同一警告の clearing→alerting 往復を「多すぎる」とみなす観測窓。
+///
+/// 2026-08-05 の実機ログでは桟橋で 24回/分 の往復が起きていた。
+/// 1件ずつ記録するとログが埋まるので、窓あたりの回数が
+/// [alertFlappingReArmThreshold] を超えたときだけ1件残す。
+const alertFlappingObservationWindow = Duration(seconds: 60);
+
+/// 上の窓の中で何回往復したら記録するか。
+///
+/// 正常な接近・離脱でも数回は往復しうる。実機で問題になった水準
+/// (24回/分)よりは十分低く、正常域よりは高いところに置く。
+const alertFlappingReArmThreshold = 10;
+
 /// 診断イベントの意味と、ログから検証する仮説のカタログ版。
-const diagnosticCatalogVersion = 3;
+const diagnosticCatalogVersion = 4;
 
 /// ZIPに同梱する、AIがイベントを解釈するための最小限のデータ辞書。
 /// ログだけを別のAIへ渡しても、何を観測し、何が未観測なのかを判断できるようにする。
@@ -163,6 +176,14 @@ const diagnosticEventCatalog = <String, dynamic>{
     'diagnostic_heartbeat': '定期的な生存確認と各サブシステムの状態スナップショット。'
         'serverTimeOffsetUpdatedAt、acceptedFutureTimestampRecordCount、'
         'maxAcceptedFutureTimestampSkewMs は時計ずれ診断用。',
+    'gps_position_poll_succeeded':
+        'GNSS streamが黙っている間に getCurrentPosition で測位を取り直した。'
+        'OSは測位を持っていて配信だけ絞ることがあるため、待たずに取りに行く。',
+    'gps_position_poll_skipped': 'ポーリングが取れた測位がstreamの最新より古い/同じだったため流さなかった。',
+    'gps_position_poll_failed': 'ポーリングが失敗した。streamと推測航法は従来どおり継続する。',
+    'alert_phase_flapping':
+        '同一alertIdの clearing→alerting 往復が単位時間あたりの上限を超えた。'
+        '測位欠測を警告解除の根拠にしていないかを疑う指標。',
     'safety_timer_stalled': '1秒安全監視タイマー自身の実行間隔が上限を超えた。GPS入力途絶や評価停止とは別に記録する。',
     'safety_evaluation_stalled': 'GPS入力は新しいが、衝突評価の正常完了時刻が上限より古い。',
     'session_summary': 'セッション終了時の件数・欠落数・最終状態の集計。',

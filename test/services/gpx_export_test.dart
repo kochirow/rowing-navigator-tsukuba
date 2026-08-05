@@ -151,7 +151,7 @@ void main() {
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
     expect(manifest['diagnosticPackageSchemaVersion'], 4);
-    expect(manifest['diagnosticCatalogVersion'], 3);
+    expect(manifest['diagnosticCatalogVersion'], 4);
     expect(files['diagnostic_event_catalog.json'],
         contains('H1_AUDIO_APP_COMPETITION'));
     expect(

@@ -97,34 +97,39 @@ const gpsStaleIndicatorSec = 5;
 /// そのまま維持する。
 const gpsStreamSilenceRecoverySeconds = 8;
 
-/// 自艇が休憩中(低速)かつ直前の測位精度が良好なときに使う、
-/// 無通知とみなすまでの時間 [秒]。
+/// GNSS stream が黙っている間、`getCurrentPosition` で測位を取りに行くまでの
+/// 待ち時間。
 ///
-/// iOS は端末が止まっているとき位置更新の配信を意図的に絞る。
-/// 2026-08-05 の実機ログでは、速度が 2.7 → 0.2 m/s へ落ちる間に配信間隔が
-/// 2 → 3 → 4 → 6 → 8秒 と伸び、8秒の閾値で再購読が251回起きていた。
-/// 再購読は `stopUpdatingLocation` → `startUpdatingLocation` を伴い、
-/// 暖機を毎回捨てるため、正常な省電力動作を自分で悪化させていた。
+/// **なぜ「待つ」ではなく「取りに行く」のか。**
 ///
-/// **真の途絶の検知は遅らせない。** `gps_unavailable` の確定は
-/// `capabilityFaultConfirmSec`(10秒)のままで、この値と独立している。
-/// 15秒にしても「音が鳴らない窓」は増えない。
+/// 2026-08-05 の実機ログ2台(iPhone15,4 / iPhone17,5)で、stream の無通知に
+/// 対する one-shot 復旧は **290/290 回・251/251 回すべて成功**していた。
+/// 所要は中央値 2〜4ms、得られた測位の鮮度は中央値 42〜64ms。
 ///
-/// 精度が良好であることを条件に入れるのは、精度が悪いまま配信が止まった
-/// ケース(本当に受信できていない)では従来どおり早く張り直すため。
-const gpsStreamSilenceRecoveryAtRestSeconds = 15;
+/// つまり **OS は常に新鮮な測位を持っていて、stream だけが配信していない。**
+/// 端末2機種で測位間隔の中央値が 2003ms / 2000ms と一致しており、
+/// 個体差でも受信環境でもない。停止に近づくほど間隔が伸びる
+/// (2 → 3 → 4 → 6 → 8秒)ことから、OS 側の配信間引きと考えられる。
+///
+/// この状況で「無通知とみなす時間」を延ばすのは逆効果である。延ばした分だけ
+/// 確実に取れる測位を捨てることになる(実測で欠測が21〜33%増える見積り)。
+/// 待つのをやめて、こちらから取りに行く。
+///
+/// 2秒は [gpsDeadReckoningStartAfter] と同じで、「推測航法で埋め始める前に、
+/// まず本物を取りに行く」という順序を作る。
+const gpsPositionPollAfterSilence = Duration(seconds: 2);
 
-/// 上の延長を適用してよい「休憩中」の速度上限 [m/s]。
+/// 測位ポーリングの最短間隔。
 ///
-/// 分速100m。`lowSpeedAudioMuteSpeedMetersPerSecond` と同じ基準で、
-/// DESIGN_PRINCIPLES 1.3「橋の下・航路の端で休む」を指す。
-const gpsStreamSilenceAtRestSpeedMetersPerSecond = 100 / 60;
+/// stream が完全に黙っている間はこの間隔で取りに行く。1秒はアプリの
+/// 安全評価周期と同じで、これ以上速くしても評価が消化できない。
+const gpsPositionPollMinimumInterval = Duration(seconds: 1);
 
-/// 上の延長を適用してよい直前の測位精度の上限 [m]。
+/// 測位ポーリング1回の上限時間。
 ///
-/// 実機の中央値は 2.6m、90%点は 4.4m。これを超えるときは受信環境自体が
-/// 悪いので、配信間引きではなく本当の劣化として早く張り直す。
-const gpsStreamSilenceAtRestAccuracyMeters = 8.0;
+/// 実測は 2〜4ms なので、これを超えるのは異常である。ポーリングの遅延で
+/// 1秒周期のウォッチドッグを詰まらせない。
+const gpsPositionPollTimeout = Duration(seconds: 3);
 
 /// 1Hzの測位がこの間来なければ、短時間の推測航法を開始する。
 /// 単発の1秒ジッタで予測と実測を往復しない一方、GPS品質表示が

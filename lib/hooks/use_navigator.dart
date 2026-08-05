@@ -218,6 +218,18 @@ UseNavigator useNavigator() {
   final lastAcceptedGpsSpeedMetersPerSecond = useRef<double?>(null);
   // 無通知とみなす時間を状況で切り替えるために、直前の測位精度も覚える。
   final lastAcceptedGpsAccuracyMeters = useRef<double?>(null);
+  // 受理した測位そのものの時刻。ポーリングが stream と同じ測位を
+  // 二度流さないための比較に使う(受理時刻ではなく fix の時刻)。
+  final lastValidGpsTimestamp = useRef<DateTime?>(null);
+  // フラッピング検出。alertIdごとの clearing→alerting 発生時刻と、
+  // 最後に記録した時刻(同じ窓で何度も記録しないため)。
+  final alertReArmWindow = useRef<Map<String, List<DateTime>>>({});
+  final lastFlappingReportAt = useRef<Map<String, DateTime>>({});
+  // 測位ポーリングの状態。多重呼び出しと連打を防ぐ。
+  final gpsPollInFlight = useRef(false);
+  final lastGpsPollAt = useRef<DateTime?>(null);
+  final gpsPollSucceededCount = useRef(0);
+  final gpsPollFailedCount = useRef(0);
   // 直近60秒の測位到着時刻。実効レートを heartbeat へ残すために使う。
   final recentPositionArrivals = useRef<List<Duration>>(<Duration>[]);
   // バックグラウンド中に音声指示が出た回数と、そのうち提示層へ届いた回数。
@@ -454,19 +466,16 @@ UseNavigator useNavigator() {
   final positionStreamSupervisor = useMemoized(
     () => ResilientStreamSupervisor<Position>(
       silenceTimeout: const Duration(seconds: gpsStreamSilenceRecoverySeconds),
-      // 休憩中(低速)かつ直前の測位精度が良好なときだけ閾値を延ばす。
-      // OSが省電力で配信を絞っているところへ短い閾値で購読を張り直すと、
-      // 暖機を毎回捨てて自分で欠測を増やす(根拠は navigator_config.dart)。
-      // `gps_unavailable` の確定10秒はこの値と独立しているので、
-      // 「音が鳴らない窓」は増えない。
-      silenceTimeoutResolver: () {
-        final speed = lastAcceptedGpsSpeedMetersPerSecond.value;
-        final accuracy = lastAcceptedGpsAccuracyMeters.value;
-        if (speed == null || accuracy == null) return null;
-        if (speed >= gpsStreamSilenceAtRestSpeedMetersPerSecond) return null;
-        if (accuracy > gpsStreamSilenceAtRestAccuracyMeters) return null;
-        return const Duration(seconds: gpsStreamSilenceRecoveryAtRestSeconds);
-      },
+      // **この閾値を「休憩中だから」と延ばしてはいけない。**
+      //
+      // 一度そうしたが、2026-08-05 の実機ログ2台が逆を示した。無通知に
+      // 対する `getCurrentPosition` は 541/541 回すべて成功し、得られた測位は
+      // 42〜64ms前の新しいものだった。OSは測位を持っていて配信しないだけで、
+      // 待つ時間を延ばすと確実に取れる測位をその分だけ捨てる
+      // (実測で欠測が21〜33%増える見積り)。
+      //
+      // 配信の間引きへは `gpsPositionPollAfterSilence` のポーリングで対処し、
+      // この閾値は「購読そのものが死んだ」検知に限って使う。
     ),
   );
   final dynamicObstacleStreamSupervisor =
@@ -718,6 +727,38 @@ UseNavigator useNavigator() {
       final candidate = candidateById[transition.alertId] ??
           diagnosticCandidates.value[transition.alertId];
       if (candidate == null) continue;
+      // 同一警告が clearing→alerting を短時間に何度も往復していないか。
+      //
+      // 往復そのものは正常な現象でもあるので、1件ずつは記録しない。
+      // **単位時間あたりの回数が上限を超えたときだけ**記録する。
+      // 2026-08-05 の実機ログでは、測位欠測を警告解除の根拠にしていたため
+      // 岸で100回・他艇で77回の往復が起きていた(桟橋では24回/分)。
+      // 再発を次回ログから自動で見つけられるようにしておく。
+      if (transition.from == AlertPhase.clearing &&
+          transition.to == AlertPhase.alerting) {
+        final alertId = candidate.alertId;
+        final window = alertReArmWindow.value.putIfAbsent(
+          alertId,
+          () => <DateTime>[],
+        )..add(transition.occurredAt);
+        final since =
+            transition.occurredAt.subtract(alertFlappingObservationWindow);
+        window.removeWhere((at) => at.isBefore(since));
+        final lastReported = lastFlappingReportAt.value[alertId];
+        if (window.length >= alertFlappingReArmThreshold &&
+            (lastReported == null ||
+                transition.occurredAt.difference(lastReported) >=
+                    alertFlappingObservationWindow)) {
+          lastFlappingReportAt.value[alertId] = transition.occurredAt;
+          appendRuntimeDiagnostic('alert_phase_flapping', {
+            'alertRef': diagnosticAlertRef(candidate),
+            'category': candidate.category,
+            'reArmCount': window.length,
+            'windowSec': alertFlappingObservationWindow.inSeconds,
+            'dataQuality': candidate.dataQuality.name,
+          });
+        }
+      }
       appendAlertEvent(AlertDiagnosticEvent(
         t: transition.occurredAt,
         event: 'transition',
@@ -995,6 +1036,9 @@ UseNavigator useNavigator() {
       'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
       // 位置更新の実効レート。lifecycle・速度と同じ行で読めるようにする。
       ...positionRateSnapshot(tick),
+      // 測位ポーリングの実績。stream の配信間引きをどれだけ埋められたか。
+      'gpsPollSucceededCount': gpsPollSucceededCount.value,
+      'gpsPollFailedCount': gpsPollFailedCount.value,
       // サーバー時計とのずれ。他艇の受理・棄却の判断根拠そのもの。
       'serverTimeOffsetMs': messageService.serverTimeOffsetMillis,
       'serverTimeOffsetUpdatedAt':
@@ -1873,6 +1917,10 @@ UseNavigator useNavigator() {
     AlertDataQuality dataQuality,
   ) applySafetyAssessment;
 
+  // 1秒ウォッチドッグの測位ポーリングから使う。実体は下で定義する
+  // `enqueuePosition` と同じで、宣言順の都合で前方参照にしている。
+  late void Function(Position position, int generation) enqueuePositionFromPoll;
+
   void applyCompletedSafetyAssessment(
     RiskAssessment assessment,
     DateTime evaluatedAt,
@@ -1965,6 +2013,62 @@ UseNavigator useNavigator() {
       final lastFix = lastValidGpsAt.value;
       if (mode.value != NavMode.navigator || lastFix == null) return;
       final gpsAge = now.difference(lastFix);
+
+      // **stream が黙っていても、OS は測位を持っている。取りに行く。**
+      //
+      // 2026-08-05 の実機ログ2台で、無通知に対する `getCurrentPosition` は
+      // 541回すべて成功し、得られた測位は 42〜64ms前の新しいものだった
+      // (所要 2〜4ms)。推測航法で埋める前に、まず本物を取りに行く。
+      // 根拠と閾値は `gpsPositionPollAfterSilence` のコメント。
+      final pollAccuracy = config.value?.accuracy;
+      if (pollAccuracy != null &&
+          gpsAge >= gpsPositionPollAfterSilence &&
+          !gpsPollInFlight.value) {
+        final lastPoll = lastGpsPollAt.value;
+        if (lastPoll == null ||
+            now.difference(lastPoll) >= gpsPositionPollMinimumInterval) {
+          lastGpsPollAt.value = now;
+          gpsPollInFlight.value = true;
+          final pollGeneration = navigationGeneration.value;
+          unawaited(geoService
+              .getCurrentPosition(pollAccuracy)
+              .timeout(gpsPositionPollTimeout)
+              .then((position) {
+            if (!isCurrentNavigation(pollGeneration)) return;
+            // stream が先に届けた測位より古い/同じものは流さない。
+            // 同じ測位を二度通すと、速度飛び判定と記録が二重になる。
+            final latest = lastValidGpsTimestamp.value;
+            if (latest != null && !position.timestamp.isAfter(latest)) {
+              appendRuntimeDiagnostic('gps_position_poll_skipped', {
+                'reason': 'not_newer',
+                'fixAgeMs':
+                    DateTime.now().difference(position.timestamp).inMilliseconds,
+              });
+              return;
+            }
+            gpsPollSucceededCount.value += 1;
+            appendRuntimeDiagnostic('gps_position_poll_succeeded', {
+              'gpsAgeMs': gpsAge.inMilliseconds,
+              'accuracyMeters': _finiteOrNull(position.accuracy),
+              'fixAgeMs':
+                  DateTime.now().difference(position.timestamp).inMilliseconds,
+            });
+            enqueuePositionFromPoll(position, pollGeneration);
+          }).catchError((Object error) {
+            if (!isCurrentNavigation(pollGeneration)) return;
+            gpsPollFailedCount.value += 1;
+            // ポーリングの失敗は縮退経路の失敗であり、streamも推測航法も
+            // 従来どおり続く。ここで警告経路を止めない(原則1)。
+            appendRuntimeDiagnostic('gps_position_poll_failed', {
+              'errorType': error.runtimeType.toString(),
+              'gpsAgeMs': gpsAge.inMilliseconds,
+            });
+          }).whenComplete(() {
+            gpsPollInFlight.value = false;
+          }));
+        }
+      }
+
       // このティックで推測航法による評価を適用したか。
       //
       // **1ティックにつき安全評価は1回だけ適用する。** 推測航法の評価には
@@ -2926,6 +3030,7 @@ UseNavigator useNavigator() {
     );
     recordGpsQualityIfChanged(health, acceptedAt);
     lastValidGpsAt.value = acceptedAt;
+    lastValidGpsTimestamp.value = position.timestamp;
     lastDeadReckoningPredictionTick.value = null;
     final recoveryFixQuality = evaluationQualityForAcceptedFix(health.quality);
     if (health.quality == GpsHealthQuality.unusable) {
@@ -2971,6 +3076,8 @@ UseNavigator useNavigator() {
     });
     positionDrainFuture.value = drain;
   }
+
+  enqueuePositionFromPoll = enqueuePosition;
 
   Future<void> startNavigation(NavConfig config_) async {
     if (navigationStopInProgress.value) {
@@ -3479,6 +3586,13 @@ UseNavigator useNavigator() {
       gpsRecoveryProbeInFlight.value = false;
       lastAcceptedGpsSpeedMetersPerSecond.value = null;
       lastAcceptedGpsAccuracyMeters.value = null;
+      lastValidGpsTimestamp.value = null;
+      gpsPollInFlight.value = false;
+      lastGpsPollAt.value = null;
+      gpsPollSucceededCount.value = 0;
+      gpsPollFailedCount.value = 0;
+      alertReArmWindow.value = {};
+      lastFlappingReportAt.value = {};
       recentPositionArrivals.value = <Duration>[];
       audioDirectiveWhilePausedCount.value = 0;
       audioPresentationWhilePausedCount.value = 0;
@@ -3768,6 +3882,13 @@ UseNavigator useNavigator() {
         gpsRecoveryProbeInFlight.value = false;
         lastAcceptedGpsSpeedMetersPerSecond.value = null;
         lastAcceptedGpsAccuracyMeters.value = null;
+        lastValidGpsTimestamp.value = null;
+        gpsPollInFlight.value = false;
+        lastGpsPollAt.value = null;
+        gpsPollSucceededCount.value = 0;
+        gpsPollFailedCount.value = 0;
+        alertReArmWindow.value = {};
+        lastFlappingReportAt.value = {};
         recentPositionArrivals.value = <Duration>[];
         audioDirectiveWhilePausedCount.value = 0;
         audioPresentationWhilePausedCount.value = 0;
