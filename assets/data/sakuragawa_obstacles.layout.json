@@ -51,16 +51,22 @@
       "order": 7
     },
     {
+      "id": "fld_mooring",
+      "name": "桟橋エリア",
+      "parentId": null,
+      "order": 8
+    },
+    {
       "id": "fld_safety",
       "name": "安全データ",
       "parentId": null,
-      "order": 8
+      "order": 9
     },
     {
       "id": "fld_imported",
       "name": "臨時（取込）",
       "parentId": null,
-      "order": 9
+      "order": 10
     }
   ],
   "objects": {
@@ -351,6 +357,13 @@
       "style": {},
       "bridgeId": "bridge_tsuchiura"
     },
+    "pile_71ec1621": {
+      "folderId": "fld_piles",
+      "order": 24,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
     "ashorearea_b672c8db": {
       "folderId": "fld_safety",
       "order": 0,
@@ -365,7 +378,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_kasumikagaura",
-      "direction": "along"
+      "direction": "along",
+      "leg": "outbound"
     },
     "lane_kasumikagaura_return": {
       "folderId": "fld_safety",
@@ -374,7 +388,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_kasumikagaura",
-      "direction": "against"
+      "direction": "against",
+      "leg": "return"
     },
     "lane_sakuragawa_estuary_outbound": {
       "folderId": "fld_safety",
@@ -383,7 +398,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_sakuragawa_estuary",
-      "direction": "against"
+      "direction": "against",
+      "leg": "outbound"
     },
     "lane_sakuragawa_estuary_return": {
       "folderId": "fld_safety",
@@ -392,7 +408,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_sakuragawa_estuary",
-      "direction": "along"
+      "direction": "along",
+      "leg": "return"
     },
     "lane_sakuragawa_upstream_outbound": {
       "folderId": "fld_safety",
@@ -401,7 +418,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_sakuragawa_upstream",
-      "direction": "along"
+      "direction": "along",
+      "leg": "outbound"
     },
     "lane_sakuragawa_upstream_return": {
       "folderId": "fld_safety",
@@ -410,7 +428,8 @@
       "verificationStatus": "aerial_only",
       "style": {},
       "centerlineId": "centerline_sakuragawa_upstream",
-      "direction": "against"
+      "direction": "against",
+      "leg": "return"
     },
     "centerline_kasumikagaura": {
       "folderId": "fld_safety",
@@ -447,11 +466,18 @@
       "verificationStatus": "aerial_only",
       "style": {}
     },
-    "pile_71ec1621": {
-      "folderId": "fld_piles",
-      "order": 1785628763806,
+    "mooringarea_efb61f15": {
+      "folderId": "fld_mooring",
+      "order": 1785915681958,
       "description": "",
-      "verificationStatus": "aerial_only",
+      "verificationStatus": "draft",
+      "style": {}
+    },
+    "mooringarea_51219154": {
+      "folderId": "fld_mooring",
+      "order": 1785915878162,
+      "description": "",
+      "verificationStatus": "draft",
       "style": {}
     }
   }
