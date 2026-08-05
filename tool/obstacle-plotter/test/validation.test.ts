@@ -288,4 +288,70 @@ describe('project validation', () => {
     expect(validateProject(project).some((item) =>
       item.code === 'bridgePier.overlapsCenterline' && item.level === 'warning')).toBe(true);
   });
+  // ---- 桟橋エリア ----
+  //
+  // 区域内で双方が低速なら他艇の警告音が止まる。**広すぎる区域や中心線を
+  // 跨ぐ区域は、航路を通過する他艇まで静音の対象にする。** ここが安全弁。
+
+  it('accepts a small mooring area on one side of the centerline', () => {
+    const project = defaultProject();
+    // 中心線は lng 140.20。岸側(西)だけを囲む約 33m × 22m。
+    const area = polygon(newMapObject('mooringArea'), [
+      { lat: 36.0700, lng: 140.1990 }, { lat: 36.0703, lng: 140.1990 },
+      { lat: 36.0703, lng: 140.1994 }, { lat: 36.0700, lng: 140.1994 },
+    ]);
+    project.objects = [centerline(), area];
+    const codes = validateProject(project).map((item) => item.code);
+    expect(codes).not.toContain('mooringArea.tooLarge');
+    expect(codes).not.toContain('mooringArea.overlapsCenterline');
+    expect(codes).not.toContain('mooringArea.selfIntersection');
+  });
+
+  it('rejects a mooring area that crosses the centerline', () => {
+    const project = defaultProject();
+    // 中心線(lng 140.20)をまたぐ。航路上の他艇まで静音対象になる。
+    const area = polygon(newMapObject('mooringArea'), [
+      { lat: 36.0700, lng: 140.1998 }, { lat: 36.0703, lng: 140.1998 },
+      { lat: 36.0703, lng: 140.2002 }, { lat: 36.0700, lng: 140.2002 },
+    ]);
+    project.objects = [centerline(), area];
+    expect(validateProject(project).some((item) =>
+      item.code === 'mooringArea.overlapsCenterline' && item.level === 'error')).toBe(true);
+  });
+
+  it('rejects a mooring area larger than the area limit', () => {
+    const project = defaultProject();
+    // 約 550m × 90m。桟橋としてあり得ない広さ。
+    const area = polygon(newMapObject('mooringArea'), [
+      { lat: 36.0700, lng: 140.1980 }, { lat: 36.0750, lng: 140.1980 },
+      { lat: 36.0750, lng: 140.1990 }, { lat: 36.0700, lng: 140.1990 },
+    ]);
+    project.objects = [centerline(), area];
+    expect(validateProject(project).some((item) =>
+      item.code === 'mooringArea.tooLarge' && item.level === 'error')).toBe(true);
+  });
+
+  it('rejects a self-intersecting mooring area', () => {
+    const project = defaultProject();
+    const area = polygon(newMapObject('mooringArea'), [
+      { lat: 36.0700, lng: 140.1990 }, { lat: 36.0703, lng: 140.1994 },
+      { lat: 36.0703, lng: 140.1990 }, { lat: 36.0700, lng: 140.1994 },
+    ]);
+    project.objects = [centerline(), area];
+    expect(validateProject(project).some((item) =>
+      item.code === 'mooringArea.selfIntersection' && item.level === 'error')).toBe(true);
+  });
+
+  it('warns when a mooring area overlaps an ashore area', () => {
+    const project = defaultProject();
+    const points = [
+      { lat: 36.0700, lng: 140.1990 }, { lat: 36.0703, lng: 140.1990 },
+      { lat: 36.0703, lng: 140.1994 }, { lat: 36.0700, lng: 140.1994 },
+    ];
+    const area = polygon(newMapObject('mooringArea'), points);
+    const ashore = polygon(newMapObject('ashoreArea'), points);
+    project.objects = [centerline(), area, ashore];
+    expect(validateProject(project).some((item) =>
+      item.code === 'mooringArea.overlapsAshore' && item.level === 'warning')).toBe(true);
+  });
 });

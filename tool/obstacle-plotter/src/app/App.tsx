@@ -17,7 +17,7 @@ const kinds: Array<[ObjectKind, string]> = [
   ['shore', '岸（向きのある基準線）'], ['bridge', '橋（閉じた基準線）'], ['island', '中州（閉じた基準線）'],
   ['bridgePier', '橋脚（外周ポリゴン）'],
   ['driftwood', '流木（閉じた基準線）'], ['pile', '杭（外周ポリゴン）'], ['testZone', 'テスト区域'], ['curve', 'カーブ'], ['reverse', '逆走注意区域（旧データ用）'], ['generic', '危険区域'],
-  ['ashoreArea', '陸上エリア（警告停止）'], ['navigableWater', '移動・一般水域（逆走判定なし）'], ['lane', '航路レーン'],
+  ['ashoreArea', '陸上エリア（警告停止）'], ['mooringArea', '桟橋エリア（着艇時の他艇静音）'], ['navigableWater', '移動・一般水域（逆走判定なし）'], ['lane', '航路レーン'],
   ['practiceArea', '練習水域'], ['operationalCoverage', '対応水域'], ['channelCenterline', '航路中心線'],
 ];
 const seven = (value: number) => value.toFixed(7);

@@ -149,4 +149,24 @@ describe('profile IO', () => {
     expect(output.navigableWaters.map((item: { id: string }) => item.id)).toContain('lane_along');
     expect(output.navigableWaters[1].leg).toBeUndefined();
   });
+  it('round-trips mooring areas and omits the field when none are plotted', async () => {
+    // 桟橋エリアが無いプロファイルへ空配列を足すと、JSONのバイト列が変わり
+    // firestore.rules に固定した SHA-256 と食い違う。1件以上あるときだけ出す。
+    const withoutMooring = await importProfileText(source);
+    expect(JSON.parse(exportProfileText(withoutMooring)).mooringAreas).toBeUndefined();
+
+    const withMooring = JSON.parse(source);
+    withMooring.mooringAreas = [{
+      id: 'mooring_boathouse', name: '艇庫前桟橋', kind: 'mooringArea',
+      points: [{ lat: 36.07, lng: 140.192 }, { lat: 36.071, lng: 140.192 }, { lat: 36.071, lng: 140.193 }],
+    }];
+    const project = await importProfileText(JSON.stringify(withMooring, null, 2));
+    const area = project.objects.find((object) => object.exportId === 'mooring_boathouse')!;
+    expect(area.kind).toBe('mooringArea');
+    const output = JSON.parse(exportProfileText(project));
+    expect(output.mooringAreas.map((item: { id: string }) => item.id)).toEqual(['mooring_boathouse']);
+    // 危険区域の配列へ混ざらないこと。
+    expect(output.dangerZoneBaselines.map((item: { id: string }) => item.id)).not.toContain('mooring_boathouse');
+    expect(output.obstacles.map((item: { id: string }) => item.id)).not.toContain('mooring_boathouse');
+  });
 });

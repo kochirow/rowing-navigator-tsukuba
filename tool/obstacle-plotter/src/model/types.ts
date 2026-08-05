@@ -22,6 +22,7 @@ export type ObjectKind =
   | 'reverse'
   | 'generic'
   | 'ashoreArea'
+  | 'mooringArea'
   | 'navigableWater'
   | 'lane'
   | 'practiceArea'

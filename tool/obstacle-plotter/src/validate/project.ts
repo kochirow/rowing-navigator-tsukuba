@@ -6,6 +6,14 @@ import { DANGER_BASELINE_KINDS, DANGER_POLYGON_KINDS, NAVIGABLE_KINDS, SINGLETON
 // 見逃さない上限は残しつつ、実データを誤って変更させないため30mとする。
 const maxBridgePierLongSideMeters = 30;
 
+/// 桟橋エリアの面積上限 [m²]。
+///
+/// **この上限がこの機能の安全弁である。** 桟橋エリアの中では、自艇と相手が
+/// ともに低速なら他艇の警告音が止まる。区域が大きすぎると、航路を通過する
+/// 他艇まで静音の対象になる。桟橋は数十m規模(例: 50m × 30m = 1500m²)で、
+/// 5000m² は「明らかに広げすぎ」を弾くための上限。
+const maxMooringAreaSquareMeters = 5000;
+
 function pointsOf(geometry: Geometry) {
   return geometry.type === 'point' ? [geometry.point] : geometry.points;
 }
@@ -23,6 +31,25 @@ function centroid(points: { lat: number; lng: number }[]) {
     (total, point) => ({ lat: total.lat + point.lat / points.length, lng: total.lng + point.lng / points.length }),
     { lat: 0, lng: 0 },
   );
+}
+
+/// ポリゴンの面積 [m²]。緯度経度を局所平面へ落として求める。
+function polygonAreaSquareMeters(points: { lat: number; lng: number }[]) {
+  if (points.length < 3) return 0;
+  const center = centroid(points);
+  const eastScale = Math.cos(center.lat * Math.PI / 180) * 111_320;
+  const northScale = 110_540;
+  let twiceArea = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const x1 = (current.lng - center.lng) * eastScale;
+    const y1 = (current.lat - center.lat) * northScale;
+    const x2 = (next.lng - center.lng) * eastScale;
+    const y2 = (next.lat - center.lat) * northScale;
+    twiceArea += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(twiceArea) / 2;
 }
 
 function dimensionsMeters(points: { lat: number; lng: number }[]) {
@@ -341,9 +368,47 @@ export function validateProject(project: Project): ValidationIssue[] {
     }
   }
   for (const object of project.objects) {
-    if (NAVIGABLE_KINDS.has(object.kind) || object.kind === 'ashoreArea') {
+    if (NAVIGABLE_KINDS.has(object.kind) || object.kind === 'ashoreArea' || object.kind === 'mooringArea') {
       if (DANGER_BASELINE_KINDS.has(object.kind) || DANGER_POLYGON_KINDS.has(object.kind)) {
-        issues.push(issue('error', 'safety.category-separation', '陸上エリア・航路を危険区域に混在させてはいけません。', object));
+        issues.push(issue('error', 'safety.category-separation', '陸上エリア・桟橋エリア・航路を危険区域に混在させてはいけません。', object));
+      }
+    }
+  }
+
+  // ---- 桟橋エリア ----
+  //
+  // 区域内で双方が低速なら他艇の警告音が止まる。**広すぎる区域は、
+  // 航路を通過する他艇まで静音の対象にする。** ここが安全弁である。
+  const mooringAreas = project.objects.filter((object) => object.kind === 'mooringArea');
+  for (const area of mooringAreas) {
+    const points = polygonPoints(area);
+    if (points.length < 3) {
+      issues.push(issue('error', 'mooringArea.geometry', '桟橋エリアは3点以上の閉じたポリゴンでなければなりません。', area));
+      continue;
+    }
+    if (hasSelfIntersection(points)) {
+      issues.push(issue('error', 'mooringArea.selfIntersection', '桟橋エリアの外周が自己交差しています。内外の判定が定まりません。', area));
+    }
+    const areaSquareMeters = polygonAreaSquareMeters(points);
+    if (areaSquareMeters > maxMooringAreaSquareMeters) {
+      issues.push(issue('error', 'mooringArea.tooLarge',
+        `桟橋エリアの面積 ${Math.round(areaSquareMeters)}m² が上限 ${maxMooringAreaSquareMeters}m² を超えています。広すぎる区域は、航路を通過する他艇まで静音の対象にします。`, area));
+    }
+    for (const centerline of centerlines) {
+      const centerlinePoints = centerline.geometry.type === 'polyline' ? centerline.geometry.points : [];
+      if (centerlinePoints.length < 2) continue;
+      if (centerlineTouchesOrNearPolygon(centerlinePoints, points, 0)) {
+        issues.push(issue('error', 'mooringArea.overlapsCenterline',
+          '桟橋エリアが航路中心線を跨いでいます。航路上の他艇まで静音の対象になります。岸側だけを囲んでください。', area));
+        break;
+      }
+    }
+    for (const ashore of project.objects.filter((object) => object.kind === 'ashoreArea')) {
+      const ashorePoints = polygonPoints(ashore);
+      if (ashorePoints.length >= 3 && polygonsOverlap(points, ashorePoints)) {
+        issues.push(issue('warning', 'mooringArea.overlapsAshore',
+          '桟橋エリアが陸上エリアと重なっています。陸上判定は全ての音を止めるため、意味が二重になります。', area));
+        break;
       }
     }
   }

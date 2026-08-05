@@ -6,7 +6,7 @@ import { roundCoordinate, sameCoordinate } from './geo';
 type RawItem = { id?: unknown; name?: unknown; kind?: unknown; bridgeId?: unknown; centerlineId?: unknown; direction?: unknown; leg?: unknown; warningAudio?: unknown; points?: unknown };
 const knownTopLevel = new Set([
   'version', 'area', 'source', 'notice', 'howToEdit', 'defaultObstacleProximityCautionMeters',
-  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'channelCenterlines', 'ashoreAreas', 'navigableWaters',
+  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'channelCenterlines', 'ashoreAreas', 'mooringAreas', 'navigableWaters',
   'dangerZoneBaselines', 'obstacles',
 ]);
 
@@ -29,7 +29,7 @@ function withoutClosingDuplicate(points: Coordinate[]): { points: Coordinate[]; 
 }
 
 function kindOf(value: unknown, fallback: ObjectKind): ObjectKind {
-  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'pile', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'navigableWater', 'lane', 'channelCenterline'];
+  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'pile', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'mooringArea', 'navigableWater', 'lane', 'channelCenterline'];
   return typeof value === 'string' && all.includes(value as ObjectKind) ? value as ObjectKind : fallback;
 }
 
@@ -112,6 +112,9 @@ export async function importProfileText(text: string): Promise<Project> {
   }
   for (const [index, item] of (Array.isArray(raw.ashoreAreas) ? raw.ashoreAreas : []).entries()) {
     objects.push(objectFromRaw(item as RawItem, 'ashoreArea', index));
+  }
+  for (const [index, item] of (Array.isArray(raw.mooringAreas) ? raw.mooringAreas : []).entries()) {
+    objects.push(objectFromRaw(item as RawItem, 'mooringArea', index));
   }
   for (const [index, item] of (Array.isArray(raw.navigableWaters) ? raw.navigableWaters : []).entries()) {
     objects.push(objectFromRaw(item as RawItem, 'navigableWater', index));
@@ -204,6 +207,12 @@ export function profileObject(project: Project): Record<string, unknown> {
     }
   }
   output.ashoreAreas = byKind((object) => object.kind === 'ashoreArea').map(standardItem);
+  // 桟橋エリアは**1件以上あるときだけ**書き出す。
+  // 空配列を常に足すと、まだ桟橋を引いていないプロファイルでも
+  // JSONのバイト列が変わり、`firestore.rules` に固定した SHA-256 と
+  // 食い違う。座標を入れた時点で version と hash を上げる運用に合わせる。
+  const mooringAreas = byKind((object) => object.kind === 'mooringArea').map(standardItem);
+  if (mooringAreas.length > 0) output.mooringAreas = mooringAreas;
   output.navigableWaters = byKind((object) => NAVIGABLE_KINDS.has(object.kind)).map(standardItem);
   output.dangerZoneBaselines = byKind((object) => DANGER_BASELINE_KINDS.has(object.kind)).map(standardItem);
   output.obstacles = byKind((object) => DANGER_POLYGON_KINDS.has(object.kind)).map(standardItem);
