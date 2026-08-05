@@ -139,9 +139,21 @@ void main() {
     final ashoreDetector = AshoreDetector(
       ashoreAreas: ashoreAreas.map((area) => area.points).toList(),
     );
-    final scenario = _readScenario(
-      _scenarioPath.isEmpty ? _defaultScenarioPath : _scenarioPath,
-    );
+    // **既定シナリオを黙って混ぜない。**
+    //
+    // 以前は SCENARIO 未指定のとき `test/replay/mooring_scenario.json` を
+    // 自動で読み、合成他艇3艇が実機ログの再生へ混入していた。実ログの
+    // 総量を測っているつもりで別のものを測ることになる(実際に誤った
+    // 数字を出した)。既定は「実機ログそのまま」にし、合成を混ぜるときは
+    // 明示させる。`SCENARIO=default` と書けば同梱シナリオを使える。
+    final scenarioPath = _scenarioPath == 'default'
+        ? _defaultScenarioPath
+        : _scenarioPath;
+    final scenario = _readScenario(scenarioPath);
+    if (scenarioPath.isNotEmpty) {
+      // ignore: avoid_print
+      print('シナリオ: $scenarioPath');
+    }
     final evaluator = CollisionRiskEvaluatorService();
     final orchestrator = SafetyOrchestrator(
       sessionId: 'replay',
