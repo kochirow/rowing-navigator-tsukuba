@@ -10,7 +10,7 @@ export function defaultProject(): Project {
     id: `proj_${uuid()}`,
     name: '桜川障害物プロジェクト',
     area: '桜川（茨城県土浦市）',
-    profileVersion: 8,
+    profileVersion: 9,
     source: '',
     notice: '',
     howToEdit: '',

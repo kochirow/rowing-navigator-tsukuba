@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "area": "桜川（茨城県土浦市）",
   "source": "旧アプリ Safety_Rowing_0212_var2.0 / Safety_Rowing/LocationManager.swift",
   "notice": "旧アプリで運用していた岸・橋・島・流木に加え、カーブ7区域・逆走注意1区域・陸上テスト区域を移植したものです。実艇で使う前に衛星写真と現地で、水上側／陸側（内側／外側）が正しい向きへ広がることを確認してください。",

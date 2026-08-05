@@ -181,11 +181,18 @@ void main() {
         'match /managed_hazards/fixed_obstacle_calibrations_v8',
       ),
     );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v9',
+      ),
+    );
     expect(rules, contains('validSharedSafetyCalibrationV3'));
     expect(rules, contains('validSharedSafetyCalibrationV4'));
     expect(rules, contains('validSharedSafetyCalibrationV5'));
     expect(rules, contains('validSharedSafetyCalibrationV6'));
     expect(rules, contains('validSharedSafetyCalibrationV7'));
+    expect(rules, contains('validSharedSafetyCalibrationV8'));
     expect(rules, contains('validScaledOffsetMap'));
     expect(rules, contains('// GENERATED: hazard-allowlist BEGIN'));
     expect(rules, contains('function canPublishTeamSafety(teamId)'));

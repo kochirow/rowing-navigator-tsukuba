@@ -103,6 +103,8 @@ function temporaryHazard(uid) {
 // `firestore.rules` の baseProfileSha256 に一致させること。
 // ずれると共有校正の書き込みが全て拒否され、このテストも通らない。
 const hazardProfileSha256 =
+  "aaafbf67b64c5b50aa401c77d849f52b1db4fe2a5bc122e5b09bc989d3572b33";
+const legacyHazardProfileSha256 =
   "b94e6f0afb23d153f50f63d8f43e020d62cb61fe8cbbe38777822a8e8671ed88";
 
 function dangerZoneOffsets() {
@@ -128,11 +130,13 @@ function sharedSafetyCalibration({
   scaledVertexOffsets = {},
   disabledWarningSourceIds = ["island_upstream"],
   previousState,
+  baseProfileVersion = 9,
+  baseProfileSha256 = hazardProfileSha256,
 } = {}) {
   return {
     kind: "fixed_obstacle_calibrations",
-    baseProfileVersion: 8,
-    baseProfileSha256: hazardProfileSha256,
+    baseProfileVersion,
+    baseProfileSha256,
     scaledOffsets: scaledOffsets ?? fixedCalibrationOffsets(calibrations),
     scaledVertexOffsets,
     dangerZoneOffsets: dangerZoneOffsets(),
@@ -882,12 +886,47 @@ async function run() {
     });
 
     await check("all team members publish one shared safety document", async () => {
-      const ownerDoc = doc(
+      const legacyDoc = doc(
         u1.firestore(),
         "teams",
         teamA,
         "managed_hazards",
         "fixed_obstacle_calibrations_v8",
+      );
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(
+          doc(
+            context.firestore(),
+            "teams",
+            teamA,
+            "managed_hazards",
+            "fixed_obstacle_calibrations_v8",
+          ),
+          sharedSafetyCalibration({
+            uid: "u1",
+            baseProfileVersion: 8,
+            baseProfileSha256: legacyHazardProfileSha256,
+          }),
+        );
+      });
+      await assertSucceeds(getDoc(legacyDoc));
+      await assertFails(
+        setDoc(
+          legacyDoc,
+          sharedSafetyCalibration({
+            uid: "u1",
+            baseProfileVersion: 8,
+            baseProfileSha256: legacyHazardProfileSha256,
+          }),
+        ),
+      );
+
+      const ownerDoc = doc(
+        u1.firestore(),
+        "teams",
+        teamA,
+        "managed_hazards",
+        "fixed_obstacle_calibrations_v9",
       );
       await assertSucceeds(
         setDoc(ownerDoc, sharedSafetyCalibration({uid: "u1"})),
@@ -899,7 +938,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v8",
+            "fixed_obstacle_calibrations_v9",
           ),
         ),
       );
@@ -910,7 +949,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v8",
+            "fixed_obstacle_calibrations_v9",
           ),
         ),
       );
@@ -921,7 +960,7 @@ async function run() {
             "teams",
             teamA,
             "managed_hazards",
-            "fixed_obstacle_calibrations_v8",
+            "fixed_obstacle_calibrations_v9",
           ),
           sharedSafetyCalibration({
             uid: "u2",
@@ -944,7 +983,7 @@ async function run() {
         "teams",
         teamA,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v8",
+        "fixed_obstacle_calibrations_v9",
       );
       const previousState = previousSafetyState(
         fixedCalibrations({
@@ -1002,7 +1041,7 @@ async function run() {
         "teams",
         teamB,
         "managed_hazards",
-        "fixed_obstacle_calibrations_v8",
+        "fixed_obstacle_calibrations_v9",
       );
       await assertFails(
         setDoc(
