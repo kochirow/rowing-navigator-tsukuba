@@ -126,6 +126,13 @@ class MessageService {
       .toUtc()
       .add(Duration(milliseconds: _serverTimeOffsetMillis));
 
+  /// `.info/serverTimeOffset` の最新値 [ms]。**診断専用**。
+  ///
+  /// 他艇レコードの受理・棄却は「端末時計 + この値」を現在として判断する。
+  /// ずれが大きいまま気づけないと、正常なレコードを未来扱いで捨てる
+  /// (2026-08-05 実機ログで693件)。次回ログで確認できるよう残す。
+  int get serverTimeOffsetMillis => _serverTimeOffsetMillis;
+
   Future<void> sendMessage(Message message) async {
     if (useRealtimeDatabaseForPositions) {
       final publishingBoatId = _publishingBoatId;

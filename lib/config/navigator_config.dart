@@ -97,6 +97,35 @@ const gpsStaleIndicatorSec = 5;
 /// そのまま維持する。
 const gpsStreamSilenceRecoverySeconds = 8;
 
+/// 自艇が休憩中(低速)かつ直前の測位精度が良好なときに使う、
+/// 無通知とみなすまでの時間 [秒]。
+///
+/// iOS は端末が止まっているとき位置更新の配信を意図的に絞る。
+/// 2026-08-05 の実機ログでは、速度が 2.7 → 0.2 m/s へ落ちる間に配信間隔が
+/// 2 → 3 → 4 → 6 → 8秒 と伸び、8秒の閾値で再購読が251回起きていた。
+/// 再購読は `stopUpdatingLocation` → `startUpdatingLocation` を伴い、
+/// 暖機を毎回捨てるため、正常な省電力動作を自分で悪化させていた。
+///
+/// **真の途絶の検知は遅らせない。** `gps_unavailable` の確定は
+/// `capabilityFaultConfirmSec`(10秒)のままで、この値と独立している。
+/// 15秒にしても「音が鳴らない窓」は増えない。
+///
+/// 精度が良好であることを条件に入れるのは、精度が悪いまま配信が止まった
+/// ケース(本当に受信できていない)では従来どおり早く張り直すため。
+const gpsStreamSilenceRecoveryAtRestSeconds = 15;
+
+/// 上の延長を適用してよい「休憩中」の速度上限 [m/s]。
+///
+/// 分速100m。`lowSpeedAudioMuteSpeedMetersPerSecond` と同じ基準で、
+/// DESIGN_PRINCIPLES 1.3「橋の下・航路の端で休む」を指す。
+const gpsStreamSilenceAtRestSpeedMetersPerSecond = 100 / 60;
+
+/// 上の延長を適用してよい直前の測位精度の上限 [m]。
+///
+/// 実機の中央値は 2.6m、90%点は 4.4m。これを超えるときは受信環境自体が
+/// 悪いので、配信間引きではなく本当の劣化として早く張り直す。
+const gpsStreamSilenceAtRestAccuracyMeters = 8.0;
+
 /// 1Hzの測位がこの間来なければ、短時間の推測航法を開始する。
 /// 単発の1秒ジッタで予測と実測を往復しない一方、GPS品質表示が
 /// degradedになる3秒より前から安全判定の穴を埋める。

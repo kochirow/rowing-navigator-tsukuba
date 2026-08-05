@@ -5,6 +5,7 @@
 /// | 層 | 意味 | 描き方 | zIndex |
 /// | --- | --- | --- | --- |
 /// | 航路の中央線 | **越えない取り決め** | 白い破線(暗い縁取り) | 2 |
+/// | 桟橋エリア | **場所の宣言**(危険ではない) | 白い破線の輪郭・塗りなし | 3 |
 /// | 監視モードの航跡 | 過去に通った線 | 線 | 5 |
 /// | 危険区域(塗り) | **実在する危険** | 塗り | 10 |
 /// | 船体領域・掃引外形(線) | **これから通る予測** | 線 | 20 |
@@ -86,6 +87,10 @@ import 'package:flutter/material.dart';
 
 /// 航路の中央線。取り決めの線なので、実在する危険と航跡より下に敷く。
 const int channelDividerZIndex = 2;
+
+/// 桟橋エリアの輪郭。場所の宣言であり、実在する危険ではない。
+/// 中央線と同じ「取り決め」の層に置き、危険区域の塗りより下に敷く。
+const int mooringAreaZIndex = 3;
 
 /// 監視モードの航跡。過去の線なので危険区域より下。
 const int coachTrailZIndex = 5;
@@ -182,5 +187,69 @@ ChannelDividerStyle channelDividerStyleFor({required bool isSatellite}) {
     casingWidth: 5,
     dashLengthPixels: 18,
     gapLengthPixels: 12,
+  );
+}
+
+/// 桟橋エリア1つぶんの表示スタイル。
+///
+/// **塗らない。** 塗り = 実在する危険、という対応を崩さないため
+/// (このファイル冒頭の表)。桟橋エリアは水面であり、そこに何かが在る
+/// わけではない。輪郭を破線で示すだけにする。
+///
+/// 色は中央線と同じ「白い芯 + 暗い縁取り」を使う。色相を割り当てないのは
+/// 中央線と同じ理由で、赤・橙・青・紫は [HazardPalette] が使い切っている。
+/// 中央線より細く・破線を短くして、主役を取らないようにする。
+@immutable
+class MooringAreaStyle {
+  final Color coreColor;
+  final int coreWidth;
+  final Color casingColor;
+  final int casingWidth;
+  final int dashLengthPixels;
+  final int gapLengthPixels;
+
+  const MooringAreaStyle({
+    required this.coreColor,
+    required this.coreWidth,
+    required this.casingColor,
+    required this.casingWidth,
+    required this.dashLengthPixels,
+    required this.gapLengthPixels,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is MooringAreaStyle &&
+      coreColor == other.coreColor &&
+      coreWidth == other.coreWidth &&
+      casingColor == other.casingColor &&
+      casingWidth == other.casingWidth &&
+      dashLengthPixels == other.dashLengthPixels &&
+      gapLengthPixels == other.gapLengthPixels;
+
+  @override
+  int get hashCode => Object.hash(coreColor, coreWidth, casingColor,
+      casingWidth, dashLengthPixels, gapLengthPixels);
+}
+
+/// 桟橋エリアの表示色。[isSatellite] は `MapType.hybrid` のとき true。
+MooringAreaStyle mooringAreaStyleFor({required bool isSatellite}) {
+  if (isSatellite) {
+    return const MooringAreaStyle(
+      coreColor: Color(0xD9FFFFFF), // 白 alpha 0.85
+      coreWidth: 2,
+      casingColor: Color(0x80000000), // 黒 alpha 0.50
+      casingWidth: 4,
+      dashLengthPixels: 10,
+      gapLengthPixels: 8,
+    );
+  }
+  return const MooringAreaStyle(
+    coreColor: Color(0xD9FFFFFF), // 白 alpha 0.85
+    coreWidth: 2,
+    casingColor: Color(0x8C263238), // #263238 alpha 0.55
+    casingWidth: 4,
+    dashLengthPixels: 10,
+    gapLengthPixels: 8,
   );
 }

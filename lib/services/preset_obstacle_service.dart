@@ -7,6 +7,7 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 
 import '../config/hazard_profile_config.dart';
 import '../models/ashore_area.dart';
+import '../models/mooring_area.dart';
 import '../models/channel_lane.dart';
 import '../models/danger_zone_settings.dart';
 import '../models/fixed_obstacle_calibration.dart';
@@ -347,6 +348,27 @@ class PresetObstacleService {
         areas.add(AshoreArea.fromJson(Map<String, dynamic>.from(raw as Map)));
       } catch (error) {
         debugPrint('Invalid ashore area skipped: $error');
+      }
+    }
+    return List.unmodifiable(areas);
+  }
+
+  /// 桟橋エリア（着艇・係留の水域）を読む。危険区域・校正対象ではない。
+  /// 1件が壊れていても残りの有効なエリアは使い、全件欠損なら従来どおり鳴らす。
+  Future<List<MooringArea>> loadMooringAreas() async {
+    final data = await _loadProfile();
+    final areas = <MooringArea>[];
+    final rawAreas = data['mooringAreas'];
+    if (rawAreas == null) return const <MooringArea>[];
+    if (rawAreas is! List) {
+      debugPrint('Invalid mooringAreas array ignored.');
+      return const <MooringArea>[];
+    }
+    for (final raw in rawAreas) {
+      try {
+        areas.add(MooringArea.fromJson(Map<String, dynamic>.from(raw as Map)));
+      } catch (error) {
+        debugPrint('Invalid mooring area skipped: $error');
       }
     }
     return List.unmodifiable(areas);

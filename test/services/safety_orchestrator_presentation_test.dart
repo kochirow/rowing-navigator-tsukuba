@@ -38,6 +38,7 @@ void main() {
     bool overlap = false,
     double? distanceMeters,
     double? entrySeconds,
+    List<String> reasonCodes = const [],
   }) =>
       RiskThreat(
         level: CollisionRiskLevel.lv2,
@@ -57,6 +58,7 @@ void main() {
             // distanceMeters を null にしたい場合はここも埋めない。
             firstEntryDistanceMeters: null,
             minimumSeparationMeters: 0,
+            reasonCodes: reasonCodes,
           ),
         ),
       );
@@ -882,6 +884,155 @@ void main() {
           'audio/bridge_pier_warning.mp3');
     });
 
+    test('抑制規則は下げるだけで、下げた結果を上書きしない', () {
+      // 低速静音で visualOnly にした岸の警告が、安定停止の分岐で
+      // singleAction へ「戻って」いた(`baseBehavior` を見て代入していた)。
+      // 2026-08-05 の実機ログでは、これが桟橋で292サンプル鳴っていた
+      // `PRESENTATION_STABLE_STOP_SINGLE` の正体である。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-suppression-monotonic',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              staticThreat(
+                obstacleId: 'shore_north_24',
+                sourceId: 'shore_north',
+                overlap: true,
+                distanceMeters: 4,
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            // 分速100m未満。橋の下・岸際で休憩している正常な運用。
+            ownSpeedMetersPerSecond: 0.2,
+          );
+
+      // 3秒で低速静音が確定し、5秒で安定停止も確定する。
+      // そのあとも音が戻らないこと。
+      for (var second = 0; second <= 12; second++) {
+        final snapshot = step(second).snapshot;
+        if (second < 3) continue;
+        expect(
+          snapshot.audioDirective,
+          isNull,
+          reason: '$second秒目で音が戻っている',
+        );
+        expect(
+          snapshot.activeAlerts.single.candidate.behavior,
+          AlertBehavior.visualOnly,
+        );
+      }
+    });
+
+    test('係留中に速度が0.4m/sをまたいでも静音は巻き戻らない', () {
+      // 係留中の艇は波と測位ノイズで 0.0〜0.6m/s を往復する。
+      // 単一のしきい値だと安定停止に入っては抜けるを繰り返し、
+      // そのたびに静音の確定待ちが巻き戻って単発音が漏れていた。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-stop-hysteresis',
+        sessionGeneration: 1,
+      );
+      const wobble = <double>[0.2, 0.5, 0.1, 0.6, 0.3, 0.55, 0.15];
+      SafetyOrchestratorResult step(int second, double speed) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              // 重なりではなく「到達予測のある」脅威にする。重なりは
+              // 「縮まっていなければ表示のみ」という別規則が先に効くため、
+              // ここで見たい静音の巻き戻りが隠れてしまう。
+              staticThreat(
+                obstacleId: 'shore_north_24',
+                sourceId: 'shore_north',
+                distanceMeters: 4,
+                entrySeconds: 3,
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: speed,
+          );
+
+      for (var second = 0; second <= 20; second++) {
+        final snapshot = step(second, wobble[second % wobble.length]).snapshot;
+        if (second < 3) continue;
+        expect(
+          snapshot.audioDirective,
+          isNull,
+          reason: '$second秒目で音が漏れている',
+        );
+      }
+
+      // 本当に漕ぎ出せば(0.8m/s以上)、従来どおり鳴る。
+      expect(step(21, 2.0).snapshot.audioDirective, isNotNull);
+    });
+
+    test('不確かさでのみ重なる候補は低速時に表示だけへ落とす', () {
+      // GPS帯を含めたときだけ重なる候補(`gps_guard_entry`)は、測位が疎に
+      // なるほど現れやすくなる。停止中にこれで鳴らすと、測位品質の低下が
+      // そのまま過剰警告に化ける(2026-08-05 実機ログ: 桟橋で31回)。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-uncertainty-only',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second, double speed) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              staticThreat(
+                obstacleId: 'shore_north_24',
+                sourceId: 'shore_north',
+                overlap: true,
+                distanceMeters: 4,
+                reasonCodes: const [
+                  'continuous_domain_entry',
+                  'gps_guard_entry',
+                ],
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: speed,
+          );
+
+      // 停止直後の1測位目から表示だけにする。3秒の確定待ちを持たないのは、
+      // 有意接近のたびに巻き戻る確定待ちでは測位が疎な場面で成立しないため。
+      final stopped = step(0, 0.2).snapshot;
+      expect(stopped.activeAlerts, hasLength(1));
+      expect(stopped.audioDirective, isNull);
+      expect(
+        stopped.activeAlerts.single.candidate.reasonCodes,
+        contains('PRESENTATION_UNCERTAINTY_ONLY_VISUAL'),
+      );
+
+      // 漕ぎ出せば従来どおり鳴る。検知そのものは一切変えていない。
+      final moving = step(1, 3.0).snapshot;
+      expect(moving.audioDirective, isNotNull);
+    });
+
+    test('確度の高い候補は低速でも従来どおり鳴る', () {
+      // 不確かさによる抑制が、実体の重なりまで巻き込まないことを固定する。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-definite-at-rest',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          staticThreat(
+            obstacleId: 'driftwood_1',
+            kind: StaticObstacleKind.driftwood,
+            overlap: true,
+            distanceMeters: 1,
+            reasonCodes: const ['continuous_domain_entry'],
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 0.2,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/driftwood_warning.mp3');
+    });
+
     test('低速でも流木と他艇は静音にしない', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-low-speed-exceptions',
@@ -907,6 +1058,283 @@ void main() {
       final afterConfirmation = step(3).snapshot;
       expect(afterConfirmation.audioDirective?.asset,
           'audio/driftwood_warning.mp3');
+    });
+  });
+
+  // ---- 5. 測位欠測による音声エピソードの再武装 ----
+
+  group('測位欠測と音声エピソード', () {
+    test('数秒消えて戻った同じ脅威は単発音を鳴らし直さない', () {
+      // GPSが数秒途絶えると候補が消える。復帰した瞬間に「新しい脅威」として
+      // 単発音が鳴り直していた(2026-08-05 実機ログ: 桟橋で8秒周期に同期)。
+      // 測位の欠測は脅威が消えた証拠ではない(原則6)。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-gap-rearm',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second, {required bool present}) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              if (present)
+                staticThreat(
+                  obstacleId: 'driftwood_1',
+                  kind: StaticObstacleKind.driftwood,
+                  distanceMeters: 2,
+                  entrySeconds: 3,
+                ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 3.0,
+          );
+
+      final first = step(0, present: true).snapshot;
+      final firstEventId = first.audioDirective?.eventId;
+      expect(firstEventId, isNotNull);
+
+      // 3秒の欠測。候補が消えるが、音声エピソードは据え置く。
+      step(1, present: false);
+      step(2, present: false);
+      step(3, present: false);
+
+      final resumed = step(4, present: true).snapshot;
+      expect(resumed.audioDirective, isNotNull);
+      expect(
+        resumed.audioDirective!.eventId,
+        firstEventId,
+        reason: 'eventIdが同じなら use_alert の重複排除で鳴り直さない',
+      );
+    });
+
+    test('保持時間を超えて消えた脅威は新しいエピソードとして鳴らし直す', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-gap-expired',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second, {required bool present}) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              if (present)
+                staticThreat(
+                  obstacleId: 'driftwood_1',
+                  kind: StaticObstacleKind.driftwood,
+                  distanceMeters: 2,
+                  entrySeconds: 3,
+                ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 3.0,
+          );
+
+      final first = step(0, present: true).snapshot;
+      final firstEventId = first.audioDirective?.eventId;
+      expect(firstEventId, isNotNull);
+
+      // 既定の保持時間は5秒。それを超えたら本当に離れたと扱う。
+      for (var second = 1; second <= 8; second++) {
+        step(second, present: false);
+      }
+      final resumed = step(9, present: true).snapshot;
+      expect(resumed.audioDirective, isNotNull);
+      expect(resumed.audioDirective!.eventId, isNot(firstEventId));
+    });
+  });
+
+  // ---- 6. 桟橋エリア ----
+
+  group('桟橋エリア', () {
+    // 桟橋を囲む小さな四角形。実座標はプロットツールで入れる。
+    const dock = <LatLng>[
+      LatLng(36.0830, 140.2140),
+      LatLng(36.0830, 140.2150),
+      LatLng(36.0836, 140.2150),
+      LatLng(36.0836, 140.2140),
+    ];
+    const insideDock = LatLng(36.0833, 140.2145);
+    const outsideDock = LatLng(36.0900, 140.2145);
+
+    SafetyOrchestratorResult run({
+      required List<List<LatLng>> areas,
+      required LatLng? ownPosition,
+      required double ownSpeed,
+      required double? otherSpeed,
+    }) {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-mooring',
+        sessionGeneration: 1,
+        mooringAreas: areas,
+      );
+      return orchestrator.processAssessment(
+        assessment: assessment([boatThreat(boatId: 'other-1')]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: ownSpeed,
+        ownPosition: ownPosition,
+        otherBoatSpeedById: {'other-1': otherSpeed},
+        healthyBoatIds: const {'other-1'},
+      );
+    }
+
+    test('区域内で双方が低速なら他艇の連続音を止め、表示は残す', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: insideDock,
+        ownSpeed: 0.2,
+        otherSpeed: 0.2,
+      );
+      expect(result.snapshot.audioDirective, isNull);
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.category, 'other_boat');
+      // 表示・内部レベル・記録は一切変えない。
+      expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
+      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(result.state.activeAlerts, hasLength(1));
+    });
+
+    test('相手が動いていれば区域内でも従来どおり鳴る', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: insideDock,
+        ownSpeed: 0.2,
+        otherSpeed: 2.0,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+    });
+
+    test('自艇が動いていれば区域内でも従来どおり鳴る', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: insideDock,
+        ownSpeed: 3.0,
+        otherSpeed: 0.2,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+    });
+
+    test('相手の速度が取れないときは抑制しない(原則6)', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: insideDock,
+        ownSpeed: 0.2,
+        otherSpeed: null,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+    });
+
+    test('区域外では一切影響しない', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: outsideDock,
+        ownSpeed: 0.2,
+        otherSpeed: 0.2,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+    });
+
+    test('区域内で低速なら岸の警告も止め、表示は残す', () {
+      // 桟橋は定義上いつも岸の隣にあり、艇は必ず岸へ寄せて止める。
+      // そこで岸の警告を鳴らすのは原則4に正面から当たる。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-mooring-shore',
+        sessionGeneration: 1,
+        mooringAreas: const [dock],
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          staticThreat(
+            obstacleId: 'shore_north_24',
+            sourceId: 'shore_north',
+            overlap: true,
+            distanceMeters: 4,
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 0.2,
+        ownPosition: insideDock,
+      );
+      // 3秒の確定待ちを挟まず、最初の1測位から止める。
+      expect(result.snapshot.audioDirective, isNull);
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(result.state.activeAlerts, hasLength(1));
+    });
+
+    test('区域内でも漕いでいれば岸の警告は従来どおり鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-mooring-shore-moving',
+        sessionGeneration: 1,
+        mooringAreas: const [dock],
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          staticThreat(
+            obstacleId: 'shore_north_24',
+            sourceId: 'shore_north',
+            distanceMeters: 4,
+            entrySeconds: 3,
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 3.0,
+        ownPosition: insideDock,
+      );
+      expect(result.snapshot.audioDirective?.asset, 'audio/shore_warning.mp3');
+    });
+
+    test('区域内でも流木・杭は止めない(視認しづらく帰結が大きい)', () {
+      // `lowSpeedMutedCategories` に入っていない種類は桟橋でも鳴らす。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-mooring-driftwood',
+        sessionGeneration: 1,
+        mooringAreas: const [dock],
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          staticThreat(
+            obstacleId: 'driftwood_1',
+            kind: StaticObstacleKind.driftwood,
+            overlap: true,
+            distanceMeters: 1,
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 0.2,
+        ownPosition: insideDock,
+      );
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/driftwood_warning.mp3',
+      );
+    });
+
+    test('桟橋エリアが無いプロファイルでも従来どおり鳴る', () {
+      final result = run(
+        areas: const [],
+        ownPosition: insideDock,
+        ownSpeed: 0.2,
+        otherSpeed: 0.2,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+    });
+
+    test('自艇の座標が取れないときは抑制しない(原則6)', () {
+      final result = run(
+        areas: const [dock],
+        ownPosition: null,
+        ownSpeed: 0.2,
+        otherSpeed: 0.2,
+      );
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
     });
   });
 }

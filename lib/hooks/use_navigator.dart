@@ -60,6 +60,7 @@ import '../services/robust_position_estimator.dart';
 import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_speed_trace.dart';
 import '../services/safety_orchestrator.dart';
+import '../services/warning_presenter.dart';
 import '../services/safety_evaluation_liveness.dart';
 import '../services/send_policy.dart';
 import '../services/session_analyzer_service.dart';
@@ -215,6 +216,15 @@ UseNavigator useNavigator() {
   final gpsRecoveryProbeAttempted = useRef(false);
   final gpsRecoveryProbeInFlight = useRef(false);
   final lastAcceptedGpsSpeedMetersPerSecond = useRef<double?>(null);
+  // 無通知とみなす時間を状況で切り替えるために、直前の測位精度も覚える。
+  final lastAcceptedGpsAccuracyMeters = useRef<double?>(null);
+  // 直近60秒の測位到着時刻。実効レートを heartbeat へ残すために使う。
+  final recentPositionArrivals = useRef<List<Duration>>(<Duration>[]);
+  // バックグラウンド中に音声指示が出た回数と、そのうち提示層へ届いた回数。
+  // 提示が描画に依存していた頃は前者だけが伸び、後者はゼロのままだった。
+  // この2つの比が「背面で鳴らない」の再発を次回ログで即座に示す。
+  final audioDirectiveWhilePausedCount = useRef(0);
+  final audioPresentationWhilePausedCount = useRef(0);
   final isPipelineUnresponsive = useState(false);
   final pipelineRecoveryNeedsAssessment = useRef(false);
   final pipelineRecoveryTicks = useRef(0);
@@ -277,6 +287,8 @@ UseNavigator useNavigator() {
   final isAshore = useState(false);
   final ashoreDetector = useRef<AshoreDetector?>(null);
   final lastAshoreState = useRef<AshoreState>(AshoreState.initial);
+  // 桟橋エリア（着艇・係留の水域）。危険区域ではなく提示ポリシーだけを変える。
+  final mooringAreaPolygons = useRef<List<List<LatLng>>>(const []);
   final activeWarnings = useState<List<NavigationWarning>>(const []);
   final activeWarningCount = useState(0);
   final safetyRunMode = useState<SafetyRunMode>(SafetyRunMode.stopped);
@@ -303,7 +315,6 @@ UseNavigator useNavigator() {
   final diagnosticSequence = useRef(0);
   final diagnosticEventDroppedCount = useRef(0);
   final alertEventDroppedCount = useRef(0);
-  final lastPresentedWarningKey = useRef<String?>(null);
   final positionSharingDiagnosticState = useRef<String?>(null);
   final pendingPreSessionDiagnostics = useRef<List<SessionDiagnosticEvent>>([]);
   final recoveryProbeDone = useRef(false);
@@ -414,6 +425,19 @@ UseNavigator useNavigator() {
       }
     },
   );
+  // 音声指示を再生要求へ変える層。
+  //
+  // **ウィジェットの再構築に依存させない。** `useEffect` に置くと build の
+  // 一部として走るため、iOS が `paused` にした瞬間から鳴らなくなる
+  // (2026-08-05 実機ログ: 96回の指示に対し再生要求1回)。判定側から
+  // 直接呼ぶ。再生・停止は従来どおり `enqueueCommand` の直列キューを通る。
+  final warningPresenter = useRef(WarningPresenter(
+    onPlayLoop: (asset) => unawaited(alert.play(asset)),
+    onPlayOnce: (asset, eventId) =>
+        unawaited(alert.playOnce(asset, eventId: eventId)),
+    onStop: () => unawaited(alert.stop()),
+    onDiagnostic: appendRuntimeDiagnostic,
+  ));
   useScreenWakelock(
     shouldKeepAwake: shouldKeepScreenAwake(mode.value),
     onDiagnostic: appendRuntimeDiagnostic,
@@ -430,6 +454,19 @@ UseNavigator useNavigator() {
   final positionStreamSupervisor = useMemoized(
     () => ResilientStreamSupervisor<Position>(
       silenceTimeout: const Duration(seconds: gpsStreamSilenceRecoverySeconds),
+      // 休憩中(低速)かつ直前の測位精度が良好なときだけ閾値を延ばす。
+      // OSが省電力で配信を絞っているところへ短い閾値で購読を張り直すと、
+      // 暖機を毎回捨てて自分で欠測を増やす(根拠は navigator_config.dart)。
+      // `gps_unavailable` の確定10秒はこの値と独立しているので、
+      // 「音が鳴らない窓」は増えない。
+      silenceTimeoutResolver: () {
+        final speed = lastAcceptedGpsSpeedMetersPerSecond.value;
+        final accuracy = lastAcceptedGpsAccuracyMeters.value;
+        if (speed == null || accuracy == null) return null;
+        if (speed >= gpsStreamSilenceAtRestSpeedMetersPerSecond) return null;
+        if (accuracy > gpsStreamSilenceAtRestAccuracyMeters) return null;
+        return const Duration(seconds: gpsStreamSilenceRecoveryAtRestSeconds);
+      },
     ),
   );
   final dynamicObstacleStreamSupervisor =
@@ -891,6 +928,34 @@ UseNavigator useNavigator() {
     };
   }
 
+  /// 直近60秒の測位到着から実効レートを求める。
+  ///
+  /// **平均だけでは判断できない。** 2026-08-05 の実機ログでは、間隔の
+  /// 中央値が2000ms(過去は1000ms)で、そこへ8秒級の停止が262回混ざって
+  /// いた。この2つは原因が違う(配信の間引きと、無通知停止)ので、
+  /// 中央値と最大を別々に残す。
+  Map<String, dynamic> positionRateSnapshot(Duration tick) {
+    const window = Duration(seconds: 60);
+    final arrivals = recentPositionArrivals.value;
+    arrivals.removeWhere((at) => tick - at > window);
+    if (arrivals.length < 2) {
+      return {
+        'positionCount60s': arrivals.length,
+        'positionIntervalMedianMs': null,
+        'positionIntervalMaxMs': null,
+      };
+    }
+    final intervals = <int>[
+      for (var index = 1; index < arrivals.length; index++)
+        (arrivals[index] - arrivals[index - 1]).inMilliseconds,
+    ]..sort();
+    return {
+      'positionCount60s': arrivals.length,
+      'positionIntervalMedianMs': intervals[intervals.length ~/ 2],
+      'positionIntervalMaxMs': intervals.last,
+    };
+  }
+
   void recordDiagnosticHeartbeatIfDue(int generation) {
     if (!isCurrentNavigation(generation)) return;
     final tick = safetyClock.value.elapsed;
@@ -928,8 +993,18 @@ UseNavigator useNavigator() {
       'positionSharingState': positionSharingDiagnosticState.value,
       'pipelineUnresponsive': isPipelineUnresponsive.value,
       'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
+      // 位置更新の実効レート。lifecycle・速度と同じ行で読めるようにする。
+      ...positionRateSnapshot(tick),
+      // サーバー時計とのずれ。他艇の受理・棄却の判断根拠そのもの。
+      'serverTimeOffsetMs': messageService.serverTimeOffsetMillis,
+      // バックグラウンド中に音声指示が出ていたか。提示層が描画に依存して
+      // いた頃は、ここが伸び続けて再生要求がゼロのままだった。
+      'audioDirectiveWhilePausedCount': audioDirectiveWhilePausedCount.value,
+      'audioPresentationWhilePausedCount':
+          audioPresentationWhilePausedCount.value,
     });
     scheduleAudioRouteSnapshot('diagnostic_heartbeat');
+    recordGpsEnvironmentSnapshot('diagnostic_heartbeat', generation);
   }
 
   Future<SessionDiagnosticMetadata> loadSessionDiagnosticMetadata(
@@ -1190,6 +1265,14 @@ UseNavigator useNavigator() {
       appendRuntimeDiagnostic('ashore_detector_loaded', {
         'areaCount': ashoreAreas.length,
         'segmentCount': ashoreDetector.value?.segmentCount ?? 0,
+      });
+      // 桟橋エリアは危険区域ではない。着艇で艇が並ぶ間、双方が低速のときの
+      // 他艇警告の音だけを落とす。空でも全機能が従来どおり動く（原則1）。
+      final mooringAreas = await presetObstacleService.loadMooringAreas();
+      mooringAreaPolygons.value =
+          mooringAreas.map((area) => area.points).toList(growable: false);
+      appendRuntimeDiagnostic('mooring_areas_loaded', {
+        'areaCount': mooringAreas.length,
       });
       final integrity = presetObstacleService.lastProfileIntegrity;
       if (integrity != null && !integrity.isFullyVerified) {
@@ -1876,6 +1959,21 @@ UseNavigator useNavigator() {
       final lastFix = lastValidGpsAt.value;
       if (mode.value != NavMode.navigator || lastFix == null) return;
       final gpsAge = now.difference(lastFix);
+      // このティックで推測航法による評価を適用したか。
+      //
+      // **1ティックにつき安全評価は1回だけ適用する。** 推測航法の評価には
+      // 脅威候補が入っており、GPS断の空評価には入っていない。両方を同じ
+      // ティックで流すと、同じ警告が alerting→clearing を毎秒往復し、
+      // 解除まで進むたびに音声エピソードが再武装して単発音が鳴り直す。
+      // 2026-08-05 の実機ログでは、この往復が岸で100回・他艇で77回
+      // 記録されていた(同一ミリ秒で alerting と clearing が並ぶ)。
+      //
+      // 推測航法の推定は「入力が無い」ではなく「劣化した入力がある」である。
+      // 直後に空評価で「入力なし」と宣言するのは自己矛盾であり、
+      // データ欠損を警告解除の根拠にしてはいけない(原則6)。
+      // GPS断そのものは `buildSystemCandidates` の `gps_unavailable` と
+      // `capabilities.gpsUsable` が従来どおり表現する(不変条件3)。
+      var appliedAssessmentThisTick = false;
       if (enableRobustPositionFilter &&
           gpsAge >= gpsDeadReckoningStartAfter &&
           gpsAge <= gpsDeadReckoningMaximumDuration) {
@@ -1945,6 +2043,7 @@ UseNavigator useNavigator() {
                 now,
                 AlertDataQuality.degraded,
               );
+              appliedAssessmentThisTick = true;
               appendRuntimeDiagnostic('gps_dead_reckoning_prediction', {
                 'gpsAgeMs': gpsAge.inMilliseconds,
                 'uncertaintyMeters': estimate.uncertaintyMeters,
@@ -1967,11 +2066,18 @@ UseNavigator useNavigator() {
         clearAshoreForUnusableGps();
         // GPS断の間もFSMを1秒ごとに進める。物理警告は
         // 3秒でGPS異常警告へ切り替わり、無限に残らない。
-        applySafetyAssessment(
-          RiskAssessment(level: CollisionRiskLevel.lv0),
-          now,
-          AlertDataQuality.unusable,
-        );
+        //
+        // 推測航法がこのティックで評価済みなら、ここは流さない
+        // (上のコメントの理由)。推測航法が続く上限は
+        // `gpsDeadReckoningMaximumDuration`(5秒)なので、そこを過ぎれば
+        // 必ずこの経路へ来て3秒の上限が働く。
+        if (!appliedAssessmentThisTick) {
+          applySafetyAssessment(
+            RiskAssessment(level: CollisionRiskLevel.lv0),
+            now,
+            AlertDataQuality.unusable,
+          );
+        }
       }
     }
   }
@@ -2080,6 +2186,14 @@ UseNavigator useNavigator() {
       evaluatedAt: evaluatedAt,
       dataQuality: dataQuality,
       ownSpeedMetersPerSecond: myBoat.value?.speed,
+      ownPosition: myBoat.value == null
+          ? null
+          : LatLng(myBoat.value!.lat, myBoat.value!.lng),
+      // 桟橋での静音は「双方が低速」でだけ成立する。速度が取れない艇は
+      // 抑制対象にしない(原則6)ため、取れたものだけを渡す。
+      otherBoatSpeedById: {
+        for (final boat in otherBoats.value) boat.boatId: boat.speed,
+      },
       capabilities: CapabilitySnapshot(
         gpsUsable: gpsHealth.value.snapshot(wallClockNow).quality !=
             GpsHealthQuality.unusable,
@@ -2149,6 +2263,30 @@ UseNavigator useNavigator() {
             .where((candidate) => candidate.alertId == directive.alertId)
             .map((candidate) => candidate.category)
             .firstOrNull;
+
+    // **音の提示はここで直接行う。ウィジェットの再構築を待たない。**
+    //
+    // 以前は `useEffect` に置いていたが、`useEffect` は build の一部として
+    // 走る。iOS はアプリが `paused` の間フレームを回さないため、
+    // 判定が「鳴らせ」を出しても実行されなかった(2026-08-05 実機ログ:
+    // 96回の指示に対し再生要求1回)。詳細は `WarningPresenter`。
+    final paused = WidgetsBinding.instance.lifecycleState ==
+            AppLifecycleState.paused ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.hidden;
+    if (paused && directive != null) {
+      audioDirectiveWhilePausedCount.value += 1;
+    }
+    final presentedBefore = warningPresenter.value.presentedWarningKey;
+    warningPresenter.value.apply(
+      directive,
+      ashore: isAshore.value,
+      category: audioDirectiveCategory.value,
+    );
+    if (paused &&
+        directive != null &&
+        warningPresenter.value.presentedWarningKey != presentedBefore) {
+      audioPresentationWhilePausedCount.value += 1;
+    }
 
     // 単発の合図(橋・カーブ・逆走・視覚優先のsystem fault)は、
     // 持続音とは別チャンネルで即座に鳴らす。orchestrator が eventId を
@@ -2773,6 +2911,12 @@ UseNavigator useNavigator() {
     final lowAccuracy = gpsFilter.value.isLowAccuracy(position);
     lastAcceptedGpsSpeedMetersPerSecond.value =
         position.speed.isFinite && position.speed >= 0 ? position.speed : null;
+    lastAcceptedGpsAccuracyMeters.value =
+        position.accuracy.isFinite && position.accuracy > 0
+            ? position.accuracy
+            : null;
+    // 実効レートは heartbeat で60秒窓に切り出す。ここでは到着だけ積む。
+    recentPositionArrivals.value.add(safetyClock.value.elapsed);
     final health = gpsHealth.value.recordAccepted(
       acceptedAt,
       degraded: lowAccuracy,
@@ -3036,7 +3180,7 @@ UseNavigator useNavigator() {
       lastDiagnosticGpsQuality.value = null;
       lastDiagnosticOrientation.value = null;
       lastDiagnosticHeartbeatTick.value = null;
-      lastPresentedWarningKey.value = null;
+      warningPresenter.value.reset();
       sessionDiagnosticMetadata.value =
           await loadSessionDiagnosticMetadata(config_);
       ensureStartIsCurrent();
@@ -3116,6 +3260,7 @@ UseNavigator useNavigator() {
       safetyOrchestrator.value = SafetyOrchestrator(
         sessionId: messageSessionId.value!,
         sessionGeneration: generation,
+        mooringAreas: mooringAreaPolygons.value,
         presentationConfig: AlertPresentationConfig(
           continuousAudioDeadline: Duration(
             milliseconds: (primaryWarningLeadTimeSeconds.value * 1000).round(),
@@ -3329,6 +3474,10 @@ UseNavigator useNavigator() {
       gpsRecoveryProbeAttempted.value = false;
       gpsRecoveryProbeInFlight.value = false;
       lastAcceptedGpsSpeedMetersPerSecond.value = null;
+      lastAcceptedGpsAccuracyMeters.value = null;
+      recentPositionArrivals.value = <Duration>[];
+      audioDirectiveWhilePausedCount.value = 0;
+      audioPresentationWhilePausedCount.value = 0;
       isTemporaryObstacleReceiveUnavailable.value = false;
       mode.value = NavMode.observer;
       config.value = null;
@@ -3346,7 +3495,7 @@ UseNavigator useNavigator() {
       diagnosticSequence.value = 0;
       diagnosticEventDroppedCount.value = 0;
       alertEventDroppedCount.value = 0;
-      lastPresentedWarningKey.value = null;
+      warningPresenter.value.reset();
       sessionStartedAt.value = null;
       lastSessionCheckpointTick.value = null;
       lastCheckpointSummary.value = null;
@@ -3614,6 +3763,10 @@ UseNavigator useNavigator() {
         gpsRecoveryProbeAttempted.value = false;
         gpsRecoveryProbeInFlight.value = false;
         lastAcceptedGpsSpeedMetersPerSecond.value = null;
+        lastAcceptedGpsAccuracyMeters.value = null;
+        recentPositionArrivals.value = <Duration>[];
+        audioDirectiveWhilePausedCount.value = 0;
+        audioPresentationWhilePausedCount.value = 0;
         messageSessionId.value = null;
         messageSequence.value = 0;
         lastProcessedTick.value = null;
@@ -3834,51 +3987,24 @@ UseNavigator useNavigator() {
     };
   }, []);
 
+  // 陸上判定が変わった瞬間に音を止める・戻す。
+  //
+  // **`isAshore` を `useEffect` の依存にしてはいけない。** それだと
+  // フレームが回らない背面で切り替わりを取りこぼす。`ValueNotifier` の
+  // listener はフレームを介さず同期的に走るので、背面でも即座に効く。
+  // 判定・表示・記録・位置共有は陸上でも従来どおり続く(原則1)。
   useEffect(() {
-    // 持続音は `SafetyOrchestrator` が表示 primary とは独立に選んだ
-    // `audioDirective` から出す。表示 primary から鳴らしていた頃は、
-    // 無音の system fault が primary になるたびに鳴っている音が止まっていた。
-    final directive = audioDirective.value;
-    // 陸上判定中は持続音を止める。検知・表示・記録・位置共有は継続しており、
-    // 水面側の測位を1点でも観測すれば即座に戻る(原則1)。
-    final ashore = isAshore.value;
-    if (directive == null || ashore) {
-      final previousWarningKey = lastPresentedWarningKey.value;
-      if (previousWarningKey != null) {
-        appendRuntimeDiagnostic('warning_presentation_cleared', {
-          'previousWarningKey': previousWarningKey,
-          'reason': ashore ? 'ashore' : 'no_audio_directive',
-        });
-      }
-      lastPresentedWarningKey.value = null;
-      unawaited(alert.stop());
-    } else {
-      final eventId = directive.eventId ?? directive.alertId;
-      appendRuntimeDiagnostic('warning_presentation_requested', {
-        'warningKey': directive.alertId,
-        'category': audioDirectiveCategory.value,
-        'asset': directive.asset,
-        'mode': directive.mode.name,
-        'eventId': eventId,
-      });
-      lastPresentedWarningKey.value = directive.alertId;
-      switch (directive.mode) {
-        case AudioDirectiveMode.loop:
-          unawaited(alert.play(directive.asset));
-          break;
-        case AudioDirectiveMode.playOnce:
-          unawaited(alert.playOnce(directive.asset, eventId: eventId));
-          break;
-      }
+    void handleAshoreChanged() {
+      warningPresenter.value.apply(
+        audioDirective.value,
+        ashore: isAshore.value,
+        category: audioDirectiveCategory.value,
+      );
     }
-    return null;
-  }, [
-    audioDirective.value?.alertId,
-    audioDirective.value?.asset,
-    audioDirective.value?.mode,
-    audioDirective.value?.eventId,
-    isAshore.value,
-  ]);
+
+    isAshore.addListener(handleAshoreChanged);
+    return () => isAshore.removeListener(handleAshoreChanged);
+  }, const []);
 
   return UseNavigator(
     config: config,

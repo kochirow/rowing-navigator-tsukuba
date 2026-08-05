@@ -37,6 +37,18 @@ class AlertPresentationConfig {
   final double proximityAudioRearmMeters;
 
   final double stableStopSpeedMetersPerSecond;
+
+  /// 安定停止を「抜けた」と認める速度 [m/s]。
+  ///
+  /// [stableStopSpeedMetersPerSecond] より**大きく**すること。
+  /// 係留中の艇は波と測位ノイズで 0.0〜0.6m/s を往復する。単一のしきい値だと
+  /// 安定停止に入っては抜けるを繰り返し、そのたびに低速静音の確定待ちが
+  /// 巻き戻って音声エピソードが作り直される(2026-08-05 実機ログ)。
+  ///
+  /// 止まったと判定するのは速く、動き出したと判定するのは慎重にする
+  /// 非対称。0.8m/s は分速48mで、漕ぎ出しの最初の1ストロークでも超える。
+  final double stableStopExitSpeedMetersPerSecond;
+
   final Duration stableStopConfirmationDuration;
   final double stableStopRealertApproachMeters;
   final double approachingObservationMeters;
@@ -92,6 +104,7 @@ class AlertPresentationConfig {
     this.intermittentRepeatInterval = const Duration(seconds: 3),
     this.proximityAudioRearmMeters = 3,
     this.stableStopSpeedMetersPerSecond = 0.4,
+    this.stableStopExitSpeedMetersPerSecond = 0.8,
     this.stableStopConfirmationDuration = const Duration(seconds: 5),
     this.stableStopRealertApproachMeters = 2,
     this.approachingObservationMeters = 0.5,
@@ -104,6 +117,8 @@ class AlertPresentationConfig {
     this.staticOverlapImminentGrace = const Duration(seconds: 5),
     this.closingRateWindow = const Duration(seconds: 3),
   })  : assert(stableStopSpeedMetersPerSecond >= 0),
+        assert(stableStopExitSpeedMetersPerSecond >=
+            stableStopSpeedMetersPerSecond),
         assert(stableStopRealertApproachMeters > 0),
         assert(approachingObservationMeters >= 0),
         assert(proximityAudioRearmMeters > 0),

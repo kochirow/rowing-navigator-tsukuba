@@ -998,11 +998,11 @@ void main() {
     final changedRisk = assessment([
       existing,
       staticThreat(
-        'bridge-new',
+        'driftwood-new',
         level: CollisionRiskLevel.lv2,
         entrySeconds: 4,
         distanceMeters: 12,
-        kind: StaticObstacleKind.bridge,
+        kind: StaticObstacleKind.driftwood,
       ),
     ]);
     orchestrator.processAssessment(
@@ -1020,7 +1020,7 @@ void main() {
 
     expect(
       changed.state.primaryAlert?.candidate.targetId,
-      'bridge-new',
+      'driftwood-new',
     );
     expect(changed.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);
   });
@@ -1041,10 +1041,10 @@ void main() {
     }
     final threat = assessment([
       staticThreat(
-        'bridge-jitter',
+        'driftwood-jitter',
         level: CollisionRiskLevel.lv2,
         entrySeconds: 4,
-        kind: StaticObstacleKind.bridge,
+        kind: StaticObstacleKind.driftwood,
       ),
     ]);
     orchestrator.processAssessment(
