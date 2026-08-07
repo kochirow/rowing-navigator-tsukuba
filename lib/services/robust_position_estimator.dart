@@ -25,6 +25,10 @@ class RobustPositionEstimate {
   final double covarianceUncertaintyMeters;
   final double uncertaintyMeters;
   final double innovationMeters;
+
+  /// 観測残差を予測・観測の分散で正規化した二乗値(NIS)。
+  /// 初期化・予測など観測残差がない結果では null。
+  final double? normalizedInnovationSquared;
   final PositionEstimateDisposition disposition;
 
   const RobustPositionEstimate({
@@ -36,6 +40,7 @@ class RobustPositionEstimate {
     required this.covarianceUncertaintyMeters,
     required this.uncertaintyMeters,
     required this.innovationMeters,
+    this.normalizedInnovationSquared,
     required this.disposition,
   });
 }
@@ -363,6 +368,7 @@ class RobustPositionEstimator {
         return _result(
           reportedAccuracyMeters: accuracyMeters,
           innovationMeters: innovationMeters,
+          normalizedInnovationSquared: normalizedInnovationSquared,
           disposition: PositionEstimateDisposition.reacquired,
         );
       }
@@ -379,6 +385,7 @@ class RobustPositionEstimator {
       return _result(
         reportedAccuracyMeters: accuracyMeters,
         innovationMeters: innovationMeters,
+        normalizedInnovationSquared: normalizedInnovationSquared,
         disposition: PositionEstimateDisposition.rejected,
       );
     }
@@ -409,6 +416,7 @@ class RobustPositionEstimator {
     return _result(
       reportedAccuracyMeters: accuracyMeters,
       innovationMeters: innovationMeters,
+      normalizedInnovationSquared: normalizedInnovationSquared,
       disposition: disposition,
     );
   }
@@ -744,6 +752,7 @@ class RobustPositionEstimator {
   RobustPositionEstimate _result({
     required double reportedAccuracyMeters,
     required double innovationMeters,
+    double? normalizedInnovationSquared,
     required PositionEstimateDisposition disposition,
   }) {
     final geodetic = _toGeodetic(_east, _north);
@@ -774,6 +783,7 @@ class RobustPositionEstimator {
       covarianceUncertaintyMeters: covarianceUncertainty,
       uncertaintyMeters: math.max(optimismFloor, covarianceUncertainty),
       innovationMeters: innovationMeters,
+      normalizedInnovationSquared: normalizedInnovationSquared,
       disposition: disposition,
     );
   }

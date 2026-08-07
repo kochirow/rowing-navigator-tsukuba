@@ -2041,8 +2041,9 @@ UseNavigator useNavigator() {
             if (latest != null && !position.timestamp.isAfter(latest)) {
               appendRuntimeDiagnostic('gps_position_poll_skipped', {
                 'reason': 'not_newer',
-                'fixAgeMs':
-                    DateTime.now().difference(position.timestamp).inMilliseconds,
+                'fixAgeMs': DateTime.now()
+                    .difference(position.timestamp)
+                    .inMilliseconds,
               });
               return;
             }
@@ -2839,6 +2840,9 @@ UseNavigator useNavigator() {
         positionFilterResult: 'accepted',
         estimateUncertaintyMeters: estimate?.uncertaintyMeters,
         estimateInnovationMeters: estimate?.innovationMeters,
+        estimateDisposition: estimate?.disposition.name,
+        estimateNormalizedInnovationSquared:
+            estimate?.normalizedInnovationSquared,
         rawGnssSpeedMetersPerSecond: _finiteOrNull(rawPos.speed),
         imuConfidence: motion?.confidence,
         imuQuality: motion?.quality.name,
