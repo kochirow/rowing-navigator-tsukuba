@@ -62,14 +62,17 @@ class SafetyContractMonitor {
   final double separationLimit;
   final Duration separationConfirmDuration;
   final Duration separationResponseDeadline;
+  final Duration integrityRecoveryDuration;
   final List<ContractViolation> _violations = [];
   Duration? _separationExceededSince;
+  Duration? _fallbackSince;
   double? _lastProtectionRadius;
 
   SafetyContractMonitor({
     this.separationLimit = 1,
     this.separationConfirmDuration = const Duration(seconds: 2),
     this.separationResponseDeadline = const Duration(seconds: 1),
+    this.integrityRecoveryDuration = const Duration(seconds: 3),
   });
 
   List<ContractViolation> get violations => List.unmodifiable(_violations);
@@ -114,6 +117,20 @@ class SafetyContractMonitor {
       }
     } else {
       _separationExceededSince = null;
+    }
+    if (observation.integrityState != null &&
+        observation.integrityState != 'trusted') {
+      _fallbackSince ??= observation.elapsed;
+    } else if (observation.integrityState == 'trusted' &&
+        _fallbackSince != null) {
+      if (observation.elapsed - _fallbackSince! < integrityRecoveryDuration) {
+        violate(
+          'INTEGRITY_NO_PREMATURE_TRUST',
+          'trusted before recovery duration elapsed',
+        );
+      } else {
+        _fallbackSince = null;
+      }
     }
 
     if (observation.category == 'other_boat' &&

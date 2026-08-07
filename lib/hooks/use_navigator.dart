@@ -26,6 +26,7 @@ import '../config/warning_audio_config.dart';
 import '../models/alert_candidate.dart';
 import '../models/boat_model.dart';
 import '../models/danger_zone_settings.dart';
+import '../models/fix_envelope.dart';
 import '../models/message_model.dart';
 import '../models/nav_config_model.dart';
 import '../models/navigation_warning.dart';
@@ -36,6 +37,7 @@ import '../models/shared_stroke_trace.dart';
 import '../models/static_obstacle_model.dart';
 import '../services/ashore_detector.dart';
 import '../services/collision_risk_evaluator_service.dart';
+import '../services/conservative_position_solution.dart';
 import '../services/audio_route_diagnostics_service.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
@@ -257,6 +259,11 @@ UseNavigator useNavigator() {
   // 航行世代とドレイン完了Futureを保持する。
   final navigationGeneration = useRef(0);
   final pendingPosition = useRef<Position?>(null);
+  final pendingPositionSource = useRef<FixSource?>(null);
+  final fixEnvelopeSequence = useRef(0);
+  final previousFixEnvelopeTimestamp = useRef<DateTime?>(null);
+  final previousFixEnvelopeArrival = useRef<Duration?>(null);
+  final lastFixEnvelopeSampleAt = useRef<Duration?>(null);
   final positionDrainRunning = useRef(false);
   final positionDrainFuture = useRef<Future<void>?>(null);
   final navigationStartInProgress = useRef(false);
@@ -278,6 +285,8 @@ UseNavigator useNavigator() {
     acceptLowAccuracy: enableRobustPositionFilter,
   ));
   final positionEstimator = useMemoized(RobustPositionEstimator.new);
+  final conservativePositionSolution =
+      useMemoized(ConservativePositionSolution.new);
   final distanceIntegrator = useMemoized(RowingDistanceIntegrator.new);
   final lastDeadReckoningPredictionTick = useRef<Duration?>(null);
   final previousEstimatedPosition = useRef<LatLng?>(null);
@@ -324,6 +333,7 @@ UseNavigator useNavigator() {
   final lastDiagnosticPositionGapAt = useRef<DateTime?>(null);
   final lastDiagnosticHeartbeatTick = useRef<Duration?>(null);
   final lastProcessingTimingSampleTick = useRef<Duration?>(null);
+  final lastSolutionSeparationSampleAt = useRef<Duration?>(null);
   final diagnosticSequence = useRef(0);
   final diagnosticEventDroppedCount = useRef(0);
   final alertEventDroppedCount = useRef(0);
@@ -2583,6 +2593,12 @@ UseNavigator useNavigator() {
     if (lastProcessedTick.value != null &&
         (processTick - lastProcessedTick.value!).inMilliseconds <
             positionUpdateInterval * 1000 - 100) {
+      appendRuntimeDiagnostic('gps_position_coalesced', {
+        'arrivalDeltaMs': lastProcessedTick.value == null
+            ? null
+            : (processTick - lastProcessedTick.value!).inMilliseconds,
+        'fixTimestamp': rawPos.timestamp.toUtc().toIso8601String(),
+      });
       return;
     }
     lastProcessedTick.value = processTick;
@@ -2692,6 +2708,7 @@ UseNavigator useNavigator() {
           estimate = candidate;
         } else if (candidate != null) {
           positionEstimator.reset();
+          conservativePositionSolution.reset();
           estimatorClock.reset();
           lastDeadReckoningPredictionTick.value = null;
           debugPrint('Position estimator produced an unusable result; reset.');
@@ -2707,6 +2724,7 @@ UseNavigator useNavigator() {
       } catch (error) {
         // 推定器の問題で警告処理全体を止めず、このfixだけGNSS値へ戻す。
         positionEstimator.reset();
+        conservativePositionSolution.reset();
         estimatorClock.reset();
         lastDeadReckoningPredictionTick.value = null;
         debugPrint('Position estimator failed and was reset: $error');
@@ -2729,6 +2747,49 @@ UseNavigator useNavigator() {
     if (!isCurrentNavigation(generation)) return;
     postProcessTime.value = DateTime.now();
     myBoat.value = latestMyBoat;
+
+    // Stage 1 shadow: S0(raw), S1(advanced), S2(conservative) を並列計算
+    // するが、以降のBoat・警告・送信・表示は従来どおり latestMyBoat(S1) の
+    // ままに保つ。ここは観測だけで、選択解を変えない。
+    final conservative = conservativePositionSolution.update(
+      latitude: rawPos.latitude,
+      longitude: rawPos.longitude,
+      elapsed: processTick,
+      speedMetersPerSecond: rawPos.speed,
+      headingDegrees: rawPos.heading,
+    );
+    final rawToAdvancedMeters = Geolocator.distanceBetween(
+      rawPos.latitude,
+      rawPos.longitude,
+      latestMyBoat.lat,
+      latestMyBoat.lng,
+    );
+    final rawToConservativeMeters = Geolocator.distanceBetween(
+      rawPos.latitude,
+      rawPos.longitude,
+      conservative.latitude,
+      conservative.longitude,
+    );
+    final advancedToConservativeMeters = Geolocator.distanceBetween(
+      latestMyBoat.lat,
+      latestMyBoat.lng,
+      conservative.latitude,
+      conservative.longitude,
+    );
+    final lastSeparation = lastSolutionSeparationSampleAt.value;
+    if (lastSeparation == null ||
+        processTick - lastSeparation >= const Duration(seconds: 10) ||
+        advancedToConservativeMeters > 8) {
+      lastSolutionSeparationSampleAt.value = processTick;
+      appendRuntimeDiagnostic('solution_separation', {
+        'rawToAdvancedMeters': rawToAdvancedMeters,
+        'rawToConservativeMeters': rawToConservativeMeters,
+        'advancedToConservativeMeters': advancedToConservativeMeters,
+        'fixAgeMs': now.difference(rawPos.timestamp).inMilliseconds,
+        'integrityHint':
+            advancedToConservativeMeters > 8 ? 'separated' : 'consistent',
+      });
+    }
 
     // ######## 陸上判定 ########
     // 艇庫での準備・艇の運搬中は岸の危険区域の中にいるため、
@@ -2979,14 +3040,67 @@ UseNavigator useNavigator() {
     recordDiagnosticHeartbeatIfDue(generation);
   }
 
-  Future<void> handlePosition(Position position, int generation) async {
+  Future<void> handlePosition(
+    Position position,
+    int generation, {
+    FixSource source = FixSource.stream,
+  }) async {
     if (!isCurrentNavigation(generation)) return;
     final receivedAt = DateTime.now();
+    final receivedElapsed = safetyClock.value.elapsed;
+    final previousTimestamp = previousFixEnvelopeTimestamp.value;
+    final previousArrival = previousFixEnvelopeArrival.value;
+    final envelopeBase = (
+      sequence: ++fixEnvelopeSequence.value,
+      source: source,
+      arrivedAtMonotonic: receivedElapsed,
+      fixTimestamp: position.timestamp,
+      ageAtArrivalMs: receivedAt.difference(position.timestamp).inMilliseconds,
+      deltaFromPreviousFixMs: previousTimestamp == null
+          ? null
+          : position.timestamp.difference(previousTimestamp).inMilliseconds,
+      deltaFromPreviousArrivalMs: previousArrival == null
+          ? null
+          : (receivedElapsed - previousArrival).inMilliseconds,
+      accuracyMeters: position.accuracy,
+    );
+    previousFixEnvelopeTimestamp.value = position.timestamp;
+    previousFixEnvelopeArrival.value = receivedElapsed;
+    void recordEnvelope(FixEnvelope envelope, {bool force = false}) {
+      final sampledAt = lastFixEnvelopeSampleAt.value;
+      if (!force &&
+          sampledAt != null &&
+          envelope.arrivedAtMonotonic - sampledAt <
+              const Duration(seconds: 10)) {
+        return;
+      }
+      lastFixEnvelopeSampleAt.value = envelope.arrivedAtMonotonic;
+      appendRuntimeDiagnostic(
+          'gps_fix_envelope', envelope.toDiagnosticDetails());
+    }
+
     if (!gpsFilter.value.accepts(
       position,
       receivedAt: receivedAt,
-      receivedElapsed: safetyClock.value.elapsed,
+      receivedElapsed: receivedElapsed,
     )) {
+      recordEnvelope(
+          FixEnvelope(
+            sequence: envelopeBase.sequence,
+            source: envelopeBase.source,
+            arrivedAtMonotonic: envelopeBase.arrivedAtMonotonic,
+            fixTimestamp: envelopeBase.fixTimestamp,
+            ageAtArrivalMs: envelopeBase.ageAtArrivalMs,
+            deltaFromPreviousFixMs: envelopeBase.deltaFromPreviousFixMs,
+            deltaFromPreviousArrivalMs: envelopeBase.deltaFromPreviousArrivalMs,
+            accuracyMeters: envelopeBase.accuracyMeters,
+            accepted: false,
+            rejectionReason:
+                !position.latitude.isFinite || !position.longitude.isFinite
+                    ? FixRejectionReason.invalidCoordinate
+                    : FixRejectionReason.stale,
+          ),
+          force: true);
       final health = gpsHealth.value.recordRejected(receivedAt);
       recordGpsQualityIfChanged(health, receivedAt);
       appendDiagnosticEvent(SessionDiagnosticEvent(
@@ -3017,6 +3131,17 @@ UseNavigator useNavigator() {
       }
       return;
     }
+    recordEnvelope(FixEnvelope(
+      sequence: envelopeBase.sequence,
+      source: envelopeBase.source,
+      arrivedAtMonotonic: envelopeBase.arrivedAtMonotonic,
+      fixTimestamp: envelopeBase.fixTimestamp,
+      ageAtArrivalMs: envelopeBase.ageAtArrivalMs,
+      deltaFromPreviousFixMs: envelopeBase.deltaFromPreviousFixMs,
+      deltaFromPreviousArrivalMs: envelopeBase.deltaFromPreviousArrivalMs,
+      accuracyMeters: envelopeBase.accuracyMeters,
+      accepted: true,
+    ));
     if (!isCurrentNavigation(generation)) return;
     final acceptedAt = receivedAt;
     final lowAccuracy = gpsFilter.value.isLowAccuracy(position);
@@ -3056,9 +3181,14 @@ UseNavigator useNavigator() {
 
   /// 高頻度のGPSストリームを有界メールボックスに集約する。
   /// 処理中の測位より古い待ち行列は捨て、次に最新の1件を使う。
-  void enqueuePosition(Position position, int generation) {
+  void enqueuePosition(
+    Position position,
+    int generation, {
+    FixSource source = FixSource.stream,
+  }) {
     if (!isCurrentNavigation(generation)) return;
     pendingPosition.value = position;
+    pendingPositionSource.value = source;
     if (positionDrainRunning.value) return;
 
     positionDrainRunning.value = true;
@@ -3068,8 +3198,10 @@ UseNavigator useNavigator() {
           final next = pendingPosition.value;
           if (next == null) break;
           pendingPosition.value = null;
+          final nextSource = pendingPositionSource.value ?? FixSource.stream;
+          pendingPositionSource.value = null;
           try {
-            await handlePosition(next, generation);
+            await handlePosition(next, generation, source: nextSource);
           } catch (e) {
             reportPipelineFailure(e, generation);
           }
@@ -3081,7 +3213,8 @@ UseNavigator useNavigator() {
     positionDrainFuture.value = drain;
   }
 
-  enqueuePositionFromPoll = enqueuePosition;
+  enqueuePositionFromPoll = (position, generation) =>
+      enqueuePosition(position, generation, source: FixSource.polling);
 
   Future<void> startNavigation(NavConfig config_) async {
     if (navigationStopInProgress.value) {
@@ -3203,6 +3336,7 @@ UseNavigator useNavigator() {
       ensureStartIsCurrent();
       gpsFilter.value.reset();
       positionEstimator.reset();
+      conservativePositionSolution.reset();
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
@@ -3524,6 +3658,7 @@ UseNavigator useNavigator() {
       pendingPosition.value = null;
       positionPublisher.stop();
       positionEstimator.reset();
+      conservativePositionSolution.reset();
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
@@ -3903,6 +4038,7 @@ UseNavigator useNavigator() {
         lastDiagnosticPositionGapAt.value = null;
         lastProcessingTimingSampleTick.value = null;
         positionEstimator.reset();
+        conservativePositionSolution.reset();
         estimatorClock.reset();
         lastDeadReckoningPredictionTick.value = null;
         previousEstimatedPosition.value = null;
@@ -4039,6 +4175,7 @@ UseNavigator useNavigator() {
       pendingPosition.value = null;
       positionPublisher.stop();
       positionEstimator.reset();
+      conservativePositionSolution.reset();
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
