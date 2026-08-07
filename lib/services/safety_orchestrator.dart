@@ -494,9 +494,18 @@ class SafetyOrchestrator {
         // `lowSpeedMutedCategories` の3秒確定待ちと違い、ここは状態を
         // 持たない。確定待ちは有意接近のたびに巻き戻るため、
         // 測位が疎で距離がぶれる場面では効かなかった。
-        behavior = AlertBehavior.visualOnly;
-        repeating = false;
-        extraReasonCodes.add('PRESENTATION_UNCERTAINTY_ONLY_VISUAL');
+        // 固定物は自艇が低速なら止めてよい。一方、他艇は相手も停止して
+        // いると確認できた場合だけ静音にする。相手の速度が不明なときは
+        // 原則6により静音しない。
+        final silenceable = _canSuppressAtRest(candidate) ||
+            _isOtherBoatAtRest(candidate, otherBoatSpeedById);
+        if (silenceable) {
+          // この規則も他の提示規則と同じく、直前の結果を下げるだけにする。
+          // 直接代入すると規則の適用順で警告を戻したり消したりしてしまう。
+          behavior = _quieter(behavior, AlertBehavior.visualOnly);
+          repeating = false;
+          extraReasonCodes.add('PRESENTATION_UNCERTAINTY_ONLY_VISUAL');
+        }
       }
       if (inMooringArea && _isLowSpeed) {
         // 桟橋エリアの中で、自艇が低速のとき。

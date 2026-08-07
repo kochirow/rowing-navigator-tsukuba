@@ -1009,6 +1009,69 @@ void main() {
       expect(moving.audioDirective, isNotNull);
     });
 
+    test('不確かさだけの他艇接近は、相手が動く又は速度不明なら音を維持する', () {
+      // boatThreat の重なりに GPS 帯だけで入ったことを表す。
+      // reason code は候補化後に付くため、専用の脅威を組み立てる。
+      RiskAssessment uncertaintyBoatAssessment() => assessment([
+            RiskThreat(
+              level: CollisionRiskLevel.lv3,
+              threat: ThreatInfo(
+                kind: ThreatKind.boat,
+                position: const LatLng(36.0, 140.0),
+                boatId: 'other-uncertain',
+                distanceMeters: 4,
+                continuousIntersection: const ContinuousIntersection(
+                  intersects: true,
+                  currentOverlap: true,
+                  firstEntryTimeSeconds: 0,
+                  firstExitTimeSeconds: 2,
+                  minimumSeparationMeters: 0,
+                  reasonCodes: ['gps_guard_entry'],
+                ),
+              ),
+            ),
+          ]);
+
+      SafetyOrchestratorResult uncertainRun(double? otherSpeed) {
+        final orchestrator = SafetyOrchestrator(
+          sessionId: 'session-uncertainty-other-${otherSpeed ?? 'unknown'}',
+          sessionGeneration: 1,
+        );
+        return orchestrator.processAssessment(
+          assessment: uncertaintyBoatAssessment(),
+          evaluatedAt: t0,
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 0.2,
+          otherBoatSpeedById: {'other-uncertain': otherSpeed},
+        );
+      }
+
+      expect(uncertainRun(2.0).snapshot.audioDirective, isNotNull);
+      expect(uncertainRun(null).snapshot.audioDirective, isNotNull);
+
+      final stopped = uncertainRun(0.1).snapshot;
+      expect(stopped.audioDirective, isNull);
+      expect(
+        stopped.activeAlerts.single.candidate.reasonCodes,
+        contains('PRESENTATION_UNCERTAINTY_ONLY_VISUAL'),
+      );
+    });
+
+    test('確度の高い他艇接近は低速でも従来どおり鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-definite-other-at-rest',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([boatThreat(boatId: 'other-definite')]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 0.2,
+        otherBoatSpeedById: const {'other-definite': 2.0},
+      );
+      expect(result.snapshot.audioDirective, isNotNull);
+    });
+
     test('確度の高い候補は低速でも従来どおり鳴る', () {
       // 不確かさによる抑制が、実体の重なりまで巻き込まないことを固定する。
       final orchestrator = SafetyOrchestrator(
