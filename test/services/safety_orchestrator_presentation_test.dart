@@ -1092,8 +1092,8 @@ void main() {
         capabilities: capabilities,
         ownSpeedMetersPerSecond: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/driftwood_warning.mp3');
+      expect(
+          result.snapshot.audioDirective?.asset, 'audio/driftwood_warning.mp3');
     });
 
     test('低速でも流木と他艇は静音にしない', () {
@@ -1251,7 +1251,8 @@ void main() {
       expect(candidate.category, 'other_boat');
       // 表示・内部レベル・記録は一切変えない。
       expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
-      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(
+          candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
       expect(result.state.activeAlerts, hasLength(1));
     });
 
@@ -1324,7 +1325,8 @@ void main() {
       // 3秒の確定待ちを挟まず、最初の1測位から止める。
       expect(result.snapshot.audioDirective, isNull);
       final candidate = result.snapshot.activeAlerts.single.candidate;
-      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(
+          candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
       expect(result.state.activeAlerts, hasLength(1));
     });
 
