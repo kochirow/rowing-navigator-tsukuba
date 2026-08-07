@@ -23,11 +23,10 @@ void main() {
   );
 
   RiskAssessment assessment(Iterable<RiskThreat> threats) => RiskAssessment(
-        level:
-            threats.isEmpty ? CollisionRiskLevel.lv0 : CollisionRiskLevel.lv2,
-        primaryThreat: threats.isEmpty ? null : threats.first.threat,
-        threats: threats,
-      );
+    level: threats.isEmpty ? CollisionRiskLevel.lv0 : CollisionRiskLevel.lv2,
+    primaryThreat: threats.isEmpty ? null : threats.first.threat,
+    threats: threats,
+  );
 
   /// 静的危険区域の脅威。[sourceId] を渡すと集約の対象になる。
   RiskThreat staticThreat({
@@ -39,92 +38,88 @@ void main() {
     double? distanceMeters,
     double? entrySeconds,
     List<String> reasonCodes = const [],
-  }) =>
-      RiskThreat(
-        level: CollisionRiskLevel.lv2,
-        threat: ThreatInfo(
-          kind: ThreatKind.obstacle,
-          position: const LatLng(36.0, 140.0),
-          obstacleKind: kind,
-          obstacleId: obstacleId,
-          obstacleSourceId: sourceId,
-          obstacleBridgeId: bridgeId,
-          distanceMeters: distanceMeters,
-          continuousIntersection: ContinuousIntersection(
-            intersects: true,
-            currentOverlap: overlap,
-            firstEntryTimeSeconds: overlap ? 0 : entrySeconds,
-            firstExitTimeSeconds: (entrySeconds ?? 0) + 2,
-            // distanceMeters を null にしたい場合はここも埋めない。
-            firstEntryDistanceMeters: null,
-            minimumSeparationMeters: 0,
-            reasonCodes: reasonCodes,
-          ),
-        ),
-      );
+  }) => RiskThreat(
+    level: CollisionRiskLevel.lv2,
+    threat: ThreatInfo(
+      kind: ThreatKind.obstacle,
+      position: const LatLng(36.0, 140.0),
+      obstacleKind: kind,
+      obstacleId: obstacleId,
+      obstacleSourceId: sourceId,
+      obstacleBridgeId: bridgeId,
+      distanceMeters: distanceMeters,
+      continuousIntersection: ContinuousIntersection(
+        intersects: true,
+        currentOverlap: overlap,
+        firstEntryTimeSeconds: overlap ? 0 : entrySeconds,
+        firstExitTimeSeconds: (entrySeconds ?? 0) + 2,
+        // distanceMeters を null にしたい場合はここも埋めない。
+        firstEntryDistanceMeters: null,
+        minimumSeparationMeters: 0,
+        reasonCodes: reasonCodes,
+      ),
+    ),
+  );
 
   RiskThreat boatThreat({
     required String boatId,
     bool overlap = true,
     double? distanceMeters,
-  }) =>
-      RiskThreat(
-        level: CollisionRiskLevel.lv3,
-        threat: ThreatInfo(
-          kind: ThreatKind.boat,
-          position: const LatLng(36.0, 140.0),
-          boatId: boatId,
-          distanceMeters: distanceMeters,
-          continuousIntersection: ContinuousIntersection(
-            intersects: true,
-            currentOverlap: overlap,
-            firstEntryTimeSeconds: 0,
-            firstExitTimeSeconds: 2,
-            minimumSeparationMeters: 0,
-          ),
-        ),
-      );
+  }) => RiskThreat(
+    level: CollisionRiskLevel.lv3,
+    threat: ThreatInfo(
+      kind: ThreatKind.boat,
+      position: const LatLng(36.0, 140.0),
+      boatId: boatId,
+      distanceMeters: distanceMeters,
+      continuousIntersection: ContinuousIntersection(
+        intersects: true,
+        currentOverlap: overlap,
+        firstEntryTimeSeconds: 0,
+        firstExitTimeSeconds: 2,
+        minimumSeparationMeters: 0,
+      ),
+    ),
+  );
 
   AlertCandidate systemFault({
     required String detectorId,
     required String category,
     required DateTime at,
     String? audioAsset,
-  }) =>
-      AlertCandidate.stable(
-        detectorId: detectorId,
-        category: category,
-        behavior: AlertBehavior.persistentSystemFault,
-        evaluatedAt: at,
-        observationId: '$detectorId:${at.microsecondsSinceEpoch}',
-        actionDeadline: Duration.zero,
-        audioAsset: audioAsset,
-      );
+  }) => AlertCandidate.stable(
+    detectorId: detectorId,
+    category: category,
+    behavior: AlertBehavior.persistentSystemFault,
+    evaluatedAt: at,
+    observationId: '$detectorId:${at.microsecondsSinceEpoch}',
+    actionDeadline: Duration.zero,
+    audioAsset: audioAsset,
+  );
 
   RiskThreat guidanceThreat(
     StaticObstacleKind kind, {
     String? obstacleId,
     bool reverseDirectionConfirmed = false,
-  }) =>
-      RiskThreat(
-        level: CollisionRiskLevel.lv1,
-        threat: ThreatInfo(
-          kind: ThreatKind.obstacle,
-          position: const LatLng(36.0, 140.0),
-          obstacleKind: kind,
-          obstacleId: obstacleId ?? kind.name,
-          continuousIntersection: reverseDirectionConfirmed
-              ? ContinuousIntersection(
-                  intersects: true,
-                  currentOverlap: true,
-                  firstEntryTimeSeconds: null,
-                  firstExitTimeSeconds: null,
-                  minimumSeparationMeters: 0,
-                  reasonCodes: const ['reverse_direction_confirmed'],
-                )
-              : null,
-        ),
-      );
+  }) => RiskThreat(
+    level: CollisionRiskLevel.lv1,
+    threat: ThreatInfo(
+      kind: ThreatKind.obstacle,
+      position: const LatLng(36.0, 140.0),
+      obstacleKind: kind,
+      obstacleId: obstacleId ?? kind.name,
+      continuousIntersection: reverseDirectionConfirmed
+          ? ContinuousIntersection(
+              intersects: true,
+              currentOverlap: true,
+              firstEntryTimeSeconds: null,
+              firstExitTimeSeconds: null,
+              minimumSeparationMeters: 0,
+              reasonCodes: const ['reverse_direction_confirmed'],
+            )
+          : null,
+    ),
+  );
 
   // ---- 1. 重なりの切迫度を接近速度で判定する ----
 
@@ -330,44 +325,48 @@ void main() {
       }
 
       for (var index = 0; index < nearFace.length; index++) {
-        observe(orchestrator.processAssessment(
-          assessment: assessment([
-            staticThreat(
-              obstacleId: 'bridge_railway_0',
-              sourceId: 'bridge_railway',
-              kind: StaticObstacleKind.bridge,
-              distanceMeters: nearFace[index],
-              entrySeconds: nearEntry[index],
-            ),
-            staticThreat(
-              obstacleId: 'bridge_railway_2',
-              sourceId: 'bridge_railway',
-              kind: StaticObstacleKind.bridge,
-              distanceMeters: farFace[index],
-              entrySeconds: 10,
-            ),
-          ]),
-          evaluatedAt: t0.add(Duration(seconds: index)),
-          capabilities: capabilities,
-          ownSpeedMetersPerSecond: 4,
-        ));
+        observe(
+          orchestrator.processAssessment(
+            assessment: assessment([
+              staticThreat(
+                obstacleId: 'bridge_railway_0',
+                sourceId: 'bridge_railway',
+                kind: StaticObstacleKind.bridge,
+                distanceMeters: nearFace[index],
+                entrySeconds: nearEntry[index],
+              ),
+              staticThreat(
+                obstacleId: 'bridge_railway_2',
+                sourceId: 'bridge_railway',
+                kind: StaticObstacleKind.bridge,
+                distanceMeters: farFace[index],
+                entrySeconds: 10,
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: index)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 4,
+          ),
+        );
       }
       for (var index = 0; index < exitFace.length; index++) {
-        observe(orchestrator.processAssessment(
-          assessment: assessment([
-            staticThreat(
-              obstacleId: 'bridge_railway_2',
-              sourceId: 'bridge_railway',
-              kind: StaticObstacleKind.bridge,
-              distanceMeters: exitFace[index],
-              entrySeconds: exitEntry[index],
-              overlap: exitFace[index] < 0,
-            ),
-          ]),
-          evaluatedAt: t0.add(Duration(seconds: 5 + index)),
-          capabilities: capabilities,
-          ownSpeedMetersPerSecond: 4,
-        ));
+        observe(
+          orchestrator.processAssessment(
+            assessment: assessment([
+              staticThreat(
+                obstacleId: 'bridge_railway_2',
+                sourceId: 'bridge_railway',
+                kind: StaticObstacleKind.bridge,
+                distanceMeters: exitFace[index],
+                entrySeconds: exitEntry[index],
+                overlap: exitFace[index] < 0,
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: 5 + index)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 4,
+          ),
+        );
       }
 
       expect(alertIds, hasLength(1));
@@ -428,8 +427,10 @@ void main() {
       );
 
       // 持続音は他艇が握る(continuousAction=band0 対 entryEvent=band3)。
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
       // カーブは2本目のプレイヤーへ回さない。重ねて鳴らすと
       // 「他艇に注意」と「カーブに注意」が混ざって両方聞き取れなくなる。
       expect(result.snapshot.oneShotAudioCues, isEmpty);
@@ -487,7 +488,8 @@ void main() {
       expect(
         result.snapshot.activeAlerts
             .firstWhere(
-                (alert) => alert.candidate.category == 'gps_unavailable')
+              (alert) => alert.candidate.category == 'gps_unavailable',
+            )
             .candidate
             .audioAsset,
         isNull,
@@ -632,15 +634,9 @@ void main() {
 
       step(0);
       final result = step(1);
-      expect(
-        result.snapshot.audioDirective?.asset,
-        'audio/bridge_warning.mp3',
-      );
+      expect(result.snapshot.audioDirective?.asset, 'audio/bridge_warning.mp3');
       // 橋も橋脚と同じ物理警告ロジックを使う。
-      expect(
-        result.snapshot.audioDirective?.mode,
-        AudioDirectiveMode.loop,
-      );
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
     });
 
     test('区域内にいる間はカーブを5秒ごとに読み上げ直す', () {
@@ -753,13 +749,12 @@ void main() {
         StaticObstacleKind kind,
         int second, {
         required bool inside,
-      }) =>
-          orchestrator.processAssessment(
-            assessment: assessment(inside ? [guidanceThreat(kind)] : const []),
-            evaluatedAt: t0.add(Duration(seconds: second)),
-            capabilities: capabilities,
-            ownSpeedMetersPerSecond: 4,
-          );
+      }) => orchestrator.processAssessment(
+        assessment: assessment(inside ? [guidanceThreat(kind)] : const []),
+        evaluatedAt: t0.add(Duration(seconds: second)),
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 4,
+      );
 
       final reverse = SafetyOrchestrator(
         sessionId: 'session-reverse-rearm',
@@ -830,21 +825,27 @@ void main() {
         expect(candidate.reasonCodes, contains('REVERSE_CONFIRM_PENDING'));
         expect(candidate.audioAsset, isNull);
         expect(
-            snapshot.audioDirective?.asset, isNot('audio/reverse_warning.mp3'));
+          snapshot.audioDirective?.asset,
+          isNot('audio/reverse_warning.mp3'),
+        );
       }
 
       final confirmed = step(6, inside: true).snapshot;
       final confirmedCandidate = confirmed.activeAlerts.single.candidate;
       expect(confirmedCandidate.audioAsset, 'audio/reverse_warning.mp3');
-      expect(confirmedCandidate.reasonCodes,
-          isNot(contains('REVERSE_CONFIRM_PENDING')));
+      expect(
+        confirmedCandidate.reasonCodes,
+        isNot(contains('REVERSE_CONFIRM_PENDING')),
+      );
       expect(confirmed.audioDirective?.asset, 'audio/reverse_warning.mp3');
 
       // 退出すると確認状態を即座に消す。再進入では60秒のrearmとは独立して
       // 再び6秒連続を要求する。
       step(7, inside: false);
-      final reentered =
-          step(8, inside: true).snapshot.activeAlerts.single.candidate;
+      final reentered = step(
+        8,
+        inside: true,
+      ).snapshot.activeAlerts.single.candidate;
       expect(reentered.reasonCodes, contains('REVERSE_CONFIRM_PENDING'));
       expect(reentered.audioAsset, isNull);
     });
@@ -880,8 +881,10 @@ void main() {
       expect(muted.audioDirective, isNull);
 
       final resumed = step(4, 2.0).snapshot;
-      expect(resumed.activeAlerts.single.candidate.audioAsset,
-          'audio/bridge_pier_warning.mp3');
+      expect(
+        resumed.activeAlerts.single.candidate.audioAsset,
+        'audio/bridge_pier_warning.mp3',
+      );
     });
 
     test('抑制規則は下げるだけで、下げた結果を上書きしない', () {
@@ -914,11 +917,7 @@ void main() {
       for (var second = 0; second <= 12; second++) {
         final snapshot = step(second).snapshot;
         if (second < 3) continue;
-        expect(
-          snapshot.audioDirective,
-          isNull,
-          reason: '$second秒目で音が戻っている',
-        );
+        expect(snapshot.audioDirective, isNull, reason: '$second秒目で音が戻っている');
         expect(
           snapshot.activeAlerts.single.candidate.behavior,
           AlertBehavior.visualOnly,
@@ -956,11 +955,7 @@ void main() {
       for (var second = 0; second <= 20; second++) {
         final snapshot = step(second, wobble[second % wobble.length]).snapshot;
         if (second < 3) continue;
-        expect(
-          snapshot.audioDirective,
-          isNull,
-          reason: '$second秒目で音が漏れている',
-        );
+        expect(snapshot.audioDirective, isNull, reason: '$second秒目で音が漏れている');
       }
 
       // 本当に漕ぎ出せば(0.8m/s以上)、従来どおり鳴る。
@@ -1013,24 +1008,24 @@ void main() {
       // boatThreat の重なりに GPS 帯だけで入ったことを表す。
       // reason code は候補化後に付くため、専用の脅威を組み立てる。
       RiskAssessment uncertaintyBoatAssessment() => assessment([
-            RiskThreat(
-              level: CollisionRiskLevel.lv3,
-              threat: ThreatInfo(
-                kind: ThreatKind.boat,
-                position: const LatLng(36.0, 140.0),
-                boatId: 'other-uncertain',
-                distanceMeters: 4,
-                continuousIntersection: const ContinuousIntersection(
-                  intersects: true,
-                  currentOverlap: true,
-                  firstEntryTimeSeconds: 0,
-                  firstExitTimeSeconds: 2,
-                  minimumSeparationMeters: 0,
-                  reasonCodes: ['gps_guard_entry'],
-                ),
-              ),
+        RiskThreat(
+          level: CollisionRiskLevel.lv3,
+          threat: ThreatInfo(
+            kind: ThreatKind.boat,
+            position: const LatLng(36.0, 140.0),
+            boatId: 'other-uncertain',
+            distanceMeters: 4,
+            continuousIntersection: const ContinuousIntersection(
+              intersects: true,
+              currentOverlap: true,
+              firstEntryTimeSeconds: 0,
+              firstExitTimeSeconds: 2,
+              minimumSeparationMeters: 0,
+              reasonCodes: ['gps_guard_entry'],
             ),
-          ]);
+          ),
+        ),
+      ]);
 
       SafetyOrchestratorResult uncertainRun(double? otherSpeed) {
         final orchestrator = SafetyOrchestrator(
@@ -1092,8 +1087,10 @@ void main() {
         capabilities: capabilities,
         ownSpeedMetersPerSecond: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/driftwood_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/driftwood_warning.mp3',
+      );
     });
 
     test('低速でも流木と他艇は静音にしない', () {
@@ -1119,8 +1116,10 @@ void main() {
       step(1);
       step(2);
       final afterConfirmation = step(3).snapshot;
-      expect(afterConfirmation.audioDirective?.asset,
-          'audio/driftwood_warning.mp3');
+      expect(
+        afterConfirmation.audioDirective?.asset,
+        'audio/driftwood_warning.mp3',
+      );
     });
   });
 
@@ -1251,7 +1250,10 @@ void main() {
       expect(candidate.category, 'other_boat');
       // 表示・内部レベル・記録は一切変えない。
       expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
-      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(
+        candidate.reasonCodes,
+        contains('PRESENTATION_MOORING_AREA_SILENT'),
+      );
       expect(result.state.activeAlerts, hasLength(1));
     });
 
@@ -1262,8 +1264,10 @@ void main() {
         ownSpeed: 0.2,
         otherSpeed: 2.0,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
 
     test('自艇が動いていれば区域内でも従来どおり鳴る', () {
@@ -1273,8 +1277,10 @@ void main() {
         ownSpeed: 3.0,
         otherSpeed: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
 
     test('相手の速度が取れないときは抑制しない(原則6)', () {
@@ -1284,8 +1290,10 @@ void main() {
         ownSpeed: 0.2,
         otherSpeed: null,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
 
     test('区域外では一切影響しない', () {
@@ -1295,8 +1303,10 @@ void main() {
         ownSpeed: 0.2,
         otherSpeed: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
 
     test('区域内で低速なら岸の警告も止め、表示は残す', () {
@@ -1324,7 +1334,10 @@ void main() {
       // 3秒の確定待ちを挟まず、最初の1測位から止める。
       expect(result.snapshot.audioDirective, isNull);
       final candidate = result.snapshot.activeAlerts.single.candidate;
-      expect(candidate.reasonCodes, contains('PRESENTATION_MOORING_AREA_SILENT'));
+      expect(
+        candidate.reasonCodes,
+        contains('PRESENTATION_MOORING_AREA_SILENT'),
+      );
       expect(result.state.activeAlerts, hasLength(1));
     });
 
@@ -1385,8 +1398,10 @@ void main() {
         ownSpeed: 0.2,
         otherSpeed: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
 
     test('自艇の座標が取れないときは抑制しない(原則6)', () {
@@ -1396,8 +1411,10 @@ void main() {
         ownSpeed: 0.2,
         otherSpeed: 0.2,
       );
-      expect(result.snapshot.audioDirective?.asset,
-          'audio/other_boat_warning.mp3');
+      expect(
+        result.snapshot.audioDirective?.asset,
+        'audio/other_boat_warning.mp3',
+      );
     });
   });
 }
