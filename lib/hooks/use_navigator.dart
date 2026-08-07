@@ -30,6 +30,7 @@ import '../models/fix_envelope.dart';
 import '../models/message_model.dart';
 import '../models/nav_config_model.dart';
 import '../models/navigation_warning.dart';
+import '../models/protection_budget.dart';
 import '../models/safety_snapshot.dart';
 import '../models/session_model.dart';
 import '../models/shared_safety_calibration.dart';
@@ -2781,6 +2782,16 @@ UseNavigator useNavigator() {
         processTick - lastSeparation >= const Duration(seconds: 10) ||
         advancedToConservativeMeters > 8) {
       lastSolutionSeparationSampleAt.value = processTick;
+      final budget = ProtectionBudget(
+        gnssMeasurementMeters:
+            rawPos.accuracy.isFinite && rawPos.accuracy > 0 ? rawPos.accuracy : 0,
+        solutionDisagreementMeters: advancedToConservativeMeters,
+        fixAgeMotionMeters: math.max(
+          0,
+          now.difference(rawPos.timestamp).inMilliseconds / 1000 *
+              math.max(0, rawPos.speed),
+        ),
+      );
       appendRuntimeDiagnostic('solution_separation', {
         'rawToAdvancedMeters': rawToAdvancedMeters,
         'rawToConservativeMeters': rawToConservativeMeters,
@@ -2788,6 +2799,7 @@ UseNavigator useNavigator() {
         'fixAgeMs': now.difference(rawPos.timestamp).inMilliseconds,
         'integrityHint':
             advancedToConservativeMeters > 8 ? 'separated' : 'consistent',
+        'protectionBudget': budget.toDiagnosticDetails(),
       });
     }
 
@@ -3337,6 +3349,12 @@ UseNavigator useNavigator() {
       gpsFilter.value.reset();
       positionEstimator.reset();
       conservativePositionSolution.reset();
+      pendingPositionSource.value = null;
+      fixEnvelopeSequence.value = 0;
+      previousFixEnvelopeTimestamp.value = null;
+      previousFixEnvelopeArrival.value = null;
+      lastFixEnvelopeSampleAt.value = null;
+      lastSolutionSeparationSampleAt.value = null;
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
