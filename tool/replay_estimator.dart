@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/services/bounded_position_set.dart';
-import 'package:rowing_navigator/services/conservative_position_solution.dart';
+import 'package:rowing_navigator/services/conservative_position_estimator.dart';
 import 'package:rowing_navigator/services/robust_position_estimator.dart';
 
 const _logDir = String.fromEnvironment('LOG_DIR');
@@ -156,31 +156,39 @@ class S1RecordedSolution extends S0RawSolution {
   }
 }
 
-/// Stage 1's shadow S2: a fixed-coefficient alpha-beta solution based only on
-/// raw fixes. It is not selected for display, sharing or safety decisions yet.
+/// Stage 2's production S2, driven only by raw fixes.
+///
+/// この再生器は本番の[ConservativePositionEstimator]を直接使う。再生だけ
+/// 別のalpha-beta解を使うと、Stage 2の受け入れ指標が出荷コードを測らない。
 class S2ConservativeSolution implements ReplaySolution {
-  final ConservativePositionSolution _solution = ConservativePositionSolution();
+  final ConservativePositionEstimator _estimator =
+      ConservativePositionEstimator();
   @override
   String get id => 's2_conservative';
 
   @override
   ReplaySolutionOutput? step({required Duration elapsed, ReplayFix? fix}) {
-    if (fix == null) return null;
-    final estimate = _solution.update(
-      latitude: fix.latitude,
-      longitude: fix.longitude,
-      elapsed: elapsed,
-      speedMetersPerSecond: fix.speedMetersPerSecond,
-      headingDegrees: fix.headingDegrees,
-    );
-    final point = LatLng(estimate.latitude, estimate.longitude);
+    final output = fix == null
+        ? _estimator.predict(elapsed: elapsed)
+        : _estimator
+            .update(
+              fix: ConservativeFix(
+                position: LatLng(fix.latitude, fix.longitude),
+                timestamp: fix.timestamp,
+                elapsed: elapsed,
+                accuracyMeters: fix.accuracyMeters,
+                speedMetersPerSecond: fix.speedMetersPerSecond,
+                headingDegrees: fix.headingDegrees,
+              ),
+            )
+            .output;
+    if (output == null) return null;
     return ReplaySolutionOutput(
-      representativePoint: point,
-      speedMetersPerSecond: fix.speedMetersPerSecond ?? 0,
-      headingDegrees: fix.headingDegrees ?? 0,
-      uncertaintyMeters: fix.accuracyMeters,
-      safetySet: CircleSet(
-          representativePoint: point, radiusMeters: fix.accuracyMeters),
+      representativePoint: output.representativePoint,
+      speedMetersPerSecond: output.speedMetersPerSecond,
+      headingDegrees: output.headingDegrees,
+      uncertaintyMeters: output.uncertaintyMeters,
+      safetySet: output.safetySet,
       dispositionName: 'conservative',
     );
   }
