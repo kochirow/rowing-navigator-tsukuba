@@ -11,9 +11,10 @@ flutter test tool/replay_estimator.dart \
   --dart-define=OUT=/tmp/replay-estimator.json
 ```
 
-`raw_lat` / `raw_lng` を入力にS0（生GNSS）とS1（現行Kalman）を動かします。
-`filtered_*` は比較用であり入力には使いません。出力JSONを確認し、推定器の
-入力取り違えを避けてください。
+S0（生GNSS）とS2（alpha-beta）は `raw_lat` / `raw_lng` から計算します。
+S1は推定器を再実行せず、実機が実際に出した`filtered_*`を参照します。これにより、
+Stage 2では実機S1と新規S2を同じログ上で比較できます。先頭60秒は初期条件の影響を
+避けるため、数値指標から除外してください。
 
 同一艇へ2台を搭載したD/Eログでは、次のようにペア指標を出します。
 

@@ -26,4 +26,17 @@ void main() {
     expect(metrics.alongCross['absoluteAlongMedian'], greaterThan(0));
     expect(metrics.alongCross['absoluteCrossMedian'], lessThan(0.1));
   });
+
+  test('解ごとのペア指標は先頭60秒を除外できる', () {
+    final left = replayFixes(
+      [point(0, 36, 140), point(61, 36, 140.00001)],
+      [S0RawSolution()],
+    );
+    final right = replayFixes(
+      [point(0, 36, 140.00001), point(61, 36, 140.00002)],
+      [S0RawSolution()],
+    );
+    final metrics = computeSolutionPairMetrics(left, right, 's0_raw');
+    expect(metrics.pairCount, 1);
+  });
 }

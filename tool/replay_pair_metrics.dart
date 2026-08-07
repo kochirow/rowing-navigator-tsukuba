@@ -130,6 +130,41 @@ PairMetrics computePairMetrics(
   );
 }
 
+/// Computes the same metrics for one named solution while retaining original
+/// timestamps, raw speed and heading for pairing and along/cross decomposition.
+PairMetrics computeSolutionPairMetrics(
+  ReplayRun left,
+  ReplayRun right,
+  String solutionId, {
+  Duration warmup = const Duration(seconds: 60),
+  double trueSeparationMeters = 1.75,
+}) {
+  List<ReplayFix> projected(ReplayRun run) {
+    final outputs = run.outputs[solutionId];
+    if (outputs == null || outputs.length != run.fixes.length) {
+      throw ArgumentError('solution output is not aligned with fixes: $solutionId');
+    }
+    final start = run.fixes.first.timestamp;
+    return [
+      for (var index = 0; index < run.fixes.length; index++)
+        if (run.fixes[index].timestamp.difference(start) >= warmup)
+          ReplayFix(
+            timestamp: run.fixes[index].timestamp,
+            latitude: outputs[index].representativePoint.latitude,
+            longitude: outputs[index].representativePoint.longitude,
+            accuracyMeters: outputs[index].uncertaintyMeters,
+            speedMetersPerSecond: outputs[index].speedMetersPerSecond,
+            headingDegrees: outputs[index].headingDegrees,
+          ),
+    ];
+  }
+  return computePairMetrics(
+    projected(left),
+    projected(right),
+    trueSeparationMeters: trueSeparationMeters,
+  );
+}
+
 Map<String, double?> _distribution(List<double> values) => {
       'median': _percentile(values, .5),
       'p90': _percentile(values, .9),
