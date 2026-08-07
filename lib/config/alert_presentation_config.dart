@@ -70,8 +70,23 @@ class AlertPresentationConfig {
 
   /// 同一区域に入っている間に読み上げる上限回数。null で無制限。
   ///
-  /// 長いカーブ区域で鳴り続ける場合の逃げ道として用意する。
-  /// 既定は無制限。現地で耳障りなら回数を入れる。
+  /// **既定を無制限から3回へ変えた(2026-08-06 実機ログ)。**
+  ///
+  /// 4x の1セッション(106分)で、逆走区域の**エピソードは13回**だったのに
+  /// 読み上げは**96回**だった。1エピソードあたり平均7.4回、
+  /// 5秒間隔で約37秒鳴り続けた計算になる。106分で96回は
+  /// 約66秒に1回であり、形骸化の域に入っている。
+  ///
+  /// 同じ状況で D/E(8+ の2台)は8エピソードで各1回しか鳴っていない。
+  /// 岸の警告(band 1)に負けて band 3 の読み上げが黙らされたためで、
+  /// **同じ状況なのに艇によって 0〜8 回とばらついていた**。
+  ///
+  /// 区域への進入は「入った」という一度きりの事実であり、
+  /// 悪化していく事象ではない。初報＋2回の念押しで打ち切り、
+  /// それ以降は表示のみにする。区域を出て再武装すれば新しい
+  /// エピソードとして数え直す。
+  ///
+  /// 1回では聞き逃すという設計意図(CLAUDE.md)は、3回で満たしている。
   final int? guidanceRepeatMaxCount;
 
   /// 逆走注意の再武装間隔。
@@ -111,7 +126,7 @@ class AlertPresentationConfig {
     this.stableThreatEpisodeRetentionDuration = const Duration(seconds: 5),
     this.guidanceRearmDuration = const Duration(seconds: 5),
     this.guidanceRepeatInterval = const Duration(seconds: 5),
-    this.guidanceRepeatMaxCount,
+    this.guidanceRepeatMaxCount = 3,
     this.reverseGuidanceRearmDuration = const Duration(seconds: 60),
     this.staticOverlapClosingRateMetersPerSecond = 0.3,
     this.staticOverlapImminentGrace = const Duration(seconds: 5),

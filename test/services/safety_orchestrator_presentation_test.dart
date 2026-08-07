@@ -1057,6 +1057,34 @@ void main() {
       );
     });
 
+    test('区域内に留まり続けても読み上げは上限で打ち切る(S3-08)', () {
+      // 2026-08-06 実機ログ: 4x の1セッション(106分)で、逆走区域の
+      // エピソードは13回だったのに読み上げは96回。約66秒に1回鳴っていた。
+      // 区域への進入は一度きりの事実であり、悪化していく事象ではない。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-guidance-repeat-cap',
+        sessionGeneration: 1,
+      );
+      final audioEventIds = <String>{};
+      // 5秒間隔の読み上げに対し、3分ぶん区域内に留まり続ける。
+      for (var second = 0; second <= 180; second += 1) {
+        final result = orchestrator.processAssessment(
+          assessment: assessment([
+            guidanceThreat(StaticObstacleKind.curve),
+          ]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 3,
+        );
+        final eventId = result.snapshot.audioDirective?.eventId;
+        if (eventId != null) audioEventIds.add(eventId);
+      }
+      // 初報 + 念押し2回で打ち切る。上限なしだと36回鳴っていた。
+      expect(audioEventIds.length, lessThanOrEqualTo(3));
+      // 初報を落としてはいけない。
+      expect(audioEventIds, isNotEmpty);
+    });
+
     test('他艇のGPS帯だけの重なりは、バンドを1段下げない(S3-06)', () {
       // 艇間の相対誤差は共通誤差が相殺してほぼ0であり(2026-08-06 実機:
       // 真値1.5〜2mに対しraw位置差 中央値1.7m)、不確かさは

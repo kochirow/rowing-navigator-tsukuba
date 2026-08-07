@@ -59,6 +59,7 @@ import '../services/other_boat_track_store.dart';
 import '../services/permission_service.dart';
 import '../services/preset_obstacle_service.dart';
 import '../services/receive_fault_debouncer.dart';
+import '../services/sharing_capability_monitor.dart';
 import '../services/risk_evaluator_settings_service.dart';
 import '../services/resilient_stream_supervisor.dart';
 import '../services/robust_position_estimator.dart';
@@ -151,6 +152,10 @@ Map<String, Object?> _positionSharingErrorDetails(Object error) {
   return {'errorType': error.runtimeType.toString()};
 }
 
+/// 原因分類に使う errorCode。Firebase 以外は null。
+String? _sharingErrorCode(Object error) =>
+    error is FirebaseException ? error.code : null;
+
 class _NavigationMetricsObserver with WidgetsBindingObserver {
   final VoidCallback onMetricsChanged;
 
@@ -176,6 +181,17 @@ UseNavigator useNavigator() {
   final defaultObstacles = useState<List<StaticObstacle>>([]);
   final temporaryObstacles = useRef<List<StaticObstacle>>([]);
   final isPositionSharingUnavailable = useState(false);
+  // 位置共有の「能力」が確認できない状態。隻数ではなく能力を見る。
+  // 0隻は正常状態でもあり得るので、それだけでは fault にしない
+  // (sharing_capability_monitor.dart)。**表示のみで音は足さない。**
+  final isSharingCapabilityUnconfirmed = useState(false);
+  /// 端末の出力音量が低く、読み上げが聞こえない恐れがある状態。表示のみ。
+  final isAudioOutputVolumeLow = useState(false);
+  final sharingCapabilityMonitor =
+      useRef(SharingCapabilityMonitor()).value;
+  final publishingSetupRetryAttempt = useRef(0);
+  final publishingSetupFailureKind = useRef<SharingFailureKind?>(null);
+  final publishingSetupNextRetryAt = useRef<DateTime?>(null);
   final isDynamicReceiveUnavailable = useState(false);
   // 受信ストリームが報告した「生の」劣化。fault への昇格は
   // [receiveFaultDebouncer] が1秒周期で決める。実機ログでは生の値が
@@ -436,6 +452,26 @@ UseNavigator useNavigator() {
           ...snapshot,
         },
       ));
+      // 端末の出力音量が小さいと、読み上げが鳴っていても聞こえない。
+      //
+      // 2026-08-06 実機ログ: 8+ に載せた1台が全期間 `outputVolume` 0.30
+      // 固定だった(他3台は 1.00)。聞こえたかどうかはログからは判定
+      // できないが、音量そのものは毎回取れている。
+      //
+      // **画面へ出すだけにする。** 音量が小さいことを音で知らせるのは
+      // 矛盾しているうえ、本当に鳴るべき衝突警告を覆い隠す。
+      final volume = snapshot['outputVolume'];
+      if (volume is num) {
+        final low = volume < audioLowOutputVolumeThreshold;
+        if (low != isAudioOutputVolumeLow.value) {
+          isAudioOutputVolumeLow.value = low;
+          appendRuntimeDiagnostic('audio_output_volume_changed', {
+            'outputVolume': volume.toDouble(),
+            'isLow': low,
+            'threshold': audioLowOutputVolumeThreshold,
+          });
+        }
+      }
     }));
   }
 
@@ -1951,6 +1987,9 @@ UseNavigator useNavigator() {
   // `enqueuePosition` と同じで、宣言順の都合で前方参照にしている。
   late void Function(Position position, int generation) enqueuePositionFromPoll;
 
+  // 1秒ウォッチドッグの共有再試行から使う。同じく宣言順の都合。
+  late Future<void> Function(int generation) retryPublishingSetupFromWatchdog;
+
   void applyCompletedSafetyAssessment(
     RiskAssessment assessment,
     DateTime evaluatedAt,
@@ -1979,6 +2018,56 @@ UseNavigator useNavigator() {
       // 実機ログのように数秒周期で315回記録されてしまう。
       if (wasUnavailable && !isDynamicReceiveUnavailable.value) {
         appendRuntimeDiagnostic('dynamic_obstacle_stream_recovered');
+      }
+    }
+    if (mode.value == NavMode.navigator) {
+      // 位置共有の「能力」を1秒周期で見る。
+      //
+      // 隻数は見ない。0隻は正常状態でもあり得る(最初に出艇した艇、
+      // 他艇が全部上がった後)。「他艇がいない」と「他艇を受信できる状態を
+      // 確認できない」を区別する(原則6)。
+      //
+      // 2026-08-06 実機ログ: 1台が2セッション118分ずっと unavailable の
+      // まま走り、他艇を1隻も受信しなかったのに何も表示されなかった。
+      final now_ = DateTime.now();
+      final authorization = switch (publishingSetupFailureKind.value) {
+        SharingFailureKind.permissionDenied => SharingAuthorization.denied,
+        null => SharingAuthorization.granted,
+        _ => SharingAuthorization.unknown,
+      };
+      final capability = SharingCapability(
+        publishSetupComplete: !isPositionSharingUnavailable.value,
+        subscriptionConnected: !isDynamicReceiveUnavailable.value &&
+            !rawDynamicReceiveDegraded.value,
+        authorization: authorization,
+        rosterAvailable: config.value != null,
+      );
+      final wasUnconfirmed = isSharingCapabilityUnconfirmed.value;
+      final unconfirmed =
+          sharingCapabilityMonitor.update(capability, at: now_);
+      isSharingCapabilityUnconfirmed.value = unconfirmed;
+      if (unconfirmed != wasUnconfirmed) {
+        appendRuntimeDiagnostic(
+          unconfirmed
+              ? 'sharing_capability_unconfirmed'
+              : 'sharing_capability_confirmed',
+          capability.toDiagnosticDetails(),
+        );
+      }
+
+      // 送信の初期設定が失敗したままなら、原因に応じて再試行する。
+      // permission-denied は何度試しても直らないので再試行しない。
+      final retryKind = publishingSetupFailureKind.value;
+      if (retryKind != null && retryKind.isRetryable) {
+        final dueAt = publishingSetupNextRetryAt.value;
+        if (dueAt == null) {
+          publishingSetupNextRetryAt.value = now_.add(
+            retryKind.backoffFor(publishingSetupRetryAttempt.value),
+          );
+        } else if (!now_.isBefore(dueAt)) {
+          publishingSetupNextRetryAt.value = null;
+          retryPublishingSetupFromWatchdog(navigationGeneration.value);
+        }
       }
     }
     {
@@ -3187,6 +3276,51 @@ UseNavigator useNavigator() {
     recordDiagnosticHeartbeatIfDue(generation);
   }
 
+  /// 送信の初期設定(clear + onDisconnect 登録)をやり直す。
+  ///
+  /// 航行開始時に5秒でACKされないと degraded 起動するが、
+  /// **従来はそこから復帰する経路が無かった**。2026-08-06 実機ログでは
+  /// それが2セッション118分続いた。degraded 起動を続ける方針(原則1)は
+  /// 変えず、復帰経路だけを足す。
+  Future<void> retryPublishingSetup(int generation) async {
+    if (!isCurrentNavigation(generation)) return;
+    final config_ = config.value;
+    if (config_ == null) return;
+    final attempt = publishingSetupRetryAttempt.value;
+    try {
+      await Future.wait([
+        messageService.clearMessage(config_.boatId),
+        messageService.registerOnDisconnect(config_.boatId),
+      ]).timeout(_publishingSetupAckTimeout);
+      if (!isCurrentNavigation(generation)) return;
+      publishingSetupFailureKind.value = null;
+      publishingSetupRetryAttempt.value = 0;
+      sharingFailureCount.value = 0;
+      sharingFailureAnnounced.value = false;
+      isPositionSharingUnavailable.value = false;
+      positionSharingDiagnosticState.value = 'healthy';
+      appendRuntimeDiagnostic('position_sharing_recovered', {
+        'previousState': 'setup_unavailable',
+        'retryAttempt': attempt,
+      });
+    } catch (error) {
+      if (!isCurrentNavigation(generation)) return;
+      final kind = classifySharingFailure(
+        errorCode: _sharingErrorCode(error),
+        errorType: error.runtimeType.toString(),
+      );
+      publishingSetupFailureKind.value = kind;
+      // 再試行しない種類へ変わったら、そこで打ち切る。
+      publishingSetupRetryAttempt.value = kind.isRetryable ? attempt + 1 : 0;
+      appendRuntimeDiagnostic('position_sharing_setup_retry_failed', {
+        'failureKind': kind.name,
+        'retryable': kind.isRetryable,
+        'retryAttempt': attempt,
+        ..._positionSharingErrorDetails(error),
+      });
+    }
+  }
+
   Future<void> handlePosition(
     Position position,
     int generation, {
@@ -3422,6 +3556,8 @@ UseNavigator useNavigator() {
   enqueuePositionFromPoll = (position, generation) =>
       enqueuePosition(position, generation, source: FixSource.polling);
 
+  retryPublishingSetupFromWatchdog = retryPublishingSetup;
+
   Future<void> startNavigation(NavConfig config_) async {
     if (navigationStopInProgress.value) {
       throw StateError('航行終了処理中です。完了後に再試行してください。');
@@ -3595,8 +3731,32 @@ UseNavigator useNavigator() {
       try {
         await Future.wait([initialClear, disconnectRegistration])
             .timeout(_publishingSetupAckTimeout);
+        publishingSetupRetryAttempt.value = 0;
+        // 前セッションの分類を持ち越さない。持ち越すと、繋がっているのに
+        // 認可拒否と誤判定して能力 fault を立て続ける。
+        publishingSetupFailureKind.value = null;
       } catch (error) {
         publishingSetupUnavailable = true;
+        // **degraded 起動は続けるが、復帰経路を必ず残す。**
+        //
+        // 2026-08-06 実機ログ: この分岐で立った degraded から復帰する
+        // 手段が無く、1台が2セッション118分ずっと unavailable のまま
+        // 走った。同じ `ack_timeout` は A・D でも起きており(一時的)、
+        // 起動直後の共有確立は全端末で不安定である。
+        //
+        // 原因によって正しい対処が違うので分類しておく。
+        // permission-denied は何度試しても直らないため再試行しない。
+        final kind = classifySharingFailure(
+          errorCode: _sharingErrorCode(error),
+          errorType: error.runtimeType.toString(),
+        );
+        publishingSetupFailureKind.value = kind;
+        publishingSetupRetryAttempt.value = kind.isRetryable ? 1 : 0;
+        appendRuntimeDiagnostic('position_sharing_setup_failed', {
+          'failureKind': kind.name,
+          'retryable': kind.isRetryable,
+          ..._positionSharingErrorDetails(error),
+        });
         debugPrint('Position publishing setup is pending/unavailable: $error');
       }
       ensureStartIsCurrent();
@@ -3633,6 +3793,9 @@ UseNavigator useNavigator() {
       isDynamicReceiveUnavailable.value = false;
       rawDynamicReceiveDegraded.value = false;
       receiveFaultDebouncer.value.reset();
+      sharingCapabilityMonitor.reset();
+      isSharingCapabilityUnconfirmed.value = false;
+      publishingSetupNextRetryAt.value = null;
       gpsStreamRecoveryStartedAt.value = null;
       sessionPoints.value = [];
       sessionAlertEvents.value = [];
@@ -3940,6 +4103,9 @@ UseNavigator useNavigator() {
       isDynamicReceiveUnavailable.value = false;
       rawDynamicReceiveDegraded.value = false;
       receiveFaultDebouncer.value.reset();
+      sharingCapabilityMonitor.reset();
+      isSharingCapabilityUnconfirmed.value = false;
+      publishingSetupNextRetryAt.value = null;
       gpsStreamRecoveryStartedAt.value = null;
       isGpsStreamRecovering.value = false;
       gpsRecoveryProbeAttempted.value = false;
@@ -4236,6 +4402,10 @@ UseNavigator useNavigator() {
         isDynamicReceiveUnavailable.value = false;
         rawDynamicReceiveDegraded.value = false;
         receiveFaultDebouncer.value.reset();
+        sharingCapabilityMonitor.reset();
+        isSharingCapabilityUnconfirmed.value = false;
+        publishingSetupFailureKind.value = null;
+        publishingSetupNextRetryAt.value = null;
         gpsStreamRecoveryStartedAt.value = null;
         isGpsStreamRecovering.value = false;
         gpsRecoveryProbeAttempted.value = false;
@@ -4517,6 +4687,8 @@ UseNavigator useNavigator() {
     gpsQuality: gpsQuality,
     isGpsStreamRecovering: isGpsStreamRecovering,
     isPositionSharingUnavailable: isPositionSharingUnavailable,
+    isSharingCapabilityUnconfirmed: isSharingCapabilityUnconfirmed,
+    isAudioOutputVolumeLow: isAudioOutputVolumeLow,
     isDynamicReceiveUnavailable: isDynamicReceiveUnavailable,
     isTemporaryObstacleReceiveUnavailable:
         isTemporaryObstacleReceiveUnavailable,
@@ -4575,6 +4747,15 @@ class UseNavigator {
   final ValueNotifier<GpsHealthQuality> gpsQuality;
   final ValueNotifier<bool> isGpsStreamRecovering;
   final ValueNotifier<bool> isPositionSharingUnavailable;
+
+  /// 位置共有の能力が確認できない状態。**表示のみ。音は足さない。**
+  ///
+  /// 「他艇がいない」とは区別する。0隻は正常状態でもあり得るので、
+  /// 隻数ではなく能力(購読接続・送信設定・認可)を見ている。
+  final ValueNotifier<bool> isSharingCapabilityUnconfirmed;
+
+  /// 端末の出力音量が低い。**表示のみ。音は足さない。**
+  final ValueNotifier<bool> isAudioOutputVolumeLow;
   final ValueNotifier<bool> isDynamicReceiveUnavailable;
 
   /// 陸上と判定して警告音を止めている状態。
@@ -4650,6 +4831,8 @@ class UseNavigator {
     required this.gpsQuality,
     required this.isGpsStreamRecovering,
     required this.isPositionSharingUnavailable,
+    required this.isSharingCapabilityUnconfirmed,
+    required this.isAudioOutputVolumeLow,
     required this.isDynamicReceiveUnavailable,
     required this.isAshore,
     required this.overrideAshoreToWater,

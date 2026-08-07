@@ -22,6 +22,15 @@ class DeviceStatusScreen extends StatelessWidget {
   final int? batteryPercent;
   final bool positionSharingUnavailable;
   final bool otherBoatReceiveUnavailable;
+
+  /// 位置共有の能力そのものが確認できない状態。
+  ///
+  /// 「他艇が0隻」とは区別する。0隻は正常状態でもあり得る(最初に出艇した艇、
+  /// 他艇が全部上がった後)。ここが赤いときだけ、周囲を直接確認する必要がある。
+  final bool sharingCapabilityUnconfirmed;
+
+  /// 端末の出力音量が低く、読み上げが聞こえない恐れがある。
+  final bool audioOutputVolumeLow;
   final bool temporaryObstacleReceiveUnavailable;
 
   /// 安全判定そのものが今どの状態で動いているか。
@@ -45,6 +54,8 @@ class DeviceStatusScreen extends StatelessWidget {
     this.batteryPercent,
     this.positionSharingUnavailable = false,
     this.otherBoatReceiveUnavailable = false,
+    this.sharingCapabilityUnconfirmed = false,
+    this.audioOutputVolumeLow = false,
     this.temporaryObstacleReceiveUnavailable = false,
     this.safetyRunMode = SafetyRunMode.stopped,
     this.otherBoatCount = 0,
@@ -97,6 +108,8 @@ class DeviceStatusScreen extends StatelessWidget {
             rows: [
               _Row.status('自艇の位置共有', !positionSharingUnavailable),
               _Row.status('他艇の受信', !otherBoatReceiveUnavailable),
+              _Row.status('他艇を受信できる状態', !sharingCapabilityUnconfirmed),
+              _Row.status('端末の音量', !audioOutputVolumeLow),
               _Row.status('臨時危険区域の受信', !temporaryObstacleReceiveUnavailable),
               _Row('安全判定', _runModeLabel(safetyRunMode)),
             ],
@@ -104,7 +117,13 @@ class DeviceStatusScreen extends StatelessWidget {
           _Group(
             title: '検出対象',
             rows: [
-              _Row('受信中の他艇', '$otherBoatCount 隻'),
+              _Row(
+                '受信中の他艇',
+                sharingCapabilityUnconfirmed
+                    // 0隻を「他艇がいない」と読ませない(原則6)。
+                    ? '確認できません'
+                    : '$otherBoatCount 隻',
+              ),
               _Row('読み込み済みの危険区域', '$obstacleCount 件'),
             ],
           ),
