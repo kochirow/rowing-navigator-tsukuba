@@ -27,7 +27,7 @@ void main() {
     final after =
         computePairMetrics([fix(0, 37, 141)], [fix(0, 37, 141.00001)]);
     expect(after.pairDistance['median'],
-      closeTo(before.pairDistance['median']!, .02));
+        closeTo(before.pairDistance['median']!, .02));
   });
   test('2: 円集合の交差は回転に依存しない', () {
     const a = CircleSet(representativePoint: LatLng(36, 140), radiusMeters: 4);
