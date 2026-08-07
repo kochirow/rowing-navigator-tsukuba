@@ -9,6 +9,7 @@ import '../utils/winding_algorithm.dart';
 import 'alert_state_machine.dart';
 import 'collision_risk_evaluator_service.dart';
 import 'reverse_guidance_debouncer.dart';
+import 'suppression_rule.dart';
 
 class SafetyOrchestratorResult {
   final SafetySnapshot snapshot;
@@ -479,13 +480,31 @@ class SafetyOrchestrator {
       var behavior = baseBehavior;
       var repeating = base.repeating;
       final extraReasonCodes = <String>[...base.reasonCodes];
+      // 各静音規則は、適用の直前に [SuppressionRule.permits] を通す。
+      // 権限(カテゴリ・切迫度・必要な入力)を満たさない規則は適用しない。
+      // 詳細と経緯は suppression_rule.dart。
+      final knownInputs = _knownSuppressionInputs(
+        ownSpeedMetersPerSecond: ownSpeedMetersPerSecond,
+        ownPosition: ownPosition,
+        candidate: candidate,
+        otherBoatSpeedById: otherBoatSpeedById,
+      );
+      final baseUrgency = _suppressibleUrgencyOf(baseBehavior);
+      bool permitted(SuppressionRule rule) => rule.permits(
+            candidate,
+            knownInputs: knownInputs,
+            currentUrgency: baseUrgency,
+          );
       if (_lowSpeedAudioMuted &&
-          lowSpeedMutedCategories.contains(candidate.category)) {
+          lowSpeedMutedCategories.contains(candidate.category) &&
+          permitted(SuppressionRules.lowSpeedStatic)) {
         // 正常な橋下・岸際の休憩では、検知・表示・記録を残して音だけ止める。
-        behavior = AlertBehavior.visualOnly;
+        behavior = _quieter(behavior, AlertBehavior.visualOnly);
         repeating = false;
       }
-      if (_isUncertaintyOnlyEntry(candidate) && _isLowSpeed) {
+      if (_isUncertaintyOnlyEntry(candidate) &&
+          _isLowSpeed &&
+          permitted(SuppressionRules.uncertaintyOnly)) {
         // 測位の不確かさでのみ重なっている候補は、自艇が低速の間は
         // 表示だけにする。停止していれば切迫していないし、疎な測位で
         // 不確かさが膨らむほど候補が現れたり消えたりして鳴り直す
@@ -507,7 +526,9 @@ class SafetyOrchestrator {
           extraReasonCodes.add('PRESENTATION_UNCERTAINTY_ONLY_VISUAL');
         }
       }
-      if (inMooringArea && _isLowSpeed) {
+      if (inMooringArea &&
+          _isLowSpeed &&
+          permitted(SuppressionRules.mooringArea)) {
         // 桟橋エリアの中で、自艇が低速のとき。
         //
         // ここは利用者が「着艇・係留する場所」と明示的に宣言した水域である。
@@ -534,7 +555,8 @@ class SafetyOrchestrator {
           extraReasonCodes.add('PRESENTATION_MOORING_AREA_SILENT');
         }
       }
-      final canSuppressAtRest = _canSuppressAtRest(candidate);
+      final canSuppressAtRest = _canSuppressAtRest(candidate) &&
+          permitted(SuppressionRules.stableStop);
       // ここから下の規則はすべて**下げるだけ**である。`baseBehavior` を見て
       // 代入すると、直前に下げた結果を上書きして鳴らし直してしまう。
       // 実機ログ(2026-08-05)では、低速静音で visualOnly にした岸の警告が
@@ -805,7 +827,27 @@ class SafetyOrchestrator {
 
     // GPS帯込みでのみ重なる「不確実」な候補は1段下げる。
     // 連続音が本当に切迫しているときだけ鳴るようにする。
-    if (candidate.confidence < 1.0) urgency = urgency.oneStepDown;
+    //
+    // **ただし他艇の `gps_guard_entry` は下げない。**
+    //
+    // 静的危険区域では、この降格は今も正しい。区域は絶対座標に固定なので、
+    // 自艇のGNSS誤差ぶんだけ広げた帯で「だけ」重なる候補は、本当に確度が低い。
+    //
+    // 他艇は事情が違う。艇間の相対誤差は共通誤差が相殺してほぼ0であり
+    // (2026-08-06 実機: 真値1.5〜2mに対しraw位置差 中央値1.7m)、
+    // そこへ絶対精度を積んだ帯で降格まで掛けると**二重に保守的**になる。
+    // 実機ログでは、自艇停止・他艇20m接近・deadline 3.7秒の候補が
+    // これで無音になり、5端末合計で他艇警告の音が0回だった。
+    //
+    // 不確かさは [ProtectionBudget] の相対合成で領域として表現済みなので、
+    // ここで重ねて下げない。方位不確かさ(`heading_uncertainty_entry`)は
+    // 回頭中の自艇領域を広げたことによるものなので、従来どおり下げる。
+    final skipUncertaintyDemotion = candidate.category == 'other_boat' &&
+        candidate.reasonCodes.contains('gps_guard_entry') &&
+        !candidate.reasonCodes.contains('heading_uncertainty_entry');
+    if (candidate.confidence < 1.0 && !skipUncertaintyDemotion) {
+      urgency = urgency.oneStepDown;
+    }
 
     final reasonCodes = steadyOverlap?.reasonCodes ?? const <String>[];
 
@@ -964,6 +1006,43 @@ class SafetyOrchestrator {
     }
     return false;
   }
+
+  /// いま値が取れている静音判定の入力。
+  ///
+  /// 取れていない入力を要求する規則は適用されない(原則6)。
+  Set<SuppressionInput> _knownSuppressionInputs({
+    required double? ownSpeedMetersPerSecond,
+    required LatLng? ownPosition,
+    required AlertCandidate candidate,
+    required Map<String, double?> otherBoatSpeedById,
+  }) {
+    final known = <SuppressionInput>{};
+    final speed = ownSpeedMetersPerSecond;
+    if (speed != null && speed.isFinite && speed >= 0) {
+      known.add(SuppressionInput.ownSpeed);
+    }
+    if (ownPosition != null) known.add(SuppressionInput.ownPosition);
+    // 他艇でない候補には相手速度の概念が無いので「既知」として扱う。
+    // 他艇のときだけ、実際に速度が取れているかを見る。
+    if (candidate.category != SuppressionRules.otherBoat) {
+      known.add(SuppressionInput.otherBoatSpeed);
+    } else {
+      final targetId = candidate.targetId;
+      final otherSpeed = targetId == null ? null : otherBoatSpeedById[targetId];
+      if (otherSpeed != null && otherSpeed.isFinite && otherSpeed >= 0) {
+        known.add(SuppressionInput.otherBoatSpeed);
+      }
+    }
+    return known;
+  }
+
+  /// 提示挙動を、静音権限の判定に使う切迫度へ写す。
+  static SuppressibleUrgency _suppressibleUrgencyOf(AlertBehavior behavior) =>
+      switch (behavior) {
+        AlertBehavior.continuousAction => SuppressibleUrgency.continuous,
+        AlertBehavior.singleAction => SuppressibleUrgency.intermittent,
+        _ => SuppressibleUrgency.visualOnly,
+      };
 
   /// 相手も止まっているか。
   ///

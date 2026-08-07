@@ -1057,6 +1057,88 @@ void main() {
       );
     });
 
+    test('他艇のGPS帯だけの重なりは、バンドを1段下げない(S3-06)', () {
+      // 艇間の相対誤差は共通誤差が相殺してほぼ0であり(2026-08-06 実機:
+      // 真値1.5〜2mに対しraw位置差 中央値1.7m)、不確かさは
+      // ProtectionBudget の相対合成で領域として表現済みである。
+      // ここで重ねてバンドを下げると二重に保守的になる。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-boat-guard-no-demotion',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          RiskThreat(
+            level: CollisionRiskLevel.lv3,
+            threat: ThreatInfo(
+              kind: ThreatKind.boat,
+              position: const LatLng(36.0, 140.0),
+              boatId: 'other-guard',
+              distanceMeters: 4,
+              // GPS帯込みでのみ重なった候補。実機の評価器はここを
+              // uncertain にし、候補の confidence が 0.7 になる。
+              confidence: ThreatConfidence.uncertain,
+              continuousIntersection: const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 2,
+                minimumSeparationMeters: 0,
+                reasonCodes: ['gps_guard_entry'],
+              ),
+            ),
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        // 自艇は航行中。低速静音の分岐へは入らない。
+        ownSpeedMetersPerSecond: 3,
+        otherBoatSpeedById: const {'other-guard': 2.0},
+      );
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      // 降格が効いていないことの確認。confidence は 0.7 のままである。
+      expect(candidate.confidence, lessThan(1.0));
+      expect(candidate.behavior, AlertBehavior.continuousAction);
+    });
+
+    test('静的区域のGPS帯だけの重なりは、従来どおり1段下げる(S3-06)', () {
+      // 危険区域は絶対座標に固定なので、自艇のGNSS誤差ぶんだけ広げた帯で
+      // 「だけ」重なる候補は本当に確度が低い。降格は維持する。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-static-guard-demotion',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          RiskThreat(
+            level: CollisionRiskLevel.lv2,
+            threat: ThreatInfo(
+              kind: ThreatKind.obstacle,
+              position: const LatLng(36.0, 140.0),
+              obstacleKind: StaticObstacleKind.driftwood,
+              obstacleId: 'driftwood-guard',
+              distanceMeters: 4,
+              confidence: ThreatConfidence.uncertain,
+              continuousIntersection: const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 2,
+                minimumSeparationMeters: 0,
+                reasonCodes: ['gps_guard_entry'],
+              ),
+            ),
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 3,
+      );
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.confidence, lessThan(1.0));
+      expect(candidate.behavior, isNot(AlertBehavior.continuousAction));
+    });
+
     test('確度の高い他艇接近は低速でも従来どおり鳴る', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-definite-other-at-rest',

@@ -9,6 +9,7 @@ import 'package:rowing_navigator/services/ship_domain_service.dart';
 import '../config/risk_evaluator_config.dart';
 import '../models/boat_model.dart';
 import '../models/channel_lane.dart';
+import '../models/protection_budget.dart';
 import '../models/static_obstacle_model.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
@@ -335,19 +336,22 @@ class CollisionRiskEvaluatorService {
     return fullWidth / 2;
   }
 
-  /// 2艇の中心間距離へ追加する安全マージン [m]。
+  /// 他艇の速度が使えるか。**取れないときは false**(原則6)。
+  static bool _isSpeedKnown(Boat boat) =>
+      boat.speed.isFinite && boat.speed >= 0;
+
+  /// 他艇の方位が使えるか。
+  static bool _isHeadingKnown(Boat boat) => boat.heading.isFinite;
+
+  /// 2艇の相対幾何へ加える保護量の内訳。
   ///
-  /// 内訳は2つ。
-  /// 1. 双方のGPS accuracy から求める測位誤差ぶん(上限
-  ///    [maxPairGpsCenterDistanceGuardMeters])
-  /// 2. 推測航法で外挿した時間に比例する誤差ぶん(上限
-  ///    [maxExtrapolationGuardMeters])
-  ///
-  /// 2は「最大6秒=30mの直線外挿に対してマージン0」という警告漏れを
-  /// 埋めるためのもの。通常運用(近傍時2秒送信)では1.2m以下に収まる。
-  double pairGpsCenterDistanceGuardMeters(Boat a, Boat b, {DateTime? now}) {
+  /// 合計だけでなく由来別に返すのは、「なぜ帯が広いのか」を説明できる
+  /// ようにするため。通信遅延で広いのか自艇のGNSSが悪いのかで、
+  /// 表示も復旧手段も違う。詳細は [ProtectionBudget]。
+  ProtectionBudget pairProtectionBudget(Boat a, Boat b, {DateTime? now}) {
     final accuracyA = _gpsAccuracyMeters(a);
     final accuracyB = _gpsAccuracyMeters(b);
+    // 近接した2端末のGNSS誤差は共通成分が相殺するため、係数は1.0より小さい。
     final accuracyGuard = (sqrt(accuracyA * accuracyA + accuracyB * accuracyB) *
             pairGpsCenterDistanceGuardFactor)
         .clamp(0.0, maxPairGpsCenterDistanceGuardMeters)
@@ -361,8 +365,34 @@ class CollisionRiskEvaluatorService {
       extrapolationUncertaintyMetersPerSecond * ageSeconds,
       maxExtrapolationGuardMeters,
     );
-    return accuracyGuard + extrapolationGuard;
+    // ---- 情報欠損ぶん(原則6) ----
+    // 速度が取れない相手は「止まっている」ではなく「上限まで動ける」。
+    // 齢に比例させるので、鮮度が落ちるほど単調に広がる。
+    final unknownSpeedGuard = (_isSpeedKnown(a) && _isSpeedKnown(b))
+        ? 0.0
+        : min(
+            unknownSpeedMaxBoatSpeedMetersPerSecond * ageSeconds,
+            maxUnknownSpeedGuardMeters,
+          );
+    final unknownHeadingGuard = (_isHeadingKnown(a) && _isHeadingKnown(b))
+        ? 0.0
+        : unknownHeadingGuardMeters;
+    return ProtectionBudget(
+      gnssMeasurementMeters: accuracyGuard,
+      remoteLatencyMeters: extrapolationGuard,
+      speedUnknownMeters: unknownSpeedGuard,
+      headingUnknownMeters: unknownHeadingGuard,
+    );
   }
+
+  /// 2艇の中心間距離へ追加する安全マージン [m]。
+  ///
+  /// 内訳は [pairProtectionBudget] が持つ。ここはその相対合成値を返すだけ。
+  ///
+  /// **速度・方位が取れているときは従来と同じ値になる**(欠損ぶんが0のため)。
+  /// 変わるのは欠損時だけで、そこは従来 0 として扱っていた分を足す。
+  double pairGpsCenterDistanceGuardMeters(Boat a, Boat b, {DateTime? now}) =>
+      pairProtectionBudget(a, b, now: now).relativeTotalMeters;
 
   double getStoppingDistance(Boat boat) {
     // 艇種ごとに停止距離を計算する(異常な速度は停止扱い)
