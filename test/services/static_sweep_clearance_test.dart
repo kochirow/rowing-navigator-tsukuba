@@ -414,5 +414,23 @@ void main() {
         }
       }
     });
+
+    test('不変条件8: 位置集合を足したbroad-phase半径はMinkowski和を下回らない', () {
+      final boat = Boat(
+        boatId: 'own',
+        boatType: BoatType.r_8p,
+        lat: 36.08,
+        lng: 140.12,
+        heading: 0,
+        speed: 4,
+        timestamp: DateTime.now(),
+      );
+      final base = ShipDomainService.effectiveExclusiveRadius(boat);
+      final expanded = ShipDomainService.effectiveExclusiveRadius(
+        boat,
+        positionSetBoundingRadiusMeters: 12,
+      );
+      expect(expanded, closeTo(base + 12, 1e-9));
+    });
   });
 }

@@ -77,6 +77,13 @@ class SafetyContractMonitor {
 
   List<ContractViolation> get violations => List.unmodifiable(_violations);
 
+  void reset() {
+    _violations.clear();
+    _separationExceededSince = null;
+    _fallbackSince = null;
+    _lastProtectionRadius = null;
+  }
+
   List<ContractViolation> observe(ContractObservation observation) {
     final found = <ContractViolation>[];
     void violate(String id, String detail) {

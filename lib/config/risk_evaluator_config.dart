@@ -42,6 +42,22 @@ const primaryWarningLeadStepSeconds = 0.5;
 const warningTime = advanceWarningLeadSeconds;
 
 // =====================================================
+// Stage 2: 保守的な自艇位置集合
+// =====================================================
+
+/// 到達集合の前方成分。1.0は現在速度維持、わずかな加速余裕を含める。
+const reachableForwardGrowthFactor = 1.15;
+
+/// 横方向への到達量に使う最大旋回率 [rad/s]。
+const reachableMaxTurnRateRadPerSecond = 0.2;
+
+/// 生fix間で物理的に許す最大艇速 [m/s]。これを超える単発位置飛びは棄却する。
+const conservativeMaxBoatSpeedMetersPerSecond = 8.0;
+
+/// 到達可能速度だけでは説明できないGNSSばらつきの固定余裕 [m]。
+const conservativeOutlierAllowanceMeters = 15.0;
+
+// =====================================================
 // 静的危険区域への近接補助距離 [m](kind別)
 // -----------------------------------------------------
 // 航路中心線に沿った予測(下記)が入ったことで、「岸へ向かっている」ケースは

@@ -37,4 +37,37 @@ void main() {
     ];
     expect(set.intersectsPolygon(near), isTrue);
   });
+
+  test('停止時のカプセルは方位不明なら円へ縮退する', () {
+    const set = CapsuleSet(
+      start: LatLng(36, 140),
+      end: LatLng(36, 140),
+      radiusMeters: 2,
+    );
+    final grown = set.grownBy(
+      elapsed: const Duration(seconds: 3),
+      speedMetersPerSecond: 0,
+      headingDegrees: 0,
+      headingReliable: false,
+    );
+    expect(grown, isA<CircleSet>());
+    expect(grown.boundingRadiusMeters, 2);
+  });
+
+  test('航行カプセルは前方へ伸び、全方向へ同じ長さを足さない', () {
+    const set = CapsuleSet(
+      start: LatLng(36, 140),
+      end: LatLng(36, 140),
+      radiusMeters: 2,
+    );
+    final grown = set.grownBy(
+      elapsed: const Duration(seconds: 3),
+      speedMetersPerSecond: 4,
+      headingDegrees: 0,
+      headingReliable: true,
+    ) as CapsuleSet;
+    // 横半幅は測位2m + 旋回分3.6mで、前方13.8mを横へ複製しない。
+    expect(grown.radiusMeters, closeTo(5.6, .01));
+    expect(grown.radiusMeters, lessThan(12));
+  });
 }

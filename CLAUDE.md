@@ -269,12 +269,14 @@ flutter run
 5. **航行開始をブロックしない。** 音声・危険区域データ・通信のいずれが欠けても開始できる。
    位置情報権限だけは例外(原理的に全機能が成立しない)
 6. **地図描画は安全判定用の拡張を反映しない。** `getShipDomains(headingReliable: true)` を使う
-7. **`ThreatInfo.distanceMeters` は符号付き**(危険区域の内部で負)。
-   0へ潰すと停止中の再接近検出が単調でなくなる
+7. **`ThreatInfo.distanceMeters` は符号付き**(危険区域の内部で負)。自艇の
+   `BoundedPositionSet` を使う判定では、集合の最近点から同じ符号付き距離を
+   求める。0へ潰すと停止中の再接近検出が単調でなくなる
 8. **`ShipDomainService.boundingRadius` は領域の実寸を下回ってはならない。**
    broad-phase の到達半径と円フォールバックの両方に使うため、過小評価すると
-   触れる障害物を評価前に捨てる。低速時の横方向拡張を含む実効値は
-   `effectiveExclusiveRadius()` を使うこと(生パラメータから計算しない)
+   触れる障害物を評価前に捨てる。位置集合を足す場合は船体領域とのMinkowski和の
+   外接半径を使う(`effectiveExclusiveRadius(positionSetBoundingRadiusMeters: ...)`)。
+   低速時の横方向拡張も含め、生パラメータから再計算しない
 9. **船体領域の六角形は凸に保つ**(`s <= h`)。低速時の方位不確かさで広げるのは
    横方向 `w` だけ。`s`(前後方向)まで広げると凹になり、実効的な全長が伸びる
 10. **警告の方向・残り秒数は表示専用。** `ThreatInfo.relativeBearingDegrees` は

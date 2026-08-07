@@ -15,6 +15,7 @@ import '../services/channel_lane_resolver.dart';
 import '../services/channel_path_predictor.dart';
 import '../services/continuous_collision_service.dart';
 import '../services/static_obstacle_index.dart';
+import '../services/bounded_position_set.dart';
 import '../types/collision_risk_level.dart';
 import '../utils/geo_math.dart';
 import '../utils/geo_proximity.dart';
@@ -973,6 +974,7 @@ class CollisionRiskEvaluatorService {
     double? warningTimeSeconds,
     ChannelCenterline? centerline,
     ChannelLaneResolver? laneResolver,
+    BoundedPositionSet? ownPositionSet,
   }) {
     final now = DateTime.now();
     final configuredWarningTime = _validatedWarningTime(warningTimeSeconds);
@@ -1130,8 +1132,12 @@ class CollisionRiskEvaluatorService {
     final staticHorizon = max(configuredWarningTime, ownStoppingTime);
     // 低速時の横方向拡張を含む実効半径を使う。生のパラメータで到達距離を
     // 見積もると、拡張した領域が触れる区域を broad-phase で捨ててしまう。
-    final myDomainRadius = ShipDomainService.effectiveExclusiveRadius(myBoat);
     final myCenter = LatLng(myBoat.lat, myBoat.lng);
+    final ownSetRadius = ownPositionSet?.boundingRadiusMeters ?? 0;
+    final myDomainRadius = ShipDomainService.effectiveExclusiveRadius(
+      myBoat,
+      positionSetBoundingRadiusMeters: ownSetRadius,
+    );
 
     // 静的区域: 自艇の掃引領域(kind別クリアランス)を予測線分に沿って掃引する。
     // 予測が届き得る最大半径で索引を引き、無関係な区域のポリゴン距離計算
@@ -1163,15 +1169,31 @@ class CollisionRiskEvaluatorService {
       // 重ならない場合でも、最接近距離(DCPA相当)は記録・表示に使う。
       double? separationMeters;
       try {
-        final definite = evaluateStaticContinuousIntersection(
-          myBoat,
-          obstacle,
-          horizonSeconds: staticHorizon,
-          includeGpsGuard: false,
-          centerline: effectiveCenterline,
-        );
+        // S2では自艇だけ、代表点とは別の到達集合を初期形状へ加える。
+        // 集合でのみ触れる場合は「可能性」であり、確実衝突へは上げない。
+        final setTouchesNow =
+            ownPositionSet?.intersectsPolygon(obstacle.points) ?? false;
+        final definite = setTouchesNow
+            ? const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 0,
+                firstEntryDistanceMeters: 0,
+                minimumSeparationMeters: 0,
+                confidence: 0.7,
+                reasonCodes: ['own_position_set_entry'],
+              )
+            : evaluateStaticContinuousIntersection(
+                myBoat,
+                obstacle,
+                horizonSeconds: staticHorizon,
+                includeGpsGuard: false,
+                centerline: effectiveCenterline,
+              );
         separationMeters = definite.minimumSeparationMeters;
         if (definite.intersects) {
+          if (setTouchesNow) confidence = ThreatConfidence.uncertain;
           intersection = definite;
         } else {
           final guarded = evaluateStaticContinuousIntersection(

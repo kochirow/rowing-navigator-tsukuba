@@ -33,7 +33,9 @@ class GeoService {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       return AppleSettings(
         accuracy: accuracy,
-        distanceFilter: 0,
+        // -1 is kCLDistanceFilterNone. 0 is not equivalent in
+        // geolocator_apple 2.3.13's Objective-C mapper.
+        distanceFilter: iosDistanceFilterNone,
         timeLimit: timeLimit,
         activityType: ActivityType.fitness,
         pauseLocationUpdatesAutomatically: false,
@@ -47,6 +49,13 @@ class GeoService {
       timeLimit: timeLimit,
     );
   }
+
+  @visibleForTesting
+  LocationSettings locationSettingsForTesting(
+    LocationAccuracy accuracy, {
+    Duration? timeLimit,
+  }) =>
+      _locationSettings(accuracy, timeLimit: timeLimit);
 
   // 現在地を取得
   Future<Position> getCurrentPosition(LocationAccuracy accuracy) async {
