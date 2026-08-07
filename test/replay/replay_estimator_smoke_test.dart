@@ -42,4 +42,20 @@ void main() {
     expect(output.representativePoint.latitude, closeTo(36, 1e-9));
     expect(output.representativePoint.longitude, closeTo(140, 1e-9));
   });
+
+  test('Stage 2比較用のS1参照は実機記録のfiltered値を使う', () {
+    final recorded = ReplayFix(
+      timestamp: origin,
+      latitude: 36,
+      longitude: 140,
+      accuracyMeters: 4,
+      recordedFilteredLatitude: 36.001,
+      recordedFilteredLongitude: 140.001,
+    );
+    final output = replayFixes([recorded], [S1RecordedSolution()])
+        .outputs['s1_recorded']!
+        .single;
+    expect(output.representativePoint.latitude, 36.001);
+    expect(output.representativePoint.longitude, 140.001);
+  });
 }

@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/services/bounded_position_set.dart';
+import 'package:rowing_navigator/services/conservative_position_solution.dart';
 import 'package:rowing_navigator/services/robust_position_estimator.dart';
 
 const _logDir = String.fromEnvironment('LOG_DIR');
@@ -122,11 +123,67 @@ class S1KalmanSolution implements ReplaySolution {
   }
 }
 
-/// Placeholder to keep the interface stable. Stage 2 supplies its alpha-beta
-/// state transition; it must not silently become a production selection here.
-class S2ConservativeSolution extends S0RawSolution {
+/// The actual S1 output recorded by the application. For Stage 2 comparison
+/// this is the trustworthy S1 reference; rerunning the estimator is not.
+class S1RecordedSolution extends S0RawSolution {
+  @override
+  String get id => 's1_recorded';
+
+  @override
+  ReplaySolutionOutput? step({required Duration elapsed, ReplayFix? fix}) {
+    final raw = super.step(elapsed: elapsed, fix: fix);
+    if (raw == null ||
+        fix == null ||
+        fix.recordedFilteredLatitude == null ||
+        fix.recordedFilteredLongitude == null) {
+      return raw;
+    }
+    final point = LatLng(
+      fix.recordedFilteredLatitude!,
+      fix.recordedFilteredLongitude!,
+    );
+    return ReplaySolutionOutput(
+      representativePoint: point,
+      speedMetersPerSecond: raw.speedMetersPerSecond,
+      headingDegrees: raw.headingDegrees,
+      uncertaintyMeters: raw.uncertaintyMeters,
+      safetySet: CircleSet(
+        representativePoint: point,
+        radiusMeters: raw.uncertaintyMeters,
+      ),
+      dispositionName: 'recorded',
+    );
+  }
+}
+
+/// Stage 1's shadow S2: a fixed-coefficient alpha-beta solution based only on
+/// raw fixes. It is not selected for display, sharing or safety decisions yet.
+class S2ConservativeSolution implements ReplaySolution {
+  final ConservativePositionSolution _solution = ConservativePositionSolution();
   @override
   String get id => 's2_conservative';
+
+  @override
+  ReplaySolutionOutput? step({required Duration elapsed, ReplayFix? fix}) {
+    if (fix == null) return null;
+    final estimate = _solution.update(
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      elapsed: elapsed,
+      speedMetersPerSecond: fix.speedMetersPerSecond,
+      headingDegrees: fix.headingDegrees,
+    );
+    final point = LatLng(estimate.latitude, estimate.longitude);
+    return ReplaySolutionOutput(
+      representativePoint: point,
+      speedMetersPerSecond: fix.speedMetersPerSecond ?? 0,
+      headingDegrees: fix.headingDegrees ?? 0,
+      uncertaintyMeters: fix.accuracyMeters,
+      safetySet: CircleSet(
+          representativePoint: point, radiusMeters: fix.accuracyMeters),
+      dispositionName: 'conservative',
+    );
+  }
 }
 
 class ReplayRun {
@@ -221,7 +278,7 @@ void main() {
     }
     final run = replayFixes(
       readReplayFixes(File('$_logDir/track.csv')),
-      [S0RawSolution(), S1KalmanSolution()],
+      [S0RawSolution(), S1RecordedSolution(), S2ConservativeSolution()],
     );
     if (_outPath.isNotEmpty) {
       File(_outPath).writeAsStringSync(
