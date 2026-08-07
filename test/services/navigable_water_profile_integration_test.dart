@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 import 'package:rowing_navigator/services/preset_obstacle_service.dart';
 import 'package:rowing_navigator/theme/map_layer_spec.dart';
 
@@ -120,6 +121,52 @@ void main() {
           reason: '${entry.key} のレーンが中心線と縮退していて左右を決められない',
         );
       }
+    }
+  });
+
+  test('霞ヶ浦のレーンは逆走判定を出さない(S3-15)', () async {
+    // レーンによる逆走判定は「川幅40〜50m・右側通行の片側1レーンで
+    // すれ違う」という桜川本流の運用前提に依存している。
+    // 霞ヶ浦は開水面で、この前提が成立しない。
+    //
+    // 2026-08-06 実機ログ: 全5端末の航跡の 17〜44% がどちらのレーンにも
+    // 入っていなかった。片側50m 広げても A 28.8% / B 19.1% / C 22.0% が
+    // 外に残り、10% 未満にするには両レーンが重なるまで広げるしかない。
+    //
+    // 除外は設定値側で持つ(危険区域プロファイルのsha256は firestore.rules が
+    // 固定しているため、ルール配備を伴わずに変えられない)。
+    // ここではプロファイル側のレーンIDと設定値が対応していることを固定する。
+    final lanes = await PresetObstacleService(includeTestZones: false)
+        .loadChannelLanes();
+    final lake = lanes
+        .where((lane) => lane.id.startsWith('lane_kasumikagaura'))
+        .toList();
+    expect(lake, isNotEmpty, reason: '霞ヶ浦のレーンが見つからない');
+    for (final lane in lake) {
+      expect(
+        reverseGuidanceDisabledLaneIds.contains(lane.id),
+        isTrue,
+        reason: '${lane.id} は開水面なので逆走判定を出してはいけない',
+      );
+    }
+
+    // 桜川本流では従来どおり有効であること。
+    final river = lanes
+        .where((lane) => lane.id.startsWith('lane_sakuragawa'))
+        .toList();
+    expect(river, isNotEmpty);
+    for (final lane in river) {
+      expect(
+        reverseGuidanceDisabledLaneIds.contains(lane.id),
+        isFalse,
+        reason: lane.id,
+      );
+    }
+
+    // 設定値が実在しないレーンIDを指していないこと(綴り誤りの検出)。
+    final allIds = lanes.map((lane) => lane.id).toSet();
+    for (final id in reverseGuidanceDisabledLaneIds) {
+      expect(allIds, contains(id), reason: '$id はプロファイルに存在しない');
     }
   });
 }

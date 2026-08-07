@@ -2089,6 +2089,13 @@ UseNavigator useNavigator() {
             appendRuntimeDiagnostic('safety_evaluation_stalled', {
               'lastSafetyEvaluationAgeMs':
                   liveness.lastSafetyEvaluationAge?.inMilliseconds,
+              // 閾値が測位間隔に追随して広がったのか、固定下限のままかを
+              // 後から切り分けられるようにする。閾値だけ上げて R1(測位が
+              // 0.4Hz しか出ていない問題)を隠さないための記録である。
+              'effectiveThresholdMs':
+                  liveness.effectiveEvaluationStallThreshold.inMilliseconds,
+              'smoothedInputIntervalMs':
+                  liveness.smoothedInputInterval?.inMilliseconds,
             });
           }
           safetyEvaluationStalled.value = true;

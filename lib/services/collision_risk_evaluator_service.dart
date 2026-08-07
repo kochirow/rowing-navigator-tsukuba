@@ -1064,8 +1064,15 @@ class CollisionRiskEvaluatorService {
         effectiveCenterline,
         laneResolver: laneResolver,
       );
-      if (outcome == ReverseGuidanceOutcome.reverse) {
-        final lane = laneResolver!.resolveLane(myPosition)!;
+      final reverseLane = laneResolver?.resolveLane(myPosition);
+      // 開水面のレーンでは逆走判定を出さない。
+      // レーンが「越えない取り決め」として成立する水域だけで使う。
+      // 根拠と実測は [reverseGuidanceDisabledLaneIds]。
+      final reverseGuidanceAllowed = reverseLane != null &&
+          reverseLane.reverseGuidanceEnabled &&
+          !reverseGuidanceDisabledLaneIds.contains(reverseLane.id);
+      if (outcome == ReverseGuidanceOutcome.reverse && reverseGuidanceAllowed) {
+        final lane = reverseLane;
         raiseLevel(
           CollisionRiskLevel.lv1,
           ThreatInfo(
