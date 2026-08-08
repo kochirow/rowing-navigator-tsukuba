@@ -254,6 +254,15 @@ class CollisionRiskEvaluatorService {
   /// - 位置(lat/lng)が使えない場合はnull(その艇は幾何判定不能)
   /// - 方位が異常なら0度、速度が異常・負なら0(停止扱い)に丸める
   /// 1艇の異常データが評価ループ全体を壊す(=全警告が止まる)ことを防ぐ。
+  /// 異常値を落とし、非有限な heading/speed を 0 へ正規化する。
+  ///
+  /// **ここが原則6(データ欠損は安全の根拠にならない)の抜け穴である。**
+  /// 「速度が取れない」を「速度0」へ潰すので、下流は両者を区別できない。
+  /// 現在の本番経路では `RemoteBoatMessage` の検証が speed 欠損を弾くため
+  /// 実害は出ていないが、**この関数がある限り、上流で欠損しても
+  /// 静かに0になる**。直すときは 0 へ潰さず「不明」を型で運ぶこと。
+  /// 下流(predictPosition・getStoppingDistance・ShipDomainService)が
+  /// すべて有限値前提なので、評価器の中核に触る変更になる。
   Boat? _usableBoat(Boat b) {
     if (!b.lat.isFinite ||
         !b.lng.isFinite ||
@@ -337,10 +346,25 @@ class CollisionRiskEvaluatorService {
   }
 
   /// 他艇の速度が使えるか。**取れないときは false**(原則6)。
+  ///
+  /// **注意: 現在の本番経路ではここが false になることはない。**
+  ///
+  /// 1. `RemoteBoatMessage` の検証が speed 欠損・非有限・範囲外を弾くので、
+  ///    受信した他艇の速度は必ず有効値である。
+  /// 2. 仮に欠損しても、[_usableBoat] が評価の手前で 0.0 へ正規化する。
+  ///
+  /// つまり**「速度不明」の情報は評価器へ届く前に消えている**。
+  /// 原則6(データ欠損は安全の根拠にならない)の観点では [_usableBoat] の
+  /// 正規化のほうが本丸であり、そこを直さない限りこの判定は
+  /// 防御的な二重化にとどまる。直すときは、0 へ潰さずに
+  /// 「不明」を型で運ぶ必要がある(下流の predictPosition・停止距離・
+  /// 船体領域がすべて非有限値を受け取らない前提で書かれているため、
+  /// 評価器の中核に触る変更になる)。
   static bool _isSpeedKnown(Boat boat) =>
       boat.speed.isFinite && boat.speed >= 0;
 
-  /// 他艇の方位が使えるか。
+  /// 他艇の方位が使えるか。[_isSpeedKnown] と同じ理由で、
+  /// 現在の本番経路では false にならない。
   static bool _isHeadingKnown(Boat boat) => boat.heading.isFinite;
 
   /// 2艇の相対幾何へ加える保護量の内訳。

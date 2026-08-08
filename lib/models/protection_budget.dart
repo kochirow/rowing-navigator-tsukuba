@@ -17,6 +17,18 @@ import 'dart:math' as math;
 ///
 /// - 静的危険区域(絶対座標に固定)には [absoluteTotalMeters]
 /// - 他艇(相対幾何)には [relativeTotalMeters]
+///
+/// ## 未達: 飽和の解消（2026-08-06 時点）
+///
+/// 内訳は持てるようになったが、[gnssMeasurementMeters] は呼出側
+/// (`pairProtectionBudget`)で**上限 2.5m にクランプしたまま**である。
+/// 「測位品質に応じて伸び縮みさせる」という当初の狙いは達成していない。
+///
+/// クランプを外すと、DESIGN_PRINCIPLES 3.2 の検算(狭所で 8+ 同士が
+/// すれ違うと最悪 13.90m 必要で、レーン幅 12.5m を既に 1.4m 超過)が
+/// さらに悪化し、桜川の狭所で過剰警告になる(原則4)。外してよいかは
+/// **Stage 2 後の accuracy 分布を実機ログで確認してから**判断する。
+/// それまでは飽和したままのほうが安全側である。
 class ProtectionBudget {
   final double gnssMeasurementMeters;
   final double fixAgeMotionMeters;
