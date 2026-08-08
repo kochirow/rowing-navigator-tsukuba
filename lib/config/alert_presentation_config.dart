@@ -70,24 +70,38 @@ class AlertPresentationConfig {
 
   /// 同一区域に入っている間に読み上げる上限回数。null で無制限。
   ///
-  /// **既定を無制限から3回へ変えた(2026-08-06 実機ログ)。**
+  /// **既定は null(無制限)である。上限で打ち切らない。**
   ///
-  /// 4x の1セッション(106分)で、逆走区域の**エピソードは13回**だったのに
-  /// 読み上げは**96回**だった。1エピソードあたり平均7.4回、
-  /// 5秒間隔で約37秒鳴り続けた計算になる。106分で96回は
-  /// 約66秒に1回であり、形骸化の域に入っている。
+  /// 一度 3 を既定にしたが撤回した。逆走は「入った」という一度きりの
+  /// 事実ではなく、**是正されるまで続く状態**である。実機ログの逆走警告は
+  /// 誤検知ではなく実際に逆走していた(利用者確認済み)。
+  /// 正しく鳴っている警告を回数で打ち切ると、状態が続いているのに
+  /// 黙ることになり、警告漏れと同じになる。
   ///
-  /// 同じ状況で D/E(8+ の2台)は8エピソードで各1回しか鳴っていない。
-  /// 岸の警告(band 1)に負けて band 3 の読み上げが黙らされたためで、
-  /// **同じ状況なのに艇によって 0〜8 回とばらついていた**。
-  ///
-  /// 区域への進入は「入った」という一度きりの事実であり、
-  /// 悪化していく事象ではない。初報＋2回の念押しで打ち切り、
-  /// それ以降は表示のみにする。区域を出て再武装すれば新しい
-  /// エピソードとして数え直す。
-  ///
-  /// 1回では聞き逃すという設計意図(CLAUDE.md)は、3回で満たしている。
+  /// うるささは**回数ではなく頻度**で解く([guidanceBurstCount])。
+  /// 長いカーブ区域などで上限を入れたくなったときのために口は残す。
   final int? guidanceRepeatMaxCount;
+
+  /// 1組の読み上げに含める回数。
+  ///
+  /// **「2回鳴らして、しばらく黙る」を1組とする。**
+  ///
+  /// 一定間隔で鳴らし続けると、聞き手はすぐに慣れて無視するようになる。
+  /// 2回続けて鳴ると「いま起きている」ことが伝わり、そのあとの静寂が
+  /// 「まだ続いている」を次の組で再認識させる。同じ総数でも、
+  /// 均等に散らすより組にしたほうが体感のうるささが下がる。
+  final int guidanceBurstCount;
+
+  /// 組と組のあいだの静寂。滞在が続くと [guidanceBurstMaxIdleInterval] まで伸びる。
+  ///
+  /// 進入直後は短い間隔で確実に気づかせ、状態が続くにつれて落ち着かせる。
+  /// 人のコーチが同じ状況で取る振る舞いに近い。
+  final Duration guidanceBurstIdleInterval;
+
+  /// 組と組の静寂の上限。長く居続けても、これ以上は間延びさせない。
+  ///
+  /// 逆走のように是正されるまで続く状態では、完全に黙ってはいけない。
+  final Duration guidanceBurstMaxIdleInterval;
 
   /// 逆走注意の再武装間隔。
   ///
@@ -126,7 +140,10 @@ class AlertPresentationConfig {
     this.stableThreatEpisodeRetentionDuration = const Duration(seconds: 5),
     this.guidanceRearmDuration = const Duration(seconds: 5),
     this.guidanceRepeatInterval = const Duration(seconds: 5),
-    this.guidanceRepeatMaxCount = 3,
+    this.guidanceRepeatMaxCount,
+    this.guidanceBurstCount = 2,
+    this.guidanceBurstIdleInterval = const Duration(seconds: 15),
+    this.guidanceBurstMaxIdleInterval = const Duration(seconds: 60),
     this.reverseGuidanceRearmDuration = const Duration(seconds: 60),
     this.staticOverlapClosingRateMetersPerSecond = 0.3,
     this.staticOverlapImminentGrace = const Duration(seconds: 5),

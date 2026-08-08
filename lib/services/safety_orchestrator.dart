@@ -759,6 +759,9 @@ class SafetyOrchestrator {
           : presentationConfig.guidanceRearmDuration,
       repeatInterval: presentationConfig.guidanceRepeatInterval,
       repeatMaxCount: presentationConfig.guidanceRepeatMaxCount,
+      burstCount: presentationConfig.guidanceBurstCount,
+      burstIdleInterval: presentationConfig.guidanceBurstIdleInterval,
+      burstMaxIdleInterval: presentationConfig.guidanceBurstMaxIdleInterval,
       nextEventId: () => _nextAudioEventId(candidate.alertId, 'entry'),
     );
     final isConfirmedReverse =
@@ -1458,6 +1461,29 @@ class _GuidancePresentationContext {
   /// 現在の滞在での発行回数。0 が進入時の1回目。
   int _repeatIndex = 0;
 
+  /// 現在の組の中で何回目か。0 が組の1回目。
+  int _burstIndex = 0;
+
+  /// この滞在で終えた組の数。静寂を伸ばすのに使う。
+  int _completedBursts = 0;
+
+  /// 次の組までの静寂。組を重ねるごとに倍にし、上限で頭打ちにする。
+  ///
+  /// 進入直後は短い間隔で確実に気づかせ、状態が続くにつれて落ち着かせる。
+  /// 完全には黙らない。逆走のように是正されるまで続く状態を、
+  /// 「もう伝えた」で打ち切らないため。
+  Duration _idleIntervalFor({
+    required Duration burstIdleInterval,
+    required Duration burstMaxIdleInterval,
+  }) {
+    var idle = burstIdleInterval;
+    for (var i = 0; i < _completedBursts; i++) {
+      idle *= 2;
+      if (idle >= burstMaxIdleInterval) return burstMaxIdleInterval;
+    }
+    return idle;
+  }
+
   void markOutside(DateTime evaluatedAt) {
     if (!_inside) return;
     _inside = false;
@@ -1466,6 +1492,8 @@ class _GuidancePresentationContext {
     _audioEventId = null;
     _lastAnnouncedAt = null;
     _repeatIndex = 0;
+    _burstIndex = 0;
+    _completedBursts = 0;
   }
 
   _GuidanceEntry enter(
@@ -1473,6 +1501,9 @@ class _GuidancePresentationContext {
     required Duration rearmDuration,
     required Duration repeatInterval,
     required int? repeatMaxCount,
+    required int burstCount,
+    required Duration burstIdleInterval,
+    required Duration burstMaxIdleInterval,
     required String Function() nextEventId,
   }) {
     if (_inside) {
@@ -1487,14 +1518,36 @@ class _GuidancePresentationContext {
       final lastAt = _lastAnnouncedAt;
       final reachedCap =
           repeatMaxCount != null && _repeatIndex + 1 >= repeatMaxCount;
+      // 「2回鳴らして、しばらく黙る」を1組にする。
+      //
+      // 一定間隔で鳴らし続けると聞き手はすぐ慣れて無視する。組にすると、
+      // 2回続く音で「いま起きている」ことが伝わり、そのあとの静寂が
+      // 次の組で「まだ続いている」を再認識させる。総数を減らしつつ、
+      // **状態が続く限り鳴り止まない**ようにできる。
+      //
+      // 逆走は「入った」という一度きりの事実ではなく、是正されるまで
+      // 続く状態なので、回数で打ち切ってはいけない。
+      final withinBurst = _burstIndex + 1 < burstCount;
+      final idle = _idleIntervalFor(
+        burstIdleInterval: burstIdleInterval,
+        burstMaxIdleInterval: burstMaxIdleInterval,
+      );
+      final waitFor = withinBurst ? repeatInterval : idle;
       // 時計が巻き戻った場合は基点を引き直し、即座に鳴らし直さない。
       if (lastAt != null && evaluatedAt.isBefore(lastAt)) {
         _lastAnnouncedAt = evaluatedAt;
       } else if (lastAt != null &&
           !reachedCap &&
-          evaluatedAt.difference(lastAt) >= repeatInterval) {
+          evaluatedAt.difference(lastAt) >= waitFor) {
         _lastAnnouncedAt = evaluatedAt;
         _repeatIndex += 1;
+        if (withinBurst) {
+          _burstIndex += 1;
+        } else {
+          // 組を1つ終えた。次の組は少し長く待つ。
+          _burstIndex = 0;
+          _completedBursts += 1;
+        }
         _audioEventId = nextEventId();
       }
       return _GuidanceEntry(

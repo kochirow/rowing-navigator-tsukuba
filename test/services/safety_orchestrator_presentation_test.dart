@@ -643,7 +643,7 @@ void main() {
       );
     });
 
-    test('区域内にいる間はカーブを5秒ごとに読み上げ直す', () {
+    test('区域内にいる間は2回1組でカーブを読み上げ直す', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-guidance-repeat',
         sessionGeneration: 1,
@@ -676,10 +676,23 @@ void main() {
       // 資産は変わらない。同じ読み上げをもう一度鳴らすだけ。
       expect(firstRepeat.audioAsset, 'audio/curve_warning.mp3');
 
-      for (var second = 6; second <= 9; second++) {
-        expect(step(second).audioEventId, firstRepeat.audioEventId);
+      // ここまでが1組(2回)。組を終えたら次の組まで静寂を置く。
+      // 均等5秒で鳴らし続けると聞き手が慣れて無視するため、
+      // 組にして体感のうるささを下げる(S3-08)。
+      for (var second = 6; second <= 19; second++) {
+        expect(
+          step(second).audioEventId,
+          firstRepeat.audioEventId,
+          reason: '組の直後は静寂を置く($second 秒)',
+        );
       }
-      expect(step(10).audioEventId, isNot(firstRepeat.audioEventId));
+      // 静寂(15秒)が明けたら次の組の1回目。
+      final secondBurst = step(20);
+      expect(secondBurst.audioEventId, isNot(firstRepeat.audioEventId));
+      expect(secondBurst.reasonCodes, contains('GUIDANCE_REPEAT'));
+      // 組の中は再び5秒間隔。
+      expect(step(24).audioEventId, secondBurst.audioEventId);
+      expect(step(25).audioEventId, isNot(secondBurst.audioEventId));
     });
 
     test('衝突警告に負けている間もカーブの周期は進み、復帰後に鳴り直す', () {
@@ -1057,17 +1070,19 @@ void main() {
       );
     });
 
-    test('区域内に留まり続けても読み上げは上限で打ち切る(S3-08)', () {
-      // 2026-08-06 実機ログ: 4x の1セッション(106分)で、逆走区域の
-      // エピソードは13回だったのに読み上げは96回。約66秒に1回鳴っていた。
-      // 区域への進入は一度きりの事実であり、悪化していく事象ではない。
+    test('区域案内は2回1組で鳴らし、組の間隔を伸ばす(S3-08)', () {
+      // 逆走は「入った」という一度きりの事実ではなく、是正されるまで
+      // 続く状態である。実機ログの逆走警告は誤検知ではなく実際に
+      // 逆走していた。回数で打ち切ると、状態が続いているのに黙る。
+      //
+      // うるささは頻度で解く。2回鳴らして静寂、が1組。
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'session-guidance-repeat-cap',
+        sessionId: 'session-guidance-burst',
         sessionGeneration: 1,
       );
-      final audioEventIds = <String>{};
-      // 5秒間隔の読み上げに対し、3分ぶん区域内に留まり続ける。
-      for (var second = 0; second <= 180; second += 1) {
+      final firedAt = <int>[];
+      String? previous;
+      for (var second = 0; second <= 300; second += 1) {
         final result = orchestrator.processAssessment(
           assessment: assessment([
             guidanceThreat(StaticObstacleKind.curve),
@@ -1077,12 +1092,33 @@ void main() {
           ownSpeedMetersPerSecond: 3,
         );
         final eventId = result.snapshot.audioDirective?.eventId;
-        if (eventId != null) audioEventIds.add(eventId);
+        if (eventId != null && eventId != previous) {
+          previous = eventId;
+          firedAt.add(second);
+        }
       }
-      // 初報 + 念押し2回で打ち切る。上限なしだと36回鳴っていた。
-      expect(audioEventIds.length, lessThanOrEqualTo(3));
-      // 初報を落としてはいけない。
-      expect(audioEventIds, isNotEmpty);
+
+      // 5分居続けても鳴り止まない。打ち切らないことが要件である。
+      expect(firedAt.length, greaterThan(6));
+
+      // 組の1回目と2回目は短い間隔(5秒)で続く。
+      expect(firedAt[1] - firedAt[0], 5);
+      expect(firedAt[3] - firedAt[2], 5);
+
+      // 組と組のあいだは空く。しかも回を追うごとに広がる。
+      final firstIdle = firedAt[2] - firedAt[1];
+      final secondIdle = firedAt[4] - firedAt[3];
+      expect(firstIdle, greaterThan(5));
+      expect(secondIdle, greaterThan(firstIdle));
+
+      // 上限で頭打ちになり、間延びし続けない。
+      final gaps = <int>[
+        for (var i = 1; i < firedAt.length; i++) firedAt[i] - firedAt[i - 1],
+      ];
+      expect(gaps.reduce((a, b) => a > b ? a : b), lessThanOrEqualTo(60));
+
+      // 均等5秒なら61回。組にすることで大きく減る。
+      expect(firedAt.length, lessThan(20));
     });
 
     test('他艇のGPS帯だけの重なりは、バンドを1段下げない(S3-06)', () {
