@@ -45,16 +45,13 @@ void useStrokeTraceSharing({
     void onTrace() {
       final value = trace.value;
       if (value == null) return;
-      unawaited(shareService
-          .publish(boatId: boatId, trace: value)
-          .then((sent) {
-            if (sent) published.value++;
-            report();
-          })
-          .catchError((Object _) {
-            failed.value++;
-            report();
-          }));
+      unawaited(shareService.publish(boatId: boatId, trace: value).then((sent) {
+        if (sent) published.value++;
+        report();
+      }).catchError((Object _) {
+        failed.value++;
+        report();
+      }));
     }
 
     trace.addListener(onTrace);

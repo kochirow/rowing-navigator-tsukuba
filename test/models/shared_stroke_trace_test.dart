@@ -54,8 +54,8 @@ void main() {
 
     test('非有限値は0として運ぶ(送信を止めない)', () {
       final decoded = StrokeWaveformCodec.decode(
-        StrokeWaveformCodec.encode([double.nan, double.infinity, ...
-            List<double>.filled(10, 0.1)]),
+        StrokeWaveformCodec.encode(
+            [double.nan, double.infinity, ...List<double>.filled(10, 0.1)]),
       );
       expect(decoded, isNotNull);
       expect(decoded![0], 0);
@@ -105,7 +105,8 @@ void main() {
       final json = _trace().toRtdbJson(serverUpdatedAt: 1780000000000);
       final bytes = json.entries.fold<int>(
         2,
-        (total, entry) => total + entry.key.length + 4 + '${entry.value}'.length,
+        (total, entry) =>
+            total + entry.key.length + 4 + '${entry.value}'.length,
       );
       expect(bytes, lessThanOrEqualTo(FirebaseUsageBudget.maxStrokeTraceBytes));
     });

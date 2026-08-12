@@ -103,9 +103,9 @@ void main() {
     // 形で分かる。カード自身の面は descendant に含まれない。
     final plates = tester
         .widgetList<Container>(find.descendant(
-          of: find.byKey(const ValueKey('nav-status-card-portrait-compact')),
-          matching: find.byType(Container),
-        ))
+      of: find.byKey(const ValueKey('nav-status-card-portrait-compact')),
+      matching: find.byType(Container),
+    ))
         .where((container) {
       final decoration = container.decoration;
       return decoration is BoxDecoration && decoration.color != null;
@@ -135,8 +135,7 @@ void main() {
     // 2枚の面は同じ高さに揃える。字なりに作ると「格の違う2つ」に見える。
     final paceHeight = tester.getRect(find.text('2:00')).height;
     final spmHeight = tester.getRect(find.text('24')).height;
-    expect(paceHeight, greaterThan(spmHeight),
-        reason: '主計器はペースが主で、レートが従');
+    expect(paceHeight, greaterThan(spmHeight), reason: '主計器はペースが主で、レートが従');
   });
 
   testWidgets('横向き小型でもSPMを消さない', (tester) async {

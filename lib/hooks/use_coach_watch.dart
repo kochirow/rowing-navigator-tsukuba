@@ -146,7 +146,8 @@ UseCoachWatch useCoachWatch({
   void syncBoatColors() {
     final boatIds = <String>{...lastBoat.value.keys, ...trails.value.keys};
     final current = boatColors.value;
-    if (boatIds.length == current.length && boatIds.every(current.containsKey)) {
+    if (boatIds.length == current.length &&
+        boatIds.every(current.containsKey)) {
       return;
     }
     boatColors.value = assignBoatTrackColors(boatIds);
@@ -292,7 +293,8 @@ UseCoachWatch useCoachWatch({
         // 桜川では全艇がほぼ同じ線上を往復するため、航跡は必ず重なる。
         // 全艇を同じ色にすると、重なった線から「この折り返しは誰か」を
         // 復元できない。艇印も同じ色で描く(BoatMarkerRenderSpec.color)。
-        final color = boatColors.value[boatId] ?? BoatPalette.trackPalette.first;
+        final color =
+            boatColors.value[boatId] ?? BoatPalette.trackPalette.first;
         polylines.add(Polyline(
           polylineId: PolylineId('trail_$boatId'),
           points: trail.map((p) => p.position).toList(),

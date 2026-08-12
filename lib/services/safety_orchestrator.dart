@@ -62,6 +62,7 @@ class SafetyOrchestrator {
   bool _lowSpeedActive = false;
   DateTime? _lowSpeedAudioMuteStartedAt;
   bool _lowSpeedAudioMuted = false;
+
   /// 確定待ちを持たない、いまこの評価時点での「休憩とみなせる低速」。
   bool _isAudioMuteSpeedNow = false;
   bool _stableStopped = false;

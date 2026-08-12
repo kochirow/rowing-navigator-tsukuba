@@ -165,7 +165,8 @@ class ChannelCrossSectionService {
     double crossAlongTangent, {
     required bool travelsAlong,
   }) {
-    final starboard = travelsAlong ? crossAlongTangent >= 0 : crossAlongTangent < 0;
+    final starboard =
+        travelsAlong ? crossAlongTangent >= 0 : crossAlongTangent < 0;
     return starboard ? RowerSide.left : RowerSide.right;
   }
 

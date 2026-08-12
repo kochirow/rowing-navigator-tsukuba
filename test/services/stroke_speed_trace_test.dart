@@ -39,8 +39,8 @@ void main() {
       expect(recorder.hasAxis, isFalse);
       expect(recorder.length, 0);
       expect(
-        recorder.window(now: start.add(const Duration(seconds: 5)),
-            windowSeconds: 6),
+        recorder.window(
+            now: start.add(const Duration(seconds: 5)), windowSeconds: 6),
         isNull,
       );
     });

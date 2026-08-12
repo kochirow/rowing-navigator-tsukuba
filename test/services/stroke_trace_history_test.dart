@@ -43,7 +43,8 @@ void main() {
 
     test('連続する2ストロークを1本の波形へつなぐ', () {
       final history = StrokeTraceHistory()
-        ..add(_trace(startedAt: t0), receivedAt: t0.add(const Duration(seconds: 3)))
+        ..add(_trace(startedAt: t0),
+            receivedAt: t0.add(const Duration(seconds: 3)))
         ..add(
           _trace(startedAt: t0.add(const Duration(milliseconds: 2400))),
           receivedAt: t0.add(const Duration(milliseconds: 5400)),
@@ -73,7 +74,8 @@ void main() {
 
     test('受信からの経過で時間軸が進む(端末の時計ずれに依らない)', () {
       final history = StrokeTraceHistory()
-        ..add(_trace(startedAt: t0), receivedAt: t0.add(const Duration(seconds: 3)));
+        ..add(_trace(startedAt: t0),
+            receivedAt: t0.add(const Duration(seconds: 3)));
       final early = history.window(now: t0.add(const Duration(seconds: 3)))!;
       final later = history.window(now: t0.add(const Duration(seconds: 5)))!;
       expect(later.endMs - early.endMs, closeTo(2000, 1));

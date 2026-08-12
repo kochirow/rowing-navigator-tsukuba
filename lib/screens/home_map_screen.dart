@@ -424,7 +424,8 @@ class HomeMapScreen extends HookConsumerWidget {
         batteryPercent: navigator.batteryLevel.value,
         positionSharingUnavailable:
             navigator.isPositionSharingUnavailable.value,
-        otherBoatReceiveUnavailable: navigator.isDynamicReceiveUnavailable.value,
+        otherBoatReceiveUnavailable:
+            navigator.isDynamicReceiveUnavailable.value,
         sharingCapabilityUnconfirmed:
             navigator.isSharingCapabilityUnconfirmed.value,
         audioOutputVolumeLow: navigator.isAudioOutputVolumeLow.value,
@@ -575,9 +576,8 @@ class HomeMapScreen extends HookConsumerWidget {
           title: isObserver ? '警告の設定' : '航行中の警告設定',
           // 1階層目のサブタイトルには、その中にある項目を並べる。
           // 開かないと何が入っているのか分からない状態にしない。
-          subtitle: isObserver
-              ? '警告のタイミング・障害物の当たり判定・警告対象の選択'
-              : '地図と警告を見ながら、確認して反映',
+          subtitle:
+              isObserver ? '警告のタイミング・障害物の当たり判定・警告対象の選択' : '地図と警告を見ながら、確認して反映',
           section: prepare,
           onTap: () async {
             if (!isObserver) {
@@ -876,7 +876,9 @@ class HomeMapScreen extends HookConsumerWidget {
     // 別の線を「中央線」として見せると、地図と警告が食い違う。
     useEffect(() {
       if (!showChannelLanes.value) {
-        if (channelDividerLines.value.isNotEmpty) channelDividerLines.value = {};
+        if (channelDividerLines.value.isNotEmpty) {
+          channelDividerLines.value = {};
+        }
         return null;
       }
       final isSatellite = navMap.mapType.value == MapType.hybrid;
@@ -2072,8 +2074,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                           label: '監視スタート',
                                           icon: Icons.visibility,
                                           compact: true,
-                                          color: context
-                                              .colors.mapControlSurface,
+                                          color:
+                                              context.colors.mapControlSurface,
                                           foregroundColor:
                                               context.colors.primary,
                                           borderColor: context.colors.primary

@@ -67,7 +67,7 @@ class StrokeMetricsChips extends StatelessWidget {
       _ChipData(
         lateDrivePositive ? 'ドライブ後半加速' : 'ドライブ後半失速',
         '${lateDrivePositive ? '+' : '−'}'
-            '${lateDriveSpeedGainMetersPerSecond.abs().toStringAsFixed(2)}',
+        '${lateDriveSpeedGainMetersPerSecond.abs().toStringAsFixed(2)}',
       ),
       _ChipData('リカバリー保持', '${(recoverySpeedRetention * 100).round()}%'),
     ];

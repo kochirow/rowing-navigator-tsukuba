@@ -522,8 +522,8 @@ void main() {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
-                  builder: (_) =>
-                      NavSettingModal(onPressStartNav: (_, __, ___, ____) async {}),
+                  builder: (_) => NavSettingModal(
+                      onPressStartNav: (_, __, ___, ____) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
@@ -620,7 +620,8 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, strokeRateEnabled, showStrokeMotion, __) async {
+              onPressStartNav:
+                  (_, strokeRateEnabled, showStrokeMotion, __) async {
                 submittedStrokeRateEnabled = strokeRateEnabled;
                 submittedStrokeMotionDisplayEnabled = showStrokeMotion;
               },

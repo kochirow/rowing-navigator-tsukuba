@@ -88,8 +88,10 @@ void main() {
 
     test('相手の速度が不明なら領域が広がる(0m/s扱いにしない)', () {
       final a = boat(boatId: 'a');
-      final unknown = boat(boatId: 'b', speed: double.nan, age: const Duration(seconds: 3));
-      final known = boat(boatId: 'b', speed: 0.0, age: const Duration(seconds: 3));
+      final unknown =
+          boat(boatId: 'b', speed: double.nan, age: const Duration(seconds: 3));
+      final known =
+          boat(boatId: 'b', speed: 0.0, age: const Duration(seconds: 3));
       final unknownBudget = evaluator.pairProtectionBudget(a, unknown);
       final knownBudget = evaluator.pairProtectionBudget(a, known);
       expect(unknownBudget.speedUnknownMeters, greaterThan(0));

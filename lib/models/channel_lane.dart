@@ -96,9 +96,8 @@ class ChannelLane {
       centerlineId: rawCenterlineId as String?,
       points: List.unmodifiable(points),
       // 未指定は従来どおり有効。開水面だけ明示的に false にする。
-      reverseGuidanceEnabled: rawReverseGuidance is bool
-          ? rawReverseGuidance
-          : true,
+      reverseGuidanceEnabled:
+          rawReverseGuidance is bool ? rawReverseGuidance : true,
     );
   }
 }

@@ -61,7 +61,8 @@ void main() {
       );
       expect(twelve, one * 12);
       // 万一12隻ぶん常時開いても無料枠の10%以内。
-      expect(twelve, lessThan(FirebaseUsageBudget.rtdbSparkDownloadBytes ~/ 10));
+      expect(
+          twelve, lessThan(FirebaseUsageBudget.rtdbSparkDownloadBytes ~/ 10));
     });
 
     test('同時接続と危険区域100件のFirestore読取に十分な余裕がある', () {

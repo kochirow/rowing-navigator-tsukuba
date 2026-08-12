@@ -45,7 +45,9 @@ class SafetyEvaluationLiveness {
       microseconds:
           (interval.inMicroseconds * evaluationStallIntervalMultiplier).round(),
     );
-    return scaled > evaluationStallThreshold ? scaled : evaluationStallThreshold;
+    return scaled > evaluationStallThreshold
+        ? scaled
+        : evaluationStallThreshold;
   }
 
   /// 診断用の実効測位間隔。
@@ -78,10 +80,10 @@ class SafetyEvaluationLiveness {
         _smoothedInputInterval = smoothed == null
             ? interval
             : Duration(
-                microseconds: ((smoothed.inMicroseconds * 3 +
-                            interval.inMicroseconds) /
-                        4)
-                    .round(),
+                microseconds:
+                    ((smoothed.inMicroseconds * 3 + interval.inMicroseconds) /
+                            4)
+                        .round(),
               );
       }
     }

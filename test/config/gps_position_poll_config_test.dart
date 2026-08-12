@@ -41,7 +41,8 @@ void main() {
 
   test('ポーリングの上限時間は1秒ウォッチドッグを詰まらせない範囲に収める', () {
     // 実測 2〜4ms。これを大きく超えるのは異常なので、短く切り上げる。
-    expect(gpsPositionPollTimeout, lessThanOrEqualTo(const Duration(seconds: 5)));
+    expect(
+        gpsPositionPollTimeout, lessThanOrEqualTo(const Duration(seconds: 5)));
     expect(gpsPositionPollTimeout, greaterThan(gpsPositionPollMinimumInterval));
   });
 

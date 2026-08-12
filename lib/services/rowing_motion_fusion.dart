@@ -435,9 +435,9 @@ class RowingMotionFusion {
     if (metrics.strokeDurationSeconds <= 0) return null;
     final end = metrics.latestStrokeBoundary;
     final start = end.subtract(Duration(
-      microseconds: (metrics.strokeDurationSeconds *
-              Duration.microsecondsPerSecond)
-          .round(),
+      microseconds:
+          (metrics.strokeDurationSeconds * Duration.microsecondsPerSecond)
+              .round(),
     ));
     final waveform = _trace.resampleStroke(start: start, end: end);
     if (waveform == null) return null;

@@ -186,8 +186,7 @@ class MapDisplayPanel extends StatelessWidget {
                   onChanged: onHighContrastChanged,
                 ),
               ),
-              if (laneCrossSection != null &&
-                  onLaneCrossSectionChanged != null)
+              if (laneCrossSection != null && onLaneCrossSectionChanged != null)
                 _DisplaySwitch(
                   icon: Icons.straighten,
                   title: '航路の断面',
@@ -270,9 +269,7 @@ class _MapTypeTile extends StatelessWidget {
       selected: selected,
       label: label,
       child: Material(
-        color: selected
-            ? colors.primary.withValues(alpha: 0.10)
-            : colors.card,
+        color: selected ? colors.primary.withValues(alpha: 0.10) : colors.card,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: dimens.borderMd,
@@ -320,8 +317,7 @@ class _MapTypeTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     color: selected ? colors.primary : colors.textSecondary,
                   ),
                 ),

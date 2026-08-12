@@ -252,7 +252,8 @@ class StrokeSpeedTraceRecorder {
     for (var offset = 0; offset < length; offset++) {
       final index = _indexAt(first + offset);
       // 窓平均を引くことで、この窓の平均艇速はGNSS艇速に一致する。
-      final speed = math.max(0.0, _base[index] + _relative[index] - relativeMean);
+      final speed =
+          math.max(0.0, _base[index] + _relative[index] - relativeMean);
       speeds[offset] = speed;
       speedSum += speed;
       if (speed < minSpeed) minSpeed = speed;

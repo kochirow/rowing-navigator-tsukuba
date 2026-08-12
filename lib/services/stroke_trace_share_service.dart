@@ -33,7 +33,9 @@ class StrokeTracePublishPolicy {
     required DateTime now,
   }) {
     final lastStroke = _lastStrokeStartedAt;
-    if (lastStroke != null && !strokeStartedAt.isAfter(lastStroke)) return false;
+    if (lastStroke != null && !strokeStartedAt.isAfter(lastStroke)) {
+      return false;
+    }
     final lastPublished = _lastPublishedAt;
     if (lastPublished != null &&
         now.difference(lastPublished) < minimumInterval) {
@@ -87,7 +89,9 @@ class StrokeTraceShareService {
         // 失敗しても送信は続ける。残骸は受信側の鮮度判定で無視される。
         unawaited(_api.armRemoval(boatId).catchError((Object error) {
           _removalArmed = false;
-          if (kDebugMode) debugPrint('Stroke trace onDisconnect failed: $error');
+          if (kDebugMode) {
+            debugPrint('Stroke trace onDisconnect failed: $error');
+          }
         }));
       }
       await _api.publish(

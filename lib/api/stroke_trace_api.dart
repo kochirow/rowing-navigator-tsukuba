@@ -42,7 +42,8 @@ class StrokeTraceAPI {
 
   /// 接続断で古い波形が残らないようにする。位置側の onDisconnect とは
   /// 独立に登録し、こちらの失敗が位置の削除登録を壊さないようにする。
-  Future<void> armRemoval(String boatId) => boatRef(boatId).onDisconnect().remove();
+  Future<void> armRemoval(String boatId) =>
+      boatRef(boatId).onDisconnect().remove();
 
   Future<void> clear(String boatId) => boatRef(boatId).remove();
 }

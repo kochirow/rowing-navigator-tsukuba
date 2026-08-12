@@ -6,7 +6,8 @@ import 'package:rowing_navigator/services/channel_cross_section.dart';
 import 'package:rowing_navigator/services/channel_lane_resolver.dart';
 
 /// 真北へ 500m 伸びる中心線。頂点の並び順 = 北向きになる。
-ChannelCenterline _northboundCenterline() => ChannelCenterline.fromPolyline(const [
+ChannelCenterline _northboundCenterline() =>
+    ChannelCenterline.fromPolyline(const [
       LatLng(36.0000, 140.0000),
       LatLng(36.0045, 140.0000),
     ])!;
@@ -19,8 +20,9 @@ ChannelLane _lane({
   required LaneDirection direction,
   required bool eastSide,
 }) {
-  final outer =
-      eastSide ? 140.0 + _twentyMetersInLongitude : 140.0 - _twentyMetersInLongitude;
+  final outer = eastSide
+      ? 140.0 + _twentyMetersInLongitude
+      : 140.0 - _twentyMetersInLongitude;
   return ChannelLane(
     id: id,
     name: id,

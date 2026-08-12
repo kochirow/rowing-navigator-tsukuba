@@ -107,7 +107,8 @@ void main() {
         liveness.recordSafetyInput(Duration(seconds: i * 3));
         liveness.recordSafetyEvaluationCompleted(Duration(seconds: i * 3));
       }
-      final now = const Duration(seconds: 27) + const Duration(milliseconds: 100);
+      final now =
+          const Duration(seconds: 27) + const Duration(milliseconds: 100);
       liveness.recordSafetyInput(now);
       final tick = liveness.tick(now);
       expect(tick.evaluationStalled, isFalse);

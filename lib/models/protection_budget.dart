@@ -111,8 +111,7 @@ class ProtectionBudget {
         solutionDisagreementMeters:
             solutionDisagreementMeters ?? this.solutionDisagreementMeters,
         remoteLatencyMeters: remoteLatencyMeters ?? this.remoteLatencyMeters,
-        headingUnknownMeters:
-            headingUnknownMeters ?? this.headingUnknownMeters,
+        headingUnknownMeters: headingUnknownMeters ?? this.headingUnknownMeters,
         speedUnknownMeters: speedUnknownMeters ?? this.speedUnknownMeters,
         modelMismatchMeters: modelMismatchMeters ?? this.modelMismatchMeters,
       );

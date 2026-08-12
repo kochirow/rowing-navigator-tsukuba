@@ -78,8 +78,7 @@ void main() {
 
     test('use_navigator の提示は build 経路から呼ばれていない', () {
       // ソース側の不変条件。配線が `useEffect` へ戻れば落ちる。
-      final source =
-          File('lib/hooks/use_navigator.dart').readAsStringSync();
+      final source = File('lib/hooks/use_navigator.dart').readAsStringSync();
 
       // 提示は安全評価の適用(タイマー/ストリーム駆動)から直接呼ぶ。
       expect(
