@@ -1,4 +1,5 @@
 import '../models/alert_candidate.dart';
+import '../models/presentation_state_protocol.dart';
 import '../models/safety_snapshot.dart';
 
 /// 位置共有に載せる、記録専用の提示状態を符号化する。
@@ -19,7 +20,11 @@ class PresentationStateCodec {
     'reverse': 'r',
   };
 
+  static final bool _allCategoryCodesAreProtocolValues = _categoryCodes.values
+      .every(PresentationStateProtocol.categoryCodes.contains);
+
   static String? warningFor(SafetySnapshot? snapshot) {
+    assert(_allCategoryCodesAreProtocolValues);
     if (snapshot == null) return null;
     final selected = _selectedAlert(snapshot);
     if (selected == null) return null;

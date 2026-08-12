@@ -108,7 +108,7 @@ Firestore は、工事などの臨時危険区域と、固定流木の位置・�
 
 臨時危険区域は、同一チームのメンバーが作成者に関係なく編集・削除でき、手動で削除するまで残ります。固定流木も失効せず、同一チームの全メンバーが位置・長さ・幅・向きを更新できますが、削除はできません。
 
-> **一般公開前の必須作業:** チーム招待/所属確認、チーム別データ分離、チーム全員の危険区域編集はコードとRulesへ実装済みで、Rules Emulator 13件に合格しています。異なる2チームの実端末試験後に本番Rulesを公開してください。
+> **一般公開前の必須作業:** チーム招待/所属確認、チーム別データ分離、チーム全員の危険区域編集はコードとRulesへ実装済みで、Rules Emulator 25件に合格しています。異なる2チームの実端末試験後に本番Rulesを公開してください。
 
 Firestore Rulesは、チーム所属を検証した上で`temporary_obstacles`の全メンバー共同編集、`managed_hazards`の全メンバー更新・削除禁止、形状・時刻・revisionの検証を設定します。リポジトリ直下の`firestore.rules`と`database.rules.json`が確定候補です。旧ルールのままでは新しい保存先への書き込みが拒否されるため、実機確認前に必ず公開してください。詳細は[チーム招待制・無料枠・省電力設計](./docs/design_notes/2026-07-20_チーム招待制・無料枠・省電力設計.md)を参照してください。
 
@@ -254,7 +254,7 @@ Firebase Authentication で次のログインプロバイダを有効にする�
 
 1. [Firebaseコンソール](https://console.firebase.google.com/) → 対象プロジェクト → 「Realtime Database」→「データベースを作成」(ロケーションは `asia-southeast1` 推奨)
 2. AuthenticationでAnonymousを有効化する。匿名アカウントの30日自動削除は有効化しない
-3. Android Studio内蔵JDKを使って、リポジトリのRules Emulator 13件を実行する
+3. Android Studio内蔵JDKを使って、リポジトリのRules Emulator 25件を実行する
 
 ```bash
 JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' \

@@ -1,5 +1,6 @@
 import '../config/protocol_config.dart';
 import '../config/display_name_config.dart';
+import 'presentation_state_protocol.dart';
 
 /// Firebaseの型に依存しない、検証済みの他艇位置メッセージ。
 ///
@@ -409,7 +410,7 @@ class RemoteBoatMessage {
   }
 
   static String? _presentationState(Object? value) {
-    if (value is! String || !RegExp(r'^[012][obsidcrgf]$').hasMatch(value)) {
+    if (value is! String || !PresentationStateProtocol.isValid(value)) {
       return null;
     }
     return value;

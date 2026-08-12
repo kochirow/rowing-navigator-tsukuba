@@ -2,6 +2,7 @@ import '../types/boat_type.dart';
 import '../config/protocol_config.dart';
 import '../config/display_name_config.dart';
 import 'remote_boat_message.dart';
+import 'presentation_state_protocol.dart';
 
 class Message {
   static const currentProtocolVersion = currentPositionProtocolVersion;
@@ -144,7 +145,7 @@ class Message {
       return 'speedAccuracy';
     }
     if (_presentationState != null &&
-        !RegExp(r'^[012][obsidcrgf]$').hasMatch(_presentationState!)) {
+        !PresentationStateProtocol.isValid(_presentationState!)) {
       return 'presentationState';
     }
     if (_safetyRunMode != null &&

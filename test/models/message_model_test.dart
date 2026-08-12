@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/models/message_model.dart';
+import 'package:rowing_navigator/models/presentation_state_protocol.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 
 void main() {
@@ -144,5 +145,28 @@ void main() {
     );
 
     expect(message.compactRtdbContractViolation, isNull);
+  });
+
+  test('警告提示コードは橋脚・杭を含め全て送信契約を満たす', () {
+    for (final categoryCode in PresentationStateProtocol.categoryCodes) {
+      final message = Message(
+        boatId: 'boat-a',
+        sessionId: 'session-a',
+        sequence: 1,
+        boatType: BoatType.r_1x,
+        lat: 36,
+        lng: 140,
+        heading: 0,
+        speed: 0,
+        timestamp: DateTime.now(),
+        accuracy: 5,
+        presentationState: '2$categoryCode',
+      );
+      expect(
+        message.compactRtdbContractViolation,
+        isNull,
+        reason: '警告コード $categoryCode で位置共有を止めない',
+      );
+    }
   });
 }

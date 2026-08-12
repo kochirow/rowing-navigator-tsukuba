@@ -18,6 +18,10 @@ enum GpsPositionFilterReason {
 class GpsPositionFilterResult {
   final bool accepted;
   final GpsPositionFilterReason reason;
+
+  /// 良好な古い基準点から離れた場所で、一貫した測位が続いたため
+  /// 速度ゲートの基準点を最新位置へ付け替えたか。
+  final bool speedAnchorReacquired;
   final double? previousAccuracyMeters;
   final double? distanceMeters;
   final double? elapsedSeconds;
@@ -25,6 +29,7 @@ class GpsPositionFilterResult {
   const GpsPositionFilterResult({
     required this.accepted,
     required this.reason,
+    this.speedAnchorReacquired = false,
     this.previousAccuracyMeters,
     this.distanceMeters,
     this.elapsedSeconds,
@@ -39,8 +44,13 @@ class GpsPositionFilter {
   final Duration maxTimestampAge;
   final bool rejectMocked;
   final bool acceptLowAccuracy;
+  final int reacquisitionSampleCount;
+  final Duration maximumReacquisitionSampleGap;
   Position? _lastAccepted;
   Duration? _lastAcceptedElapsed;
+  Position? _pendingReacquisition;
+  Duration? _pendingReacquisitionElapsed;
+  int _pendingReacquisitionCount = 0;
 
   GpsPositionFilter({
     required this.maxAccuracyMeters,
@@ -48,11 +58,15 @@ class GpsPositionFilter {
     this.maxTimestampAge = const Duration(seconds: 10),
     this.rejectMocked = false,
     this.acceptLowAccuracy = false,
-  });
+    this.reacquisitionSampleCount = 3,
+    this.maximumReacquisitionSampleGap = const Duration(seconds: 3),
+  })  : assert(reacquisitionSampleCount >= 2),
+        assert(maximumReacquisitionSampleGap > Duration.zero);
 
   void reset() {
     _lastAccepted = null;
     _lastAcceptedElapsed = null;
+    _clearPendingReacquisition();
   }
 
   /// 航行用Stopwatchのreset後に、直前の正常fixを同じ単調時刻へ載せ替える。
@@ -162,6 +176,26 @@ class GpsPositionFilter {
         final previousIsLowAccuracy = isLowAccuracy(previous);
         if (!acceptLowAccuracy ||
             (!currentIsLowAccuracy && !previousIsLowAccuracy)) {
+          // 精度の良い新位置が連続しても、古いanchorとの速度だけで
+          // 永久に棄却し続けると、端末の再測位後に地図・記録・警告が
+          // 止まり得る。古いanchorとは独立に、新位置側の候補間が
+          // 現実的な速度で連続した場合だけ有限時間で再捕捉する。
+          final reacquired = _recordReacquisitionCandidate(
+            position,
+            receivedElapsed: receivedElapsed,
+          );
+          if (reacquired) {
+            _lastAccepted = position;
+            _lastAcceptedElapsed = receivedElapsed;
+            return GpsPositionFilterResult(
+              accepted: true,
+              reason: GpsPositionFilterReason.accepted,
+              speedAnchorReacquired: true,
+              previousAccuracyMeters: previousAccuracyMeters,
+              distanceMeters: distanceMeters,
+              elapsedSeconds: elapsedSeconds,
+            );
+          }
           return GpsPositionFilterResult(
             accepted: false,
             reason: GpsPositionFilterReason.implausibleSpeed,
@@ -176,6 +210,7 @@ class GpsPositionFilter {
       }
     }
 
+    _clearPendingReacquisition();
     _lastAccepted = position;
     _lastAcceptedElapsed = receivedElapsed;
     return GpsPositionFilterResult(
@@ -185,5 +220,57 @@ class GpsPositionFilter {
       distanceMeters: distanceMeters,
       elapsedSeconds: elapsedSeconds,
     );
+  }
+
+  bool _recordReacquisitionCandidate(
+    Position position, {
+    Duration? receivedElapsed,
+  }) {
+    final pending = _pendingReacquisition;
+    if (pending == null) {
+      _startPendingReacquisition(position, receivedElapsed);
+      return false;
+    }
+
+    final pendingElapsed = _pendingReacquisitionElapsed;
+    final elapsedSeconds = receivedElapsed != null && pendingElapsed != null
+        ? (receivedElapsed - pendingElapsed).inMicroseconds / 1000000
+        : position.timestamp.difference(pending.timestamp).inMicroseconds /
+            1000000;
+    final maximumGapSeconds =
+        maximumReacquisitionSampleGap.inMicroseconds / 1000000;
+    final distanceMeters = Geolocator.distanceBetween(
+      pending.latitude,
+      pending.longitude,
+      position.latitude,
+      position.longitude,
+    );
+    if (elapsedSeconds <= 0 ||
+        elapsedSeconds > maximumGapSeconds ||
+        distanceMeters / elapsedSeconds > maxSpeedMetersPerSecond) {
+      // 候補列に一貫性がない場合は、今回を新しい1点目とする。
+      // 古い候補を残すと、散発的なジャンプで誤再捕捉し得る。
+      _startPendingReacquisition(position, receivedElapsed);
+      return false;
+    }
+
+    _pendingReacquisition = position;
+    _pendingReacquisitionElapsed = receivedElapsed;
+    _pendingReacquisitionCount += 1;
+    if (_pendingReacquisitionCount < reacquisitionSampleCount) return false;
+    _clearPendingReacquisition();
+    return true;
+  }
+
+  void _startPendingReacquisition(Position position, Duration? elapsed) {
+    _pendingReacquisition = position;
+    _pendingReacquisitionElapsed = elapsed;
+    _pendingReacquisitionCount = 1;
+  }
+
+  void _clearPendingReacquisition() {
+    _pendingReacquisition = null;
+    _pendingReacquisitionElapsed = null;
+    _pendingReacquisitionCount = 0;
   }
 }

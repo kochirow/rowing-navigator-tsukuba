@@ -378,32 +378,29 @@ async function run() {
     // Build 8から位置payloadへ追加された表示状態。Rules側が1項目でも
     // 未対応だと、Firebaseは部分的に保存せず位置書き込み全体を拒否する。
     await check("presentation state fields do not block position sharing", async () => {
-      const updatedAt = Date.now();
-      await testEnv.withSecurityRulesDisabled(async (context) => {
-        await set(
-          ref(context.database(), `teams/${teamA}/live_positions/u2`),
-          livePosition({
-            updatedAt: updatedAt - 2000,
-            sequence: 29,
-            session: "presentation",
-          }),
+      // Codecが生成する全カテゴリ。特に p=橋脚 / k=杭が
+      // 欠けると、その警告中だけ他艇から自艇が消える。
+      for (const category of ["o", "b", "p", "s", "i", "d", "k", "c", "r", "f", "g"]) {
+        const positionRef = ref(
+          u2.database(),
+          `teams/${teamA}/live_positions/u2`,
         );
-      });
-      await assertSucceeds(
-        set(
-          ref(u2.database(), `teams/${teamA}/live_positions/u2`),
-          {
+        // 直前の別テストが残した位置とのレート制限は、
+        // ここで検証する提示コードと無関係なので先に削除する。
+        await assertSucceeds(set(positionRef, null));
+        await assertSucceeds(
+          set(positionRef, {
             ...livePosition({
-              updatedAt,
+              updatedAt: Date.now(),
               sequence: 30,
-              session: "presentation",
+              session: `presentation-${category}`,
             }),
-            w: "0s",
+            w: `2${category}`,
             m: "f",
             a: 1,
-          },
-        ),
-      );
+          }),
+        );
+      }
 
       // 値域は開放せず、壊れた表示状態は拒否する。
       for (const invalidState of [

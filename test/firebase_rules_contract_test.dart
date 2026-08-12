@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/hazard_profile_config.dart';
+import 'package:rowing_navigator/models/presentation_state_protocol.dart';
 
 /// `database.rules.json` は Firebase Rules の JSONC(行コメントを書ける)。
 /// 設定値の根拠はルールの隣に置きたいので、解析前に行コメントだけ落とす。
@@ -47,6 +48,16 @@ void main() {
             '位置書き込み全体がpermission-deniedになる。',
       );
     }
+    final presentationRule =
+        (livePosition['w'] as Map<String, dynamic>)['.validate'] as String;
+    expect(
+      presentationRule,
+      contains(r'^[012][obpsidkcrfg]$'),
+      reason: '橋脚p・杭kを含むDart生成側の全コードをRulesも許可する。',
+    );
+    for (final code in PresentationStateProtocol.categoryCodes) {
+      expect(presentationRule, contains(code), reason: '欠落コード: $code');
+    }
     expect(
       (livePosition[r'$other'] as Map<String, dynamic>)['.validate'],
       isNot(false),
@@ -87,7 +98,8 @@ void main() {
       contains('newData.val() >= data.val() + 1700'),
     );
     // 12〜65spm の外はストロークとして描けない。
-    final duration = (trace['d'] as Map<String, dynamic>)['.validate'] as String;
+    final duration =
+        (trace['d'] as Map<String, dynamic>)['.validate'] as String;
     expect(duration, contains('newData.val() >= 800'));
     expect(duration, contains('newData.val() <= 5200'));
     // 巨大payloadを受け取らない。

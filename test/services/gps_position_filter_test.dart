@@ -240,6 +240,129 @@ void main() {
     expect(result.reason, GpsPositionFilterReason.implausibleSpeed);
   });
 
+  test('良好anchorから離れた良好fixも一貫した3点で再捕捉する', () {
+    final now = DateTime(2026, 8, 13, 12);
+    final filter = GpsPositionFilter(
+      maxAccuracyMeters: 25,
+      maxSpeedMetersPerSecond: 10,
+      acceptLowAccuracy: true,
+    );
+    expect(
+      filter
+          .evaluate(
+            position(
+              latitude: 36.08000,
+              longitude: 140.12000,
+              timestamp: now,
+            ),
+            receivedAt: now,
+            receivedElapsed: Duration.zero,
+          )
+          .accepted,
+      isTrue,
+    );
+
+    GpsPositionFilterResult? result;
+    for (var second = 1; second <= 3; second++) {
+      final at = now.add(Duration(seconds: second));
+      result = filter.evaluate(
+        position(
+          latitude: 36.09000,
+          longitude: 140.12000 + second * 0.00001,
+          timestamp: at,
+        ),
+        receivedAt: at,
+        receivedElapsed: Duration(seconds: second),
+      );
+      expect(result.accepted, second == 3);
+    }
+    expect(result!.speedAnchorReacquired, isTrue);
+
+    // anchorが付け替わった後は、新しい場所の次fixも通る。
+    final next = now.add(const Duration(seconds: 4));
+    final continued = filter.evaluate(
+      position(
+        latitude: 36.09000,
+        longitude: 140.12004,
+        timestamp: next,
+      ),
+      receivedAt: next,
+      receivedElapsed: const Duration(seconds: 4),
+    );
+    expect(continued.accepted, isTrue);
+    expect(continued.speedAnchorReacquired, isFalse);
+  });
+
+  test('良好anchorからの単発jumpと2点だけは再捕捉しない', () {
+    final now = DateTime(2026, 8, 13, 12);
+    final filter = GpsPositionFilter(
+      maxAccuracyMeters: 25,
+      maxSpeedMetersPerSecond: 10,
+      acceptLowAccuracy: true,
+    );
+    expect(
+      filter
+          .evaluate(
+            position(latitude: 36.08, longitude: 140.12, timestamp: now),
+            receivedAt: now,
+            receivedElapsed: Duration.zero,
+          )
+          .accepted,
+      isTrue,
+    );
+
+    for (var second = 1; second <= 2; second++) {
+      final at = now.add(Duration(seconds: second));
+      final result = filter.evaluate(
+        position(
+          latitude: 36.09,
+          longitude: 140.12 + second * 0.00001,
+          timestamp: at,
+        ),
+        receivedAt: at,
+        receivedElapsed: Duration(seconds: second),
+      );
+      expect(result.accepted, isFalse);
+      expect(result.reason, GpsPositionFilterReason.implausibleSpeed);
+    }
+  });
+
+  test('候補間が異常速度なら再起算し、誤再捕捉しない', () {
+    final now = DateTime(2026, 8, 13, 12);
+    final filter = GpsPositionFilter(
+      maxAccuracyMeters: 25,
+      maxSpeedMetersPerSecond: 10,
+      acceptLowAccuracy: true,
+    );
+    expect(
+      filter
+          .evaluate(
+            position(latitude: 36.08, longitude: 140.12, timestamp: now),
+            receivedAt: now,
+            receivedElapsed: Duration.zero,
+          )
+          .accepted,
+      isTrue,
+    );
+
+    // 候補1と候補2の間自体が約1km/sであり、候補列はここでresetされる。
+    final candidates = [
+      (1, 36.09000),
+      (2, 36.10000),
+      (3, 36.10001),
+    ];
+    for (final (second, latitude) in candidates) {
+      final at = now.add(Duration(seconds: second));
+      final result = filter.evaluate(
+        position(latitude: latitude, longitude: 140.12, timestamp: at),
+        receivedAt: at,
+        receivedElapsed: Duration(seconds: second),
+      );
+      expect(result.accepted, isFalse);
+      expect(result.speedAnchorReacquired, isFalse);
+    }
+  });
+
   test('実機相当の粗いbootstrap後に良好fixで有限時間内に捕捉する', () {
     final now = DateTime(2026, 8, 6, 12);
     final filter = GpsPositionFilter(

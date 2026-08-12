@@ -79,7 +79,7 @@
             "b": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
             "j": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 180" },
             "k": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 30" },
-            "w": { ".validate": "newData.isString() && newData.val().matches(/^[012][obsidcrgf]$/)" },
+            "w": { ".validate": "newData.isString() && newData.val().matches(/^[012][obpsidkcrfg]$/)" },
             "m": { ".validate": "newData.isString() && newData.val().matches(/^[fdu]$/)" },
             "a": { ".validate": "newData.isNumber() && newData.val() === 1" },
             // 新版が追加した任意スカラー値は旧版が無視して位置を読める。

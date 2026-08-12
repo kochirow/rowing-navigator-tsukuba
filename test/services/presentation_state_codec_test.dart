@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/models/alert_candidate.dart';
+import 'package:rowing_navigator/models/presentation_state_protocol.dart';
 import 'package:rowing_navigator/models/safety_snapshot.dart';
 import 'package:rowing_navigator/services/presentation_state_codec.dart';
 
@@ -91,6 +92,46 @@ void main() {
         audioMode: AudioDirectiveMode.loop,
       )),
       '2k',
+    );
+  });
+
+  test('全警告カテゴリが位置共有プロトコルの値域内にある', () {
+    const expectedCodes = <String, String>{
+      'other_boat': 'o',
+      'bridge': 'b',
+      'bridgePier': 'p',
+      'shore': 's',
+      'island': 'i',
+      'driftwood': 'd',
+      'pile': 'k',
+      'curve': 'c',
+      'reverse': 'r',
+    };
+    for (final entry in expectedCodes.entries) {
+      final encoded = PresentationStateCodec.warningFor(snapshotFor(
+        behavior: AlertBehavior.visualOnly,
+        category: entry.key,
+      ));
+      expect(encoded, '0${entry.value}', reason: entry.key);
+      expect(PresentationStateProtocol.isValid(encoded!), isTrue);
+    }
+    expect(
+      PresentationStateProtocol.isValid(
+        PresentationStateCodec.warningFor(snapshotFor(
+          behavior: AlertBehavior.persistentSystemFault,
+          category: 'gps_unavailable',
+        ))!,
+      ),
+      isTrue,
+    );
+    expect(
+      PresentationStateProtocol.isValid(
+        PresentationStateCodec.warningFor(snapshotFor(
+          behavior: AlertBehavior.visualOnly,
+          category: 'future_category',
+        ))!,
+      ),
+      isTrue,
     );
   });
 

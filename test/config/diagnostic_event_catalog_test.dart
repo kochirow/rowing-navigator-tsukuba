@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/log_config.dart';
 
 final _diagnosticCallPattern = RegExp(
-  r'\b(appendRuntimeDiagnostic|emitDiagnostic|onDiagnostic|onDiagnosticEvent)'
+  r'\b(appendRuntimeDiagnostic|queuePreSessionDiagnostic|emitDiagnostic|onDiagnostic|onDiagnosticEvent)'
   r'(?:\?\.call)?\s*\(',
 );
 final _eventConstructorPattern = RegExp(r'\bSessionDiagnosticEvent\s*\(');
@@ -112,7 +112,8 @@ void main() {
     expect(
       forwardingExpressions,
       <String, int>{
-        'emitter declaration': 2,
+        // appendRuntimeDiagnostic / queuePreSessionDiagnostic / emitter API.
+        'emitter declaration': 3,
         // appendRuntimeDiagnostic / audio callback / pre-session queue.
         'runtime forwarding': 3,
         'JSON deserialization': 1,
