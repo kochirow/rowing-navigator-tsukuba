@@ -92,7 +92,7 @@ class GpxExportService {
     );
     final fixedObstacleProfile = settings.remove('fixedObstacleProfile');
     final manifest = <String, dynamic>{
-      'diagnosticPackageSchemaVersion': 4,
+      'diagnosticPackageSchemaVersion': 5,
       'diagnosticEventSchemaVersion': diagnosticEventSchemaVersion,
       'diagnosticCatalogVersion': diagnosticCatalogVersion,
       'sessionSchemaVersion': session.schemaVersion,
@@ -120,10 +120,15 @@ class GpxExportService {
       'app': {
         'version': metadata?.appVersion ?? 'unknown',
         'buildNumber': metadata?.buildNumber ?? 'unknown',
+        'gitCommitSha': metadata?.gitCommitSha ?? 'unknown',
+        'buildTimestampUtc': metadata?.buildTimestampUtc ?? 'unknown',
+        'buildFlavor': metadata?.buildFlavor ?? 'unknown',
       },
       'device': {
         'platform': metadata?.platform ?? exportPlatform,
-        'operatingSystemVersion': exportPlatformVersion,
+        // 解析時ではなく、航行開始時のOSを優先する。
+        'operatingSystemVersion':
+            metadata?.operatingSystemVersion ?? exportPlatformVersion,
         'class': 'mobile',
       },
       'hazardProfile': {

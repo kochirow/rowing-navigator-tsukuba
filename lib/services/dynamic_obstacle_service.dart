@@ -5,6 +5,11 @@ import 'package:rowing_navigator/models/boat_model.dart';
 import '../services/message_service.dart';
 
 class DynamicObstacleService {
+  final MessageService _messageService;
+
+  DynamicObstacleService({MessageService? messageService})
+      : _messageService = messageService ?? MessageService();
+
   Stream<Map<String, dynamic>> getDynamicObstaclesStream() {
     return getBoatsStream();
   }
@@ -37,8 +42,7 @@ class DynamicObstacleService {
   /// 別物として扱う(要件定義 2026-07-26 提案5-2)。前者で fault を立てると、
   /// RTDB に壊れたレコードが1件残っているだけで永久にフラップする。
   Stream<Map<String, dynamic>> getBoatsStream() {
-    final messageService = MessageService();
-    return messageService
+    return _messageService
         .getMessagesStream()
         .map((messages) => summarize(messages, now: DateTime.now()));
   }

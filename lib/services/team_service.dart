@@ -93,6 +93,34 @@ class TeamRecoveryHint {
   }
 }
 
+/// 航行開始時のRTDB所属bridge読取り結果。
+///
+/// nullは「無し」ではなく、Rules/通信で確認できなかったことを
+/// 表す。IDやpath自体は診断ログへ入れない。
+class TeamMembershipDiagnostic {
+  final bool authenticated;
+  final bool? teamUserMatchesActiveTeam;
+  final bool? memberRecordExists;
+  final bool readDenied;
+  final String? failureCode;
+
+  const TeamMembershipDiagnostic({
+    required this.authenticated,
+    this.teamUserMatchesActiveTeam,
+    this.memberRecordExists,
+    this.readDenied = false,
+    this.failureCode,
+  });
+
+  Map<String, dynamic> toDiagnosticDetails() => {
+        'authenticated': authenticated,
+        'teamUserMatchesActiveTeam': teamUserMatchesActiveTeam,
+        'memberRecordExists': memberRecordExists,
+        'readDenied': readDenied,
+        if (failureCode != null) 'failureCode': failureCode,
+      };
+}
+
 /// 所属復元に失敗した際、過去キャッシュを使ってよいかを限定する方針。
 class TeamRestoreErrorPolicy {
   static bool allowsOfflineCache(String code) =>
@@ -208,6 +236,47 @@ class TeamService {
       _firestore.collection('users').doc(uid).snapshots().map(
             (snapshot) => snapshot.exists,
           );
+
+  /// RTDB位置共有Rulesの前提を読取りのみで確認する。
+  Future<TeamMembershipDiagnostic> diagnoseActiveRtdbMembership() async {
+    final user = _auth.currentUser;
+    final active = _activeMembership;
+    if (user == null || active == null || active.teamId.isEmpty) {
+      return TeamMembershipDiagnostic(authenticated: user != null);
+    }
+    try {
+      final teamUser = await _database.ref('team_users/${user.uid}').get();
+      final value = teamUser.value;
+      final teamUserMatches = value is Map && value['teamId'] == active.teamId;
+      if (!teamUserMatches) {
+        return const TeamMembershipDiagnostic(
+          authenticated: true,
+          teamUserMatchesActiveTeam: false,
+          // Rules上、team_usersが不一致ならmemberのreadも拒否される。
+          memberRecordExists: null,
+        );
+      }
+      final member = await _database
+          .ref('team_members/${active.teamId}/${user.uid}')
+          .get();
+      return TeamMembershipDiagnostic(
+        authenticated: true,
+        teamUserMatchesActiveTeam: true,
+        memberRecordExists: member.exists,
+      );
+    } on FirebaseException catch (error) {
+      return TeamMembershipDiagnostic(
+        authenticated: true,
+        readDenied: error.code == 'permission-denied',
+        failureCode: error.code,
+      );
+    } catch (error) {
+      return TeamMembershipDiagnostic(
+        authenticated: true,
+        failureCode: error.runtimeType.toString(),
+      );
+    }
+  }
 
   static String get requireActiveTeamId {
     final value = _activeMembership?.teamId;

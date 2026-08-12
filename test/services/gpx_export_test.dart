@@ -80,6 +80,10 @@ void main() {
       diagnosticMetadata: SessionDiagnosticMetadata(
         appVersion: '1.0.0',
         buildNumber: '1',
+        gitCommitSha: '0123456789abcdef',
+        buildTimestampUtc: '2026-08-13T00:00:00Z',
+        buildFlavor: 'production',
+        operatingSystemVersion: 'iOS 19.0',
         platform: 'ios',
         hazardProfileVersion: 3,
         hazardProfileSha256: 'abc',
@@ -150,8 +154,14 @@ void main() {
     expect(files['manifest.json'], contains('fixedObstacleCalibrations'));
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
-    expect(manifest['diagnosticPackageSchemaVersion'], 4);
-    expect(manifest['diagnosticCatalogVersion'], 4);
+    expect(manifest['diagnosticPackageSchemaVersion'], 5);
+    expect(manifest['diagnosticCatalogVersion'], 5);
+    expect(manifest['app'], containsPair('gitCommitSha', '0123456789abcdef'));
+    expect(manifest['app'], containsPair('buildFlavor', 'production'));
+    expect(
+      manifest['device'],
+      containsPair('operatingSystemVersion', 'iOS 19.0'),
+    );
     expect(files['diagnostic_event_catalog.json'],
         contains('H1_AUDIO_APP_COMPETITION'));
     expect(

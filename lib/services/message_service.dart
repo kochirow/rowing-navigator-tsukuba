@@ -112,6 +112,11 @@ class MessageService {
   int _acceptedFutureTimestampRecordCount = 0;
   int _maxAcceptedFutureTimestampSkewMillis = 0;
   DateTime? _serverTimeOffsetUpdatedAt;
+  int _receivedPositionRecordCount = 0;
+  int _acceptedPositionRecordCount = 0;
+  int _rejectedPositionRecordCount = 0;
+  DateTime? _lastPositionRecordReceivedAt;
+  String? _localBoatId;
   String? _publishedProfileFingerprint;
   StreamSubscription<DatabaseEvent>? _publisherConnectionSubscription;
   String? _publishingBoatId;
@@ -148,10 +153,27 @@ class MessageService {
   /// `.info/serverTimeOffset` の最新値を受け取った端末時刻。**診断専用**。
   DateTime? get serverTimeOffsetUpdatedAt => _serverTimeOffsetUpdatedAt;
 
+  int get receivedPositionRecordCount => _receivedPositionRecordCount;
+  int get acceptedPositionRecordCount => _acceptedPositionRecordCount;
+  int get rejectedPositionRecordCount => _rejectedPositionRecordCount;
+  DateTime? get lastPositionRecordReceivedAt => _lastPositionRecordReceivedAt;
+  String get receiveBackendType =>
+      useRealtimeDatabaseForPositions ? 'rtdb' : 'firestore';
+  String? get localBoatIdHash {
+    final value = _localBoatId;
+    if (value == null || value.isEmpty) return null;
+    return sha256.convert(utf8.encode(value)).toString().substring(0, 8);
+  }
+
   /// 航行単位の時計ずれカウンタを開始時にリセットする。
-  void resetClockSkewDiagnostics() {
+  void resetClockSkewDiagnostics({String? localBoatId}) {
     _acceptedFutureTimestampRecordCount = 0;
     _maxAcceptedFutureTimestampSkewMillis = 0;
+    _receivedPositionRecordCount = 0;
+    _acceptedPositionRecordCount = 0;
+    _rejectedPositionRecordCount = 0;
+    _lastPositionRecordReceivedAt = null;
+    _localBoatId = localBoatId;
   }
 
   void _recordAcceptedFutureTimestamp(OtherBoatTrackUpdateResult result) {
@@ -294,7 +316,21 @@ class MessageService {
       }
     }
 
+    void recordIngestResult(OtherBoatTrackUpdateResult result) {
+      if (result.boatId == _localBoatId) return;
+      _recordAcceptedFutureTimestamp(result);
+      if (result.accepted) {
+        _acceptedPositionRecordCount++;
+      } else {
+        _rejectedPositionRecordCount++;
+      }
+    }
+
     void processPosition(String boatId, Map<Object?, Object?> compact) {
+      if (boatId != _localBoatId) {
+        _receivedPositionRecordCount++;
+        _lastPositionRecordReceivedAt = DateTime.now().toUtc();
+      }
       clearTransportFault('RTDB_POSITION_STREAM_ERROR');
       positionJoiner.putPosition(boatId, compact);
       if (!serverOffsetReady) {
@@ -303,7 +339,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
-      _recordAcceptedFutureTimestamp(result);
+      recordIngestResult(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -346,7 +382,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
-      _recordAcceptedFutureTimestamp(result);
+      recordIngestResult(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -383,7 +419,7 @@ class MessageService {
         final expanded = positionJoiner.takeExpanded(boatId);
         if (expanded == null) continue;
         final result = _trackStore.ingestJson(expanded);
-        _recordAcceptedFutureTimestamp(result);
+        recordIngestResult(result);
         if (result.status ==
                 OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
             result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {

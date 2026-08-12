@@ -20,4 +20,22 @@ void main() {
     expect(envelope.toDiagnosticDetails(),
         containsPair('rejectionReason', 'throttleWindow'));
   });
+
+  test('速度飛びをstaleと混同せず記録する', () {
+    final envelope = FixEnvelope(
+      sequence: 5,
+      source: FixSource.stream,
+      arrivedAtMonotonic: const Duration(seconds: 2),
+      fixTimestamp: DateTime.utc(2026, 8, 6),
+      ageAtArrivalMs: 30,
+      accuracyMeters: 4,
+      accepted: false,
+      rejectionReason: FixRejectionReason.implausibleSpeed,
+    );
+
+    expect(
+      envelope.toDiagnosticDetails(),
+      containsPair('rejectionReason', 'implausibleSpeed'),
+    );
+  });
 }

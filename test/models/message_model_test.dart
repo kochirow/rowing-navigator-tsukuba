@@ -110,4 +110,39 @@ void main() {
     expect(expanded['safetyRunMode'], 'd');
     expect(expanded['capabilities'], contains('presentation_state'));
   });
+
+  test('Rules上限を超える精度は切り下げず送信契約違反にする', () {
+    final message = Message(
+      boatId: 'boat-a',
+      sessionId: 'session-a',
+      sequence: 1,
+      boatType: BoatType.r_1x,
+      lat: 36,
+      lng: 140,
+      heading: 0,
+      speed: 0,
+      timestamp: DateTime.now(),
+      accuracy: 1026.5,
+    );
+
+    expect(message.compactRtdbContractViolation, 'accuracy');
+    expect(message.toCompactRtdbJson()['z'], 1026.5);
+  });
+
+  test('Rules上限内の精度は送信契約を満たす', () {
+    final message = Message(
+      boatId: 'boat-a',
+      sessionId: 'session-a',
+      sequence: 1,
+      boatType: BoatType.r_1x,
+      lat: 36,
+      lng: 140,
+      heading: 0,
+      speed: 0,
+      timestamp: DateTime.now(),
+      accuracy: 1000,
+    );
+
+    expect(message.compactRtdbContractViolation, isNull);
+  });
 }

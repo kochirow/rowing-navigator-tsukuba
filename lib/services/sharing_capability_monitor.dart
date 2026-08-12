@@ -26,7 +26,7 @@ enum SharingAuthorization {
   /// 認可されている(書き込み・購読が通っている)。
   granted,
 
-  /// `permission-denied`。Rules かチーム所属の問題。再試行では直らない。
+  /// `permission-denied`。Rules・payload・所属・Auth/App Checkのいずれか。
   denied,
 
   /// まだ判定できていない。
@@ -155,8 +155,8 @@ enum SharingFailureKind {
   /// 一時的な切断。すぐ1回試して、それでも駄目ならバックオフ。
   transientDisconnect,
 
-  /// `permission-denied`。Rules・チーム所属・認証の問題。
-  /// **無限に再試行しない。** 何度試しても直らず、電池と転送量を捨てるだけ。
+  /// `permission-denied`。Rulesの値検証や起動直後のAuth/App Check
+  /// 過渡状態も同じcodeになるため、最大3回の有限確認だけ許す。
   permissionDenied,
 
   /// データ契約の不一致。アプリ側の互換性問題。再試行しない。
@@ -168,8 +168,15 @@ extension SharingFailureRetryPolicy on SharingFailureKind {
   bool get isRetryable => switch (this) {
         SharingFailureKind.transientTimeout => true,
         SharingFailureKind.transientDisconnect => true,
-        SharingFailureKind.permissionDenied => false,
+        SharingFailureKind.permissionDenied => true,
         SharingFailureKind.invalidDataContract => false,
+      };
+
+  /// 現在の連続失敗回数で次の再試行を行うか。
+  bool shouldRetry(int failureCount) => switch (this) {
+        SharingFailureKind.permissionDenied => failureCount < 3,
+        SharingFailureKind.invalidDataContract => false,
+        _ => true,
       };
 
   /// [attempt] 回目(1始まり)の再試行までの待ち時間。

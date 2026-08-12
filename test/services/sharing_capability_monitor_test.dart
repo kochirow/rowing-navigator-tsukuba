@@ -116,11 +116,14 @@ void main() {
   });
 
   group('再試行の原因別分類', () {
-    test('permission-denied は再試行しない', () {
+    test('permission-denied は最大3回の失敗で打ち切る', () {
       final kind = classifySharingFailure(errorCode: 'permission-denied');
       expect(kind, SharingFailureKind.permissionDenied);
-      expect(kind.isRetryable, isFalse);
-      expect(kind.backoffFor(1), Duration.zero);
+      expect(kind.isRetryable, isTrue);
+      expect(kind.shouldRetry(1), isTrue);
+      expect(kind.shouldRetry(2), isTrue);
+      expect(kind.shouldRetry(3), isFalse);
+      expect(kind.backoffFor(1), const Duration(seconds: 1));
     });
 
     test('データ契約の不一致は再試行しない', () {

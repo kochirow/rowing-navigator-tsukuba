@@ -299,6 +299,10 @@ class SessionDiagnosticEvent {
 class SessionDiagnosticMetadata {
   final String appVersion;
   final String buildNumber;
+  final String gitCommitSha;
+  final String buildTimestampUtc;
+  final String buildFlavor;
+  final String operatingSystemVersion;
   final String platform;
   final int hazardProfileVersion;
   final String hazardProfileSha256;
@@ -307,6 +311,10 @@ class SessionDiagnosticMetadata {
   SessionDiagnosticMetadata({
     required this.appVersion,
     required this.buildNumber,
+    this.gitCommitSha = 'unknown',
+    this.buildTimestampUtc = 'unknown',
+    this.buildFlavor = 'unknown',
+    this.operatingSystemVersion = 'unknown',
     required this.platform,
     required this.hazardProfileVersion,
     required this.hazardProfileSha256,
@@ -316,6 +324,10 @@ class SessionDiagnosticMetadata {
   Map<String, dynamic> toJson() => {
         'appVersion': appVersion,
         'buildNumber': buildNumber,
+        'gitCommitSha': gitCommitSha,
+        'buildTimestampUtc': buildTimestampUtc,
+        'buildFlavor': buildFlavor,
+        'operatingSystemVersion': operatingSystemVersion,
         'platform': platform,
         'hazardProfileVersion': hazardProfileVersion,
         'hazardProfileSha256': hazardProfileSha256,
@@ -326,6 +338,11 @@ class SessionDiagnosticMetadata {
       SessionDiagnosticMetadata(
         appVersion: json['appVersion'] as String? ?? 'unknown',
         buildNumber: json['buildNumber'] as String? ?? 'unknown',
+        gitCommitSha: json['gitCommitSha'] as String? ?? 'unknown',
+        buildTimestampUtc: json['buildTimestampUtc'] as String? ?? 'unknown',
+        buildFlavor: json['buildFlavor'] as String? ?? 'unknown',
+        operatingSystemVersion:
+            json['operatingSystemVersion'] as String? ?? 'unknown',
         platform: json['platform'] as String? ?? 'unknown',
         hazardProfileVersion:
             (json['hazardProfileVersion'] as num?)?.toInt() ?? 0,

@@ -20,6 +20,7 @@ import '../hooks/navigation_stop_budget.dart';
 import '../hooks/use_screen_wakelock.dart';
 import '../hooks/use_stroke_rate.dart';
 import '../config/log_config.dart';
+import '../config/build_provenance.dart';
 import '../config/stroke_rate_config.dart';
 import '../config/system_fault_config.dart';
 import '../config/warning_audio_config.dart';
@@ -65,6 +66,7 @@ import '../services/resilient_stream_supervisor.dart';
 import '../services/robust_position_estimator.dart';
 import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_speed_trace.dart';
+import '../services/team_service.dart';
 import '../services/safety_orchestrator.dart';
 import '../services/warning_presenter.dart';
 import '../services/safety_evaluation_liveness.dart';
@@ -146,7 +148,8 @@ Map<String, Object?> _positionSharingErrorDetails(Object error) {
       if (message != null && message.isNotEmpty)
         'message': message.length <= 240 ? message : message.substring(0, 240),
       if (error.code == 'permission-denied')
-        'likelyCause': 'rtdb_rules_or_team_membership',
+        'likelyCause':
+            'rtdb_rules_payload_membership_auth_app_check_or_deployed_rules',
     };
   }
   return {'errorType': error.runtimeType.toString()};
@@ -185,13 +188,17 @@ UseNavigator useNavigator() {
   // 0隻は正常状態でもあり得るので、それだけでは fault にしない
   // (sharing_capability_monitor.dart)。**表示のみで音は足さない。**
   final isSharingCapabilityUnconfirmed = useState(false);
+
   /// 端末の出力音量が低く、読み上げが聞こえない恐れがある状態。表示のみ。
   final isAudioOutputVolumeLow = useState(false);
-  final sharingCapabilityMonitor =
-      useRef(SharingCapabilityMonitor()).value;
+  final sharingCapabilityMonitor = useRef(SharingCapabilityMonitor()).value;
   final publishingSetupRetryAttempt = useRef(0);
   final publishingSetupFailureKind = useRef<SharingFailureKind?>(null);
   final publishingSetupNextRetryAt = useRef<DateTime?>(null);
+  final publishingSetupInFlight = useRef<Future<void>?>(null);
+  final publishContractViolationField = useRef<String?>(null);
+  final membershipReceiveProbeConfirmed = useRef(false);
+  final membershipAuthorization = useRef(SharingAuthorization.unknown);
   final isDynamicReceiveUnavailable = useState(false);
   // 受信ストリームが報告した「生の」劣化。fault への昇格は
   // [receiveFaultDebouncer] が1秒周期で決める。実機ログでは生の値が
@@ -374,6 +381,7 @@ UseNavigator useNavigator() {
   final diagnosticEventDroppedCount = useRef(0);
   final alertEventDroppedCount = useRef(0);
   final positionSharingDiagnosticState = useRef<String?>(null);
+  final lastPositionPublishAckAt = useRef<DateTime?>(null);
   final pendingPreSessionDiagnostics = useRef<List<SessionDiagnosticEvent>>([]);
   final recoveryProbeDone = useRef(false);
   final sessionStartedAt = useState<DateTime?>(null);
@@ -432,6 +440,24 @@ UseNavigator useNavigator() {
       type: type,
       details: Map<String, dynamic>.from(details),
     ));
+  }
+
+  /// 航行開始処理中のFirebase工程を、セッション開始後に
+  /// 受け渡す。[appendRuntimeDiagnostic]だけでは開始前に破棄される。
+  void queuePreSessionDiagnostic(
+    String type, [
+    Map<String, dynamic> details = const <String, dynamic>{},
+  ]) {
+    final event = SessionDiagnosticEvent(
+      t: DateTime.now(),
+      type: type,
+      details: Map<String, dynamic>.from(details),
+    );
+    if (mode.value == NavMode.navigator && sessionStartedAt.value != null) {
+      appendDiagnosticEvent(event);
+    } else if (pendingPreSessionDiagnostics.value.length < 40) {
+      pendingPreSessionDiagnostics.value.add(event);
+    }
   }
 
   final audioRouteDiagnostics = AudioRouteDiagnosticsService();
@@ -559,6 +585,14 @@ UseNavigator useNavigator() {
   // publish中のprofile fingerprintと再接続購読を航行セッション
   // 全体で保つため、Widget rebuildごとに作り直さない。
   final messageService = useMemoized(MessageService.new);
+  // 受信と送信の診断を同じinstanceで観測する。これまで
+  // heartbeatは送信側instanceのserver offsetを読み、受信中でも
+  // nullを記録していた。
+  final envService = useMemoized(
+    () => EnvService(messageService: messageService),
+    [messageService],
+  );
+  final teamService = useMemoized(TeamService.new);
   final permissionService = useMemoized(PermissionService.new);
   final presetObstacleService = useMemoized(PresetObstacleService.new);
   final evaluatorService = useMemoized(CollisionRiskEvaluatorService.new);
@@ -579,6 +613,7 @@ UseNavigator useNavigator() {
       // ACK直後にも次を送らないよう、完了後2秒のpaceをpublisherで保証する。
       minPublishInterval: const Duration(seconds: 2),
       onSuccess: (_) {
+        lastPositionPublishAckAt.value = DateTime.now().toUtc();
         final previousState = positionSharingDiagnosticState.value;
         sharingFailureCount.value = 0;
         sharingFailureAnnounced.value = false;
@@ -1109,6 +1144,19 @@ UseNavigator useNavigator() {
       'serverTimeOffsetMs': messageService.serverTimeOffsetMillis,
       'serverTimeOffsetUpdatedAt':
           messageService.serverTimeOffsetUpdatedAt?.toUtc().toIso8601String(),
+      'serverTimeOffsetStatus': messageService.serverTimeOffsetUpdatedAt == null
+          ? 'unavailable'
+          : 'acquired',
+      'receiveBackendType': messageService.receiveBackendType,
+      'teamIdHash': sharedSafetyTeamIdHash.value,
+      'localBoatIdHash': messageService.localBoatIdHash,
+      'receivedPositionRecordCount': messageService.receivedPositionRecordCount,
+      'acceptedPositionRecordCount': messageService.acceptedPositionRecordCount,
+      'rejectedPositionRecordCount': messageService.rejectedPositionRecordCount,
+      'lastPositionRecordReceivedAt': messageService
+          .lastPositionRecordReceivedAt
+          ?.toUtc()
+          .toIso8601String(),
       'acceptedFutureTimestampRecordCount':
           messageService.acceptedFutureTimestampRecordCount,
       'maxAcceptedFutureTimestampSkewMs':
@@ -1287,9 +1335,31 @@ UseNavigator useNavigator() {
       // package infoが読めない場合も、compile-timeの値を使って航行は継続する。
       debugPrint('Failed to capture runtime app version: $error');
     }
+    var operatingSystemVersion = 'unknown';
+    try {
+      final device = await deviceRuntimeDiagnostics
+          .snapshot()
+          .timeout(_platformReadTimeout);
+      final systemName = device['systemName']?.toString();
+      final systemVersion = device['systemVersion']?.toString();
+      if (systemVersion != null && systemVersion.isNotEmpty) {
+        operatingSystemVersion = systemName == null || systemName.isEmpty
+            ? systemVersion
+            : '$systemName $systemVersion';
+      }
+    } catch (error) {
+      // OS取得は診断用。失敗しても航行開始を止めない。
+      debugPrint('Failed to capture operating system version: $error');
+    }
     return SessionDiagnosticMetadata(
       appVersion: appVersion,
       buildNumber: buildNumber,
+      gitCommitSha: BuildProvenance.gitCommitSha,
+      buildTimestampUtc: BuildProvenance.buildTimestampUtc,
+      buildFlavor: BuildProvenance.configuredFlavor == 'unknown'
+          ? BuildProvenance.buildMode
+          : BuildProvenance.configuredFlavor,
+      operatingSystemVersion: operatingSystemVersion,
       platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
       hazardProfileVersion: PresetObstacleService.expectedProfileVersion,
       hazardProfileSha256: PresetObstacleService.expectedProfileSha256,
@@ -1872,7 +1942,7 @@ UseNavigator useNavigator() {
   Future<void> watchEnv() async {
     await Future.wait([
       dynamicObstacleStreamSupervisor.start(
-        streamFactory: () => EnvService().getDynamicObstaclesStream(),
+        streamFactory: envService.getDynamicObstaclesStream,
         onData: (obstacles) {
           // 生の劣化フラグを保持するだけ。fault への昇格は1秒周期の
           // watchdog がデバウンスして決める(数秒のフラップで鳴らさない)。
@@ -2032,19 +2102,37 @@ UseNavigator useNavigator() {
       final now_ = DateTime.now();
       final authorization = switch (publishingSetupFailureKind.value) {
         SharingFailureKind.permissionDenied => SharingAuthorization.denied,
-        null => SharingAuthorization.granted,
+        null => membershipAuthorization.value,
         _ => SharingAuthorization.unknown,
       };
       final capability = SharingCapability(
-        publishSetupComplete: !isPositionSharingUnavailable.value,
-        subscriptionConnected: !isDynamicReceiveUnavailable.value &&
+        // clear/onDisconnectだけでは他端末へ届く証拠にならない。
+        // 初回の位置write ACK後に初めてpublish能力確認とする。
+        publishSetupComplete: lastPositionPublishAckAt.value != null &&
+            !isPositionSharingUnavailable.value,
+        sinceLastPublishAck: lastPositionPublishAckAt.value == null
+            ? null
+            : now_.toUtc().difference(lastPositionPublishAckAt.value!),
+        subscriptionConnected: membershipReceiveProbeConfirmed.value &&
+            messageService.serverTimeOffsetUpdatedAt != null &&
+            !isDynamicReceiveUnavailable.value &&
             !rawDynamicReceiveDegraded.value,
         authorization: authorization,
-        rosterAvailable: config.value != null,
+        serverTimeOffsetAge: messageService.serverTimeOffsetUpdatedAt == null
+            ? null
+            : now_
+                .toUtc()
+                .difference(messageService.serverTimeOffsetUpdatedAt!),
+        sinceLastRemoteUpdate:
+            messageService.lastPositionRecordReceivedAt == null
+                ? null
+                : now_.toUtc().difference(
+                      messageService.lastPositionRecordReceivedAt!,
+                    ),
+        rosterAvailable: membershipReceiveProbeConfirmed.value,
       );
       final wasUnconfirmed = isSharingCapabilityUnconfirmed.value;
-      final unconfirmed =
-          sharingCapabilityMonitor.update(capability, at: now_);
+      final unconfirmed = sharingCapabilityMonitor.update(capability, at: now_);
       isSharingCapabilityUnconfirmed.value = unconfirmed;
       if (unconfirmed != wasUnconfirmed) {
         appendRuntimeDiagnostic(
@@ -2056,9 +2144,11 @@ UseNavigator useNavigator() {
       }
 
       // 送信の初期設定が失敗したままなら、原因に応じて再試行する。
-      // permission-denied は何度試しても直らないので再試行しない。
+      // permission-deniedは起動過渡状態も同じcodeになるため、
+      // 連続3回で打ち切る有限確認だけ行う。
       final retryKind = publishingSetupFailureKind.value;
-      if (retryKind != null && retryKind.isRetryable) {
+      if (retryKind != null &&
+          retryKind.shouldRetry(publishingSetupRetryAttempt.value)) {
         final dueAt = publishingSetupNextRetryAt.value;
         if (dueAt == null) {
           publishingSetupNextRetryAt.value = now_.add(
@@ -3239,11 +3329,33 @@ UseNavigator useNavigator() {
             PresentationStateCodec.runModeFor(safetySnapshotGate.value.latest),
         audioSuppressedAshore: isAshore.value,
       );
-      // Firebase writeは圏外中にACK待ちとなり得る。GPS処理から
-      // awaitせず、同時1件・待機は最新1件の送信mailboxへ渡す。
-      // これにより通信断中も端末内の危険判定と記録は1Hzで続く。
-      positionPublisher.add(message);
-      lastQueuedTick.value = safetyClock.value.elapsed;
+      final contractViolation = message.compactRtdbContractViolation;
+      if (contractViolation != null) {
+        // Rulesでpermission-deniedに変わる前に、payloadの契約違反と
+        // 特定する。精度を1000mへ切り下げると他艇の予測保護
+        // 領域を過小評価するため、このfixは送らない。
+        if (publishContractViolationField.value != contractViolation) {
+          appendRuntimeDiagnostic('position_publish_contract_rejected', {
+            'stage': 'periodic_write',
+            'field': contractViolation,
+            if (message.accuracy != null)
+              'reportedAccuracyMeters': message.accuracy,
+          });
+          publishContractViolationField.value = contractViolation;
+        }
+      } else {
+        if (publishContractViolationField.value != null) {
+          appendRuntimeDiagnostic('position_publish_contract_recovered', {
+            'previousField': publishContractViolationField.value,
+          });
+          publishContractViolationField.value = null;
+        }
+        // Firebase writeは圏外中にACK待ちとなり得る。GPS処理から
+        // awaitせず、同時1件・待機は最新1件の送信mailboxへ渡す。
+        // これにより通信断中も端末内の危険判定と記録は1Hzで続く。
+        positionPublisher.add(message);
+        lastQueuedTick.value = safetyClock.value.elapsed;
+      }
     }
     final sharingDurationMs =
         (processingStopwatch.elapsed - sharingStartedAt).inMilliseconds;
@@ -3291,25 +3403,50 @@ UseNavigator useNavigator() {
   /// 変えず、復帰経路だけを足す。
   Future<void> retryPublishingSetup(int generation) async {
     if (!isCurrentNavigation(generation)) return;
+    // Future.timeoutはFirebase処理自体をcancelしない。遅延した
+    // onDisconnect登録に上書きする再登録を重ねない。
+    if (publishingSetupInFlight.value != null) return;
     final config_ = config.value;
     if (config_ == null) return;
     final attempt = publishingSetupRetryAttempt.value;
     try {
-      await Future.wait([
+      final setup = Future.wait([
         messageService.clearMessage(config_.boatId),
         messageService.registerOnDisconnect(config_.boatId),
-      ]).timeout(_publishingSetupAckTimeout);
+      ]);
+      publishingSetupInFlight.value = setup;
+      unawaited(setup.then<void>((_) {
+        if (identical(publishingSetupInFlight.value, setup)) {
+          publishingSetupInFlight.value = null;
+        }
+        if (!isCurrentNavigation(generation)) return;
+        final recovered = publishingSetupFailureKind.value != null;
+        publishingSetupFailureKind.value = null;
+        publishingSetupRetryAttempt.value = 0;
+        sharingFailureCount.value = 0;
+        sharingFailureAnnounced.value = false;
+        isPositionSharingUnavailable.value = false;
+        positionSharingDiagnosticState.value = 'pending_write_ack';
+        if (recovered) {
+          appendRuntimeDiagnostic('position_sharing_setup_recovered', {
+            'retryAttempt': attempt,
+          });
+        }
+      }, onError: (Object _, StackTrace __) {
+        if (identical(publishingSetupInFlight.value, setup)) {
+          publishingSetupInFlight.value = null;
+        }
+      }));
+      await setup.timeout(_publishingSetupAckTimeout);
       if (!isCurrentNavigation(generation)) return;
       publishingSetupFailureKind.value = null;
       publishingSetupRetryAttempt.value = 0;
       sharingFailureCount.value = 0;
       sharingFailureAnnounced.value = false;
       isPositionSharingUnavailable.value = false;
-      positionSharingDiagnosticState.value = 'healthy';
-      appendRuntimeDiagnostic('position_sharing_recovered', {
-        'previousState': 'setup_unavailable',
-        'retryAttempt': attempt,
-      });
+      // まだ位置writeのACKは得ていない。publisherの
+      // onSuccessでだけhealthyへ上げる。
+      positionSharingDiagnosticState.value = 'pending_write_ack';
     } catch (error) {
       if (!isCurrentNavigation(generation)) return;
       final kind = classifySharingFailure(
@@ -3318,10 +3455,11 @@ UseNavigator useNavigator() {
       );
       publishingSetupFailureKind.value = kind;
       // 再試行しない種類へ変わったら、そこで打ち切る。
-      publishingSetupRetryAttempt.value = kind.isRetryable ? attempt + 1 : 0;
+      final nextFailureCount = attempt + 1;
+      publishingSetupRetryAttempt.value = nextFailureCount;
       appendRuntimeDiagnostic('position_sharing_setup_retry_failed', {
         'failureKind': kind.name,
-        'retryable': kind.isRetryable,
+        'retryable': kind.shouldRetry(nextFailureCount),
         'retryAttempt': attempt,
         ..._positionSharingErrorDetails(error),
       });
@@ -3355,7 +3493,11 @@ UseNavigator useNavigator() {
     );
     previousFixEnvelopeTimestamp.value = position.timestamp;
     previousFixEnvelopeArrival.value = receivedElapsed;
-    void recordEnvelope(FixEnvelope envelope, {bool force = false}) {
+    void recordEnvelope(
+      FixEnvelope envelope, {
+      bool force = false,
+      Map<String, dynamic> extraDetails = const {},
+    }) {
       final sampledAt = lastFixEnvelopeSampleAt.value;
       if (!force &&
           sampledAt != null &&
@@ -3364,8 +3506,10 @@ UseNavigator useNavigator() {
         return;
       }
       lastFixEnvelopeSampleAt.value = envelope.arrivedAtMonotonic;
-      appendRuntimeDiagnostic(
-          'gps_fix_envelope', envelope.toDiagnosticDetails());
+      appendRuntimeDiagnostic('gps_fix_envelope', {
+        ...envelope.toDiagnosticDetails(),
+        ...extraDetails,
+      });
     }
 
     if (forcedRejectionReason != null) {
@@ -3387,11 +3531,39 @@ UseNavigator useNavigator() {
       return;
     }
 
-    if (!gpsFilter.value.accepts(
+    final filterResult = gpsFilter.value.evaluate(
       position,
       receivedAt: receivedAt,
       receivedElapsed: receivedElapsed,
-    )) {
+    );
+    final filterDetails = <String, dynamic>{
+      'filterReason': filterResult.reason.name,
+      'currentAccuracyMeters': position.accuracy,
+      if (filterResult.previousAccuracyMeters != null)
+        'previousAccuracyMeters': filterResult.previousAccuracyMeters,
+      if (filterResult.distanceMeters != null)
+        'distanceMeters': filterResult.distanceMeters,
+      if (filterResult.elapsedSeconds != null)
+        'filterElapsedMs': (filterResult.elapsedSeconds! * 1000).round(),
+    };
+    final filterRejectionReason = switch (filterResult.reason) {
+      GpsPositionFilterReason.mocked => FixRejectionReason.mocked,
+      GpsPositionFilterReason.invalidCoordinate =>
+        FixRejectionReason.invalidCoordinate,
+      GpsPositionFilterReason.invalidAccuracy =>
+        FixRejectionReason.invalidAccuracy,
+      GpsPositionFilterReason.lowAccuracy => FixRejectionReason.lowAccuracy,
+      GpsPositionFilterReason.staleTimestamp =>
+        FixRejectionReason.staleTimestamp,
+      GpsPositionFilterReason.nonMonotonic => FixRejectionReason.nonMonotonic,
+      GpsPositionFilterReason.implausibleSpeed =>
+        FixRejectionReason.implausibleSpeed,
+      GpsPositionFilterReason.accepted ||
+      GpsPositionFilterReason.lowAccuracyMeasurementBypassed ||
+      GpsPositionFilterReason.lowAccuracyAnchorBypassed =>
+        null,
+    };
+    if (!filterResult.accepted) {
       recordEnvelope(
           FixEnvelope(
             sequence: envelopeBase.sequence,
@@ -3403,12 +3575,10 @@ UseNavigator useNavigator() {
             deltaFromPreviousArrivalMs: envelopeBase.deltaFromPreviousArrivalMs,
             accuracyMeters: envelopeBase.accuracyMeters,
             accepted: false,
-            rejectionReason:
-                !position.latitude.isFinite || !position.longitude.isFinite
-                    ? FixRejectionReason.invalidCoordinate
-                    : FixRejectionReason.stale,
+            rejectionReason: filterRejectionReason!,
           ),
-          force: true);
+          force: true,
+          extraDetails: filterDetails);
       final health = gpsHealth.value.recordRejected(receivedAt);
       recordGpsQualityIfChanged(health, receivedAt);
       appendDiagnosticEvent(SessionDiagnosticEvent(
@@ -3421,6 +3591,7 @@ UseNavigator useNavigator() {
           if (position.longitude.isFinite) 'rawLng': position.longitude,
           if (position.accuracy.isFinite) 'accuracyMeters': position.accuracy,
           if (position.speed.isFinite) 'speedMetersPerSecond': position.speed,
+          ...filterDetails,
           'healthQuality': health.quality.name,
           'consecutiveRejected': health.consecutiveRejected,
         },
@@ -3458,6 +3629,7 @@ UseNavigator useNavigator() {
           rejectionReason: ingress.rejectionReason!,
         ),
         force: true,
+        extraDetails: filterDetails,
       );
       appendRuntimeDiagnostic('gps_position_coalesced', {
         'arrivalDeltaMs': envelopeBase.deltaFromPreviousArrivalMs,
@@ -3467,17 +3639,23 @@ UseNavigator useNavigator() {
       });
       return;
     }
-    recordEnvelope(FixEnvelope(
-      sequence: envelopeBase.sequence,
-      source: envelopeBase.source,
-      arrivedAtMonotonic: envelopeBase.arrivedAtMonotonic,
-      fixTimestamp: envelopeBase.fixTimestamp,
-      ageAtArrivalMs: envelopeBase.ageAtArrivalMs,
-      deltaFromPreviousFixMs: envelopeBase.deltaFromPreviousFixMs,
-      deltaFromPreviousArrivalMs: envelopeBase.deltaFromPreviousArrivalMs,
-      accuracyMeters: envelopeBase.accuracyMeters,
-      accepted: true,
-    ));
+    recordEnvelope(
+      FixEnvelope(
+        sequence: envelopeBase.sequence,
+        source: envelopeBase.source,
+        arrivedAtMonotonic: envelopeBase.arrivedAtMonotonic,
+        fixTimestamp: envelopeBase.fixTimestamp,
+        ageAtArrivalMs: envelopeBase.ageAtArrivalMs,
+        deltaFromPreviousFixMs: envelopeBase.deltaFromPreviousFixMs,
+        deltaFromPreviousArrivalMs: envelopeBase.deltaFromPreviousArrivalMs,
+        accuracyMeters: envelopeBase.accuracyMeters,
+        accepted: true,
+      ),
+      // 通常の受理は10秒サンプルのままだが、再捕捉の入口は
+      // 次回の実機ログで必ず確認できるよう全件残す。
+      force: filterResult.reason != GpsPositionFilterReason.accepted,
+      extraDetails: filterDetails,
+    );
     if (!isCurrentNavigation(generation)) return;
     final acceptedAt = receivedAt;
     final lowAccuracy = gpsFilter.value.isLowAccuracy(position);
@@ -3722,7 +3900,33 @@ UseNavigator useNavigator() {
         sharedCalibrationSyncPolicy.markApplied(appliedRevision);
       }
       // 固定流木は直前に取得済みのため、ここでは再取得しない。
-      messageService.resetClockSkewDiagnostics();
+      messageService.resetClockSkewDiagnostics(localBoatId: config_.boatId);
+      lastPositionPublishAckAt.value = null;
+      membershipReceiveProbeConfirmed.value = false;
+      membershipAuthorization.value = SharingAuthorization.unknown;
+      queuePreSessionDiagnostic('team_membership_self_check_started');
+      final membershipDiagnostic = await teamService
+          .diagnoseActiveRtdbMembership()
+          .timeout(const Duration(seconds: 3), onTimeout: () {
+        return const TeamMembershipDiagnostic(
+          authenticated: true,
+          failureCode: 'timeout',
+        );
+      });
+      queuePreSessionDiagnostic(
+        'team_membership_self_check_completed',
+        membershipDiagnostic.toDiagnosticDetails(),
+      );
+      membershipReceiveProbeConfirmed.value =
+          membershipDiagnostic.teamUserMatchesActiveTeam == true &&
+              membershipDiagnostic.memberRecordExists == true;
+      membershipAuthorization.value = membershipReceiveProbeConfirmed.value
+          ? SharingAuthorization.granted
+          : membershipDiagnostic.readDenied ||
+                  membershipDiagnostic.teamUserMatchesActiveTeam == false ||
+                  membershipDiagnostic.memberRecordExists == false
+              ? SharingAuthorization.denied
+              : SharingAuthorization.unknown;
       await startWatching(
         refreshManagedHazards: false,
         navigationOwned: true,
@@ -3735,9 +3939,49 @@ UseNavigator useNavigator() {
       final initialClear = messageService.clearMessage(config_.boatId);
       final disconnectRegistration =
           messageService.registerOnDisconnect(config_.boatId);
+      queuePreSessionDiagnostic('position_sharing_clear_started');
+      queuePreSessionDiagnostic('position_sharing_disconnect_arm_started');
+      unawaited(initialClear.then<void>((_) {
+        queuePreSessionDiagnostic('position_sharing_clear_completed');
+      }, onError: (Object error, StackTrace _) {
+        queuePreSessionDiagnostic('position_sharing_clear_failed', {
+          ..._positionSharingErrorDetails(error),
+        });
+      }));
+      unawaited(disconnectRegistration.then<void>((_) {
+        queuePreSessionDiagnostic('position_sharing_disconnect_arm_completed');
+      }, onError: (Object error, StackTrace _) {
+        queuePreSessionDiagnostic('position_sharing_disconnect_arm_failed', {
+          ..._positionSharingErrorDetails(error),
+        });
+      }));
+      final initialSetup = Future.wait([initialClear, disconnectRegistration]);
+      publishingSetupInFlight.value = initialSetup;
+      unawaited(initialSetup.then<void>((_) {
+        if (identical(publishingSetupInFlight.value, initialSetup)) {
+          publishingSetupInFlight.value = null;
+        }
+        if (!isCurrentNavigation(generation)) return;
+        final recovered = publishingSetupFailureKind.value != null;
+        publishingSetupFailureKind.value = null;
+        publishingSetupRetryAttempt.value = 0;
+        sharingFailureCount.value = 0;
+        sharingFailureAnnounced.value = false;
+        isPositionSharingUnavailable.value = false;
+        positionSharingDiagnosticState.value = 'pending_write_ack';
+        if (recovered) {
+          appendRuntimeDiagnostic('position_sharing_setup_recovered', {
+            'retryAttempt': 0,
+            'lateCompletion': true,
+          });
+        }
+      }, onError: (Object _, StackTrace __) {
+        if (identical(publishingSetupInFlight.value, initialSetup)) {
+          publishingSetupInFlight.value = null;
+        }
+      }));
       try {
-        await Future.wait([initialClear, disconnectRegistration])
-            .timeout(_publishingSetupAckTimeout);
+        await initialSetup.timeout(_publishingSetupAckTimeout);
         publishingSetupRetryAttempt.value = 0;
         // 前セッションの分類を持ち越さない。持ち越すと、繋がっているのに
         // 認可拒否と誤判定して能力 fault を立て続ける。
@@ -3758,10 +4002,10 @@ UseNavigator useNavigator() {
           errorType: error.runtimeType.toString(),
         );
         publishingSetupFailureKind.value = kind;
-        publishingSetupRetryAttempt.value = kind.isRetryable ? 1 : 0;
-        appendRuntimeDiagnostic('position_sharing_setup_failed', {
+        publishingSetupRetryAttempt.value = 1;
+        queuePreSessionDiagnostic('position_sharing_setup_failed', {
           'failureKind': kind.name,
-          'retryable': kind.isRetryable,
+          'retryable': kind.shouldRetry(1),
           ..._positionSharingErrorDetails(error),
         });
         debugPrint('Position publishing setup is pending/unavailable: $error');
@@ -3782,6 +4026,7 @@ UseNavigator useNavigator() {
           '${DateTime.now().toUtc().microsecondsSinceEpoch.toRadixString(36)}-'
           '${generation.toRadixString(36)}';
       messageSequence.value = 0;
+      publishContractViolationField.value = null;
       lastProcessedTick.value = null;
       lastProcessedWallClock.value = null;
       lastDiagnosticPositionGapAt.value = null;
