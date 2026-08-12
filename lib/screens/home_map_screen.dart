@@ -425,6 +425,9 @@ class HomeMapScreen extends HookConsumerWidget {
         positionSharingUnavailable:
             navigator.isPositionSharingUnavailable.value,
         otherBoatReceiveUnavailable: navigator.isDynamicReceiveUnavailable.value,
+        sharingCapabilityUnconfirmed:
+            navigator.isSharingCapabilityUnconfirmed.value,
+        audioOutputVolumeLow: navigator.isAudioOutputVolumeLow.value,
         temporaryObstacleReceiveUnavailable:
             navigator.isTemporaryObstacleReceiveUnavailable.value,
         safetyRunMode: navigator.safetyRunMode.value,

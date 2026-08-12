@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 import 'package:rowing_navigator/services/preset_obstacle_service.dart';
 import 'package:rowing_navigator/theme/map_layer_spec.dart';
 
@@ -121,5 +122,25 @@ void main() {
         );
       }
     }
+  });
+
+  test('レーン由来の逆走判定は、どの水域でも無効化しない(S3-15 撤回)', () {
+    // 一度 霞ヶ浦のレーンを除外リストへ入れたが撤回した。
+    //
+    // 「航跡の 17〜44% がどちらのレーンにも入っていない」ことを根拠に
+    // 開水面では判定が不安定だと考えたが、この推論が誤っていた。
+    // レーンから外れているときは判定が発火しないので、レーンのずれが
+    // 生むのは**被覆不足(警告漏れ)**であって誤発報ではない。
+    //
+    // 利用者の確認により、実機ログで鳴った逆走警告は**すべて正しかった**
+    // (実際に逆走していた)。同一艇の2台が同期して発火していた観測とも整合する。
+    // 正しく働いている警告を、被覆率の統計を理由に止めてはいけない。
+    //
+    // 開水面で**誤発報**が実測されたときだけ除外を足すこと。
+    expect(
+      reverseGuidanceDisabledLaneIds,
+      isEmpty,
+      reason: '被覆不足を理由にレーンを除外しないこと。誤発報の実測が要る',
+    );
   });
 }

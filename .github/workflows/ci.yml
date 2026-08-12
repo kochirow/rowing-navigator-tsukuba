@@ -52,3 +52,8 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      # 個人航跡を使わないStage 1の再生基盤は、実機ログが無いCIでも
+      # 必ず明示的に実行する。実機ログ依存の比較は各テストでskipする。
+      - name: Verify Stage 1 replay foundations
+        run: flutter test test/replay/replay_estimator_smoke_test.dart test/replay/pair_metrics_test.dart test/replay/fault_injection_test.dart test/replay/metamorphic_test.dart test/replay/counterexample_reducer_test.dart

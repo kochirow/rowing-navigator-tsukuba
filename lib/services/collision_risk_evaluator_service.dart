@@ -9,12 +9,14 @@ import 'package:rowing_navigator/services/ship_domain_service.dart';
 import '../config/risk_evaluator_config.dart';
 import '../models/boat_model.dart';
 import '../models/channel_lane.dart';
+import '../models/protection_budget.dart';
 import '../models/static_obstacle_model.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
 import '../services/channel_path_predictor.dart';
 import '../services/continuous_collision_service.dart';
 import '../services/static_obstacle_index.dart';
+import '../services/bounded_position_set.dart';
 import '../types/collision_risk_level.dart';
 import '../utils/geo_math.dart';
 import '../utils/geo_proximity.dart';
@@ -252,6 +254,15 @@ class CollisionRiskEvaluatorService {
   /// - 位置(lat/lng)が使えない場合はnull(その艇は幾何判定不能)
   /// - 方位が異常なら0度、速度が異常・負なら0(停止扱い)に丸める
   /// 1艇の異常データが評価ループ全体を壊す(=全警告が止まる)ことを防ぐ。
+  /// 異常値を落とし、非有限な heading/speed を 0 へ正規化する。
+  ///
+  /// **ここが原則6(データ欠損は安全の根拠にならない)の抜け穴である。**
+  /// 「速度が取れない」を「速度0」へ潰すので、下流は両者を区別できない。
+  /// 現在の本番経路では `RemoteBoatMessage` の検証が speed 欠損を弾くため
+  /// 実害は出ていないが、**この関数がある限り、上流で欠損しても
+  /// 静かに0になる**。直すときは 0 へ潰さず「不明」を型で運ぶこと。
+  /// 下流(predictPosition・getStoppingDistance・ShipDomainService)が
+  /// すべて有限値前提なので、評価器の中核に触る変更になる。
   Boat? _usableBoat(Boat b) {
     if (!b.lat.isFinite ||
         !b.lng.isFinite ||
@@ -334,19 +345,37 @@ class CollisionRiskEvaluatorService {
     return fullWidth / 2;
   }
 
-  /// 2艇の中心間距離へ追加する安全マージン [m]。
+  /// 他艇の速度が使えるか。**取れないときは false**(原則6)。
   ///
-  /// 内訳は2つ。
-  /// 1. 双方のGPS accuracy から求める測位誤差ぶん(上限
-  ///    [maxPairGpsCenterDistanceGuardMeters])
-  /// 2. 推測航法で外挿した時間に比例する誤差ぶん(上限
-  ///    [maxExtrapolationGuardMeters])
+  /// **注意: 現在の本番経路ではここが false になることはない。**
   ///
-  /// 2は「最大6秒=30mの直線外挿に対してマージン0」という警告漏れを
-  /// 埋めるためのもの。通常運用(近傍時2秒送信)では1.2m以下に収まる。
-  double pairGpsCenterDistanceGuardMeters(Boat a, Boat b, {DateTime? now}) {
+  /// 1. `RemoteBoatMessage` の検証が speed 欠損・非有限・範囲外を弾くので、
+  ///    受信した他艇の速度は必ず有効値である。
+  /// 2. 仮に欠損しても、[_usableBoat] が評価の手前で 0.0 へ正規化する。
+  ///
+  /// つまり**「速度不明」の情報は評価器へ届く前に消えている**。
+  /// 原則6(データ欠損は安全の根拠にならない)の観点では [_usableBoat] の
+  /// 正規化のほうが本丸であり、そこを直さない限りこの判定は
+  /// 防御的な二重化にとどまる。直すときは、0 へ潰さずに
+  /// 「不明」を型で運ぶ必要がある(下流の predictPosition・停止距離・
+  /// 船体領域がすべて非有限値を受け取らない前提で書かれているため、
+  /// 評価器の中核に触る変更になる)。
+  static bool _isSpeedKnown(Boat boat) =>
+      boat.speed.isFinite && boat.speed >= 0;
+
+  /// 他艇の方位が使えるか。[_isSpeedKnown] と同じ理由で、
+  /// 現在の本番経路では false にならない。
+  static bool _isHeadingKnown(Boat boat) => boat.heading.isFinite;
+
+  /// 2艇の相対幾何へ加える保護量の内訳。
+  ///
+  /// 合計だけでなく由来別に返すのは、「なぜ帯が広いのか」を説明できる
+  /// ようにするため。通信遅延で広いのか自艇のGNSSが悪いのかで、
+  /// 表示も復旧手段も違う。詳細は [ProtectionBudget]。
+  ProtectionBudget pairProtectionBudget(Boat a, Boat b, {DateTime? now}) {
     final accuracyA = _gpsAccuracyMeters(a);
     final accuracyB = _gpsAccuracyMeters(b);
+    // 近接した2端末のGNSS誤差は共通成分が相殺するため、係数は1.0より小さい。
     final accuracyGuard = (sqrt(accuracyA * accuracyA + accuracyB * accuracyB) *
             pairGpsCenterDistanceGuardFactor)
         .clamp(0.0, maxPairGpsCenterDistanceGuardMeters)
@@ -360,8 +389,34 @@ class CollisionRiskEvaluatorService {
       extrapolationUncertaintyMetersPerSecond * ageSeconds,
       maxExtrapolationGuardMeters,
     );
-    return accuracyGuard + extrapolationGuard;
+    // ---- 情報欠損ぶん(原則6) ----
+    // 速度が取れない相手は「止まっている」ではなく「上限まで動ける」。
+    // 齢に比例させるので、鮮度が落ちるほど単調に広がる。
+    final unknownSpeedGuard = (_isSpeedKnown(a) && _isSpeedKnown(b))
+        ? 0.0
+        : min(
+            unknownSpeedMaxBoatSpeedMetersPerSecond * ageSeconds,
+            maxUnknownSpeedGuardMeters,
+          );
+    final unknownHeadingGuard = (_isHeadingKnown(a) && _isHeadingKnown(b))
+        ? 0.0
+        : unknownHeadingGuardMeters;
+    return ProtectionBudget(
+      gnssMeasurementMeters: accuracyGuard,
+      remoteLatencyMeters: extrapolationGuard,
+      speedUnknownMeters: unknownSpeedGuard,
+      headingUnknownMeters: unknownHeadingGuard,
+    );
   }
+
+  /// 2艇の中心間距離へ追加する安全マージン [m]。
+  ///
+  /// 内訳は [pairProtectionBudget] が持つ。ここはその相対合成値を返すだけ。
+  ///
+  /// **速度・方位が取れているときは従来と同じ値になる**(欠損ぶんが0のため)。
+  /// 変わるのは欠損時だけで、そこは従来 0 として扱っていた分を足す。
+  double pairGpsCenterDistanceGuardMeters(Boat a, Boat b, {DateTime? now}) =>
+      pairProtectionBudget(a, b, now: now).relativeTotalMeters;
 
   double getStoppingDistance(Boat boat) {
     // 艇種ごとに停止距離を計算する(異常な速度は停止扱い)
@@ -973,6 +1028,7 @@ class CollisionRiskEvaluatorService {
     double? warningTimeSeconds,
     ChannelCenterline? centerline,
     ChannelLaneResolver? laneResolver,
+    BoundedPositionSet? ownPositionSet,
   }) {
     final now = DateTime.now();
     final configuredWarningTime = _validatedWarningTime(warningTimeSeconds);
@@ -1032,8 +1088,15 @@ class CollisionRiskEvaluatorService {
         effectiveCenterline,
         laneResolver: laneResolver,
       );
-      if (outcome == ReverseGuidanceOutcome.reverse) {
-        final lane = laneResolver!.resolveLane(myPosition)!;
+      final reverseLane = laneResolver?.resolveLane(myPosition);
+      // 開水面のレーンでは逆走判定を出さない。
+      // レーンが「越えない取り決め」として成立する水域だけで使う。
+      // 根拠と実測は [reverseGuidanceDisabledLaneIds]。
+      final reverseGuidanceAllowed = reverseLane != null &&
+          reverseLane.reverseGuidanceEnabled &&
+          !reverseGuidanceDisabledLaneIds.contains(reverseLane.id);
+      if (outcome == ReverseGuidanceOutcome.reverse && reverseGuidanceAllowed) {
+        final lane = reverseLane;
         raiseLevel(
           CollisionRiskLevel.lv1,
           ThreatInfo(
@@ -1130,8 +1193,12 @@ class CollisionRiskEvaluatorService {
     final staticHorizon = max(configuredWarningTime, ownStoppingTime);
     // 低速時の横方向拡張を含む実効半径を使う。生のパラメータで到達距離を
     // 見積もると、拡張した領域が触れる区域を broad-phase で捨ててしまう。
-    final myDomainRadius = ShipDomainService.effectiveExclusiveRadius(myBoat);
     final myCenter = LatLng(myBoat.lat, myBoat.lng);
+    final ownSetRadius = ownPositionSet?.boundingRadiusMeters ?? 0;
+    final myDomainRadius = ShipDomainService.effectiveExclusiveRadius(
+      myBoat,
+      positionSetBoundingRadiusMeters: ownSetRadius,
+    );
 
     // 静的区域: 自艇の掃引領域(kind別クリアランス)を予測線分に沿って掃引する。
     // 予測が届き得る最大半径で索引を引き、無関係な区域のポリゴン距離計算
@@ -1163,15 +1230,31 @@ class CollisionRiskEvaluatorService {
       // 重ならない場合でも、最接近距離(DCPA相当)は記録・表示に使う。
       double? separationMeters;
       try {
-        final definite = evaluateStaticContinuousIntersection(
-          myBoat,
-          obstacle,
-          horizonSeconds: staticHorizon,
-          includeGpsGuard: false,
-          centerline: effectiveCenterline,
-        );
+        // S2では自艇だけ、代表点とは別の到達集合を初期形状へ加える。
+        // 集合でのみ触れる場合は「可能性」であり、確実衝突へは上げない。
+        final setTouchesNow =
+            ownPositionSet?.intersectsPolygon(obstacle.points) ?? false;
+        final definite = setTouchesNow
+            ? const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 0,
+                firstEntryDistanceMeters: 0,
+                minimumSeparationMeters: 0,
+                confidence: 0.7,
+                reasonCodes: ['own_position_set_entry'],
+              )
+            : evaluateStaticContinuousIntersection(
+                myBoat,
+                obstacle,
+                horizonSeconds: staticHorizon,
+                includeGpsGuard: false,
+                centerline: effectiveCenterline,
+              );
         separationMeters = definite.minimumSeparationMeters;
         if (definite.intersects) {
+          if (setTouchesNow) confidence = ThreatConfidence.uncertain;
           intersection = definite;
         } else {
           final guarded = evaluateStaticContinuousIntersection(

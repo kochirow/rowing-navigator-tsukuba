@@ -643,7 +643,7 @@ void main() {
       );
     });
 
-    test('区域内にいる間はカーブを5秒ごとに読み上げ直す', () {
+    test('区域内にいる間は2回1組でカーブを読み上げ直す', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-guidance-repeat',
         sessionGeneration: 1,
@@ -676,10 +676,23 @@ void main() {
       // 資産は変わらない。同じ読み上げをもう一度鳴らすだけ。
       expect(firstRepeat.audioAsset, 'audio/curve_warning.mp3');
 
-      for (var second = 6; second <= 9; second++) {
-        expect(step(second).audioEventId, firstRepeat.audioEventId);
+      // ここまでが1組(2回)。組を終えたら次の組まで静寂を置く。
+      // 均等5秒で鳴らし続けると聞き手が慣れて無視するため、
+      // 組にして体感のうるささを下げる(S3-08)。
+      for (var second = 6; second <= 19; second++) {
+        expect(
+          step(second).audioEventId,
+          firstRepeat.audioEventId,
+          reason: '組の直後は静寂を置く($second 秒)',
+        );
       }
-      expect(step(10).audioEventId, isNot(firstRepeat.audioEventId));
+      // 静寂(15秒)が明けたら次の組の1回目。
+      final secondBurst = step(20);
+      expect(secondBurst.audioEventId, isNot(firstRepeat.audioEventId));
+      expect(secondBurst.reasonCodes, contains('GUIDANCE_REPEAT'));
+      // 組の中は再び5秒間隔。
+      expect(step(24).audioEventId, secondBurst.audioEventId);
+      expect(step(25).audioEventId, isNot(secondBurst.audioEventId));
     });
 
     test('衝突警告に負けている間もカーブの周期は進み、復帰後に鳴り直す', () {
@@ -1055,6 +1068,139 @@ void main() {
         stopped.activeAlerts.single.candidate.reasonCodes,
         contains('PRESENTATION_UNCERTAINTY_ONLY_VISUAL'),
       );
+    });
+
+    test('区域案内は2回1組で鳴らし、組の間隔を伸ばす(S3-08)', () {
+      // 逆走は「入った」という一度きりの事実ではなく、是正されるまで
+      // 続く状態である。実機ログの逆走警告は誤検知ではなく実際に
+      // 逆走していた。回数で打ち切ると、状態が続いているのに黙る。
+      //
+      // うるささは頻度で解く。2回鳴らして静寂、が1組。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-guidance-burst',
+        sessionGeneration: 1,
+      );
+      final firedAt = <int>[];
+      String? previous;
+      for (var second = 0; second <= 300; second += 1) {
+        final result = orchestrator.processAssessment(
+          assessment: assessment([
+            guidanceThreat(StaticObstacleKind.curve),
+          ]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 3,
+        );
+        final eventId = result.snapshot.audioDirective?.eventId;
+        if (eventId != null && eventId != previous) {
+          previous = eventId;
+          firedAt.add(second);
+        }
+      }
+
+      // 5分居続けても鳴り止まない。打ち切らないことが要件である。
+      expect(firedAt.length, greaterThan(6));
+
+      // 組の1回目と2回目は短い間隔(5秒)で続く。
+      expect(firedAt[1] - firedAt[0], 5);
+      expect(firedAt[3] - firedAt[2], 5);
+
+      // 組と組のあいだは空く。しかも回を追うごとに広がる。
+      final firstIdle = firedAt[2] - firedAt[1];
+      final secondIdle = firedAt[4] - firedAt[3];
+      expect(firstIdle, greaterThan(5));
+      expect(secondIdle, greaterThan(firstIdle));
+
+      // 上限で頭打ちになり、間延びし続けない。
+      final gaps = <int>[
+        for (var i = 1; i < firedAt.length; i++) firedAt[i] - firedAt[i - 1],
+      ];
+      expect(gaps.reduce((a, b) => a > b ? a : b), lessThanOrEqualTo(60));
+
+      // 均等5秒なら61回。組にすることで大きく減る。
+      expect(firedAt.length, lessThan(20));
+    });
+
+    test('他艇のGPS帯だけの重なりは、バンドを1段下げない(S3-06)', () {
+      // 艇間の相対誤差は共通誤差が相殺してほぼ0であり(2026-08-06 実機:
+      // 真値1.5〜2mに対しraw位置差 中央値1.7m)、不確かさは
+      // ProtectionBudget の相対合成で領域として表現済みである。
+      // ここで重ねてバンドを下げると二重に保守的になる。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-boat-guard-no-demotion',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          RiskThreat(
+            level: CollisionRiskLevel.lv3,
+            threat: ThreatInfo(
+              kind: ThreatKind.boat,
+              position: const LatLng(36.0, 140.0),
+              boatId: 'other-guard',
+              distanceMeters: 4,
+              // GPS帯込みでのみ重なった候補。実機の評価器はここを
+              // uncertain にし、候補の confidence が 0.7 になる。
+              confidence: ThreatConfidence.uncertain,
+              continuousIntersection: const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 2,
+                minimumSeparationMeters: 0,
+                reasonCodes: ['gps_guard_entry'],
+              ),
+            ),
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        // 自艇は航行中。低速静音の分岐へは入らない。
+        ownSpeedMetersPerSecond: 3,
+        otherBoatSpeedById: const {'other-guard': 2.0},
+      );
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      // 降格が効いていないことの確認。confidence は 0.7 のままである。
+      expect(candidate.confidence, lessThan(1.0));
+      expect(candidate.behavior, AlertBehavior.continuousAction);
+    });
+
+    test('静的区域のGPS帯だけの重なりは、従来どおり1段下げる(S3-06)', () {
+      // 危険区域は絶対座標に固定なので、自艇のGNSS誤差ぶんだけ広げた帯で
+      // 「だけ」重なる候補は本当に確度が低い。降格は維持する。
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-static-guard-demotion',
+        sessionGeneration: 1,
+      );
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          RiskThreat(
+            level: CollisionRiskLevel.lv2,
+            threat: ThreatInfo(
+              kind: ThreatKind.obstacle,
+              position: const LatLng(36.0, 140.0),
+              obstacleKind: StaticObstacleKind.driftwood,
+              obstacleId: 'driftwood-guard',
+              distanceMeters: 4,
+              confidence: ThreatConfidence.uncertain,
+              continuousIntersection: const ContinuousIntersection(
+                intersects: true,
+                currentOverlap: true,
+                firstEntryTimeSeconds: 0,
+                firstExitTimeSeconds: 2,
+                minimumSeparationMeters: 0,
+                reasonCodes: ['gps_guard_entry'],
+              ),
+            ),
+          ),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 3,
+      );
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.confidence, lessThan(1.0));
+      expect(candidate.behavior, isNot(AlertBehavior.continuousAction));
     });
 
     test('確度の高い他艇接近は低速でも従来どおり鳴る', () {

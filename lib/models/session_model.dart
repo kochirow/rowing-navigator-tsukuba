@@ -24,6 +24,8 @@ class TrackPoint {
   final String? positionFilterResult;
   final double? estimateUncertaintyMeters;
   final double? estimateInnovationMeters;
+  final String? estimateDisposition;
+  final double? estimateNormalizedInnovationSquared;
   final double? rawGnssSpeedMetersPerSecond;
   final double? imuConfidence;
   final String? imuQuality;
@@ -50,6 +52,8 @@ class TrackPoint {
     this.positionFilterResult,
     this.estimateUncertaintyMeters,
     this.estimateInnovationMeters,
+    this.estimateDisposition,
+    this.estimateNormalizedInnovationSquared,
     this.rawGnssSpeedMetersPerSecond,
     this.imuConfidence,
     this.imuQuality,
@@ -83,6 +87,11 @@ class TrackPoint {
           'estimateUncertaintyMeters': estimateUncertaintyMeters,
         if (estimateInnovationMeters != null)
           'estimateInnovationMeters': estimateInnovationMeters,
+        if (estimateDisposition != null)
+          'estimateDisposition': estimateDisposition,
+        if (estimateNormalizedInnovationSquared != null)
+          'estimateNormalizedInnovationSquared':
+              estimateNormalizedInnovationSquared,
         if (rawGnssSpeedMetersPerSecond != null)
           'rawGnssSpeedMetersPerSecond': rawGnssSpeedMetersPerSecond,
         if (imuConfidence != null) 'imuConfidence': imuConfidence,
@@ -120,6 +129,9 @@ class TrackPoint {
             (json['estimateUncertaintyMeters'] as num?)?.toDouble(),
         estimateInnovationMeters:
             (json['estimateInnovationMeters'] as num?)?.toDouble(),
+        estimateDisposition: json['estimateDisposition'] as String?,
+        estimateNormalizedInnovationSquared:
+            (json['estimateNormalizedInnovationSquared'] as num?)?.toDouble(),
         rawGnssSpeedMetersPerSecond:
             (json['rawGnssSpeedMetersPerSecond'] as num?)?.toDouble(),
         imuConfidence: (json['imuConfidence'] as num?)?.toDouble(),

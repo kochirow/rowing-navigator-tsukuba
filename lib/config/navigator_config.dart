@@ -7,6 +7,28 @@
 /// 送信間隔を伸ばしても静的危険区域への警告には影響しない。
 const positionUpdateInterval = 1;
 
+/// 安全評価・記録へ渡すGNSS fix同士の最小間隔 [ms]。
+///
+/// 到着時刻ではなくfix自身の時刻に対する重複除去である。iOSが複数の
+/// 1Hz fixを同じイベントループでまとめて渡しても、新しいfixを捨てない。
+/// 700msは、1Hzの時計丸めジッタを許しつつ同一fixの重複を防ぐ値である。
+const positionMinimumFixIntervalMs = 700;
+
+/// 端末時計が逆行したfixを棄却し続ける最長時間。
+/// この時間を超えて同じ方向の逆行が続く場合は、時計変更後も測位処理を
+/// 永久停止しないよう、fix時刻の基準を新しい時計へ付け替える。
+const fixTimestampRegressionReset = Duration(seconds: 10);
+
+/// iOSのCLLocationManagerで距離による配信間引きを無効にする値。
+/// geolocator_appleはこの値をネイティブ層へそのまま渡す。
+const iosDistanceFilterNone = -1;
+
+/// 安全判定に使う位置解。advancedは既存Kalman、conservativeは生fixを
+/// 代表点として保つ集合値解である。Stage 2ではconservativeを既定にする。
+enum PrimarySolution { conservative, advanced }
+
+const primarySolution = PrimarySolution.conservative;
+
 // ---------------- GPS品質・死活監視 ----------------
 
 /// 初回測位を待つ上限時間 [秒]。屋内やGPS無効時の無限待ちを防ぐ。
