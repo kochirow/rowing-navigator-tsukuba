@@ -54,4 +54,17 @@ void main() {
     expect(restored, isNotNull);
     expect(restored!.strokeRateEnabled, isTrue);
   });
+
+  test('航路断面の表示は新規端末で既定OFF、航行中の切替を保存する', () async {
+    final service = NavigationDefaultsService();
+    await service.save(
+      displayName: '後藤',
+      boatType: BoatType.r_1x,
+      seatPosition: 1,
+    );
+    expect((await service.load())!.laneCrossSectionEnabled, isFalse);
+
+    await service.saveLaneCrossSectionEnabled(true);
+    expect((await service.load())!.laneCrossSectionEnabled, isTrue);
+  });
 }

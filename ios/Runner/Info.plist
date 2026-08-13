@@ -35,6 +35,8 @@
 	<string>現在地と進行方向の表示、航行開始後の接近警告・艇間位置共有・練習記録のために位置情報を使用します。</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>練習中にアプリがバックグラウンドの場合も、現在地と進行方向を記録し、接近警告と艇間の位置共有を継続するために位置情報を使用します。</string>
+	<key>NSMotionUsageDescription</key>
+	<string>艇に固定した端末の加速度と回転を使い、SPM、艇速変化、短時間のGPS誤差を補正するためにモーションセンサーを使用します。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

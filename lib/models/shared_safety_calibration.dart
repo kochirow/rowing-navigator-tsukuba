@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../config/hazard_profile_config.dart';
+import '../config/risk_evaluator_config.dart' as risk;
 import 'danger_zone_settings.dart';
 import 'fixed_obstacle_calibration.dart';
 import 'shared_safety_calibration.g.dart';
@@ -10,15 +11,20 @@ import 'shared_safety_calibration.g.dart';
 /// 位置校正と危険範囲を同じ文書にまとめることで、航行中の更新確認を
 /// 1 document read（または1 listener）で完了できる。
 class SharedSafetyCalibrationState {
-  /// v4はprofile v5専用。旧座標向けのv3以前は読み取り専用で残す。
-  static const documentId = 'fixed_obstacle_calibrations_v4';
+  /// v10は座標更新と陸上エリア追加を含むprofile v10専用。旧profile向けの
+  /// 頂点差分を新しい座標へ誤適用しないよう、v9以前とは文書を分離する。
+  static const documentId = 'fixed_obstacle_calibrations_v10';
   static const kind = 'fixed_obstacle_calibrations';
 
-  /// 現地確認により、初期状態では島2（上流）を警告対象から外す。
+  /// 現地確認により、現在使っていない旧ポリゴン2件を初期状態で
+  /// 警告対象から外す。航路中心線ベースの逆走判定はこの設定とは別経路。
   ///
   /// 共有文書がまだないチームと、旧形式の共有文書を読む端末でも、安全側の
   /// 初期設定を一貫して使えるようここで定義する。
-  static const defaultDisabledWarningSourceIds = <String>{'island_upstream'};
+  static const defaultDisabledWarningSourceIds = <String>{
+    'reverse_main_channel',
+    'island_upstream',
+  };
 
   /// 現行プリセットに含まれる、校正可能なsourceId。
   ///
@@ -26,7 +32,7 @@ class SharedSafetyCalibrationState {
   /// 未知の障害物IDを書き込めないようにする。
   static const allowedSourceIds = generatedAllowedSourceIds;
 
-  /// 同梱プロフィールv5の各基準線・Polygonの頂点数。
+  /// 同梱プロフィールv10の各基準線・Polygonの頂点数。
   ///
   /// 頂点補正はこの固定レイアウトに対する差分だけを共有する。基準
   /// プロフィールのversion/hashが変われば、別レイアウトを誤適用しない。
@@ -37,6 +43,8 @@ class SharedSafetyCalibrationState {
   final Map<String, FixedObstacleCalibration> calibrations;
   final DangerZoneSettings dangerZoneSettings;
   final Set<String> disabledWarningSourceIds;
+  final double primaryWarningLeadSeconds;
+  final double advanceWarningLeadSeconds;
   final int revision;
   final DateTime? updatedAt;
   final String? updatedBy;
@@ -47,6 +55,8 @@ class SharedSafetyCalibrationState {
     Map<String, FixedObstacleCalibration> calibrations = const {},
     DangerZoneSettings? dangerZoneSettings,
     Set<String> disabledWarningSourceIds = defaultDisabledWarningSourceIds,
+    this.primaryWarningLeadSeconds = risk.primaryWarningLeadSeconds,
+    this.advanceWarningLeadSeconds = risk.advanceWarningLeadSeconds,
     this.revision = 0,
     this.updatedAt,
     this.updatedBy,
@@ -86,6 +96,14 @@ class SharedSafetyCalibrationState {
       disabledWarningSourceIds: _disabledWarningSourceIdsFromMap(
         map['disabledWarningSourceIds'],
       ),
+      primaryWarningLeadSeconds: _requiredDouble(
+        map['primaryWarningLeadSeconds'],
+        'primaryWarningLeadSeconds',
+      ),
+      advanceWarningLeadSeconds: _requiredDouble(
+        map['advanceWarningLeadSeconds'],
+        'advanceWarningLeadSeconds',
+      ),
       revision: _requiredInt(map['revision'], 'revision'),
       updatedAt: updatedAt is Timestamp ? updatedAt.toDate() : null,
       updatedBy: updatedBy is String ? updatedBy : null,
@@ -115,6 +133,18 @@ class SharedSafetyCalibrationState {
       disabledWarningSourceIds: _disabledWarningSourceIdsFromMap(
         map['disabledWarningSourceIds'],
       ),
+      primaryWarningLeadSeconds: map['primaryWarningLeadSeconds'] == null
+          ? risk.primaryWarningLeadSeconds
+          : _requiredDouble(
+              map['primaryWarningLeadSeconds'],
+              'primaryWarningLeadSeconds',
+            ),
+      advanceWarningLeadSeconds: map['advanceWarningLeadSeconds'] == null
+          ? risk.advanceWarningLeadSeconds
+          : _requiredDouble(
+              map['advanceWarningLeadSeconds'],
+              'advanceWarningLeadSeconds',
+            ),
       revision: _requiredInt(map['revision'], 'revision'),
       updatedAt: updatedAt is Timestamp ? updatedAt.toDate() : null,
       updatedBy: updatedBy is String ? updatedBy : null,
@@ -135,6 +165,14 @@ class SharedSafetyCalibrationState {
       disabledWarningSourceIds: _disabledWarningSourceIdsFromMap(
         map['disabledWarningSourceIds'],
       ),
+      primaryWarningLeadSeconds: _requiredDouble(
+        map['primaryWarningLeadSeconds'],
+        'primaryWarningLeadSeconds',
+      ),
+      advanceWarningLeadSeconds: _requiredDouble(
+        map['advanceWarningLeadSeconds'],
+        'advanceWarningLeadSeconds',
+      ),
       revision: _requiredInt(map['revision'], 'revision'),
       updatedAt: updatedAtMillis is int
           ? DateTime.fromMillisecondsSinceEpoch(updatedAtMillis, isUtc: true)
@@ -147,6 +185,8 @@ class SharedSafetyCalibrationState {
     Map<String, FixedObstacleCalibration>? calibrations,
     DangerZoneSettings? dangerZoneSettings,
     Set<String>? disabledWarningSourceIds,
+    double? primaryWarningLeadSeconds,
+    double? advanceWarningLeadSeconds,
     int? revision,
     DateTime? updatedAt,
     String? updatedBy,
@@ -158,6 +198,10 @@ class SharedSafetyCalibrationState {
       dangerZoneSettings: dangerZoneSettings ?? this.dangerZoneSettings,
       disabledWarningSourceIds:
           disabledWarningSourceIds ?? this.disabledWarningSourceIds,
+      primaryWarningLeadSeconds:
+          primaryWarningLeadSeconds ?? this.primaryWarningLeadSeconds,
+      advanceWarningLeadSeconds:
+          advanceWarningLeadSeconds ?? this.advanceWarningLeadSeconds,
       revision: revision ?? this.revision,
       updatedAt: updatedAt ?? this.updatedAt,
       updatedBy: updatedBy ?? this.updatedBy,
@@ -180,6 +224,8 @@ class SharedSafetyCalibrationState {
       'disabledWarningSourceIds': _disabledWarningSourceIdsToList(
         disabledWarningSourceIds,
       ),
+      'primaryWarningLeadSeconds': primaryWarningLeadSeconds,
+      'advanceWarningLeadSeconds': advanceWarningLeadSeconds,
       'revision': revision,
       'updatedAt': updatedAt,
       'updatedBy': updatedBy,
@@ -194,6 +240,8 @@ class SharedSafetyCalibrationState {
         'disabledWarningSourceIds': _disabledWarningSourceIdsToList(
           disabledWarningSourceIds,
         ),
+        'primaryWarningLeadSeconds': primaryWarningLeadSeconds,
+        'advanceWarningLeadSeconds': advanceWarningLeadSeconds,
         'revision': revision,
       };
 
@@ -205,6 +253,8 @@ class SharedSafetyCalibrationState {
         'disabledWarningSourceIds': _disabledWarningSourceIdsToList(
           disabledWarningSourceIds,
         ),
+        'primaryWarningLeadSeconds': primaryWarningLeadSeconds,
+        'advanceWarningLeadSeconds': advanceWarningLeadSeconds,
         'revision': revision,
         if (updatedAt != null)
           'updatedAtMillis': updatedAt!.toUtc().millisecondsSinceEpoch,
@@ -263,6 +313,14 @@ class SharedSafetyCalibrationState {
     if (disabledWarningSourceIds.length > allowedSourceIds.length ||
         !allowedSourceIds.containsAll(disabledWarningSourceIds)) {
       throw const FormatException('Invalid shared disabled warning source IDs');
+    }
+    if (!primaryWarningLeadSeconds.isFinite ||
+        !advanceWarningLeadSeconds.isFinite ||
+        primaryWarningLeadSeconds < risk.minPrimaryWarningLeadSeconds ||
+        advanceWarningLeadSeconds > risk.maxWarningTimeSeconds ||
+        advanceWarningLeadSeconds < risk.minWarningTimeSeconds ||
+        primaryWarningLeadSeconds >= advanceWarningLeadSeconds) {
+      throw const FormatException('Invalid shared warning lead times');
     }
   }
 

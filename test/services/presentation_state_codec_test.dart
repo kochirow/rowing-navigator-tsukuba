@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/models/alert_candidate.dart';
+import 'package:rowing_navigator/models/presentation_state_protocol.dart';
 import 'package:rowing_navigator/models/safety_snapshot.dart';
 import 'package:rowing_navigator/services/presentation_state_codec.dart';
 
@@ -26,7 +27,6 @@ SafetySnapshot snapshotFor({
     capabilities: const CapabilitySnapshot(
       gpsUsable: true,
       staticProfileUsable: true,
-      insideSupportedCoverage: true,
       audioUsable: true,
     ),
     activeAlerts: [
@@ -84,6 +84,57 @@ void main() {
     expect(PresentationStateCodec.warningFor(snapshot), '0c');
   });
 
+  test('杭は圧縮した提示状態でも杭カテゴリを保持する', () {
+    expect(
+      PresentationStateCodec.warningFor(snapshotFor(
+        behavior: AlertBehavior.continuousAction,
+        category: 'pile',
+        audioMode: AudioDirectiveMode.loop,
+      )),
+      '2k',
+    );
+  });
+
+  test('全警告カテゴリが位置共有プロトコルの値域内にある', () {
+    const expectedCodes = <String, String>{
+      'other_boat': 'o',
+      'bridge': 'b',
+      'bridgePier': 'p',
+      'shore': 's',
+      'island': 'i',
+      'driftwood': 'd',
+      'pile': 'k',
+      'curve': 'c',
+      'reverse': 'r',
+    };
+    for (final entry in expectedCodes.entries) {
+      final encoded = PresentationStateCodec.warningFor(snapshotFor(
+        behavior: AlertBehavior.visualOnly,
+        category: entry.key,
+      ));
+      expect(encoded, '0${entry.value}', reason: entry.key);
+      expect(PresentationStateProtocol.isValid(encoded!), isTrue);
+    }
+    expect(
+      PresentationStateProtocol.isValid(
+        PresentationStateCodec.warningFor(snapshotFor(
+          behavior: AlertBehavior.persistentSystemFault,
+          category: 'gps_unavailable',
+        ))!,
+      ),
+      isTrue,
+    );
+    expect(
+      PresentationStateProtocol.isValid(
+        PresentationStateCodec.warningFor(snapshotFor(
+          behavior: AlertBehavior.visualOnly,
+          category: 'future_category',
+        ))!,
+      ),
+      isTrue,
+    );
+  });
+
   test('警告なしは省略し、run modeを1文字にする', () {
     final noAlert = SafetySnapshot(
       sessionId: 'session',
@@ -92,10 +143,7 @@ void main() {
       evaluatedAt: DateTime.utc(2026),
       runMode: SafetyRunMode.runningDegraded,
       capabilities: const CapabilitySnapshot(
-          gpsUsable: true,
-          staticProfileUsable: true,
-          insideSupportedCoverage: true,
-          audioUsable: true),
+          gpsUsable: true, staticProfileUsable: true, audioUsable: true),
       activeAlerts: const [],
       health: const DetectorHealthSnapshot.empty(),
       visualDirective: const VisualDirective.empty(),

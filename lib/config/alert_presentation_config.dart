@@ -37,6 +37,18 @@ class AlertPresentationConfig {
   final double proximityAudioRearmMeters;
 
   final double stableStopSpeedMetersPerSecond;
+
+  /// 安定停止を「抜けた」と認める速度 [m/s]。
+  ///
+  /// [stableStopSpeedMetersPerSecond] より**大きく**すること。
+  /// 係留中の艇は波と測位ノイズで 0.0〜0.6m/s を往復する。単一のしきい値だと
+  /// 安定停止に入っては抜けるを繰り返し、そのたびに低速静音の確定待ちが
+  /// 巻き戻って音声エピソードが作り直される(2026-08-05 実機ログ)。
+  ///
+  /// 止まったと判定するのは速く、動き出したと判定するのは慎重にする
+  /// 非対称。0.8m/s は分速48mで、漕ぎ出しの最初の1ストロークでも超える。
+  final double stableStopExitSpeedMetersPerSecond;
+
   final Duration stableStopConfirmationDuration;
   final double stableStopRealertApproachMeters;
   final double approachingObservationMeters;
@@ -58,9 +70,38 @@ class AlertPresentationConfig {
 
   /// 同一区域に入っている間に読み上げる上限回数。null で無制限。
   ///
-  /// 長いカーブ区域で鳴り続ける場合の逃げ道として用意する。
-  /// 既定は無制限。現地で耳障りなら回数を入れる。
+  /// **既定は null(無制限)である。上限で打ち切らない。**
+  ///
+  /// 一度 3 を既定にしたが撤回した。逆走は「入った」という一度きりの
+  /// 事実ではなく、**是正されるまで続く状態**である。実機ログの逆走警告は
+  /// 誤検知ではなく実際に逆走していた(利用者確認済み)。
+  /// 正しく鳴っている警告を回数で打ち切ると、状態が続いているのに
+  /// 黙ることになり、警告漏れと同じになる。
+  ///
+  /// うるささは**回数ではなく頻度**で解く([guidanceBurstCount])。
+  /// 長いカーブ区域などで上限を入れたくなったときのために口は残す。
   final int? guidanceRepeatMaxCount;
+
+  /// 1組の読み上げに含める回数。
+  ///
+  /// **「2回鳴らして、しばらく黙る」を1組とする。**
+  ///
+  /// 一定間隔で鳴らし続けると、聞き手はすぐに慣れて無視するようになる。
+  /// 2回続けて鳴ると「いま起きている」ことが伝わり、そのあとの静寂が
+  /// 「まだ続いている」を次の組で再認識させる。同じ総数でも、
+  /// 均等に散らすより組にしたほうが体感のうるささが下がる。
+  final int guidanceBurstCount;
+
+  /// 組と組のあいだの静寂。滞在が続くと [guidanceBurstMaxIdleInterval] まで伸びる。
+  ///
+  /// 進入直後は短い間隔で確実に気づかせ、状態が続くにつれて落ち着かせる。
+  /// 人のコーチが同じ状況で取る振る舞いに近い。
+  final Duration guidanceBurstIdleInterval;
+
+  /// 組と組の静寂の上限。長く居続けても、これ以上は間延びさせない。
+  ///
+  /// 逆走のように是正されるまで続く状態では、完全に黙ってはいけない。
+  final Duration guidanceBurstMaxIdleInterval;
 
   /// 逆走注意の再武装間隔。
   ///
@@ -92,6 +133,7 @@ class AlertPresentationConfig {
     this.intermittentRepeatInterval = const Duration(seconds: 3),
     this.proximityAudioRearmMeters = 3,
     this.stableStopSpeedMetersPerSecond = 0.4,
+    this.stableStopExitSpeedMetersPerSecond = 0.8,
     this.stableStopConfirmationDuration = const Duration(seconds: 5),
     this.stableStopRealertApproachMeters = 2,
     this.approachingObservationMeters = 0.5,
@@ -99,11 +141,16 @@ class AlertPresentationConfig {
     this.guidanceRearmDuration = const Duration(seconds: 5),
     this.guidanceRepeatInterval = const Duration(seconds: 5),
     this.guidanceRepeatMaxCount,
+    this.guidanceBurstCount = 2,
+    this.guidanceBurstIdleInterval = const Duration(seconds: 15),
+    this.guidanceBurstMaxIdleInterval = const Duration(seconds: 60),
     this.reverseGuidanceRearmDuration = const Duration(seconds: 60),
     this.staticOverlapClosingRateMetersPerSecond = 0.3,
     this.staticOverlapImminentGrace = const Duration(seconds: 5),
     this.closingRateWindow = const Duration(seconds: 3),
   })  : assert(stableStopSpeedMetersPerSecond >= 0),
+        assert(stableStopExitSpeedMetersPerSecond >=
+            stableStopSpeedMetersPerSecond),
         assert(stableStopRealertApproachMeters > 0),
         assert(approachingObservationMeters >= 0),
         assert(proximityAudioRearmMeters > 0),
@@ -138,10 +185,11 @@ enum AlertUrgency {
 /// 近接注意(到達予測なし)でも単発音を鳴らすカテゴリ。
 ///
 /// 岸は川幅40mでは常に近く、鳴らすと確実に形骸化するため入れない。
-/// 流木・中州は水面下や視認しづらい位置にあり、帰結が最悪なので鳴らす。
+/// 流木・中州・杭は水面下や視認しづらい位置にあり、帰結が最悪なので鳴らす。
 const audibleProximityCategories = <String>{
   'driftwood',
   'island',
+  'pile',
   'bridgePier'
 };
 

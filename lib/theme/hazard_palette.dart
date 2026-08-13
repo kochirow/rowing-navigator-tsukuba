@@ -22,6 +22,7 @@ class HazardPalette {
         'bridgePier' => context.colors.danger,
         'island' => const Color(0xFF8D6E00),
         'driftwood' => const Color(0xFF6D4C41),
+        'pile' => const Color(0xFF4E342E),
         'other_boat' => const Color(0xFFAD1457),
         'curve' => context.colors.info,
         'reverse' => const Color(0xFF8E24AA),
@@ -39,6 +40,7 @@ class HazardPalette {
       'shore' => 0.18,
       'bridge' || 'curve' || 'reverse' => 0.28,
       'bridgePier' => 0.52,
+      'pile' => 0.48,
       _ => 0.45,
     };
     // 現地で見つけて登録された臨時区域は、同じ種類の常設区域より目立たせる。
@@ -54,6 +56,7 @@ class HazardPalette {
         'shore' => 1,
         'bridge' || 'curve' || 'reverse' => 2,
         'bridgePier' => 3,
+        'pile' => 3,
         _ => 3,
       };
 

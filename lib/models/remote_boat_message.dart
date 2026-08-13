@@ -1,5 +1,6 @@
 import '../config/protocol_config.dart';
 import '../config/display_name_config.dart';
+import 'presentation_state_protocol.dart';
 
 /// Firebaseの型に依存しない、検証済みの他艇位置メッセージ。
 ///
@@ -9,7 +10,25 @@ class RemoteBoatMessage {
   static const int maxSafeInteger = 9007199254740991; // JavaScriptでも正確な上限
   static const double maxAccuracyMeters = 1000;
   static const double maxSpeedMetersPerSecond = 30;
-  static const Duration maxObservedAtFutureSkew = Duration(seconds: 5);
+
+  /// 未来方向の時刻ずれをどこまで受け入れるか。
+  ///
+  /// `observedAt` は送信端末の壁時計、`serverUpdatedAt` はRTDBサーバーが
+  /// `ServerValue.timestamp` で書いた実時刻である。受信側が比較に使う「現在」は
+  /// `DateTime.now() + .info/serverTimeOffset` という**推定値**でしかなく、
+  /// オフセットはRTT由来の誤差を持ち、端末時計は常時ドリフトする。
+  ///
+  /// **両方に同じ許容を与えること。** 2026-08-05 の実機ログでは
+  /// `serverUpdatedAt` だけ許容ゼロだったため、在席していた他艇2艇の
+  /// 位置が693件（セッション全域）棄却されていた。時計のずれで他艇を
+  /// 消すのは原則6「データ欠損は安全の根拠にならない」に反する。
+  ///
+  /// 5秒はRTDB Rules が端末差に許している上限と一致させている。
+  /// クライアント検証だけが厳しいと、Rulesを通ったレコードを自分で捨てる。
+  static const Duration maxFutureTimestampSkew = Duration(seconds: 5);
+
+  /// 後方互換のための別名。[maxFutureTimestampSkew] と同一でなければならない。
+  static const Duration maxObservedAtFutureSkew = maxFutureTimestampSkew;
 
   final int protocolVersion;
   final String appVersion;
@@ -174,7 +193,10 @@ class RemoteBoatMessage {
     if (observedAt == null) {
       return fail('observedAt', RemoteBoatMessageValidationCode.outOfRange);
     }
-    if (serverUpdatedAt.isAfter(now)) {
+    // [now] はサーバー時刻の推定値なので、わずかな推定遅れで正常なレコードを
+    // 未来扱いにしてはいけない。許容は observedAt と同じにする
+    // ([maxFutureTimestampSkew] のコメントに根拠)。
+    if (serverUpdatedAt.isAfter(now.add(maxFutureTimestampSkew))) {
       return fail(
         'serverUpdatedAt',
         RemoteBoatMessageValidationCode.futureTimestamp,
@@ -183,7 +205,7 @@ class RemoteBoatMessage {
     // observedAtは送信端末のwall clockであり、RTDB Rulesも端末差を5秒まで
     // 許容する。鮮度・外挿にはserverUpdatedAtを使い、ここでは同じ上限だけ
     // 受理してRulesとクライアント検証の不一致を避ける。
-    if (observedAt.isAfter(now.add(maxObservedAtFutureSkew))) {
+    if (observedAt.isAfter(now.add(maxFutureTimestampSkew))) {
       return fail(
         'observedAt',
         RemoteBoatMessageValidationCode.futureTimestamp,
@@ -388,7 +410,7 @@ class RemoteBoatMessage {
   }
 
   static String? _presentationState(Object? value) {
-    if (value is! String || !RegExp(r'^[012][obsidcrgf]$').hasMatch(value)) {
+    if (value is! String || !PresentationStateProtocol.isValid(value)) {
       return null;
     }
     return value;

@@ -15,32 +15,43 @@ import '../../../theme/app_theme.dart';
 ///
 /// 配色は danger の塗りつぶしを避け、地図上チップの標準面([AppColors.chipScrim])に
 /// 枠線でアクセントを付ける。枠線の色だけは異常の重さで変える。
-/// - 長時間停止・水域外(沈・迷子の疑い) → [AppColors.danger]
-/// - 更新途絶だけ / 水域外検知の停止だけ → [AppColors.caution]
+/// - 長時間停止(沈の疑い) → [AppColors.danger]
+/// - 更新途絶だけ → [AppColors.caution]
 class CoachAnomalyChip extends StatelessWidget {
   /// 現在検知されている異常。空なら件数行は出さない。
   final List<BoatAnomaly> anomalies;
 
-  /// 練習水域を読めず、「水域外」の自動検知だけが働いていない状態。
-  ///
-  /// 能力が欠けていることは必ず画面に出す(原則1)。ただし赤バナーではなく
-  /// このチップへ小さく併記する。
-  final bool practiceAreaUnavailable;
-
   /// タップ時の動作。艇一覧を開くために使う。
   final VoidCallback? onTap;
+
+  /// タップ時に、いちばん重い異常の艇へ地図を寄せるための通知。
+  ///
+  /// [onTap]（艇一覧を開く）と**併用する**。異常に気づいた監視者が
+  /// 次にすることは「どの艇か」と「どこにいるか」の確認であり、
+  /// その両方を1回のタップで出す。
+  final void Function(String boatId)? onFocusBoat;
 
   const CoachAnomalyChip({
     super.key,
     required this.anomalies,
-    this.practiceAreaUnavailable = false,
     this.onTap,
+    this.onFocusBoat,
   });
+
+  /// 寄せる先の艇。**重い異常(沈の疑い)を優先する。**
+  ///
+  /// 更新途絶は日常的に起こるため、そちらを先に出すと、本当にまずい艇が
+  /// あるときに毎回ずれた場所へ飛ぶ(DESIGN_PRINCIPLES 原則4)。
+  static String? focusTargetBoatId(List<BoatAnomaly> anomalies) {
+    if (anomalies.isEmpty) return null;
+    final serious = anomalies.where((anomaly) => !anomaly.isRoutine);
+    return serious.isNotEmpty ? serious.first.boatId : anomalies.first.boatId;
+  }
 
   @override
   Widget build(BuildContext context) {
     // 伝えることが何もないときは場所を取らない。
-    if (anomalies.isEmpty && !practiceAreaUnavailable) {
+    if (anomalies.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -50,22 +61,36 @@ class CoachAnomalyChip extends StatelessWidget {
     final hasSerious = anomalies.any((anomaly) => !anomaly.isRoutine);
     final accent = hasSerious ? colors.danger : colors.caution;
 
-    final lines = <String>[
-      if (boatCount > 0) '異常 $boatCount隻',
-      if (practiceAreaUnavailable) '水域外の自動検知が停止中',
-    ];
+    final lines = <String>['異常 $boatCount隻'];
+    final focusBoatId = focusTargetBoatId(anomalies);
+    final onFocusBoat = this.onFocusBoat;
+    final handleTap = onTap == null && onFocusBoat == null
+        ? null
+        : () {
+            // 一覧を開く動作は従来どおり残し、そこへ地図の移動を足す。
+            onTap?.call();
+            if (onFocusBoat != null && focusBoatId != null) {
+              onFocusBoat(focusBoatId);
+            }
+          };
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: handleTap,
           borderRadius: BorderRadius.circular(999),
           child: Semantics(
             // 内側の Text を個別に読み上げず、1つのまとまりとして伝える。
             // タップ操作の意味づけは外側の InkWell が持つ。
-            label: [...lines, if (onTap != null) 'タップで艇一覧を開く'].join('。'),
+            label: [
+              ...lines,
+              if (handleTap != null)
+                onFocusBoat != null && focusBoatId != null
+                    ? 'タップで艇一覧を開き、その艇へ地図を寄せる'
+                    : 'タップで艇一覧を開く',
+            ].join('。'),
             excludeSemantics: true,
             child: Container(
               // 濡れた手・グローブでも押せる大きさを確保する。

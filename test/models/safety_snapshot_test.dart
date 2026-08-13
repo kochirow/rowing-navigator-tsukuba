@@ -30,7 +30,6 @@ void main() {
       capabilities: const CapabilitySnapshot(
         gpsUsable: true,
         staticProfileUsable: true,
-        insideSupportedCoverage: true,
         audioUsable: true,
       ),
       activeAlerts: active,

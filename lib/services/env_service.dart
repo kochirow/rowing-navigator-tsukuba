@@ -4,11 +4,17 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'dynamic_obstacle_service.dart';
+import 'message_service.dart';
 import 'static_obstacle_service.dart';
 
 class EnvService {
-  final dynamicObstacleService = DynamicObstacleService();
-  final staticObstacleService = StaticObstacleService();
+  final DynamicObstacleService dynamicObstacleService;
+  final StaticObstacleService staticObstacleService;
+
+  EnvService({MessageService? messageService})
+      : dynamicObstacleService =
+            DynamicObstacleService(messageService: messageService),
+        staticObstacleService = StaticObstacleService();
 
   Stream<dynamic> getDynamicObstaclesStream() {
     return dynamicObstacleService.getDynamicObstaclesStream();

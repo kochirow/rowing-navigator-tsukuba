@@ -10,7 +10,7 @@ export function defaultProject(): Project {
     id: `proj_${uuid()}`,
     name: '桜川障害物プロジェクト',
     area: '桜川（茨城県土浦市）',
-    profileVersion: 5,
+    profileVersion: 10,
     source: '',
     notice: '',
     howToEdit: '',
@@ -34,8 +34,8 @@ export function defaultProject(): Project {
 export function defaultFolders(): Folder[] {
   return [
     ['fld_banks', '河岸'], ['fld_bridges', '橋'], ['fld_islands', '中州'],
-    ['fld_driftwood', '流木'], ['fld_curve', 'カーブ'], ['fld_reverse', '逆走注意'],
-    ['fld_test', 'テスト区域'], ['fld_safety', '安全データ'], ['fld_imported', '臨時（取込）'],
+    ['fld_driftwood', '流木'], ['fld_piles', '杭'], ['fld_curve', 'カーブ'], ['fld_reverse', '逆走注意'],
+    ['fld_test', 'テスト区域'], ['fld_mooring', '桟橋エリア'], ['fld_safety', '安全データ'], ['fld_imported', '臨時（取込）'],
   ].map(([id, name], order) => ({ id, name, parentFolderId: null, expanded: true, visible: true, locked: false, order }));
 }
 
@@ -90,8 +90,10 @@ export function folderForKind(kind: ObjectKind): string {
   if (kind === 'bridge' || kind === 'bridgePier') return 'fld_bridges';
   if (kind === 'island') return 'fld_islands';
   if (kind === 'driftwood') return 'fld_driftwood';
+  if (kind === 'pile') return 'fld_piles';
   if (kind === 'curve') return 'fld_curve';
   if (kind === 'reverse') return 'fld_reverse';
   if (kind === 'testZone') return 'fld_test';
+  if (kind === 'mooringArea') return 'fld_mooring';
   return 'fld_safety';
 }

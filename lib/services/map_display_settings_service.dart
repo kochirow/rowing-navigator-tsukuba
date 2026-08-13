@@ -8,6 +8,7 @@ class MapDisplaySettingsService {
   static const _highContrastKey = 'map_high_contrast_v1';
   static const _developerSafetyShapeOverlayKey =
       'map_developer_safety_shape_overlay_v1';
+  static const _showChannelLanesKey = 'map_show_channel_lanes_v1';
 
   Future<bool> loadHighContrast() async {
     try {
@@ -22,6 +23,30 @@ class MapDisplaySettingsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_highContrastKey, enabled);
+    } catch (_) {
+      // 保存できなくても今回の表示は切り替わっている。次回の起動で
+      // 既定へ戻るだけなので、航行を止めてまで知らせる価値はない。
+    }
+  }
+
+  /// 航路(往路・復路)の帯を地図へ描くか。
+  ///
+  /// **既定はON。** 右側通行の片側1レーンで運用しているため、どちらの帯に
+  /// いるかは常に必要な情報である。読み書きに失敗してもONへ倒す
+  /// (表示が消えるより、余分に出るほうが安全側)。
+  Future<bool> loadShowChannelLanes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_showChannelLanesKey) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> saveShowChannelLanes(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showChannelLanesKey, enabled);
     } catch (_) {
       // 保存できなくても今回の表示は切り替わっている。次回の起動で
       // 既定へ戻るだけなので、航行を止めてまで知らせる価値はない。

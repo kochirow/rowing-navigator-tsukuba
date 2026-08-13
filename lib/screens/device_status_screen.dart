@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../models/safety_snapshot.dart';
 import '../theme/app_theme.dart';
+import 'privacy_data_screen.dart';
 
-/// 現地でのトラブルシュート用の読み取り専用画面。
+/// 端末の今の状態と、この端末が持っているデータの行き先をまとめた画面。
 ///
 /// これまで内部状態は `kReleaseMode` で完全に隠れていたため、「警告が鳴らない」
 /// 「他艇が出ない」と現地で言われても、開発ビルドを配り直さないと何も
-/// 確かめられなかった。設定は何も変えず、今どうなっているかだけを見せる。
+/// 確かめられなかった。上半分は設定を何も変えず、今どうなっているかだけを見せる。
+///
+/// 下半分の「データとプライバシー」は、以前は警告の設定画面の末尾に
+/// 埋まっていた。警告の設定ではないので、端末そのものの話であるここへ移した。
 class DeviceStatusScreen extends StatelessWidget {
   final double? latitude;
   final double? longitude;
@@ -18,9 +22,16 @@ class DeviceStatusScreen extends StatelessWidget {
   final int? batteryPercent;
   final bool positionSharingUnavailable;
   final bool otherBoatReceiveUnavailable;
+
+  /// 位置共有の能力そのものが確認できない状態。
+  ///
+  /// 「他艇が0隻」とは区別する。0隻は正常状態でもあり得る(最初に出艇した艇、
+  /// 他艇が全部上がった後)。ここが赤いときだけ、周囲を直接確認する必要がある。
+  final bool sharingCapabilityUnconfirmed;
+
+  /// 端末の出力音量が低く、読み上げが聞こえない恐れがある。
+  final bool audioOutputVolumeLow;
   final bool temporaryObstacleReceiveUnavailable;
-  final bool operationalCoverageUnverified;
-  final bool outsideOperationalCoverage;
 
   /// 安全判定そのものが今どの状態で動いているか。
   /// 固定危険区域データの欠落や警告処理の停止は、ここへ集約されている。
@@ -43,9 +54,9 @@ class DeviceStatusScreen extends StatelessWidget {
     this.batteryPercent,
     this.positionSharingUnavailable = false,
     this.otherBoatReceiveUnavailable = false,
+    this.sharingCapabilityUnconfirmed = false,
+    this.audioOutputVolumeLow = false,
     this.temporaryObstacleReceiveUnavailable = false,
-    this.operationalCoverageUnverified = false,
-    this.outsideOperationalCoverage = false,
     this.safetyRunMode = SafetyRunMode.stopped,
     this.otherBoatCount = 0,
     this.obstacleCount = 0,
@@ -75,7 +86,7 @@ class DeviceStatusScreen extends StatelessWidget {
         : now.difference(lastFixAt!).inSeconds.clamp(0, 99999);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('端末情報')),
+      appBar: AppBar(title: const Text('端末とデータ')),
       body: ListView(
         padding: EdgeInsets.all(dimens.space4),
         children: [
@@ -97,16 +108,22 @@ class DeviceStatusScreen extends StatelessWidget {
             rows: [
               _Row.status('自艇の位置共有', !positionSharingUnavailable),
               _Row.status('他艇の受信', !otherBoatReceiveUnavailable),
+              _Row.status('他艇を受信できる状態', !sharingCapabilityUnconfirmed),
+              _Row.status('端末の音量', !audioOutputVolumeLow),
               _Row.status('臨時危険区域の受信', !temporaryObstacleReceiveUnavailable),
-              _Row.status('対応水域の検証', !operationalCoverageUnverified),
-              _Row.status('対応水域の内側', !outsideOperationalCoverage),
               _Row('安全判定', _runModeLabel(safetyRunMode)),
             ],
           ),
           _Group(
             title: '検出対象',
             rows: [
-              _Row('受信中の他艇', '$otherBoatCount 隻'),
+              _Row(
+                '受信中の他艇',
+                sharingCapabilityUnconfirmed
+                    // 0隻を「他艇がいない」と読ませない(原則6)。
+                    ? '確認できません'
+                    : '$otherBoatCount 隻',
+              ),
               _Row('読み込み済みの危険区域', '$obstacleCount 件'),
             ],
           ),
@@ -118,8 +135,47 @@ class DeviceStatusScreen extends StatelessWidget {
               border: Border.all(color: colors.caution),
             ),
             child: const Text(
-              'この画面は現在の状態を表示するだけです。'
-              'ここから設定を変更することはできません。',
+              '上の値は現在の状態を表示するだけです。'
+              'ここから警告の設定を変更することはできません。',
+            ),
+          ),
+          SizedBox(height: dimens.space5),
+          Text(
+            'データとプライバシー',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+          ),
+          SizedBox(height: dimens.space2),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('プライバシーとデータ'),
+                  subtitle: const Text('取得データの確認、ポリシー、アカウント削除'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PrivacyDataScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('オープンソースライセンス'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showLicensePage(
+                    context: context,
+                    applicationName: 'Rowing Navigator',
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(height: dimens.space5),

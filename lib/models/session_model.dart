@@ -24,6 +24,15 @@ class TrackPoint {
   final String? positionFilterResult;
   final double? estimateUncertaintyMeters;
   final double? estimateInnovationMeters;
+  final String? estimateDisposition;
+  final double? estimateNormalizedInnovationSquared;
+  final double? rawGnssSpeedMetersPerSecond;
+  final double? imuConfidence;
+  final String? imuQuality;
+  final double? distancePerStrokeMeters;
+  final double? catchSpeedLossMetersPerSecond;
+  final double? lateDriveSpeedGainMetersPerSecond;
+  final double? recoverySpeedRetention;
 
   TrackPoint({
     required this.t,
@@ -43,6 +52,15 @@ class TrackPoint {
     this.positionFilterResult,
     this.estimateUncertaintyMeters,
     this.estimateInnovationMeters,
+    this.estimateDisposition,
+    this.estimateNormalizedInnovationSquared,
+    this.rawGnssSpeedMetersPerSecond,
+    this.imuConfidence,
+    this.imuQuality,
+    this.distancePerStrokeMeters,
+    this.catchSpeedLossMetersPerSecond,
+    this.lateDriveSpeedGainMetersPerSecond,
+    this.recoverySpeedRetention,
   });
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +87,24 @@ class TrackPoint {
           'estimateUncertaintyMeters': estimateUncertaintyMeters,
         if (estimateInnovationMeters != null)
           'estimateInnovationMeters': estimateInnovationMeters,
+        if (estimateDisposition != null)
+          'estimateDisposition': estimateDisposition,
+        if (estimateNormalizedInnovationSquared != null)
+          'estimateNormalizedInnovationSquared':
+              estimateNormalizedInnovationSquared,
+        if (rawGnssSpeedMetersPerSecond != null)
+          'rawGnssSpeedMetersPerSecond': rawGnssSpeedMetersPerSecond,
+        if (imuConfidence != null) 'imuConfidence': imuConfidence,
+        if (imuQuality != null) 'imuQuality': imuQuality,
+        if (distancePerStrokeMeters != null)
+          'distancePerStrokeMeters': distancePerStrokeMeters,
+        if (catchSpeedLossMetersPerSecond != null)
+          'catchSpeedLossMetersPerSecond': catchSpeedLossMetersPerSecond,
+        if (lateDriveSpeedGainMetersPerSecond != null)
+          'lateDriveSpeedGainMetersPerSecond':
+              lateDriveSpeedGainMetersPerSecond,
+        if (recoverySpeedRetention != null)
+          'recoverySpeedRetention': recoverySpeedRetention,
       };
 
   factory TrackPoint.fromJson(Map<String, dynamic> json) => TrackPoint(
@@ -93,6 +129,21 @@ class TrackPoint {
             (json['estimateUncertaintyMeters'] as num?)?.toDouble(),
         estimateInnovationMeters:
             (json['estimateInnovationMeters'] as num?)?.toDouble(),
+        estimateDisposition: json['estimateDisposition'] as String?,
+        estimateNormalizedInnovationSquared:
+            (json['estimateNormalizedInnovationSquared'] as num?)?.toDouble(),
+        rawGnssSpeedMetersPerSecond:
+            (json['rawGnssSpeedMetersPerSecond'] as num?)?.toDouble(),
+        imuConfidence: (json['imuConfidence'] as num?)?.toDouble(),
+        imuQuality: json['imuQuality'] as String?,
+        distancePerStrokeMeters:
+            (json['distancePerStrokeMeters'] as num?)?.toDouble(),
+        catchSpeedLossMetersPerSecond:
+            (json['catchSpeedLossMetersPerSecond'] as num?)?.toDouble(),
+        lateDriveSpeedGainMetersPerSecond:
+            (json['lateDriveSpeedGainMetersPerSecond'] as num?)?.toDouble(),
+        recoverySpeedRetention:
+            (json['recoverySpeedRetention'] as num?)?.toDouble(),
       );
 }
 
@@ -248,6 +299,10 @@ class SessionDiagnosticEvent {
 class SessionDiagnosticMetadata {
   final String appVersion;
   final String buildNumber;
+  final String gitCommitSha;
+  final String buildTimestampUtc;
+  final String buildFlavor;
+  final String operatingSystemVersion;
   final String platform;
   final int hazardProfileVersion;
   final String hazardProfileSha256;
@@ -256,6 +311,10 @@ class SessionDiagnosticMetadata {
   SessionDiagnosticMetadata({
     required this.appVersion,
     required this.buildNumber,
+    this.gitCommitSha = 'unknown',
+    this.buildTimestampUtc = 'unknown',
+    this.buildFlavor = 'unknown',
+    this.operatingSystemVersion = 'unknown',
     required this.platform,
     required this.hazardProfileVersion,
     required this.hazardProfileSha256,
@@ -265,6 +324,10 @@ class SessionDiagnosticMetadata {
   Map<String, dynamic> toJson() => {
         'appVersion': appVersion,
         'buildNumber': buildNumber,
+        'gitCommitSha': gitCommitSha,
+        'buildTimestampUtc': buildTimestampUtc,
+        'buildFlavor': buildFlavor,
+        'operatingSystemVersion': operatingSystemVersion,
         'platform': platform,
         'hazardProfileVersion': hazardProfileVersion,
         'hazardProfileSha256': hazardProfileSha256,
@@ -275,6 +338,11 @@ class SessionDiagnosticMetadata {
       SessionDiagnosticMetadata(
         appVersion: json['appVersion'] as String? ?? 'unknown',
         buildNumber: json['buildNumber'] as String? ?? 'unknown',
+        gitCommitSha: json['gitCommitSha'] as String? ?? 'unknown',
+        buildTimestampUtc: json['buildTimestampUtc'] as String? ?? 'unknown',
+        buildFlavor: json['buildFlavor'] as String? ?? 'unknown',
+        operatingSystemVersion:
+            json['operatingSystemVersion'] as String? ?? 'unknown',
         platform: json['platform'] as String? ?? 'unknown',
         hazardProfileVersion:
             (json['hazardProfileVersion'] as num?)?.toInt() ?? 0,
@@ -438,7 +506,7 @@ class SessionSummary {
 
 /// 練習セッション
 class Session {
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
 
   final int schemaVersion;
   final String id;

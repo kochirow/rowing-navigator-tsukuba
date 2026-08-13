@@ -54,9 +54,13 @@ $ flutter run
 
 本リポジトリの作業パスに日本語が含まれる場合、Dart analysis server の LSP チャネルが
 ヘッダのバイト長と UTF-16 長を取り違えてクラッシュするため、`flutter analyze` を実行できません。
-ローカルでは代わりに `dart analyze lib test` を使用してください。
+ローカルでは代わりに `dart analyze lib test tool` を使用してください。
 `flutter analyze` と `flutter test` は、ASCII パスで動作する GitHub Actions
 (`.github/workflows/ci.yml`)で担保しています。
+
+`tool` を対象から外さないでください。`tool/` 配下の再生ツールは `lib/` のモデルを
+直接呼ぶため、`lib test` だけを解析するとローカルは緑のまま、プロジェクト全体を見る
+CI の `flutter analyze` だけが落ちます。
 
 危険区域データ(`assets/data/sakuragawa_obstacles.json`)を編集した場合は、
 `tool/update_hazard_profile_hash.sh` を実行してチェックサムを更新してください。
@@ -104,7 +108,7 @@ Firestore は、工事などの臨時危険区域と、固定流木の位置・�
 
 臨時危険区域は、同一チームのメンバーが作成者に関係なく編集・削除でき、手動で削除するまで残ります。固定流木も失効せず、同一チームの全メンバーが位置・長さ・幅・向きを更新できますが、削除はできません。
 
-> **一般公開前の必須作業:** チーム招待/所属確認、チーム別データ分離、チーム全員の危険区域編集はコードとRulesへ実装済みで、Rules Emulator 13件に合格しています。異なる2チームの実端末試験後に本番Rulesを公開してください。
+> **一般公開前の必須作業:** チーム招待/所属確認、チーム別データ分離、チーム全員の危険区域編集はコードとRulesへ実装済みで、Rules Emulator 25件に合格しています。異なる2チームの実端末試験後に本番Rulesを公開してください。
 
 Firestore Rulesは、チーム所属を検証した上で`temporary_obstacles`の全メンバー共同編集、`managed_hazards`の全メンバー更新・削除禁止、形状・時刻・revisionの検証を設定します。リポジトリ直下の`firestore.rules`と`database.rules.json`が確定候補です。旧ルールのままでは新しい保存先への書き込みが拒否されるため、実機確認前に必ず公開してください。詳細は[チーム招待制・無料枠・省電力設計](./docs/design_notes/2026-07-20_チーム招待制・無料枠・省電力設計.md)を参照してください。
 
@@ -187,7 +191,7 @@ Firebase Authentication で次のログインプロバイダを有効にする�
 | **Realtime Database移行** | 位置共有を Firestore(操作回数課金)から Realtime Database(転送量課金)に移行。実際の料金は接続数・転送量・Firebaseの契約条件に依存 |
 | **適応送信** | 停止中は10秒間隔・周囲300mに他艇がいなければ5秒間隔・他艇近傍で安全なら2秒間隔・リスク時は1秒間隔で送信。受信側は推測航法で補間。**リスク評価は送信間隔に関係なく毎秒実行されるため、危険区域への警告は影響を受けない** |
 | **GPSストリーム化** | 毎秒のポーリングから位置ストリーム購読に変更し電池効率を改善 |
-| **コーチモード(監視)** | 観察者モードの地図と艇一覧に名前を表示。艇一覧パネル(速度・電池残量・最終更新)、航跡表示、異常検知(長時間停止・練習水域外・更新途絶)を追加 |
+| **コーチモード(監視)** | 観察者モードの地図と艇一覧に名前を表示。艇一覧パネル(速度・電池残量・最終更新)、航跡表示、異常検知(長時間停止・更新途絶)を追加 |
 | **練習ログ** | ナビゲーション終了時に自動保存。距離・タイム・最高速度・平均ペース・500mスプリット・ピース自動検出。GPX出力で**Stravaにアップロード可能** |
 | **ストロークレート計測** | 加速度センサから艇の周期的な加速を検出しSPMを算出・記録 |
 | **電池残量共有** | 各艇の電池残量を位置情報と一緒に共有し、コーチ画面に表示 |
@@ -205,20 +209,9 @@ Firebase Authentication で次のログインプロバイダを有効にする�
 
 固定危険区域はアプリ内に同梱されるため、Firestoreへの全頂点の取り込みは不要です。固定流木だけは位置・サイズ・向きの小さな更新値を共有しますが、アプリ上から削除はできません。
 
-Release版では、危険区域を網羅していることを現地確認した範囲を、同じJSONの `operationalCoveragePolygon` に設定できます。これはコーチ用の `practiceArea` とは別のデータです。未設定または現在地が範囲外でも航行開始と既知の警告を制限せず、`runningDegraded` と「この水域の固定危険区域は未検証」の固定表示で状況を伝えます。
-
-```json
-"operationalCoveragePolygon": {
-  "name": "桜川警告システム対応水域",
-  "points": [
-    { "lat": 36.070000, "lng": 140.200000 },
-    { "lat": 36.070000, "lng": 140.210000 },
-    { "lat": 36.060000, "lng": 140.210000 }
-  ]
-}
-```
-
-上の数値は形式例です。実際の座標にそのまま使わず、衛星写真と現地で確認した3点以上の外周を設定してください。
+旧データとのハッシュ互換を保つため、JSONに `practiceArea` と
+`operationalCoveragePolygon` が残っている版がありますが、アプリはこれらを
+読み込まず、水域の内外による表示・警告・監視判定には使用しません。
 
 **方法2: アプリ上で直接描く(現地での微調整向け)**
 
@@ -261,7 +254,7 @@ Release版では、危険区域を網羅していることを現地確認した�
 
 1. [Firebaseコンソール](https://console.firebase.google.com/) → 対象プロジェクト → 「Realtime Database」→「データベースを作成」(ロケーションは `asia-southeast1` 推奨)
 2. AuthenticationでAnonymousを有効化する。匿名アカウントの30日自動削除は有効化しない
-3. Android Studio内蔵JDKを使って、リポジトリのRules Emulator 13件を実行する
+3. Android Studio内蔵JDKを使って、リポジトリのRules Emulator 25件を実行する
 
 ```bash
 JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' \
@@ -288,10 +281,8 @@ RTDBを使わず従来のFirestoreに戻す場合は `useRealtimeDatabaseForPosi
 ナビゲーションを開始せず、観察者画面の「監視スタート」を押した端末がコーチ用です。「監視終了」を押すとFirebaseとの位置共有受信を停止します。
 
 - 人型アイコン: 艇一覧パネルの表示切替(速度・電池残量・最終更新・異常)
-- 地図上: 各艇の航跡(直近10分)と練習水域の枠(青線)を表示
-- 異常検知: 長時間停止(3分)・練習水域外・更新途絶(45秒)を検知すると画面で通知
-
-練習水域は `assets/data/sakuragawa_obstacles.json` の `practiceArea` で定義します(サンプル座標のため要調整)。
+- 地図上: 各艇の航跡(直近10分)を表示
+- 異常検知: 長時間停止(3分)・更新途絶(45秒)を検知すると画面で通知
 
 ### 練習ログの使い方
 
@@ -331,13 +322,12 @@ $ flutter test
 
 **公開前の必須確認**
 
-1. `assets/data/sakuragawa_obstacles.json` の危険区域と `practiceArea` を確定し、可能なら別途 `operationalCoveragePolygon` に危険区域を網羅確認済みの範囲を設定する（未設定でも航行は制限しない）
+1. `assets/data/sakuragawa_obstacles.json` の危険区域と詳細航路データを確定する
 2. Firebase Authentication、Firestoreルール、RTDBルール・`databaseURL`を本番プロジェクトで確認する
 3. 同じアプリ版を入れた2台で、交差・追越し・正面接近・並走・受信断・GPS断を一括試験する
 4. iOS/Android実機で、サイレントスイッチ、画面消灯、Bluetooth接続/切断、音量変更後も警告音が継続・復旧することを確認する
 5. 各艇種で端末の固定方向を確認し、地図上で進行方向が常に画面下側になることを確認する
-6. `operationalCoveragePolygon` の未設定時・範囲外でも航行開始と既知の警告が継続し、物理危険・GPS・通信の警告がcoverage補助表示より優先されることを確認する
-7. Androidのproduction signingと、iOSのDistribution証明書・Provisioning Profileでarchiveできることを確認する
+6. Androidのproduction signingと、iOSのDistribution証明書・Provisioning Profileでarchiveできることを確認する
 
 **3. 公開判定用の実艇一括試験**
 

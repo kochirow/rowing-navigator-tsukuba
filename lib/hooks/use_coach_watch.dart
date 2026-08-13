@@ -7,13 +7,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../config/coach_config.dart';
 import '../models/boat_model.dart';
-import '../services/preset_obstacle_service.dart';
-import '../utils/winding_algorithm.dart';
+import '../services/channel_centerline.dart';
+import '../services/channel_lane_resolver.dart';
+import '../services/observer_traffic_awareness_evaluator.dart';
+import '../theme/boat_palette.dart';
 
 /// 検知される異常の種類
 enum BoatAnomalyKind {
   stopped, // 長時間停止
-  outOfArea, // 練習水域から逸脱
   lost, // 更新途絶(電池切れ・アプリ終了・圏外)
 }
 
@@ -43,7 +44,7 @@ class BoatAnomaly {
   /// 日常的に起こる異常か。**表示の強調度だけ**に使う。
   ///
   /// 更新途絶は、停止中送信10秒 + 画面OFF + 通信ジッタで普通に起こる。
-  /// 沈の疑い(長時間停止)・水域外と同じ赤枠で出すと一覧が常時赤くなり、
+  /// 沈の疑い(長時間停止)と同じ赤枠で出すと一覧が常時赤くなり、
   /// 本当にまずい艇が埋もれる(DESIGN_PRINCIPLES 原則4)。
   /// 検知も表示も消さず、目立たせ方だけを下げるための区別である。
   bool get isRoutine => kind == BoatAnomalyKind.lost;
@@ -60,8 +61,6 @@ class BoatAnomaly {
     switch (kind) {
       case BoatAnomalyKind.stopped:
         return '長時間停止';
-      case BoatAnomalyKind.outOfArea:
-        return '水域外';
       case BoatAnomalyKind.lost:
         return '更新途絶';
     }
@@ -115,11 +114,13 @@ bool isAudibleCoachAnomalyKind(BoatAnomalyKind kind) =>
 
 /// コーチ(観察者)モードの監視機能フック。
 /// - 各艇の航跡を保持しポリラインとして提供
-/// - 長時間停止・水域外・更新途絶を検知して画面に表示
+/// - 長時間停止・更新途絶を検知して画面に表示
 /// - 一覧パネル用のステータスを提供
 UseCoachWatch useCoachWatch({
   required List<Boat> otherBoats,
   required bool enabled,
+  ChannelCenterline? channelCenterline,
+  ChannelLaneResolver? channelLaneResolver,
 }) {
   final trails = useRef<Map<String, List<_TrailPoint>>>({});
   final lastSeen = useRef<Map<String, DateTime>>({});
@@ -127,36 +128,30 @@ UseCoachWatch useCoachWatch({
   final anomalies = useState<List<BoatAnomaly>>([]);
   final boatStatuses = useState<List<BoatStatus>>([]);
   final trailPolylines = useState<Set<Polyline>>({});
-  final practiceArea = useState<List<LatLng>?>(null);
-  // 練習水域が読めないと水域外の検知だけが黙って止まる。航行側の
-  // system fault と同じく、能力が欠けていることを画面へ出すために持つ。
-  final practiceAreaUnavailable = useState(false);
   final anomalyFirstDetectedAt = useRef<Map<String, DateTime>>({});
   final scanTimer = useState<Timer?>(null);
-  final presetService = useMemoized(PresetObstacleService.new);
+  final trafficTimer = useState<Timer?>(null);
+  final trafficState = useRef<ObserverTrafficState>(ObserverTrafficState.empty);
+  final trafficSnapshot = useState<ObserverTrafficSnapshot>(
+    ObserverTrafficSnapshot.empty,
+  );
+  final trafficEvaluator = useMemoized(ObserverTrafficAwarenessEvaluator.new);
+  final boatColors = useState<Map<String, Color>>(const {});
 
-  // 練習水域の読み込み(初回のみ)
-  useEffect(() {
-    var cancelled = false;
-    unawaited(Future<void>(() async {
-      try {
-        final loaded = await presetService.loadPracticeArea();
-        if (cancelled) return;
-        practiceArea.value = loaded;
-        // 3点未満のポリゴンでは内外判定ができない。読めなかった場合と同じく
-        // 「水域外の検知が働いていない」状態として扱う。
-        practiceAreaUnavailable.value = loaded == null || loaded.length < 3;
-      } catch (e) {
-        if (!cancelled) {
-          practiceAreaUnavailable.value = true;
-          debugPrint('Failed to load practice area: $e');
-        }
-      }
-    }));
-    return () {
-      cancelled = true;
-    };
-  }, []);
+  /// 監視対象の艇集合が変わったときだけ識別色を割り当て直す。
+  ///
+  /// 航跡の蓄積(受信のたび)とスキャン(定期)の両方から呼ぶ。前者だけだと
+  /// 消えた艇の色が残り、後者だけだと新しく現れた艇の艇印が次のスキャンまで
+  /// 色なしで描かれる。
+  void syncBoatColors() {
+    final boatIds = <String>{...lastBoat.value.keys, ...trails.value.keys};
+    final current = boatColors.value;
+    if (boatIds.length == current.length &&
+        boatIds.every(current.containsKey)) {
+      return;
+    }
+    boatColors.value = assignBoatTrackColors(boatIds);
+  }
 
   // 受信した艇情報を航跡に蓄積
   useEffect(() {
@@ -182,6 +177,7 @@ UseCoachWatch useCoachWatch({
       trail
           .removeWhere((p) => now.difference(p.t).inSeconds > trailDurationSec);
     }
+    syncBoatColors();
     return null;
   }, [otherBoats, enabled]);
 
@@ -196,7 +192,12 @@ UseCoachWatch useCoachWatch({
       anomalies.value = [];
       boatStatuses.value = [];
       trailPolylines.value = {};
+      boatColors.value = const {};
       anomalyFirstDetectedAt.value.clear();
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+      trafficState.value = ObserverTrafficState.empty;
+      trafficSnapshot.value = ObserverTrafficSnapshot.empty;
       return null;
     }
 
@@ -268,17 +269,6 @@ UseCoachWatch useCoachWatch({
           }
         }
 
-        // 3. 練習水域からの逸脱
-        // 水域が読めていないときは判定せず、能力低下として画面へ出す
-        // (practiceAreaUnavailable)。黙って無効化しない。
-        final area = practiceArea.value;
-        if (anomaly == null && area != null && area.length >= 3) {
-          final inside = isPointInPolygon(LatLng(boat.lat, boat.lng), area);
-          if (!inside) {
-            anomaly = makeAnomaly(BoatAnomalyKind.outOfArea);
-          }
-        }
-
         if (anomaly != null) {
           newAnomalies.add(anomaly);
         }
@@ -296,14 +286,20 @@ UseCoachWatch useCoachWatch({
       boatStatuses.value = newStatuses;
 
       // 航跡ポリラインを更新
+      syncBoatColors();
       final polylines = HashSet<Polyline>();
       trails.value.forEach((boatId, trail) {
         if (trail.length < 2) return;
+        // 桜川では全艇がほぼ同じ線上を往復するため、航跡は必ず重なる。
+        // 全艇を同じ色にすると、重なった線から「この折り返しは誰か」を
+        // 復元できない。艇印も同じ色で描く(BoatMarkerRenderSpec.color)。
+        final color =
+            boatColors.value[boatId] ?? BoatPalette.trackPalette.first;
         polylines.add(Polyline(
           polylineId: PolylineId('trail_$boatId'),
           points: trail.map((p) => p.position).toList(),
           width: 3,
-          color: Colors.blue.withValues(alpha: 0.6),
+          color: color.withValues(alpha: BoatPalette.trailOpacity),
         ));
       });
       trailPolylines.value = polylines;
@@ -318,12 +314,48 @@ UseCoachWatch useCoachWatch({
     };
   }, [enabled]);
 
+  // 早期注意は監視画面だけの表示用判定。既存の衝突判定・位置共有とは
+  // 分離し、ここでの例外や遅延が航行側へ波及しないようにする。
+  useEffect(() {
+    void evaluateTraffic() {
+      if (!enabled) return;
+      try {
+        final evaluation = trafficEvaluator.evaluate(
+          boats: otherBoats,
+          evaluatedAt: DateTime.now().toUtc(),
+          previousState: trafficState.value,
+          channelCenterline: channelCenterline,
+          laneResolver: channelLaneResolver,
+        );
+        trafficState.value = evaluation.nextState;
+        trafficSnapshot.value = evaluation.snapshot;
+      } catch (_) {
+        // 監視補助が失敗しても、既存の艇一覧・航跡・更新途絶監視を止めない。
+      }
+    }
+
+    if (!enabled) {
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+      return null;
+    }
+    evaluateTraffic();
+    trafficTimer.value?.cancel();
+    trafficTimer.value = Timer.periodic(const Duration(seconds: 1), (_) {
+      evaluateTraffic();
+    });
+    return () {
+      trafficTimer.value?.cancel();
+      trafficTimer.value = null;
+    };
+  }, [enabled, otherBoats, channelCenterline, channelLaneResolver]);
+
   return UseCoachWatch(
     anomalies: anomalies,
     boatStatuses: boatStatuses,
     trailPolylines: trailPolylines,
-    practiceArea: practiceArea,
-    practiceAreaUnavailable: practiceAreaUnavailable,
+    trafficSnapshot: trafficSnapshot,
+    boatColors: boatColors,
   );
 }
 
@@ -331,16 +363,16 @@ class UseCoachWatch {
   final ValueNotifier<List<BoatAnomaly>> anomalies;
   final ValueNotifier<List<BoatStatus>> boatStatuses;
   final ValueNotifier<Set<Polyline>> trailPolylines;
-  final ValueNotifier<List<LatLng>?> practiceArea;
+  final ValueNotifier<ObserverTrafficSnapshot> trafficSnapshot;
 
-  /// 練習水域を読み込めず、水域外の検知だけが働いていない状態。
-  final ValueNotifier<bool> practiceAreaUnavailable;
+  /// 艇IDごとの識別色。航跡・艇印・艇一覧で同じ色を使う。**表示専用。**
+  final ValueNotifier<Map<String, Color>> boatColors;
 
   UseCoachWatch({
     required this.anomalies,
     required this.boatStatuses,
     required this.trailPolylines,
-    required this.practiceArea,
-    required this.practiceAreaUnavailable,
+    required this.trafficSnapshot,
+    required this.boatColors,
   });
 }

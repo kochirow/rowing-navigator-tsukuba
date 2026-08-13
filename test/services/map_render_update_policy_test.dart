@@ -197,6 +197,23 @@ void main() {
       expect(gate.shouldUpdate(moved), isTrue);
       expect(gate.shouldUpdate(first, force: true), isTrue);
     });
+
+    test('reset()後は同じ位置でも更新する', () {
+      // 「全艇を表示」のように、このゲートを通さず直接カメラを動かした後に
+      // 記憶を捨てないと、次の追従要求が「もう描いた」と誤判定されて
+      // 画面が固まる。艇一覧から艇を選んでもカメラが動かなくなる。
+      final gate = MapCameraUpdateGate();
+      const rendered = CameraRenderSnapshot(
+        target: origin,
+        bearing: 180,
+        zoom: 18,
+      );
+
+      gate.markRendered(rendered);
+      expect(gate.shouldUpdate(rendered), isFalse);
+      gate.reset();
+      expect(gate.shouldUpdate(rendered), isTrue);
+    });
   });
 
   group('shouldRefreshShipDomains', () {

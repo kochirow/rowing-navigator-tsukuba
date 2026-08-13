@@ -17,6 +17,89 @@ double longitudeAtEastMeters(double meters) =>
 
 void main() {
   group('RobustPositionEstimator', () {
+    test('欠測中は5秒まで進行方向へ予測し、不確実性を増やす', () {
+      final estimator = RobustPositionEstimator();
+      final measured = estimator.update(
+        latitude: originLatitude,
+        longitude: originLongitude,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+        speedAccuracyMetersPerSecond: 0.5,
+        headingAccuracyDegrees: 5,
+      )!;
+
+      final predicted = estimator.predict(
+        elapsed: const Duration(seconds: 3),
+        maxPredictionGap: const Duration(seconds: 5),
+      );
+
+      expect(predicted, isNotNull);
+      expect(predicted!.disposition, PositionEstimateDisposition.predicted);
+      final predictedEast = (predicted.longitude - originLongitude) *
+          metersPerLatitudeDegree *
+          math.cos(originLatitude * math.pi / 180);
+      expect(predictedEast, closeTo(9, 0.2));
+      expect(
+        predicted.covarianceUncertaintyMeters,
+        greaterThan(measured.covarianceUncertaintyMeters),
+      );
+      expect(
+          predicted.uncertaintyMeters, greaterThan(measured.uncertaintyMeters));
+    });
+
+    test('推測は最後の統合測位から5秒を超えたら停止する', () {
+      final estimator = RobustPositionEstimator();
+      estimator.update(
+        latitude: originLatitude,
+        longitude: originLongitude,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+      );
+      expect(
+        estimator.predict(
+          elapsed: const Duration(seconds: 5),
+          maxPredictionGap: const Duration(seconds: 5),
+        ),
+        isNotNull,
+      );
+      expect(
+        estimator.predict(
+          elapsed: const Duration(seconds: 6),
+          maxPredictionGap: const Duration(seconds: 5),
+        ),
+        isNull,
+      );
+    });
+
+    test('予測後の実測は観測全体の欠測時間で再捕捉する', () {
+      final estimator = RobustPositionEstimator();
+      estimator.update(
+        latitude: originLatitude,
+        longitude: originLongitude,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+      );
+      estimator.predict(elapsed: const Duration(seconds: 5));
+
+      final recovered = estimator.update(
+        latitude: originLatitude,
+        longitude: longitudeAtEastMeters(24),
+        accuracyMeters: 5,
+        elapsed: const Duration(seconds: 8),
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+      );
+
+      expect(recovered, isNotNull);
+      expect(recovered!.disposition, PositionEstimateDisposition.reacquired);
+    });
+
     test('最初の測位で初期化し、端末精度より楽観的な不確実性にしない', () {
       final estimator = RobustPositionEstimator();
 
@@ -575,6 +658,31 @@ void main() {
       );
       expect(estimate, isNotNull);
       expect(estimate!.innovationMeters, lessThan(0.1));
+    });
+
+    test('GPS短時間欠測中はIMU艇速・相対方位を有界な速度観測として使う', () {
+      final estimator = RobustPositionEstimator();
+      estimator.update(
+        latitude: originLatitude,
+        longitude: originLongitude,
+        accuracyMeters: 5,
+        elapsed: Duration.zero,
+        speedMetersPerSecond: 3,
+        headingDegrees: 90,
+      );
+
+      final estimate = estimator.predict(
+        elapsed: const Duration(seconds: 2),
+        motionSpeedMetersPerSecond: 4,
+        motionHeadingDegrees: 100,
+        motionSpeedAccuracyMetersPerSecond: 0.5,
+      );
+
+      expect(estimate, isNotNull);
+      expect(estimate!.disposition, PositionEstimateDisposition.predicted);
+      expect(estimate.speedMetersPerSecond, greaterThan(3.4));
+      expect(estimate.headingDegrees, inInclusiveRange(94, 103));
+      expect(estimate.uncertaintyMeters, greaterThan(0));
     });
 
     test('reset後は以前の原点・速度・共分散を引き継がない', () {

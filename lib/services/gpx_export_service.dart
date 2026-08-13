@@ -92,7 +92,7 @@ class GpxExportService {
     );
     final fixedObstacleProfile = settings.remove('fixedObstacleProfile');
     final manifest = <String, dynamic>{
-      'diagnosticPackageSchemaVersion': 3,
+      'diagnosticPackageSchemaVersion': 5,
       'diagnosticEventSchemaVersion': diagnosticEventSchemaVersion,
       'diagnosticCatalogVersion': diagnosticCatalogVersion,
       'sessionSchemaVersion': session.schemaVersion,
@@ -120,10 +120,15 @@ class GpxExportService {
       'app': {
         'version': metadata?.appVersion ?? 'unknown',
         'buildNumber': metadata?.buildNumber ?? 'unknown',
+        'gitCommitSha': metadata?.gitCommitSha ?? 'unknown',
+        'buildTimestampUtc': metadata?.buildTimestampUtc ?? 'unknown',
+        'buildFlavor': metadata?.buildFlavor ?? 'unknown',
       },
       'device': {
         'platform': metadata?.platform ?? exportPlatform,
-        'operatingSystemVersion': exportPlatformVersion,
+        // 解析時ではなく、航行開始時のOSを優先する。
+        'operatingSystemVersion':
+            metadata?.operatingSystemVersion ?? exportPlatformVersion,
         'class': 'mobile',
       },
       'hazardProfile': {
@@ -164,6 +169,15 @@ class GpxExportService {
         'position_filter_result',
         'estimate_uncertainty_m',
         'estimate_innovation_m',
+        'estimate_disposition',
+        'estimate_nis',
+        'raw_gnss_speed_mps',
+        'imu_confidence',
+        'imu_quality',
+        'distance_per_stroke_m',
+        'catch_speed_loss_mps',
+        'late_drive_speed_gain_mps',
+        'recovery_speed_retention',
         'spm',
         'safety_level',
       ].join(','));
@@ -184,6 +198,15 @@ class GpxExportService {
         point.positionFilterResult ?? '',
         point.estimateUncertaintyMeters ?? '',
         point.estimateInnovationMeters ?? '',
+        point.estimateDisposition ?? '',
+        point.estimateNormalizedInnovationSquared ?? '',
+        point.rawGnssSpeedMetersPerSecond ?? '',
+        point.imuConfidence ?? '',
+        point.imuQuality ?? '',
+        point.distancePerStrokeMeters ?? '',
+        point.catchSpeedLossMetersPerSecond ?? '',
+        point.lateDriveSpeedGainMetersPerSecond ?? '',
+        point.recoverySpeedRetention ?? '',
         point.spm ?? '',
         point.safetyLevel,
       ].map(_csvCell).join(','));

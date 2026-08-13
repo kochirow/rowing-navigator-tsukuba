@@ -25,13 +25,14 @@ class _AppEntryGateState extends State<AppEntryGate> {
   late final TeamService _teamService = widget.teamService ?? TeamService();
   late Future<TeamMembership?> _membership;
   StreamSubscription<String?>? _authenticationSubscription;
+  StreamSubscription<bool>? _membershipSubscription;
   String? _observedUserId;
 
   @override
   void initState() {
     super.initState();
     _observedUserId = _teamService.currentUserId;
-    _membership = _teamService.restoreMembership();
+    _membership = _restoreAndWatchMembership();
     _authenticationSubscription =
         _teamService.authenticationUserIds.listen(_handleAuthenticationChange);
   }
@@ -49,16 +50,36 @@ class _AppEntryGateState extends State<AppEntryGate> {
   @override
   void dispose() {
     _authenticationSubscription?.cancel();
+    _membershipSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<TeamMembership?> _restoreAndWatchMembership() async {
+    final membership = await _teamService.restoreMembership();
+    if (membership != null) _watchMembership(membership.userId);
+    return membership;
+  }
+
+  void _watchMembership(String userId) {
+    _membershipSubscription?.cancel();
+    _membershipSubscription = _teamService.watchMembershipExists(userId).listen(
+      (exists) {
+        if (!exists && mounted) _retry();
+      },
+      // 圏外や一時的なApp Check/Rules障害では、既存の復元方針どおり
+      // ローカル機能を直ちに終了させず、次のサーバー状態を待つ。
+      onError: (_, __) {},
+    );
   }
 
   void _retry() {
     setState(() {
-      _membership = _teamService.restoreMembership();
+      _membership = _restoreAndWatchMembership();
     });
   }
 
   void _openMap(TeamMembership membership) {
+    _watchMembership(membership.userId);
     setState(() {
       _membership = Future<TeamMembership?>.value(membership);
     });

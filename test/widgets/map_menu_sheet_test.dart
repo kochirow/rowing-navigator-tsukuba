@@ -85,4 +85,77 @@ void main() {
     expect(tapCount, 0);
     expect(find.text('記録'), findsOneWidget);
   });
+
+  testWidgets('塊が変わったところにだけ見出しを出す', (tester) async {
+    // 出艇前は行き先が9つ前後になる。平らに並べると、性質の違う4種類が
+    // 混ざっていた元の状態へ戻ってしまう。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MapMenuSheet(
+            actions: [
+              // 先頭の表示切替は塊に入れず、見出し無しで置く。
+              MapMenuAction(
+                icon: Icons.layers_outlined,
+                title: '表示',
+                onTap: () {},
+              ),
+              MapMenuAction(
+                icon: Icons.shield_outlined,
+                title: '警告の設定',
+                section: '準備',
+                onTap: () {},
+              ),
+              MapMenuAction(
+                icon: Icons.groups_outlined,
+                title: 'チーム',
+                section: '準備',
+                onTap: () {},
+              ),
+              MapMenuAction(
+                icon: Icons.timeline_outlined,
+                title: '練習記録',
+                section: '記録',
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // 同じ塊の2項目めで見出しを繰り返さない。
+    expect(find.text('準備'), findsOneWidget);
+    expect(find.text('記録'), findsOneWidget);
+    // 塊に属さない項目には見出しを出さない。
+    expect(find.text('表示'), findsOneWidget);
+    expect(find.byType(ListTile), findsNWidgets(4));
+  });
+
+  testWidgets('航行中のように塊が無ければ見出しを一切出さない', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MapMenuSheet(
+            actions: [
+              MapMenuAction(
+                icon: Icons.layers_outlined,
+                title: '表示',
+                onTap: () {},
+              ),
+              MapMenuAction(
+                icon: Icons.add_location_alt_outlined,
+                title: '危険区域を追加',
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // 見出し用の Divider は1本も出ない(ListTile 自体は罫線を持たない)。
+    expect(find.byType(Divider), findsNothing);
+    expect(find.byType(ListTile), findsNWidgets(2));
+  });
 }

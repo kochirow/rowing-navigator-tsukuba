@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/channel_lane.dart';
+import 'package:rowing_navigator/services/channel_centerline.dart';
 import 'package:rowing_navigator/services/channel_lane_resolver.dart';
 
 LatLng point(double lat, double lng) => LatLng(lat, lng);
@@ -8,9 +9,16 @@ LatLng point(double lat, double lng) => LatLng(lat, lng);
 ChannelLane lane({
   required String id,
   required LaneDirection direction,
+  String? centerlineId,
   required List<LatLng> points,
 }) =>
-    ChannelLane(id: id, name: id, direction: direction, points: points);
+    ChannelLane(
+      id: id,
+      name: id,
+      direction: direction,
+      centerlineId: centerlineId,
+      points: points,
+    );
 
 void main() {
   group('ChannelLane.fromJson', () {
@@ -19,6 +27,7 @@ void main() {
       'name': '往路',
       'kind': 'lane',
       'direction': 'along',
+      'centerlineId': 'sakuragawa_axis',
       'points': [
         {'lat': 36.0, 'lng': 140.0},
         {'lat': 36.0, 'lng': 140.01},
@@ -30,6 +39,7 @@ void main() {
       final parsed = ChannelLane.fromJson(valid);
 
       expect(parsed.direction, LaneDirection.along);
+      expect(parsed.centerlineId, 'sakuragawa_axis');
       expect(parsed.points, hasLength(3));
       expect(() => parsed.points.add(point(36.02, 140.02)),
           throwsUnsupportedError);
@@ -97,6 +107,62 @@ void main() {
 
     test('1枚だけは既存のcross符号方式へ縮退させる', () {
       expect(ChannelLaneResolver([along]).hasCompleteLaneSet, isFalse);
+    });
+
+    test('現在レーンに明示された複数中心線から正しい1本を選ぶ', () {
+      final sakuragawa = ChannelCenterline.fromPolyline([
+        point(0, 5),
+        point(10, 5),
+      ])!;
+      final kasumigaura = ChannelCenterline.fromPolyline([
+        point(0, 15),
+        point(10, 15),
+      ])!;
+      final linkedAlong = lane(
+        id: 'sakuragawa_outbound',
+        direction: LaneDirection.along,
+        centerlineId: 'sakuragawa_axis',
+        points: along.points,
+      );
+      final linkedAgainst = lane(
+        id: 'kasumigaura_return',
+        direction: LaneDirection.against,
+        centerlineId: 'kasumigaura_axis',
+        points: against.points,
+      );
+      final resolver = ChannelLaneResolver(
+        [linkedAlong, linkedAgainst],
+        centerlines: {
+          'sakuragawa_axis': sakuragawa,
+          'kasumigaura_axis': kasumigaura,
+        },
+      );
+
+      expect(resolver.hasLinkedCenterlines, isTrue);
+      expect(resolver.centerlineFor(point(5, 5)), same(sakuragawa));
+      expect(resolver.centerlineFor(point(5, 15)), same(kasumigaura));
+      expect(resolver.centerlineFor(point(5, 11)), isNull);
+    });
+
+    test('一部だけの中心線紐付けでは旧逆走区域を止めない', () {
+      final centerline = ChannelCenterline.fromPolyline([
+        point(0, 5),
+        point(10, 5),
+      ])!;
+      final partiallyLinked = ChannelLaneResolver(
+        [
+          lane(
+            id: 'linked',
+            direction: LaneDirection.along,
+            centerlineId: 'sakuragawa_axis',
+            points: along.points,
+          ),
+          against,
+        ],
+        centerlines: {'sakuragawa_axis': centerline},
+      );
+
+      expect(partiallyLinked.hasLinkedCenterlines, isFalse);
     });
   });
 }

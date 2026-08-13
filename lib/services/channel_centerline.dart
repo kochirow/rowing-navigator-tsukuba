@@ -59,6 +59,17 @@ class ChannelCenterline {
   /// 頂点数。
   int get pointCount => _east.length;
 
+  /// 中心線の頂点を地理座標で返す。**地図描画専用。**
+  ///
+  /// 判定には使わない(判定は [project] / [toLatLng] の曲線座標で行う)。
+  /// 一定間隔で標本化せず内部の頂点をそのまま返すのは、地図に描く線と
+  /// 予測が使う線を必ず同じものにするため。標本化すると、カーブの頂点が
+  /// わずかに丸まった別の線を「中央線」として見せることになる。
+  List<LatLng> get vertices => List.unmodifiable(<LatLng>[
+        for (var index = 0; index < _east.length; index++)
+          _toLatLng(_east[index], _north[index]),
+      ]);
+
   /// 地理座標の折れ線から中心線を作る。
   ///
   /// 頂点が2点未満、または全長が [minimumChannelCenterlineLengthMeters] 未満なら

@@ -26,15 +26,32 @@ class OtherBoatTrackUpdateResult {
   final String? boatId;
   final RemoteBoatMessageValidationFailure? validationFailure;
 
+  /// 受理したレコードの `serverUpdatedAt - estimatedServerNow`。
+  ///
+  /// 鮮度判定では0へ丸めるが、時計ずれの発生量は診断へ残す必要がある。
+  /// 棄却・過去時刻・未来ずれのないレコードではnull。
+  final Duration? acceptedFutureTimestampSkew;
+
   const OtherBoatTrackUpdateResult({
     required this.status,
     this.boatId,
     this.validationFailure,
+    this.acceptedFutureTimestampSkew,
   });
 
   bool get accepted =>
       status == OtherBoatTrackUpdateStatus.accepted ||
       status == OtherBoatTrackUpdateStatus.replacedSession;
+
+  OtherBoatTrackUpdateResult withAcceptedFutureTimestampSkew(
+    Duration? skew,
+  ) =>
+      OtherBoatTrackUpdateResult(
+        status: status,
+        boatId: boatId,
+        validationFailure: validationFailure,
+        acceptedFutureTimestampSkew: accepted ? skew : null,
+      );
 }
 
 /// 検証済み他艇トラックと、現在の通信鮮度。
@@ -123,12 +140,29 @@ class OtherBoatTrackStore {
         validationFailure: parsed.failure,
       );
     }
-    return _ingest(parsed.message!, serverNow: serverNow);
+    final message = parsed.message!;
+    return _ingest(message, serverNow: serverNow)
+        .withAcceptedFutureTimestampSkew(
+      _acceptedFutureSkew(message, serverNow),
+    );
   }
 
   /// 別層で既に検証したメッセージを受け入れる。
-  OtherBoatTrackUpdateResult ingest(RemoteBoatMessage message) =>
-      _ingest(message, serverNow: _estimatedServerNow().toUtc());
+  OtherBoatTrackUpdateResult ingest(RemoteBoatMessage message) {
+    final serverNow = _estimatedServerNow().toUtc();
+    return _ingest(message, serverNow: serverNow)
+        .withAcceptedFutureTimestampSkew(
+      _acceptedFutureSkew(message, serverNow),
+    );
+  }
+
+  static Duration? _acceptedFutureSkew(
+    RemoteBoatMessage message,
+    DateTime serverNow,
+  ) {
+    final skew = message.serverUpdatedAt.difference(serverNow);
+    return skew.isNegative || skew == Duration.zero ? null : skew;
+  }
 
   OtherBoatTrackUpdateResult _ingest(
     RemoteBoatMessage message, {
@@ -136,14 +170,25 @@ class OtherBoatTrackStore {
   }) {
     var ageAtReceipt = serverNow.difference(message.serverUpdatedAt);
     if (ageAtReceipt.isNegative) {
-      return OtherBoatTrackUpdateResult(
-        status: OtherBoatTrackUpdateStatus.rejectedInvalidMessage,
-        boatId: message.boatId,
-        validationFailure: const RemoteBoatMessageValidationFailure(
-          field: 'serverUpdatedAt',
-          code: RemoteBoatMessageValidationCode.futureTimestamp,
-        ),
-      );
+      // [serverNow] はサーバー時刻の推定値である。推定がわずかに遅れただけの
+      // 正常なレコードを「未来から来た」として捨てない。許容を超えたものだけ
+      // 棄却し、許容内は age = 0 として鮮度の階層へ渡す
+      // (`freshUntil` < `boatPredictionTimeoutSeconds` < `boatStaleTimeoutSeconds`)。
+      //
+      // **外挿(`extrapolateToNow`)の基準は `serverUpdatedAt` のままにする。**
+      // ここで丸めるのは鮮度判定に使う age だけで、位置の外挿量は変えない。
+      // 取り違えると他艇が実際より先へ描かれる。
+      if (ageAtReceipt.abs() > RemoteBoatMessage.maxFutureTimestampSkew) {
+        return OtherBoatTrackUpdateResult(
+          status: OtherBoatTrackUpdateStatus.rejectedInvalidMessage,
+          boatId: message.boatId,
+          validationFailure: const RemoteBoatMessageValidationFailure(
+            field: 'serverUpdatedAt',
+            code: RemoteBoatMessageValidationCode.futureTimestamp,
+          ),
+        );
+      }
+      ageAtReceipt = Duration.zero;
     }
 
     final monotonicReceivedAt = _monotonicNow();

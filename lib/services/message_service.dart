@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
@@ -102,18 +103,28 @@ class RejectedBoatIdRetention {
 /// Realtime Database(推奨) / Firestore(切り戻し用)を切り替えられる。
 /// どちらのバックエンドでも上位層のインターフェースは同一。
 class MessageService {
+  static const _publisherSubscriptionCancelTimeout = Duration(seconds: 2);
   // Firestore バックエンド(切り戻し用に温存)
   final _firestoreRef = MessageAPI().collection;
   // Realtime Database バックエンド
   final _rtdbApi = LivePositionAPI();
   late final OtherBoatTrackStore _trackStore;
   int _serverTimeOffsetMillis = 0;
+  int _acceptedFutureTimestampRecordCount = 0;
+  int _maxAcceptedFutureTimestampSkewMillis = 0;
+  DateTime? _serverTimeOffsetUpdatedAt;
+  int _receivedPositionRecordCount = 0;
+  int _acceptedPositionRecordCount = 0;
+  int _rejectedPositionRecordCount = 0;
+  DateTime? _lastPositionRecordReceivedAt;
+  String? _localBoatId;
   String? _publishedProfileFingerprint;
   StreamSubscription<DatabaseEvent>? _publisherConnectionSubscription;
   String? _publishingBoatId;
   bool _publisherConnected = false;
   bool _disconnectRemovalArmed = false;
   int _publisherConnectionEpoch = 0;
+  int _publisherSubscriptionGeneration = 0;
   Completer<void> _nextPublisherConnection = Completer<void>();
   Future<void>? _disconnectArmingFuture;
 
@@ -126,17 +137,85 @@ class MessageService {
       .toUtc()
       .add(Duration(milliseconds: _serverTimeOffsetMillis));
 
+  /// `.info/serverTimeOffset` の最新値 [ms]。**診断専用**。
+  ///
+  /// 他艇レコードの受理・棄却は「端末時計 + この値」を現在として判断する。
+  /// ずれが大きいまま気づけないと、正常なレコードを未来扱いで捨てる
+  /// (2026-08-05 実機ログで693件)。次回ログで確認できるよう残す。
+  int get serverTimeOffsetMillis => _serverTimeOffsetMillis;
+
+  /// 今回の航行で受理した未来時刻レコードの件数。**診断専用**。
+  int get acceptedFutureTimestampRecordCount =>
+      _acceptedFutureTimestampRecordCount;
+
+  /// 今回の航行で受理した未来時刻の最大ずれ [ms]。**診断専用**。
+  int get maxAcceptedFutureTimestampSkewMillis =>
+      _maxAcceptedFutureTimestampSkewMillis;
+
+  /// `.info/serverTimeOffset` の最新値を受け取った端末時刻。**診断専用**。
+  DateTime? get serverTimeOffsetUpdatedAt => _serverTimeOffsetUpdatedAt;
+
+  int get receivedPositionRecordCount => _receivedPositionRecordCount;
+  int get acceptedPositionRecordCount => _acceptedPositionRecordCount;
+  int get rejectedPositionRecordCount => _rejectedPositionRecordCount;
+  DateTime? get lastPositionRecordReceivedAt => _lastPositionRecordReceivedAt;
+  String get receiveBackendType =>
+      useRealtimeDatabaseForPositions ? 'rtdb' : 'firestore';
+  String? get localBoatIdHash {
+    final value = _localBoatId;
+    if (value == null || value.isEmpty) return null;
+    return sha256.convert(utf8.encode(value)).toString().substring(0, 8);
+  }
+
+  /// 航行単位の時計ずれカウンタを開始時にリセットする。
+  void resetClockSkewDiagnostics({String? localBoatId}) {
+    _acceptedFutureTimestampRecordCount = 0;
+    _maxAcceptedFutureTimestampSkewMillis = 0;
+    _receivedPositionRecordCount = 0;
+    _acceptedPositionRecordCount = 0;
+    _rejectedPositionRecordCount = 0;
+    _lastPositionRecordReceivedAt = null;
+    _localBoatId = localBoatId;
+  }
+
+  /// 空のチームでも「0隻」と「読取り不可」を区別するため、
+  /// 最小1件の読取りを明示的にサーバーへ要求する。診断のみで、
+  /// 位置ストリームや端末内の安全判定を待たせない。
+  Future<void> probeReceiveAccess() async {
+    if (useRealtimeDatabaseForPositions) {
+      await _rtdbApi.ref.limitToFirst(1).get();
+    } else {
+      await _firestoreRef.limit(1).get();
+    }
+  }
+
+  void _recordAcceptedFutureTimestamp(OtherBoatTrackUpdateResult result) {
+    final skew = result.acceptedFutureTimestampSkew;
+    if (!result.accepted || skew == null) return;
+    _acceptedFutureTimestampRecordCount++;
+    _maxAcceptedFutureTimestampSkewMillis = math.max(
+      _maxAcceptedFutureTimestampSkewMillis,
+      // serverUpdatedAtはms精度で、estimatedServerNowはus精度なので、
+      // 1ms未満の正のずれも「発生した」と読めるよう1msへ丸め上げる。
+      math.max(1, skew.inMilliseconds),
+    );
+  }
+
   Future<void> sendMessage(Message message) async {
     if (useRealtimeDatabaseForPositions) {
       final publishingBoatId = _publishingBoatId;
-      if (publishingBoatId != null) {
-        if (publishingBoatId != message.boatId) {
-          throw StateError('登録した艘と異なる位置を送信できません。');
-        }
-        // onDisconnect登録のACKを待つのは送信専用mailboxだけ。
-        // 呼出元のGPS・危険判定パイプラインはこのFutureを待たない。
-        await _ensureDisconnectRemovalArmed(message.boatId);
+      // 初期setupはローカル航行を止めないようバックグラウンド
+      // で行う。未完了中のwriteはpublisher側だけで失敗・最新値再試行
+      // させ、onDisconnect未登録の幽霊艘データは作らない。
+      if (publishingBoatId == null) {
+        throw StateError('位置共有の切断時削除を準備中です。');
       }
+      if (publishingBoatId != message.boatId) {
+        throw StateError('登録した艘と異なる位置を送信できません。');
+      }
+      // onDisconnect登録のACKを待つのは送信専用mailboxだけ。
+      // 呼出元のGPS・危険判定パイプラインはこのFutureを待たない。
+      await _ensureDisconnectRemovalArmed(message.boatId);
       final profileFingerprint = '${message.displayName}\u0000'
           '${message.boatType.name}\u0000${message.protocolVersion}\u0000'
           '${message.appVersion}\u0000${message.profileVersion}';
@@ -254,7 +333,21 @@ class MessageService {
       }
     }
 
+    void recordIngestResult(OtherBoatTrackUpdateResult result) {
+      if (result.boatId == _localBoatId) return;
+      _recordAcceptedFutureTimestamp(result);
+      if (result.accepted) {
+        _acceptedPositionRecordCount++;
+      } else {
+        _rejectedPositionRecordCount++;
+      }
+    }
+
     void processPosition(String boatId, Map<Object?, Object?> compact) {
+      if (boatId != _localBoatId) {
+        _receivedPositionRecordCount++;
+        _lastPositionRecordReceivedAt = DateTime.now().toUtc();
+      }
       clearTransportFault('RTDB_POSITION_STREAM_ERROR');
       positionJoiner.putPosition(boatId, compact);
       if (!serverOffsetReady) {
@@ -263,6 +356,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
+      recordIngestResult(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -305,6 +399,7 @@ class MessageService {
       final expanded = positionJoiner.takeExpanded(boatId);
       if (expanded == null) return;
       final result = _trackStore.ingestJson(expanded);
+      recordIngestResult(result);
       if (result.status == OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
           result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
         retainRecordRejection(boatId, result);
@@ -341,6 +436,7 @@ class MessageService {
         final expanded = positionJoiner.takeExpanded(boatId);
         if (expanded == null) continue;
         final result = _trackStore.ingestJson(expanded);
+        recordIngestResult(result);
         if (result.status ==
                 OtherBoatTrackUpdateStatus.rejectedInvalidMessage ||
             result.status == OtherBoatTrackUpdateStatus.rejectedCapacity) {
@@ -362,6 +458,7 @@ class MessageService {
             final value = event.snapshot.value;
             if (value is num) {
               _serverTimeOffsetMillis = value.toInt();
+              _serverTimeOffsetUpdatedAt = DateTime.now().toUtc();
             }
             serverOffsetReady = true;
             offsetFallbackTimer?.cancel();
@@ -476,8 +573,15 @@ class MessageService {
     _disconnectRemovalArmed = false;
     _publisherConnectionEpoch += 1;
     _nextPublisherConnection = Completer<void>();
+    final subscriptionGeneration = ++_publisherSubscriptionGeneration;
     _publisherConnectionSubscription = _rtdbApi.connectedRef.onValue.listen(
       (event) {
+        // stop/register中にcancelできなかった古い購読は、次の位置
+        // 共有sessionの接続状態を書き換えてはいけない。
+        if (_publishingBoatId != boatId ||
+            subscriptionGeneration != _publisherSubscriptionGeneration) {
+          return;
+        }
         final connected = event.snapshot.value == true;
         if (connected == _publisherConnected) return;
         _publisherConnected = connected;
@@ -493,6 +597,10 @@ class MessageService {
         }
       },
       onError: (Object error, StackTrace stackTrace) {
+        if (_publishingBoatId != boatId ||
+            subscriptionGeneration != _publisherSubscriptionGeneration) {
+          return;
+        }
         _publisherConnected = false;
         _disconnectRemovalArmed = false;
         _publishedProfileFingerprint = null;
@@ -548,6 +656,7 @@ class MessageService {
     _disconnectRemovalArmed = false;
     _publishedProfileFingerprint = null;
     _publisherConnectionEpoch += 1;
+    _publisherSubscriptionGeneration += 1;
     _disconnectArmingFuture = null;
     if (!_nextPublisherConnection.isCompleted) {
       // 接続待ちの_ensureを起こし、セッション終了として戻す。
@@ -555,6 +664,15 @@ class MessageService {
     }
     final subscription = _publisherConnectionSubscription;
     _publisherConnectionSubscription = null;
-    await subscription?.cancel();
+    try {
+      await subscription?.cancel().timeout(_publisherSubscriptionCancelTimeout);
+    } catch (error) {
+      // pluginのcancelが返らなくても、位置共有の次sessionや
+      // 端末内の警告・記録を永久停止させない。古いcallbackは
+      // epochで無視される。
+      if (kDebugMode) {
+        debugPrint('Publisher connection subscription cancel failed: $error');
+      }
+    }
   }
 }

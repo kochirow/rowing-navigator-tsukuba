@@ -9,7 +9,7 @@ import '../../../widgets/app_state_views.dart';
 /// 各艇の艇種・速度・電池残量・最終更新・異常を一覧できる。
 ///
 /// 強調度は**異常の重さに合わせる**。
-/// - 長時間停止(沈の疑い)・水域外 → 行ごと赤系で強調し、岸から一目で気づける
+/// - 長時間停止(沈の疑い) → 行ごと赤系で強調し、岸から一目で気づける
 /// - 更新途絶([BoatAnomaly.isRoutine]) → 控えめ。停止中送信10秒 + 画面OFF +
 ///   通信ジッタで日常的に起こるため、赤枠で出すと一覧が常時赤くなり
 ///   本当にまずい艇が埋もれる(DESIGN_PRINCIPLES 原則4)
@@ -19,7 +19,31 @@ import '../../../widgets/app_state_views.dart';
 class BoatListPanel extends StatelessWidget {
   final List<BoatStatus> statuses;
 
-  const BoatListPanel({super.key, required this.statuses});
+  /// 行をタップしたときに、その艇へ地図を寄せるための通知。
+  ///
+  /// 監視者は陸上で端末を操作できるため確認ダイアログは挟まない。
+  /// null のときは行をタップできない(従来の表示専用パネル)。
+  final void Function(String boatId)? onTapBoat;
+
+  /// その艇の1ストロークの艇速変化を開く。
+  ///
+  /// **行タップ(地図を寄せる)とは別のボタンにする。** 一覧で艇を探して
+  /// 地図を追う操作のほうが頻度が高く、そこにグラフが割り込むと邪魔になる。
+  /// グラフを見たい人だけがボタンを押す(設計原則2)。
+  final void Function(String boatId, String displayName)? onShowStrokeTrace;
+
+  /// 艇IDごとの識別色(地図の航跡・艇印と同じ)。
+  ///
+  /// 一覧と地図を色で対応づけるためだけに使う。渡さなくても一覧は成立する。
+  final Map<String, Color> boatColors;
+
+  const BoatListPanel({
+    super.key,
+    required this.statuses,
+    this.onTapBoat,
+    this.onShowStrokeTrace,
+    this.boatColors = const {},
+  });
 
   Widget _row(BuildContext context, BoatStatus status) {
     final colors = context.colors;
@@ -34,7 +58,10 @@ class BoatListPanel extends StatelessWidget {
     final emphasized = hasAnomaly && !isRoutineAnomaly;
     final lowBattery = boat.battery != null && boat.battery! <= 20;
 
-    return Container(
+    final onTapBoat = this.onTapBoat;
+    final row = Container(
+      // 濡れた手・グローブでも押せる高さを確保する。
+      constraints: const BoxConstraints(minHeight: 44),
       margin: const EdgeInsets.symmetric(vertical: 3),
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       decoration: BoxDecoration(
@@ -47,6 +74,18 @@ class BoatListPanel extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // 地図の航跡・艇印と同じ識別色。一覧のどの行が地図のどの線かを
+          // 名前を読み比べずに追えるようにする。色が決まっていない艇では
+          // 幅だけ確保して、行の文字位置が揃うようにする。
+          Container(
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: boatColors[boat.boatId] ?? Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+          ),
           Icon(
             // 更新途絶は「通信が来ていない」ことであって、艇の異常とは限らない。
             // 警告アイコンではなく中立的な cloud_off で示す。
@@ -129,7 +168,31 @@ class BoatListPanel extends StatelessWidget {
             '${status.ageSec.round()}秒前',
             style: TextStyle(fontSize: 12, color: colors.textSecondary),
           ),
+          if (onShowStrokeTrace != null)
+            IconButton(
+              icon: const Icon(Icons.show_chart, size: 20),
+              color: colors.primary,
+              visualDensity: VisualDensity.compact,
+              // 濡れた手でも押せるよう44pxを確保する。
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              tooltip: '1ストロークの艇速変化',
+              onPressed: () =>
+                  onShowStrokeTrace!(boat.boatId, boat.displayName),
+            ),
         ],
+      ),
+    );
+    if (onTapBoat == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onTapBoat(boat.boatId),
+        borderRadius: BorderRadius.circular(10),
+        child: Semantics(
+          button: true,
+          label: '${boat.displayName}。タップで地図をこの艇へ寄せる',
+          child: row,
+        ),
       ),
     );
   }

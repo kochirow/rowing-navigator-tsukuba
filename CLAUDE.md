@@ -11,6 +11,13 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 川幅40〜50m・狭所35m、**右側通行の片側1レーンですれ違う**、カーブ間隔は最短200m・最長700m、
 同時に出る艇は2〜12、**コーチ艇はいない**、休憩は橋の下または航路の端。
 
+**水域によって前提が違う。** 上は桜川本流の前提であり、**霞ヶ浦(開水面)では成立しない**
+(DESIGN_PRINCIPLES 1.2b)。霞ヶ浦では対岸が数百m先で、レーンは「推奨経路」であって
+「越えない取り決め」ではないため、レーンの被覆が落ちる(航跡の17〜44%がレーン外)。
+ただしそれは**警告漏れであって誤発報ではない**ので、逆走判定は有効のまま残す。
+岸も北岸しか定義していない。
+**新しい水域を足すときは、先に 1.2c へ前提を書いてから設定値を決めること。**
+
 - 自艇・他艇の位置/針路/速度を Realtime Database 経由でリアルタイム共有
 - 静的危険区域(橋脚・浅瀬・岸など)と艇を Google Maps 上に表示
 - 衝突リスクを段階評価(lv0〜lv3)し、音声+画面バナーで警告
@@ -61,7 +68,7 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 
 ```bash
 flutter pub get
-dart analyze lib test   # ← flutter analyze は使わない(下記)
+dart analyze lib test tool   # ← flutter analyze は使わない(下記)
 flutter test
 flutter run
 ```
@@ -69,8 +76,15 @@ flutter run
 > **`flutter analyze` はこの作業パスでは必ずクラッシュする。**
 > Dart analysis server の LSP チャネルが、URLエンコードされた日本語パス
 > (`漕艇部` / `桜川プロジェクト`)でヘッダのバイト長とUTF-16長を取り違えるため。
-> ローカルでは `dart analyze lib test` を使い、`flutter analyze` は
+> ローカルでは `dart analyze lib test tool` を使い、`flutter analyze` は
 > ASCIIパスで動く GitHub Actions(`.github/workflows/ci.yml`)で担保する。
+
+> **`tool` を必ず入れること。** `tool/replay_alerts.dart` /
+> `tool/replay_field_log.dart` は `lib/` のモデルを直接呼ぶため、安全経路の
+> クラスから引数を1つ削るだけで壊れる。`lib test` だけで解析すると
+> ローカルは緑のまま CI の `flutter analyze`(プロジェクト全体)だけが落ちる。
+> 実際にこれで2回落ちている(`1724d33`、および 2026-08-03 の
+> `insideSupportedCoverage` 削除)。
 
 起動には Firebase 設定と Google Maps API キーが必要(README参照)。
 
@@ -105,6 +119,10 @@ flutter run
 | ---- | ---- |
 | `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過で音とバナーを出す。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
+| `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
+| `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
+| `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側。**波形を見る口はここ(監視端末の `stroke_trace_sheet.dart`)だけ**で、艇側は送るだけ |
+| `lib/features/home_map/widgets/nav_status_card.dart` | 航行中の計器カード(ペース・レート・経過時間・距離)。**艇速変化グラフは置かない**(2026-08-13に廃止。漕ぎながら波形を読む場面が無く、上部の一等地を主計器と取り合っていた)。理由と寸法の根拠は同ファイル冒頭 |
 | `lib/services/message_service.dart` | 位置共有。RTDB(既定)/Firestoreをフラグで切替。onDisconnect対応 |
 | `lib/services/other_boat_track_store.dart` | 受信メッセージの検証・順序付け・鮮度管理(純Dart) |
 | `lib/services/send_policy.dart` | 適応送信の間隔決定 |
@@ -112,6 +130,10 @@ flutter run
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
 | `lib/services/gpx_export_service.dart` | GPX/CSV出力 |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
+| `lib/theme/map_layer_spec.dart` | 地図の層(中央線＝白い破線／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。**実線＝実在するもの、破線＝越えない取り決め。** 航路は中央線1本だけを描き、レーンの外側の辺は描かない(往路・復路の帯を廃止した経緯も同ファイル) |
+| `lib/services/channel_cross_section.dart` | 「中央線のどちら側を、どれだけ離れて走っているか」の表示用モデル(純Dart)。左右は**漕手の体の左右**(=画面の左右)で持つ。レーンの左右は右側通行の規則ではなくレーン形状から決める(水域により向きが違う)。**表示専用・警告にしない** |
+| `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |
+| `lib/services/swept_outline_service.dart` | 予測掃引の外形(凸包)を1枚にまとめる(純Dart)。**表示専用で判定には使わない** |
 | `lib/services/static_obstacle_service.dart` | 臨時危険区域の CRUD(Firestore) |
 | `lib/config/` | 全設定値(コメント付き)。調整はここ |
 
@@ -202,7 +224,7 @@ flutter run
   **待たせるのは音声だけで、候補・表示・`runMode` は即座に立てる。**
   候補まで遅らせると、`AlertDataQuality.unusable` で物理警告が3秒で終わるのに
   理由が表示されない窓が空き、データ欠損が警告を消す根拠になる(不変条件3・原則6)。
-  他の fault(受信途絶・送信停止・区域データ・対応範囲外・他艇ロスト)は**表示のみ**。
+  他の fault(受信途絶・送信停止・区域データ・他艇ロスト)は**表示のみ**。
   漕ぎながら対処できない情報を読み上げると、本当に鳴るべき衝突警告を覆い隠す。
   **表示・バナー・`runMode` は従来どおり残る**(原則1・原則6)。
   `NavigationWarningService` で `?? genericWarningAudioAsset` のような
@@ -255,12 +277,14 @@ flutter run
 5. **航行開始をブロックしない。** 音声・危険区域データ・通信のいずれが欠けても開始できる。
    位置情報権限だけは例外(原理的に全機能が成立しない)
 6. **地図描画は安全判定用の拡張を反映しない。** `getShipDomains(headingReliable: true)` を使う
-7. **`ThreatInfo.distanceMeters` は符号付き**(危険区域の内部で負)。
-   0へ潰すと停止中の再接近検出が単調でなくなる
+7. **`ThreatInfo.distanceMeters` は符号付き**(危険区域の内部で負)。自艇の
+   `BoundedPositionSet` を使う判定では、集合の最近点から同じ符号付き距離を
+   求める。0へ潰すと停止中の再接近検出が単調でなくなる
 8. **`ShipDomainService.boundingRadius` は領域の実寸を下回ってはならない。**
    broad-phase の到達半径と円フォールバックの両方に使うため、過小評価すると
-   触れる障害物を評価前に捨てる。低速時の横方向拡張を含む実効値は
-   `effectiveExclusiveRadius()` を使うこと(生パラメータから計算しない)
+   触れる障害物を評価前に捨てる。位置集合を足す場合は船体領域とのMinkowski和の
+   外接半径を使う(`effectiveExclusiveRadius(positionSetBoundingRadiusMeters: ...)`)。
+   低速時の横方向拡張も含め、生パラメータから再計算しない
 9. **船体領域の六角形は凸に保つ**(`s <= h`)。低速時の方位不確かさで広げるのは
    横方向 `w` だけ。`s`(前後方向)まで広げると凹になり、実効的な全長が伸びる
 10. **警告の方向・残り秒数は表示専用。** `ThreatInfo.relativeBearingDegrees` は
@@ -274,6 +298,10 @@ flutter run
    `PracticeLogRecorder` だけが読む。他艇の警告は自艇の判断材料にならず、
    表示すれば画面が混み(原則4)、安全経路へ入れれば他艇のアプリの不具合が
    自艇の警告を汚染する
+13. **1ストロークの艇速波形は表示専用で、位置payloadへ混ぜない。** 衝突評価にも
+   地図描画にも渡さない(不変条件12と同じ理由)。共有の書込を位置の atomic update へ
+   入れると、波形側の validation 失敗で位置の書込ごと拒否され安全経路が巻き添えになる。
+   `onDisconnect` も位置とは独立に登録する
 
 ## 練習一括ログ(監視端末)
 
@@ -292,6 +320,10 @@ flutter run
 ## 通信バックエンド
 
 - 位置共有・シグナル: Realtime Database(転送量課金・無料枠内で運用可能)
+- **1ストロークの艇速波形は `stroke_traces` という別ノードへ置く。**
+  `live_positions` は全12艇が全12艇ぶんを購読するため、そこへ足したバイト数は
+  144倍で効く。波形は監視端末が開いた1艇だけが購読し、艇側は購読しない(送信のみ)。
+  詳細は [docs/design_notes/2026-08-03_艇速変化グラフと監視共有_設計.md](docs/design_notes/2026-08-03_艇速変化グラフと監視共有_設計.md)
 - 固定危険区域: アプリ内JSON。臨時危険区域だけFirestore(低頻度)
 - `useRealtimeDatabaseForPositions = false` でFirestoreに切り戻せる(コスト大・検証用)
 - RTDBのURLが `firebase_options.dart` にない場合は `realtimeDatabaseUrl` で指定
@@ -340,4 +372,6 @@ flutter run
 コミット、作業ブランチへのpush、PR作成に関する共通規約は
 [`AGENTS.md`](AGENTS.md) を必ず読むこと。実装が検証可能な区切りまで完了したら、
 同規約に従って対象ファイルだけを自律的にコミットする。既存の未コミット変更を
-まとめてステージしたり、利用者の明示的な依頼なしにPRをmainへマージしたりしてはいけない。
+まとめてステージしてはいけない。必要な検証とPRの必須チェックが成功し、競合や未解決の
+安全上の問題がなければ、利用者の追加確認を待たずにPRをmainへマージする。チェック失敗、
+競合、必須レビュー不足、外部設定変更などがある場合は、マージせず理由を報告する。

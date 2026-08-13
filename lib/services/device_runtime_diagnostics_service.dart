@@ -39,7 +39,9 @@ class DeviceRuntimeDiagnosticsService {
       result['batterySaveMode'] = await _battery.isInBatterySaveMode;
     } catch (_) {}
 
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android)) {
       try {
         final native = await _channel.invokeMapMethod<String, Object?>(
           'snapshot',

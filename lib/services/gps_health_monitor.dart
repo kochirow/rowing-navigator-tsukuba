@@ -1,5 +1,13 @@
 enum GpsHealthQuality { good, degraded, unusable }
 
+/// 回復確認中に受理した新鮮なfixを、安全判定で使う品質。
+///
+/// health表示は3観測・2秒のヒステリシスを維持する一方、新鮮で
+/// フィルタ済みの座標まで捨てない。回復確認中だけdegradedとして、
+/// Kalman・危険判定・警告へ渡す。
+GpsHealthQuality evaluationQualityForAcceptedFix(GpsHealthQuality health) =>
+    health == GpsHealthQuality.unusable ? GpsHealthQuality.degraded : health;
+
 class GpsHealthSnapshot {
   final GpsHealthQuality quality;
   final DateTime? lastAcceptedAt;

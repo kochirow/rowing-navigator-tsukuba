@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -6,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/boat_config.dart';
 import '../config/map_style_config.dart';
 import '../services/map_render_update_policy.dart';
+import '../theme/boat_palette.dart';
 import '../types/marker_type.dart';
 import '../types/boat_type.dart';
 import '../utils/image2icon.dart';
@@ -57,19 +60,25 @@ UseNavMap useNavMap() {
   }
 
   Future<Marker> createMarkerAtIconSize(
-      String markerId,
-      MarkerType type,
-      double lat,
-      double lng,
-      double heading,
-      String title,
-      String snippet,
-      int iconSize) async {
+    String markerId,
+    MarkerType type,
+    double lat,
+    double lng,
+    double heading,
+    String title,
+    String snippet,
+    int iconSize, {
+    double? imagePixelRatio,
+  }) async {
     final iconPath =
         type == MarkerType.myBoat ? redBoatIconPath : blueBoatIconPath;
-    final cacheKey = '$iconPath@$iconSize';
-    final iconFuture = boatIcons.value[cacheKey] ??=
-        getBitmapDescriptorFromAssetBytes(iconPath, iconSize);
+    final cacheKey = '$iconPath@$iconSize@${imagePixelRatio ?? 1.0}';
+    final iconFuture =
+        boatIcons.value[cacheKey] ??= getBitmapDescriptorFromAssetBytes(
+      iconPath,
+      iconSize,
+      imagePixelRatio: imagePixelRatio,
+    );
     late final BitmapDescriptor icon;
     try {
       icon = await iconFuture;
@@ -106,23 +115,35 @@ UseNavMap useNavMap() {
       zoomLevel: zoomLevel,
       devicePixelRatio: dpr,
     );
+    // 監視モードは艇ごとに色を指定する。指定がなければ航行モードの
+    // 自艇=赤 / 他艇=濃い青みグレー。
+    final color = spec.color ??
+        (spec.type == MarkerType.myBoat
+            ? BoatPalette.myBoat
+            : BoatPalette.otherBoat);
     final cacheKey = [
       spec.type.name,
+      // 色が違えば別のビットマップになる。ここを落とすと、監視モードで
+      // 先に描いた艇の色が後の艇へそのまま使い回される。
+      color.toARGB32().toRadixString(16),
       spec.boatType.name,
       params.h.toStringAsFixed(3),
       boatConfig.displayHullWidthMeters.toStringAsFixed(3),
       pixelsPerMeter.toStringAsFixed(4),
       dpr.toStringAsFixed(2),
+      minBoatMarkerLengthPixels.toString(),
+      maxBoatMarkerLengthPixels.toString(),
     ].join('@');
     final iconFuture =
-        boatIcons.value[cacheKey] ??= getBoatArrowBitmapDescriptor(
+        boatIcons.value[cacheKey] ??= getBoatHomePlateBitmapDescriptor(
       lengthMeters: params.h,
       // 判定用の幅(オーを含む6〜7.5m)ではなく、船体の実幅。
       // 安全ポリゴンと矢羽の役割を視覚的に分ける。
       widthMeters: boatConfig.displayHullWidthMeters,
-      color: spec.type == MarkerType.myBoat ? Colors.red : Colors.blue,
+      color: color,
       pixelsPerMeter: pixelsPerMeter,
       minPixels: (minBoatMarkerLengthPixels * dpr).round(),
+      maxPixels: (maxBoatMarkerLengthPixels * dpr).round(),
     );
     late final BitmapDescriptor icon;
     try {
@@ -140,7 +161,10 @@ UseNavMap useNavMap() {
         spec.heading,
         spec.title,
         spec.snippet,
-        minBoatMarkerLengthPixels,
+        // [getBitmapDescriptorFromAssetBytes] は物理pxで受ける。Canvasの
+        // ホームベース型と同じ最小論理サイズを維持し、縮退時だけ極小にならないようにする。
+        (minBoatMarkerLengthPixels * dpr).round(),
+        imagePixelRatio: dpr,
       );
     }
     return Marker(
@@ -346,6 +370,55 @@ UseNavMap useNavMap() {
     return true;
   }
 
+  /// 指定した地点がすべて収まる位置へカメラを動かす。監視モード専用。
+  ///
+  /// 航行中は使わない。漕手の画面は自艇を追い続ける必要があり、勝手に
+  /// 引くと前方の見通しが失われる。
+  ///
+  /// 1点だけのとき、または全艇がほぼ同じ場所にいて範囲が潰れるときは、
+  /// bounds が面積を持たず Google Maps が最大倍率まで寄せてしまうため、
+  /// 単純な中心移動へ切り替える。
+  Future<void> fitBounds(
+    List<LatLng> points, {
+    double singlePointZoom = watchSingleBoatZoomLevel,
+    double paddingPixels = 64,
+  }) async {
+    final controller = mapController.value;
+    if (controller == null || points.isEmpty) return;
+    // 手動でカメラを動かすため、差分ゲートの記憶を捨てる。これを忘れると、
+    // 次の focus() が「もう描いた」と誤判定されて画面が動かなくなる。
+    cameraUpdateGate.reset();
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+    for (final point in points) {
+      south = min(south, point.latitude);
+      north = max(north, point.latitude);
+      west = min(west, point.longitude);
+      east = max(east, point.longitude);
+    }
+    // 約1m。これ未満の広がりは「1点」として扱う。
+    const degenerateSpanDegrees = 1e-5;
+    if (north - south < degenerateSpanDegrees &&
+        east - west < degenerateSpanDegrees) {
+      await controller.moveCamera(CameraUpdate.newLatLngZoom(
+        LatLng((north + south) / 2, (east + west) / 2),
+        singlePointZoom,
+      ));
+      return;
+    }
+    // south/west は最小、north/east は最大。逆にすると Google Maps が
+    // assert で落ちる。
+    await controller.animateCamera(CameraUpdate.newLatLngBounds(
+      LatLngBounds(
+        southwest: LatLng(south, west),
+        northeast: LatLng(north, east),
+      ),
+      paddingPixels,
+    ));
+  }
+
   useEffect(() {
     return () {
       markerRenderGate.invalidate();
@@ -373,6 +446,7 @@ UseNavMap useNavMap() {
     setPolylines: setPolylines,
     setPolygons: setPolygons,
     focus: focus,
+    fitBounds: fitBounds,
   );
 }
 
@@ -414,6 +488,11 @@ class UseNavMap {
     double zoomLevel, {
     bool force,
   }) focus;
+  final Future<void> Function(
+    List<LatLng> points, {
+    double singlePointZoom,
+    double paddingPixels,
+  }) fitBounds;
 
   UseNavMap({
     required this.mapController,
@@ -435,6 +514,7 @@ class UseNavMap {
     required this.setPolylines,
     required this.setPolygons,
     required this.focus,
+    required this.fitBounds,
   });
 }
 
@@ -451,6 +531,12 @@ class BoatMarkerRenderSpec {
   /// `null`の場合は名前ラベルを作らない。監視モードだけ指定する。
   final String? nameLabel;
 
+  /// 艇印の色。`null`なら [MarkerType] から決める(航行モード)。
+  ///
+  /// 監視モードだけが艇ごとの識別色を渡す。航跡ポリラインと同じ色を
+  /// 使うことで、地図上の線と艇が対応する。
+  final Color? color;
+
   const BoatMarkerRenderSpec({
     required this.markerId,
     required this.type,
@@ -461,6 +547,7 @@ class BoatMarkerRenderSpec {
     required this.title,
     required this.snippet,
     this.nameLabel,
+    this.color,
   });
 
   @override
@@ -474,7 +561,8 @@ class BoatMarkerRenderSpec {
         heading == other.heading &&
         title == other.title &&
         snippet == other.snippet &&
-        nameLabel == other.nameLabel;
+        nameLabel == other.nameLabel &&
+        color == other.color;
   }
 
   @override
@@ -488,6 +576,7 @@ class BoatMarkerRenderSpec {
         title,
         snippet,
         nameLabel,
+        color,
       );
 }
 

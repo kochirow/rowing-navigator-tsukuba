@@ -67,4 +67,14 @@ class EstimatorClock {
     _lastResolved = resolved;
     return resolved;
   }
+
+  /// GNSS欠測中の予測時刻を、次の実測fixと同じ単調軸へ載せる。
+  Duration resolvePrediction(Duration processElapsed) {
+    final previous = _lastResolved;
+    final resolved = previous == null || processElapsed > previous
+        ? processElapsed
+        : previous + const Duration(milliseconds: 1);
+    _lastResolved = resolved;
+    return resolved;
+  }
 }

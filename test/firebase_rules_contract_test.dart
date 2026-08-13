@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/hazard_profile_config.dart';
+import 'package:rowing_navigator/models/presentation_state_protocol.dart';
 
 /// `database.rules.json` は Firebase Rules の JSONC(行コメントを書ける)。
 /// 設定値の根拠はルールの隣に置きたいので、解析前に行コメントだけ落とす。
@@ -47,10 +48,69 @@ void main() {
             '位置書き込み全体がpermission-deniedになる。',
       );
     }
+    final presentationRule =
+        (livePosition['w'] as Map<String, dynamic>)['.validate'] as String;
+    expect(
+      presentationRule,
+      contains(r'^[012][obpsidkcrfg]$'),
+      reason: '橋脚p・杭kを含むDart生成側の全コードをRulesも許可する。',
+    );
+    for (final code in PresentationStateProtocol.categoryCodes) {
+      expect(presentationRule, contains(code), reason: '欠落コード: $code');
+    }
     expect(
       (livePosition[r'$other'] as Map<String, dynamic>)['.validate'],
       isNot(false),
       reason: '将来の任意スカラー値で旧Rulesと同じ全拒否に戻さない。',
+    );
+  });
+
+  test('艇速波形は位置と別ノードで、fan-outを持たない', () {
+    final rules = readDatabaseRules();
+    final scoped = ((rules['rules'] as Map<String, dynamic>)['teams']
+        as Map<String, dynamic>)[r'$teamId'] as Map<String, dynamic>;
+
+    final traces = scoped['stroke_traces'] as Map<String, dynamic>;
+    expect(
+      traces,
+      isA<Map<String, dynamic>>(),
+      reason: '波形を live_positions へ混ぜると、全艇が全艇ぶんを受け取る '
+          '12x12 の fan-out に乗って転送量が跳ね上がる。',
+    );
+
+    // 位置側の必須項目は従来のまま。ここへ波形フィールドを足すと、
+    // 旧版の艇が位置を書けなくなり、安全経路が止まる。
+    final livePosition = (scoped['live_positions']
+        as Map<String, dynamic>)[r'$boatId'] as Map<String, dynamic>;
+    expect(
+      livePosition['.validate'] as String,
+      "newData.hasChildren(['s','q','u','o','x','y','z','c','v'])",
+    );
+
+    final trace = traces[r'$boatId'] as Map<String, dynamic>;
+    expect(
+      trace['.validate'] as String,
+      contains("newData.hasChildren(['o','d','b','w','u'])"),
+    );
+    // 位置と同じレート制限。1ストロークに1回を超えて書かせない。
+    expect(
+      (trace['u'] as Map<String, dynamic>)['.validate'] as String,
+      contains('newData.val() >= data.val() + 1700'),
+    );
+    // 12〜65spm の外はストロークとして描けない。
+    final duration =
+        (trace['d'] as Map<String, dynamic>)['.validate'] as String;
+    expect(duration, contains('newData.val() >= 800'));
+    expect(duration, contains('newData.val() <= 5200'));
+    // 巨大payloadを受け取らない。
+    expect(
+      (trace['w'] as Map<String, dynamic>)['.validate'] as String,
+      contains('newData.val().length <= 176'),
+    );
+    expect(
+      (trace[r'$other'] as Map<String, dynamic>)['.validate'],
+      isNot(false),
+      reason: '新版が足したスカラーで旧版の読み取りを壊さない。',
     );
   });
 
@@ -109,17 +169,89 @@ void main() {
         'match /managed_hazards/fixed_obstacle_calibrations_v4',
       ),
     );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v5',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v6',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v7',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v8',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v9',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v10',
+      ),
+    );
     expect(rules, contains('validSharedSafetyCalibrationV3'));
+    expect(rules, contains('validSharedSafetyCalibrationV4'));
+    expect(rules, contains('validSharedSafetyCalibrationV5'));
+    expect(rules, contains('validSharedSafetyCalibrationV6'));
+    expect(rules, contains('validSharedSafetyCalibrationV7'));
+    expect(rules, contains('validSharedSafetyCalibrationV8'));
+    expect(rules, contains('validSharedSafetyCalibrationV9'));
     expect(rules, contains('validScaledOffsetMap'));
     expect(rules, contains('// GENERATED: hazard-allowlist BEGIN'));
     expect(rules, contains('function canPublishTeamSafety(teamId)'));
+    expect(rules, contains('function isTeamAdmin(teamId)'));
+    expect(rules, contains('function validTermsAcceptance(data)'));
+    expect(rules, contains("data.termsVersion == '2026-08-03'"));
+    expect(rules, contains("'adminUid'"));
     expect(rules, contains('validPreviousSafetyCalibration'));
+    expect(rules, contains('validPreviousSafetyCalibrationV4'));
     expect(rules, contains('validDisabledWarningSourceIds'));
+    expect(rules, contains('data.primaryWarningLeadSeconds >= 8.5'));
+    expect(rules, contains('data.advanceWarningLeadSeconds <= 25'));
     expect(rules, contains('request.query.limit <= 100'));
     expect(rules, contains('allow list: if false;'));
     expect(
       rules,
       contains('match /temporary_obstacles/{document=**}'),
+    );
+  });
+
+  test('team management rules rotate invitations and revoke members atomically',
+      () {
+    final rules = File('firestore.rules').readAsStringSync();
+    final rtdb = readDatabaseRules().toString();
+
+    expect(
+      rules,
+      contains('allow delete: if isTeamAdmin(resource.data.teamId)'),
+      reason: '旧招待コードを管理者が無効化できないと、外した利用者が再参加できる。',
+    );
+    expect(
+      rules,
+      contains('request.auth.uid != uid && isTeamAdmin(teamId)'),
+      reason: '管理者は自分以外のmembers/usersを同一batchで削除する必要がある。',
+    );
+    expect(
+      rtdb,
+      contains(
+          r"root.child('team_meta').child($teamId).child('ownerUid').val() === auth.uid"),
+      reason: 'RTDBの位置・艇情報・membership bridgeも管理者が削除できる必要がある。',
     );
   });
 

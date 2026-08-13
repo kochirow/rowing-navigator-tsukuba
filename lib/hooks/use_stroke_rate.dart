@@ -1,38 +1,64 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../config/stroke_rate_config.dart';
+import '../models/shared_stroke_trace.dart';
+import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_rate_analyzer.dart';
 
 /// 加速度センサからストロークレート(SPM)を計測するフック。
 /// [active]かつ[enabled]がtrueの間だけセンサを購読する(電池への配慮)。
 /// SPM不要の運用では[enabled]をfalseにし、加速度センサと解析タイマーを
 /// 完全に停止できる。
-UseStrokeRate useStrokeRate({required bool active, bool enabled = false}) {
+///
+/// 1ストロークの艇速波形も[enabled]と同時に動き出す。**航行中の画面には
+/// 出さない**(2026-08-13に廃止)が、監視端末へ共有する元データなので
+/// 計測は続ける。**1サンプルあたりの追加処理は積分1回**で、リングバッファも
+/// 14秒ぶん(350点)しかない。ここを別スイッチにしても得るものがない。
+UseStrokeRate useStrokeRate({
+  required bool active,
+  bool enabled = false,
+  void Function(String type, Map<String, dynamic> details)? onDiagnosticEvent,
+}) {
   final spm = useState<double?>(null);
-  final sensorSubscription = useState<StreamSubscription?>(null);
+  final motion = useState<RowingMotionMetrics?>(null);
+  final latestStrokeTrace = useState<SharedStrokeTrace?>(null);
+  final accelerationSubscription = useState<StreamSubscription?>(null);
+  final gravitySubscription = useState<StreamSubscription?>(null);
+  final gyroscopeSubscription = useState<StreamSubscription?>(null);
   final updateTimer = useState<Timer?>(null);
-  // 実際のセンサー時刻を含む3軸加速度のリングバッファ。
-  final buffer = useRef<Queue<StrokeRateSample>>(Queue<StrokeRateSample>());
-  final analyzer = StrokeRateAnalyzer();
+  final fusion = useMemoized(RowingMotionFusion.new);
+  final lastLoggedStrokeBoundary = useRef<DateTime?>(null);
+  final lastHealthLogAt = useRef<DateTime?>(null);
+
+  useEffect(() {
+    fusion.setTraceEnabled(active && enabled);
+    if (!(active && enabled)) latestStrokeTrace.value = null;
+    return null;
+  }, [active, enabled]);
 
   useEffect(() {
     if (!active || !enabled) {
-      sensorSubscription.value?.cancel();
-      sensorSubscription.value = null;
+      accelerationSubscription.value?.cancel();
+      gravitySubscription.value?.cancel();
+      gyroscopeSubscription.value?.cancel();
+      accelerationSubscription.value = null;
+      gravitySubscription.value = null;
+      gyroscopeSubscription.value = null;
       updateTimer.value?.cancel();
       updateTimer.value = null;
-      buffer.value.clear();
+      fusion.reset();
       spm.value = null;
+      motion.value = null;
+      latestStrokeTrace.value = null;
       return null;
     }
 
     try {
-      sensorSubscription.value = userAccelerometerEventStream(
+      accelerationSubscription.value = userAccelerometerEventStream(
         samplingPeriod: const Duration(milliseconds: spmSamplingMs),
       ).listen((event) {
         final sample = StrokeRateSample(
@@ -41,35 +67,143 @@ UseStrokeRate useStrokeRate({required bool active, bool enabled = false}) {
           y: event.y,
           z: event.z,
         );
-        buffer.value.addLast(sample);
-        while (buffer.value.isNotEmpty &&
-            sample.timestamp.difference(buffer.value.first.timestamp) >
-                const Duration(seconds: spmWindowSec)) {
-          buffer.value.removeFirst();
-        }
+        fusion.addUserAcceleration(sample);
       }, onError: (e) {
-        debugPrint('Accelerometer error: $e'); // センサ非搭載端末では計測しない
+        debugPrint('Accelerometer error: $e');
+        onDiagnosticEvent?.call('imu_sensor_error', {
+          'sensor': 'user_accelerometer',
+          'error': e.runtimeType.toString(),
+        });
+      });
+      gravitySubscription.value = accelerometerEventStream(
+        samplingPeriod: const Duration(milliseconds: spmSamplingMs),
+      ).listen((event) {
+        fusion.addGravity(RowingGravitySample(
+          timestamp: event.timestamp,
+          x: event.x,
+          y: event.y,
+          z: event.z,
+        ));
+      }, onError: (e) {
+        debugPrint('Raw accelerometer error: $e');
+        onDiagnosticEvent?.call('imu_sensor_error', {
+          'sensor': 'accelerometer',
+          'error': e.runtimeType.toString(),
+        });
+      });
+      gyroscopeSubscription.value = gyroscopeEventStream(
+        samplingPeriod: const Duration(milliseconds: spmSamplingMs),
+      ).listen((event) {
+        fusion.addGyroscope(RowingGyroscopeSample(
+          timestamp: event.timestamp,
+          x: event.x,
+          y: event.y,
+          z: event.z,
+        ));
+      }, onError: (e) {
+        debugPrint('Gyroscope error: $e');
+        onDiagnosticEvent?.call('imu_sensor_error', {
+          'sensor': 'gyroscope',
+          'error': e.runtimeType.toString(),
+        });
       });
     } catch (e) {
-      debugPrint('Accelerometer unavailable: $e');
+      debugPrint('Motion sensor unavailable: $e');
+      onDiagnosticEvent?.call('imu_sensor_error', {
+        'sensor': 'startup',
+        'error': e.runtimeType.toString(),
+      });
     }
 
     updateTimer.value =
         Timer.periodic(const Duration(seconds: spmUpdateIntervalSec), (_) {
-      spm.value = analyzer.estimate(buffer.value.toList())?.spm;
+      final estimate = fusion.analyze();
+      motion.value = estimate;
+      spm.value = estimate?.spm;
+      final now = DateTime.now();
+      if (estimate != null) {
+        final boundary = estimate.latestStrokeBoundary;
+        if (lastLoggedStrokeBoundary.value == null ||
+            boundary.isAfter(lastLoggedStrokeBoundary.value!)) {
+          lastLoggedStrokeBoundary.value = boundary;
+          onDiagnosticEvent?.call(
+            'stroke_motion_analyzed',
+            estimate.toDiagnosticDetails(),
+          );
+          // 新しい1ストロークが確定したときだけ共有候補を作る。
+          // 波形が切り出せなければ null のまま(欠測を捏造しない)。
+          final trace = fusion.buildSharedStrokeTrace(estimate);
+          if (trace != null) latestStrokeTrace.value = trace;
+        }
+      }
+      if (lastHealthLogAt.value == null ||
+          now.difference(lastHealthLogAt.value!) >=
+              const Duration(seconds: 10)) {
+        lastHealthLogAt.value = now;
+        onDiagnosticEvent?.call('imu_fusion_health', {
+          'available': estimate != null,
+          if (estimate != null) ...{
+            'quality': estimate.quality.name,
+            'confidence': estimate.confidence,
+            'accelerometerSamples': estimate.accelerometerSampleCount,
+            'gyroscopeSamples': estimate.gyroscopeSampleCount,
+          },
+        });
+      }
     });
 
     return () {
-      sensorSubscription.value?.cancel();
+      accelerationSubscription.value?.cancel();
+      gravitySubscription.value?.cancel();
+      gyroscopeSubscription.value?.cancel();
       updateTimer.value?.cancel();
     };
   }, [active, enabled]);
 
-  return UseStrokeRate(spm: spm);
+  return UseStrokeRate(
+    spm: spm,
+    motion: motion,
+    latestStrokeTrace: latestStrokeTrace,
+    observeGnss: ({
+      required timestamp,
+      required speedMetersPerSecond,
+      required accuracyMeters,
+      headingDegrees,
+    }) {
+      fusion.observeGnss(
+        timestamp: timestamp,
+        speedMetersPerSecond: speedMetersPerSecond,
+        accuracyMeters: accuracyMeters,
+        headingDegrees: headingDegrees,
+      );
+      final estimate = fusion.analyze(now: timestamp);
+      if (estimate != null) {
+        motion.value = estimate;
+        spm.value = estimate.spm;
+      }
+    },
+  );
 }
 
 class UseStrokeRate {
   final ValueNotifier<double?> spm;
+  final ValueNotifier<RowingMotionMetrics?> motion;
 
-  UseStrokeRate({required this.spm});
+  /// 直近に確定した1ストロークを、監視端末へ送れる形にしたもの。
+  /// **作るだけで送らない。** 送るかどうかは共有の設定が決める。
+  final ValueNotifier<SharedStrokeTrace?> latestStrokeTrace;
+
+  final void Function({
+    required DateTime timestamp,
+    required double speedMetersPerSecond,
+    required double accuracyMeters,
+    double? headingDegrees,
+  }) observeGnss;
+
+  UseStrokeRate({
+    required this.spm,
+    required this.motion,
+    required this.latestStrokeTrace,
+    required this.observeGnss,
+  });
 }

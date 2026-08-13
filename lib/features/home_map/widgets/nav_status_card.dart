@@ -1,42 +1,46 @@
 import 'package:flutter/material.dart';
 
-import '../../../config/navigator_config.dart';
-import '../../../services/gps_health_monitor.dart';
 import '../../../theme/app_theme.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
-/// 情報を3階層に分けて視線誘導を明確にする。
-///   1. 主計器: ペース(/500m)。SPM実験機能がONの時だけレートを併記。
-///   2. 補助: 距離・経過時間。
-///   3. 状態: GPS鮮度・通信/対応水域の能力低下。異常時のみ強調し、正常時は最小。
-/// 一番下に安全上の注記を最小ウェイトで常時表示する。
+/// 計器と補助値だけを表示し、GPS・通信・安全設定などのシステム状態は
+/// 上部の警告や専用画面へ集約する。
+///   1. 主計器: ペース。SPM計測がONの時はレートを併記。
+///   2. 副計器: 経過時間・距離。主計器と同じ「面」で、行いっぱいに置く。
+///
+/// **1ストロークの艇速変化グラフは航行中には出さない(2026-08-13)。**
+/// 漕ぎながら波形を読む場面が実際には無く、上部の一等地を主計器と
+/// 取り合っていた。空いた高さは副計器(経過時間・距離)へ回し、
+/// 14〜15pxの添え物だったものを面のある計器に戻してある。
+/// 波形そのものは監視端末側(`stroke_trace_sheet.dart`)に残っており、
+/// 艇側は従来どおり計測・共有する(陸上で見るぶんには有用なため)。
+/// **戻すときは「漕ぎながら読むのか」を先に確かめること。**
+///
+/// **小型表示の主計器は、カード幅が許す限り大きくする。**
+/// ペース・レート・単位を1つの [FittedBox] に入れて横いっぱいへ拡大する
+/// ので、実寸は幅で決まる(`_paceBaseFontSize` 他は比率)。地図との両立は
+/// 文字を縮めることではなく、**縦向きは横幅9割の中央寄せ・横向きは
+/// 左上寄せで幅を絞ること**と、**カード面を半透明にすること**で取る。
+///
+/// **主計器の大きさは状況で変えない(`deemphasized` を廃止した記録)。**
+///
+/// 元の実装には「連続音が鳴っている間は主計器を縮めて(ペース52→32px、
+/// SPMは非表示)、警告バナーへ視線の一等地を譲る」という意図があった。
+/// これを外したのは、**計器の大きさが状況で変わること自体が読み取りを
+/// 遅らせる**という利用者判断による。漕手が常時見たいのはペースとSPMの
+/// 2つだけで、その2つが警告のたびに動く・消えることのほうが害が大きい。
+///
+/// 警告バナーの表示・音・優先順位は一切変えていないので、警告が伝わらなく
+/// なることはない。**この判断を戻すときは、その理由もここへ書くこと。**
 class NavStatusCard extends StatelessWidget {
   final int paceSeconds;
   final int distanceMeters;
   final int elapsedTimeSeconds;
   final double? spm; // ストロークレート(計測不能時はnull)
   final bool spmMeasurementEnabled; // ユーザーがSPM計測をONにしているか
-  final bool compact; // 横向き用の省スペース表示
-  final bool portraitCompact; // 縦向き用。主計器の可読性を保ちながら左上へ縮小
-  final int? gpsAgeSeconds; // 最後のGPS測位からの経過秒(不明時はnull)
-  final GpsHealthQuality gpsQuality;
-  final bool positionSharingUnavailable;
-  final bool otherBoatReceiveUnavailable;
-  final bool temporaryObstacleReceiveUnavailable;
-  final bool operationalCoverageLimited;
-  final String safetySettingsLabel;
-  final bool safetySettingsNeedsAttention;
-  final int? pendingSharedSafetyRevision;
-  final VoidCallback? onApplyPendingSafetySettings;
-
-  /// 連続音の警告が出ている間、主計器を控えめにする。
-  ///
-  /// 画面でいちばん大きい数字がペースのままだと、一瞬のチラ見で最初に目へ
-  /// 入るのが「2:05 /500m」になる。危険が迫っている間だけ主計器を縮め、
-  /// 警告バナーを視線の一等地へ譲る。距離・時間・状態表示は消さない。
-  final bool deemphasized;
-
+  final bool compact; // 横向き用。左上へ寄せ、幅だけを絞る
+  final bool portraitCompact; // 縦向き用。横幅9割を中央寄せで使う
   const NavStatusCard({
     super.key,
     required this.paceSeconds,
@@ -46,17 +50,6 @@ class NavStatusCard extends StatelessWidget {
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
-    this.gpsAgeSeconds,
-    this.gpsQuality = GpsHealthQuality.good,
-    this.positionSharingUnavailable = false,
-    this.otherBoatReceiveUnavailable = false,
-    this.temporaryObstacleReceiveUnavailable = false,
-    this.operationalCoverageLimited = false,
-    this.safetySettingsLabel = '安全設定: 読込中',
-    this.safetySettingsNeedsAttention = true,
-    this.pendingSharedSafetyRevision,
-    this.onApplyPendingSafetySettings,
-    this.deemphasized = false,
   });
 
   // 数字が変わっても幅が揺れない等幅数字
@@ -94,40 +87,13 @@ class NavStatusCard extends StatelessWidget {
     final onDark = colors.onDark;
     final onDarkSub = onDark.withValues(alpha: 0.7);
 
-    final gpsStale = gpsQuality != GpsHealthQuality.good ||
-        (gpsAgeSeconds != null && gpsAgeSeconds! >= gpsStaleIndicatorSec);
-    final statusLabel = switch (gpsQuality) {
-      GpsHealthQuality.unusable =>
-        gpsAgeSeconds == null ? 'GPS捕捉中' : 'GPS再捕捉中 $gpsAgeSeconds秒前',
-      GpsHealthQuality.degraded => 'GPS精度低下',
-      GpsHealthQuality.good => gpsStale ? 'GPS $gpsAgeSeconds秒前' : null,
-    };
-    final degraded = positionSharingUnavailable ||
-        otherBoatReceiveUnavailable ||
-        temporaryObstacleReceiveUnavailable ||
-        operationalCoverageLimited;
-
-    // SPMは実験機能。OFF時は値だけでなく表示領域ごと取り除く。
+    // OFF時は値だけでなくSPM・艇速分析の表示領域ごと取り除く。
     final spmValueText = spm?.toStringAsFixed(0) ?? '--';
-    final capabilityBadges = <Widget>[
-      if (otherBoatReceiveUnavailable)
-        _CapabilityBadge(label: '他艇受信: 利用不可', color: colors.danger),
-      if (positionSharingUnavailable)
-        _CapabilityBadge(label: '自艇共有: 利用不可', color: colors.danger),
-      if (temporaryObstacleReceiveUnavailable)
-        _CapabilityBadge(label: '臨時危険区域: 受信不可', color: colors.danger),
-      if (operationalCoverageLimited)
-        _CapabilityBadge(label: '固定危険区域: 未検証水域', color: colors.warning),
-    ];
 
     if (compact || portraitCompact) {
       return _buildCompact(
         colors: colors,
         onDark: onDark,
-        onDarkSub: onDarkSub,
-        gpsStale: gpsStale,
-        statusLabel: statusLabel,
-        degraded: degraded,
         spmValueText: spmValueText,
         portrait: portraitCompact,
       );
@@ -140,9 +106,9 @@ class NavStatusCard extends StatelessWidget {
       ),
       padding: EdgeInsets.fromLTRB(
         dimens.space5,
-        dimens.space3,
+        dimens.space4,
         dimens.space5,
-        dimens.space2,
+        dimens.space4,
       ),
       decoration: BoxDecoration(
         color: colors.mapPanelScrim,
@@ -170,7 +136,7 @@ class NavStatusCard extends StatelessWidget {
                       Text(
                         _formatPace(paceSeconds),
                         style: TextStyle(
-                          fontSize: deemphasized ? 32 : 52,
+                          fontSize: 52,
                           height: 1.1,
                           fontWeight: FontWeight.bold,
                           color: onDark,
@@ -185,7 +151,7 @@ class NavStatusCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (spmMeasurementEnabled && !deemphasized) ...[
+              if (spmMeasurementEnabled) ...[
                 SizedBox(width: dimens.space3),
                 Expanded(
                   flex: 2,
@@ -198,17 +164,20 @@ class NavStatusCard extends StatelessWidget {
                       children: [
                         Text(
                           spmValueText,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 44,
                             height: 1.1,
                             fontWeight: FontWeight.bold,
-                            color: onDark,
+                            color: _rateAccent,
                             fontFeatures: _tabularFigures,
                           ),
                         ),
                         Text(
                           ' spm',
-                          style: TextStyle(fontSize: 18, color: onDarkSub),
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: _rateAccent.withValues(alpha: 0.8),
+                          ),
                         ),
                       ],
                     ),
@@ -217,287 +186,389 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
-          SizedBox(height: dimens.space2),
+          SizedBox(height: dimens.space3),
           Divider(height: 1, color: onDark.withValues(alpha: 0.2)),
-          SizedBox(height: dimens.space2),
-          // ---- 第2階層(補助) + 第3階層(状態) ----
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _InlineMetric(
-                      icon: Icons.straighten,
-                      value: _formatDistance(distanceMeters),
-                    ),
-                    SizedBox(height: dimens.space1),
-                    _InlineMetric(
-                      icon: Icons.timer_outlined,
-                      value: _formatTime(elapsedTimeSeconds),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: dimens.space2),
-              // GPSが途絶えたら明示する(気づかないまま航行するのが最も危険)。
-              // 正常時は最小の淡色アイコンのみ。
-              if (statusLabel != null)
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: dimens.space2,
-                    vertical: dimens.space1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.danger,
-                    borderRadius: dimens.borderSm,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        gpsStale ? Icons.gps_off : Icons.cloud_off,
-                        size: 16,
-                        color: onDark,
-                      ),
-                      SizedBox(width: dimens.space1),
-                      Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: onDark,
-                          fontFeatures: _tabularFigures,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Icon(Icons.gps_fixed,
-                    size: 18, color: onDark.withValues(alpha: 0.38)),
-            ],
-          ),
-          // 能力低下バッジ(異常時のみ)
+          SizedBox(height: dimens.space3),
+          // ---- 第2階層(副計器): 経過時間・距離 ----
           //
-          // 固定2列だと「臨時危険区域: 受信不可」のような長い文言が幅に
-          // 収まらず省略され、どの能力が落ちたのか読めなくなる。自然折返しに
-          // して、文言が切れるより行が増えるほうを選ぶ。
-          if (degraded) ...[
-            SizedBox(height: dimens.space2),
-            Wrap(
-              spacing: dimens.space2,
-              runSpacing: dimens.space1,
-              children: capabilityBadges,
-            ),
-          ],
-          SizedBox(height: dimens.space2),
-          // 常時表示して、複数艇の危険形状が揃っているかを出艇中にも
-          // 照合できるようにする。既定値・端末のみ・古いcacheは注意色だが、
-          // 原則1に従い航行自体は止めない。
-          Row(
-            children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 15,
-                color:
-                    safetySettingsNeedsAttention ? colors.warning : onDarkSub,
-              ),
-              SizedBox(width: dimens.space1),
-              Expanded(
-                child: Text(
-                  safetySettingsLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: safetySettingsNeedsAttention
-                        ? colors.warning
-                        : onDarkSub,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (pendingSharedSafetyRevision != null &&
-                  onApplyPendingSafetySettings != null)
-                TextButton(
-                  onPressed: onApplyPendingSafetySettings,
-                  style: TextButton.styleFrom(
-                    foregroundColor: onDark,
-                    minimumSize: const Size(40, 28),
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                  ),
-                  child: const Text('反映'),
-                ),
-            ],
-          ),
-          SizedBox(height: dimens.space2),
-          // 安全注記: 最小ウェイトで常時表示
-          Text(
-            'アプリで共有中の艇のみ検出します・周囲を目視確認',
-            maxLines: 2,
-            style: TextStyle(
-              color: onDarkSub,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompact({
-    required AppColors colors,
-    required Color onDark,
-    required Color onDarkSub,
-    required bool gpsStale,
-    required String? statusLabel,
-    required bool degraded,
-    required String spmValueText,
-    required bool portrait,
-  }) {
-    final statusParts = <String>[
-      if (statusLabel != null) statusLabel,
-      if (otherBoatReceiveUnavailable) '他艇受信不可',
-      if (positionSharingUnavailable) '自艇共有不可',
-      if (temporaryObstacleReceiveUnavailable) '危険区域受信不可',
-      if (operationalCoverageLimited) '未検証水域',
-      safetySettingsLabel,
-    ];
-
-    return Container(
-      key: ValueKey(
-        portrait
-            ? 'nav-status-card-portrait-compact'
-            : 'nav-status-card-compact',
-      ),
-      // 縦向きはSPMを使わない場合に幅そのものをさらに縮める。
-      // 外側8px余白を含む実表示幅は、それぞれ約230/268px。
-      constraints: BoxConstraints(
-        maxWidth: portrait
-            ? spmMeasurementEnabled
-                ? 252
-                : 214
-            : 244,
-      ),
-      margin: const EdgeInsets.all(8),
-      padding: EdgeInsets.symmetric(
-        horizontal: portrait ? 10 : 12,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: colors.mapPanelScrim,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        _formatPace(paceSeconds),
-                        style: TextStyle(
-                          color: onDark,
-                          // 縦向きは従来52pxから少しだけ縮め、主計器の
-                          // 読みやすさを維持する。横向きだけ30pxにする。
-                          // 連続音の警告中はさらに落として警告へ譲る。
-                          fontSize: deemphasized
-                              ? (portrait ? 28 : 22)
-                              : (portrait ? 46 : 30),
-                          height: 1,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: _tabularFigures,
-                        ),
-                      ),
-                      Text(
-                        ' /500m',
-                        style: TextStyle(
-                          color: onDarkSub,
-                          fontSize: portrait ? 13 : 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (spmMeasurementEnabled && !deemphasized) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '$spmValueText spm',
-                  key: const ValueKey('compact-spm'),
-                  style: TextStyle(
-                    color: onDark,
-                    fontSize: portrait ? 18 : 14,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: _tabularFigures,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
+          // 艇速グラフを外したぶんの高さをここへ回している。横に2つ並べ、
+          // 行いっぱいを使う。縦に積んで16pxで書いていた頃は、主計器の
+          // 下に付いた添え物にしか見えず、揺れる艇の上では読めなかった。
           Row(
             children: [
               Expanded(
-                child: _CompactMetric(
+                child: _InlineMetric(
                   icon: Icons.timer_outlined,
                   value: _formatTime(elapsedTimeSeconds),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: dimens.space3),
               Expanded(
-                child: _CompactMetric(
+                child: _InlineMetric(
                   icon: Icons.straighten,
                   value: _formatDistance(distanceMeters),
                 ),
               ),
             ],
           ),
-          if (gpsStale || degraded || safetySettingsNeedsAttention) ...[
-            const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+
+  /// 主計器の基準寸法。**実寸ではなく比率**として使う。
+  ///
+  /// ペース・レート・単位を1つの [FittedBox] へ入れて横幅いっぱいまで
+  /// 拡大するので、実際の文字サイズは「カード幅 ÷ この組の基準幅」で決まる。
+  /// ここの値どうしの比だけが見た目を決める。単位を小さくすると
+  /// そのぶん数字が大きくなる。
+  ///
+  /// レートはペースの約77%(ペース80pxならレート62px)。レートは2桁固定で
+  /// 幅が出ないため、同じ比でも小さく見える。かといって近づけすぎると
+  /// 「主計器が2つある」ように見えて、視線がどちらへ行くか決まらない。
+  ///
+  /// **単位・余白は数字の取り分を削る(2026-08-13)。** 主計器の実寸は
+  /// 「カード幅 ÷ 行全体の基準幅」で決まるので、単位や余白を1px縮めると
+  /// そのぶん数字が大きくなる。艇速グラフを外したときに、縦に空いた高さは
+  /// 主計器の大きさに効かない(横幅で決まる)ため、代わりに単位
+  /// (16→14 / 14→12)・面の余白(12→8)・面の間隔(10→6)を詰めて
+  /// 数字へ回した。**実測で数字は約8%大きくなる。**
+  /// 単位はラベルであって値ではないので、ここは数字を優先してよい。
+  /// ただし読めなくなるまで詰めない(実機で単位が10px台前半になる)。
+  static const double _paceBaseFontSize = 92;
+  static const double _paceUnitBaseFontSize = 14;
+  static const double _spmBaseFontSize = 71;
+  static const double _spmUnitBaseFontSize = 12;
+
+  /// 計器の面どうしの間隔(基準寸法。[FittedBox] が一緒に縮小する)。
+  static const double _plateGap = 6;
+
+  /// 面の左右の余白(基準寸法)。数字の取り分を増やすため詰めてある。
+  static const double _platePaddingHorizontal = 8;
+
+  /// 面の高さ(基準寸法)。
+  ///
+  /// **2枚を同じ高さにする。** ペースとレートは字の大きさが違うので、
+  /// 面を字なりに作ると高さの違う箱が2つ並び、「格の違う2つ」に見える。
+  /// 大きいほうの字([_paceBaseFontSize])に上下の余白を足した値で固定する。
+  ///
+  /// [FittedBox] の中は縦が無制限なので、`CrossAxisAlignment.stretch` では
+  /// 高さを揃えられない(レイアウトが解けない)。実寸で決め打つ。
+  static const double _plateHeight = _paceBaseFontSize + 12;
+
+  /// 面の角丸。
+  static const double _plateRadius = 14;
+
+  /// レート側の面の縁の太さ。[FittedBox] の縮小(実測で約0.75倍)を見込んで、
+  /// 実寸で1.5px程度になる値を置く。
+  static const double _plateBorderWidth = 2;
+
+  /// 副計器(経過時間・距離)の面の高さ。
+  ///
+  /// **主計器の半分強にする。** 同じ高さにすると計器が4つ横並びに見えて、
+  /// ペースとレートがどれか分からなくなる。艇速グラフ(84px)を外して
+  /// 空いた高さのうち、ここへ回すのは面1枚ぶんだけで、残りは地図へ返す。
+  static const double _secondaryPlateHeight = 52;
+
+  /// 副計器の数値・単位・アイコンの寸法。**実寸**(拡大しない)。
+  ///
+  /// 主計器と違って [FittedBox] で行いっぱいへ引き伸ばさない。桁数が
+  /// 変わるたびに(`9:59` → `10:00`、`999 m` → `1.00 km`)大きさが跳ねると、
+  /// 目が毎回そこへ引かれて主計器から離れる。**桁で揺れないことが、
+  /// 数pxの大きさより効く。**
+  static const double _secondaryValueFontSize = 30;
+  static const double _secondaryUnitFontSize = 14;
+  static const double _secondaryIconSize = 20;
+
+  /// 主計器のうち、レートだけに与える色。
+  ///
+  /// ペースとレートは同じ大きさ帯の数字が2つ並ぶので、白一色だと視線が
+  /// どちらへ行くか決まらない。ペースは白のまま(いちばん明るい=主)にし、
+  /// レートはアプリの寒色系の明るい方へ振る。**色は補助チャネルで、
+  /// 位置と単位が主。** 色が読めなくても意味は失われない。
+  ///
+  /// danger/warning/caution/ok は状態を表す色として取ってあるので、
+  /// 計器には使わない(赤い数字は「異常」に見える)。
+  static const Color _rateAccent = Color(0xFF8FD0EA);
+
+  /// レートの字面。ペースの白に対して、明度をできるだけ落とさずに色相で分ける。
+  static const Color _rateValueColor = Color(0xFFD6F2FF);
+
+  /// 計器の面。**ペースもレートも同じ暗い面を使う。**
+  ///
+  /// 初版はレート側を水色 alpha 0.14 で染めていたが、**明るい文字の下に
+  /// 明るい面を敷いたことで対比を自分で削っていた**(実機で「レートが読み
+  /// にくい」)。カードの面の上に重ねた実効色で概算すると、
+  /// ペースの白が約15:1に対してレートは約7:1しかなかった。
+  ///
+  /// 面を暗いほうへ揃えると約12:1まで戻る。**色は面ではなく縁と字が持つ。**
+  /// 屋外の定石(明るい対象を暗い下地へ)にも、これが正しい向きである。
+  /// 面を染め直したくなったら、まず対比を計算すること。
+  static const Color _plateColor = Color(0x8C001E33);
+
+  /// レート側の面の縁。ここだけが背景と別の色系統を持つ。
+  ///
+  /// **枠の色分けは縁が担う。** 面を染めると字の対比を失うが、縁なら
+  /// 字に触れずに「別の計器だ」と言える。
+  static const Color _ratePlateBorderColor = Color(0xE68FD0EA);
+
+  /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
+  static const double _landscapeMaxWidth = 360;
+
+  /// 縦向きカードが使う画面幅の割合。
+  static const double _portraitWidthFactor = 0.9;
+
+  /// **文字の縁取り(輪郭影)はもう持たない(2026-08-05 / 2026-08-13)。**
+  ///
+  /// 半透明のカードに白文字を置いていた頃は、「明るいにじみ + 黒の
+  /// キーライン」の二重縁取りで、明るい地図の上でも暗い水面の上でも
+  /// 対比が残るようにしていた。その後
+  ///   1. カードの面を alpha 0.86 まで濃くして下地を濃紺1種類に確定させ、
+  ///   2. 計器をフィールドごとの面([_MetricPlate] / [_SecondaryPlate])で分けた
+  /// ため、縁取りは対比を作らずに字画の内側を食うだけになった
+  /// (ペース92pxで7.4px)。**対比は面の明度差で作る。**
+  ///
+  /// 最後まで残っていた補助情報(14px)の縁取りは、艇速グラフを外して
+  /// 経過時間・距離を面に載せた時点で下地が確定したので落とした。
+  /// 戻すときは「下地が本当に混在するのか」を先に確かめること。
+  /// 実装は git 履歴(`_outlineShadows`)にある。
+
+  Widget _buildCompact({
+    required AppColors colors,
+    required Color onDark,
+    required String spmValueText,
+    required bool portrait,
+  }) {
+    if (portrait) {
+      // 縦向きは横幅を目一杯(9割)使い、中央へ寄せる。
+      // 親の Align が左寄せでも中央に見えるよう、余白を左右へ等分する。
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final available = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : MediaQuery.sizeOf(context).width;
+          final cardWidth = available * _portraitWidthFactor;
+          final side = ((available - cardWidth) / 2).clamp(0.0, available);
+          return _compactCard(
+            colors: colors,
+            onDark: onDark,
+            spmValueText: spmValueText,
+            portrait: true,
+            width: cardWidth,
+            margin: EdgeInsets.fromLTRB(side, 8, side, 8),
+          );
+        },
+      );
+    }
+    return _compactCard(
+      colors: colors,
+      onDark: onDark,
+      spmValueText: spmValueText,
+      portrait: false,
+      margin: const EdgeInsets.all(8),
+    );
+  }
+
+  Widget _compactCard({
+    required AppColors colors,
+    required Color onDark,
+    required String spmValueText,
+    required bool portrait,
+    required EdgeInsets margin,
+    double? width,
+  }) {
+    // 余白は Container の margin ではなく外側の Padding で持つ。
+    // margin にすると key で取れる大きさに余白が混ざり、
+    // 「カードの幅」を測るテストが実寸を見られなくなる。
+    return Padding(
+      padding: margin,
+      child: Container(
+        key: ValueKey(
+          portrait
+              ? 'nav-status-card-portrait-compact'
+              : 'nav-status-card-compact',
+        ),
+        width: width,
+        constraints: width == null
+            ? const BoxConstraints(maxWidth: _landscapeMaxWidth)
+            : null,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          // 文字の輪郭影(`_outlineShadows`)だけでは、地図の明るい部分
+          // (建物・砂地・白い橋)の上で数字が沈む。実機では日光下で読めない
+          // 場面があったため、面をほぼ不透明まで濃くする。地図はカードの
+          // 外側に十分残っており、ここを透かして得るものはない。
+          color: colors.mapPanelScrim.withValues(alpha: 0.86),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.24),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ペースとレートを1つの FittedBox に入れ、カード幅いっぱいまで
+            // 拡大する。2つを別々に縮小すると、間に無駄な余白が空いたまま
+            // 数字だけが小さいという最悪の組合せになる。
+            //
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _MetricPlate(
+                      plateColor: _plateColor,
+                      borderColor: null,
+                      value: _formatPace(paceSeconds),
+                      valueColor: onDark,
+                      valueFontSize: _paceBaseFontSize,
+                      unit: '/500m',
+                      unitColor: onDark.withValues(alpha: 0.82),
+                      unitFontSize: _paceUnitBaseFontSize,
+                    ),
+                    if (spmMeasurementEnabled) ...[
+                      const SizedBox(width: _plateGap),
+                      _MetricPlate(
+                        plateColor: _plateColor,
+                        borderColor: _ratePlateBorderColor,
+                        value: spmValueText,
+                        valueKey: const ValueKey('compact-spm'),
+                        valueColor: _rateValueColor,
+                        valueFontSize: _spmBaseFontSize,
+                        unit: 'spm',
+                        unitColor: _rateValueColor.withValues(alpha: 0.9),
+                        unitFontSize: _spmUnitBaseFontSize,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            // 副計器(経過時間・距離)。**主計器と同じ「面」に載せる。**
+            //
+            // 艇速グラフを外して空いた高さをここへ回した。以前は14pxの
+            // 文字を1行に並べただけで、面も持たず、グラフを出すと左端の
+            // 58px幅の列へ畳まれていた。ピースの経過時間は漕ぎながら
+            // いちばん見る値の1つなので、面のある計器に戻す。
+            const SizedBox(height: _plateGap),
             Row(
               children: [
-                Icon(
-                  gpsStale ? Icons.gps_off : Icons.warning_amber_rounded,
-                  size: 14,
-                  color: gpsStale ? colors.danger : colors.warning,
-                ),
-                const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
-                    statusParts.join('・'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: onDark,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: _SecondaryPlate(
+                    icon: Icons.timer_outlined,
+                    value: _formatTime(elapsedTimeSeconds),
+                  ),
+                ),
+                const SizedBox(width: _plateGap),
+                Expanded(
+                  child: _SecondaryPlate(
+                    icon: Icons.straighten,
+                    value: _formatDistance(distanceMeters),
                   ),
                 ),
               ],
             ),
           ],
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 主計器1つぶんの「面」。数字と単位を1枚の面へ載せる。
+///
+/// **枠は文字の輪郭ではなく、計器の境界である。** 舶用計器や自転車用
+/// サイクルコンピュータがデータフィールドを箱で区切るのと同じで、
+/// 面が分かれていれば「計器が2つある」ことが色を読まなくても分かる。
+/// 面の色はそのうえで**どちらの計器か**を補助的に伝える。
+///
+/// 単位は数字の右下へベースライン揃えで置く。位置と単位が主で色は従、
+/// という [NavStatusCard._rateAccent] の方針をそのまま引き継ぐ。
+class _MetricPlate extends StatelessWidget {
+  final Color plateColor;
+  final Color? borderColor;
+  final String value;
+  final Key? valueKey;
+  final Color valueColor;
+  final double valueFontSize;
+  final String unit;
+  final Color unitColor;
+  final double unitFontSize;
+
+  const _MetricPlate({
+    required this.plateColor,
+    required this.borderColor,
+    required this.value,
+    required this.valueColor,
+    required this.valueFontSize,
+    required this.unit,
+    required this.unitColor,
+    required this.unitFontSize,
+    this.valueKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = borderColor;
+    return Container(
+      height: NavStatusCard._plateHeight,
+      padding: const EdgeInsets.symmetric(
+        horizontal: NavStatusCard._platePaddingHorizontal,
+      ),
+      decoration: BoxDecoration(
+        color: plateColor,
+        borderRadius: BorderRadius.circular(NavStatusCard._plateRadius),
+        border: border == null
+            ? null
+            : Border.all(
+                color: border,
+                width: NavStatusCard._plateBorderWidth,
+              ),
+      ),
+      // 高さを決め打つので、中身は面の中央へ置く。`widthFactor: 1` で
+      // 横幅だけは字なりに縮める(面の幅が字で決まる)。
+      child: Center(
+        widthFactor: 1,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              key: valueKey,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: valueFontSize,
+                height: 1,
+                fontWeight: FontWeight.bold,
+                fontFeatures: NavStatusCard._tabularFigures,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              unit,
+              style: TextStyle(
+                color: unitColor,
+                fontSize: unitFontSize,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -518,12 +589,14 @@ class _InlineMetric extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: onDark.withValues(alpha: 0.7)),
-          SizedBox(width: context.dimens.space1),
+          Icon(icon, size: 22, color: onDark.withValues(alpha: 0.75)),
+          SizedBox(width: context.dimens.space2),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              // 副計器。主計器(ペース52px・SPM44px)との差は保ちつつ、
+              // 艇速グラフを外して空いた高さのぶんだけ大きくする。
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: onDark,
               fontFeatures: NavStatusCard._tabularFigures,
@@ -535,74 +608,86 @@ class _InlineMetric extends StatelessWidget {
   }
 }
 
-class _CapabilityBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _CapabilityBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final dimens = context.dimens;
-    return ConstrainedBox(
-      // Wrap は子へ無限幅を渡すため、上限が無いと省略も折返しもできずに
-      // カードからはみ出す。1バッジがカード幅を越えないところで頭打ちにする。
-      constraints: const BoxConstraints(maxWidth: 260),
-      child: Container(
-        alignment: Alignment.center,
-        padding: EdgeInsets.symmetric(
-          horizontal: dimens.space2,
-          vertical: dimens.space1,
-        ),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: dimens.borderSm,
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactMetric extends StatelessWidget {
+/// 副計器(経過時間・距離)1つぶんの面。
+///
+/// **主計器と同じ形で、一段小さい。** 面・角丸・等幅数字は [_MetricPlate]
+/// と揃え、高さと文字だけを落とす。同じ形なら「同じ種類のもの(計器)が
+/// 4つある」と読め、大きさの差だけが主従を伝える。
+///
+/// アイコンは種類の印として残す。`0:14` と `120 m` は形でも見分けが
+/// つくが、日光下でちらりと見るときは時計と物差しの形のほうが速い。
+///
+/// 面を持つので、文字の縁取り([NavStatusCard._smallOutlineShadows])は
+/// 掛けない。下地が濃紺1種類に確定していれば縁は字画を食うだけになる、
+/// という主計器と同じ理由。
+class _SecondaryPlate extends StatelessWidget {
   final IconData icon;
   final String value;
 
-  const _CompactMetric({required this.icon, required this.value});
+  const _SecondaryPlate({required this.icon, required this.value});
 
   @override
   Widget build(BuildContext context) {
     final onDark = context.colors.onDark;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: onDark.withValues(alpha: 0.7)),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: TextStyle(
-              color: onDark,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              fontFeatures: NavStatusCard._tabularFigures,
+    // 「12.35 km」の単位側だけを小さくする。数字が主で単位は従。
+    final spaceIndex = value.indexOf(' ');
+    final number = spaceIndex < 0 ? value : value.substring(0, spaceIndex);
+    final unit = spaceIndex < 0 ? null : value.substring(spaceIndex + 1);
+    return Container(
+      height: NavStatusCard._secondaryPlateHeight,
+      padding: const EdgeInsets.symmetric(
+        horizontal: NavStatusCard._platePaddingHorizontal,
+      ),
+      decoration: BoxDecoration(
+        color: NavStatusCard._plateColor,
+        borderRadius: BorderRadius.circular(NavStatusCard._plateRadius),
+      ),
+      // 桁が増えても面から溢れないよう、中身だけを縮める。
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        // アイコンはベースライン揃えの行の外へ出す。文字ではないので
+        // ベースラインを持たず、中へ入れると縦位置が決められない。
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: NavStatusCard._secondaryIconSize,
+              color: onDark.withValues(alpha: 0.75),
             ),
-          ),
+            const SizedBox(width: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  number,
+                  style: TextStyle(
+                    color: onDark,
+                    fontSize: NavStatusCard._secondaryValueFontSize,
+                    height: 1,
+                    fontWeight: FontWeight.bold,
+                    fontFeatures: NavStatusCard._tabularFigures,
+                  ),
+                ),
+                if (unit != null) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    unit,
+                    style: TextStyle(
+                      color: onDark.withValues(alpha: 0.8),
+                      fontSize: NavStatusCard._secondaryUnitFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

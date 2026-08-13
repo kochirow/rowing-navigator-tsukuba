@@ -24,11 +24,26 @@ class StrokeRateEstimate {
   final int strokeCount;
   final double intervalCoefficientOfVariation;
 
+  /// 艇の長軸として推定した端末座標系の単位ベクトル。
+  /// 符号は、ストローク境界（キャッチ候補）が負の加速度になる向きへ揃える。
+  final double longitudinalAxisX;
+  final double longitudinalAxisY;
+  final double longitudinalAxisZ;
+
+  /// 直近2つの完全なストローク境界。艇速曲線の位相合わせに使う。
+  final DateTime previousStrokeBoundary;
+  final DateTime latestStrokeBoundary;
+
   const StrokeRateEstimate({
     required this.spm,
     required this.confidence,
     required this.strokeCount,
     required this.intervalCoefficientOfVariation,
+    required this.longitudinalAxisX,
+    required this.longitudinalAxisY,
+    required this.longitudinalAxisZ,
+    required this.previousStrokeBoundary,
+    required this.latestStrokeBoundary,
   });
 }
 
@@ -116,6 +131,12 @@ class StrokeRateAnalyzer {
       confidence: best.confidence,
       strokeCount: best.strokeCount,
       intervalCoefficientOfVariation: best.coefficientOfVariation,
+      longitudinalAxisX: direction.x * (best.positive ? -1 : 1),
+      longitudinalAxisY: direction.y * (best.positive ? -1 : 1),
+      longitudinalAxisZ: direction.z * (best.positive ? -1 : 1),
+      previousStrokeBoundary:
+          valid[best.extremaIndices[best.extremaIndices.length - 2]].timestamp,
+      latestStrokeBoundary: valid[best.extremaIndices.last].timestamp,
     );
   }
 
@@ -281,6 +302,8 @@ class StrokeRateAnalyzer {
       confidence: confidence,
       strokeCount: extrema.length,
       coefficientOfVariation: coefficientOfVariation,
+      positive: positive,
+      extremaIndices: List<int>.unmodifiable(extrema),
     );
   }
 
@@ -335,12 +358,16 @@ class _Candidate {
   final double confidence;
   final int strokeCount;
   final double coefficientOfVariation;
+  final bool positive;
+  final List<int> extremaIndices;
 
   const _Candidate({
     required this.spm,
     required this.confidence,
     required this.strokeCount,
     required this.coefficientOfVariation,
+    required this.positive,
+    required this.extremaIndices,
   });
 
   double get score => confidence - coefficientOfVariation * 0.1;

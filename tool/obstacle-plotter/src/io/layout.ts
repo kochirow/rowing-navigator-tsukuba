@@ -11,6 +11,10 @@ export function exportLayout(project: Project): string {
       description: object.description,
       verificationStatus: object.verificationStatus,
       style: object.style,
+      ...(object.bridgeId ? { bridgeId: object.bridgeId } : {}),
+      ...(object.centerlineId ? { centerlineId: object.centerlineId } : {}),
+      ...(object.laneDirection ? { direction: object.laneDirection } : {}),
+      ...(object.laneLeg ? { leg: object.laneLeg } : {}),
     }])),
   };
   return `${JSON.stringify(layout, null, 2)}\n`;

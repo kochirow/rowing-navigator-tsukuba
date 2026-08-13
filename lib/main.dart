@@ -9,9 +9,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:rowing_navigator/screens/app_entry_gate.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/widgets/app_state_views.dart';
+import 'package:rowing_navigator/services/safety_defaults_migration_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SafetyDefaultsMigrationService().migrateIfNeeded();
   runApp(const ProviderScope(child: App()));
 }
 

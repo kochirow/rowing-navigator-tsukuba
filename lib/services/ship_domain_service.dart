@@ -120,11 +120,19 @@ class ShipDomainService {
   }
 
   /// 実効的な排他領域の外接円半径 [m]。低速時の横拡張を含む。
-  static double effectiveExclusiveRadius(Boat boat, {bool? headingReliable}) =>
+  static double effectiveExclusiveRadius(
+    Boat boat, {
+    bool? headingReliable,
+    double positionSetBoundingRadiusMeters = 0,
+  }) =>
       boundingRadius(
         effectiveParamsFor(boat, headingReliable: headingReliable)
             .exclusiveParam,
-      );
+      ) +
+      (positionSetBoundingRadiusMeters.isFinite &&
+              positionSetBoundingRadiusMeters > 0
+          ? positionSetBoundingRadiusMeters
+          : 0);
 
   /// 艇の船体領域・排他領域を返す。
   ///

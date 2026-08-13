@@ -7,6 +7,28 @@
 /// 送信間隔を伸ばしても静的危険区域への警告には影響しない。
 const positionUpdateInterval = 1;
 
+/// 安全評価・記録へ渡すGNSS fix同士の最小間隔 [ms]。
+///
+/// 到着時刻ではなくfix自身の時刻に対する重複除去である。iOSが複数の
+/// 1Hz fixを同じイベントループでまとめて渡しても、新しいfixを捨てない。
+/// 700msは、1Hzの時計丸めジッタを許しつつ同一fixの重複を防ぐ値である。
+const positionMinimumFixIntervalMs = 700;
+
+/// 端末時計が逆行したfixを棄却し続ける最長時間。
+/// この時間を超えて同じ方向の逆行が続く場合は、時計変更後も測位処理を
+/// 永久停止しないよう、fix時刻の基準を新しい時計へ付け替える。
+const fixTimestampRegressionReset = Duration(seconds: 10);
+
+/// iOSのCLLocationManagerで距離による配信間引きを無効にする値。
+/// geolocator_appleはこの値をネイティブ層へそのまま渡す。
+const iosDistanceFilterNone = -1;
+
+/// 安全判定に使う位置解。advancedは既存Kalman、conservativeは生fixを
+/// 代表点として保つ集合値解である。Stage 2ではconservativeを既定にする。
+enum PrimarySolution { conservative, advanced }
+
+const primarySolution = PrimarySolution.conservative;
+
 // ---------------- GPS品質・死活監視 ----------------
 
 /// 初回測位を待つ上限時間 [秒]。屋内やGPS無効時の無限待ちを防ぐ。
@@ -96,6 +118,52 @@ const gpsStaleIndicatorSec = 5;
 /// GPS品質がunusableになる10秒より前に再購読を始め、カルマン判定経路は
 /// そのまま維持する。
 const gpsStreamSilenceRecoverySeconds = 8;
+
+/// GNSS stream が黙っている間、`getCurrentPosition` で測位を取りに行くまでの
+/// 待ち時間。
+///
+/// **なぜ「待つ」ではなく「取りに行く」のか。**
+///
+/// 2026-08-05 の実機ログ2台(iPhone15,4 / iPhone17,5)で、stream の無通知に
+/// 対する one-shot 復旧は **290/290 回・251/251 回すべて成功**していた。
+/// 所要は中央値 2〜4ms、得られた測位の鮮度は中央値 42〜64ms。
+///
+/// つまり **OS は常に新鮮な測位を持っていて、stream だけが配信していない。**
+/// 端末2機種で測位間隔の中央値が 2003ms / 2000ms と一致しており、
+/// 個体差でも受信環境でもない。停止に近づくほど間隔が伸びる
+/// (2 → 3 → 4 → 6 → 8秒)ことから、OS 側の配信間引きと考えられる。
+///
+/// この状況で「無通知とみなす時間」を延ばすのは逆効果である。延ばした分だけ
+/// 確実に取れる測位を捨てることになる(実測で欠測が21〜33%増える見積り)。
+/// 待つのをやめて、こちらから取りに行く。
+///
+/// 2秒は [gpsDeadReckoningStartAfter] と同じで、「推測航法で埋め始める前に、
+/// まず本物を取りに行く」という順序を作る。
+const gpsPositionPollAfterSilence = Duration(seconds: 2);
+
+/// 測位ポーリングの最短間隔。
+///
+/// stream が完全に黙っている間はこの間隔で取りに行く。1秒はアプリの
+/// 安全評価周期と同じで、これ以上速くしても評価が消化できない。
+const gpsPositionPollMinimumInterval = Duration(seconds: 1);
+
+/// 測位ポーリング1回の上限時間。
+///
+/// 実測は 2〜4ms なので、これを超えるのは異常である。ポーリングの遅延で
+/// 1秒周期のウォッチドッグを詰まらせない。
+const gpsPositionPollTimeout = Duration(seconds: 3);
+
+/// 1Hzの測位がこの間来なければ、短時間の推測航法を開始する。
+/// 単発の1秒ジッタで予測と実測を往復しない一方、GPS品質表示が
+/// degradedになる3秒より前から安全判定の穴を埋める。
+const gpsDeadReckoningStartAfter = Duration(seconds: 2);
+
+/// GNSS欠測中にKalman状態の時間予測だけで警告判定を続ける上限。
+///
+/// 巡航5m/sで5秒=25m進む。これ以上は操舵・回頭を観測できず、
+/// 古い速度の外挿が危険になるため停止する。不確実性は毎秒
+/// 拡大し、この推測点は生GPS記録・位置共有には使わない。
+const gpsDeadReckoningMaximumDuration = Duration(seconds: 5);
 
 /// 1Hz記録を約10時間まで保持する。異常な長時間セッションで
 /// メモリが無制限に増え、警告処理を圧迫することを防ぐ。

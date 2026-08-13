@@ -6,9 +6,9 @@ import '../../../theme/hazard_palette.dart';
 /// activeな警告を画面上部にカテゴリ色付きで並べる。
 ///
 /// 表示は2段構え。
-/// - 1行目: 対象(「岸」「他艇」)。走りながら一瞥で読める大きさ。
-/// - 2行目: 方向と残り秒数(「右 5秒」)。漕手は後ろ向きで前を見ていないため、
-///   振り向く側が分からないと判断に時間を失う。音を増やさずに足せる情報。
+/// - 1行目: 対象(「岸」「他艇」)。「〜に接近」とは書かない。接近したから
+///   鳴っているので、対象名だけで用は足りる。
+/// - 2行目: 残り秒数(「5秒」)だけ。**方向は出さない**(下記 `_detailLabel`)。
 ///
 /// 切迫度([NavigationWarning.urgency])で見た目を変える。風・後ろ向き・
 /// イヤホン無しでは音が届かないことがあり、そのとき「連続音が鳴っている」のか
@@ -80,11 +80,11 @@ class SafetyBanner extends StatelessWidget {
     if (activeWarnings.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       child: Wrap(
         alignment: WrapAlignment.center,
-        spacing: 6,
-        runSpacing: 5,
+        spacing: 5,
+        runSpacing: 4,
         children: [
           for (final group in _groupByCategory(activeWarnings))
             _WarningChip(warning: group.representative, count: group.count),
@@ -123,19 +123,22 @@ class _WarningChip extends StatelessWidget {
         ? const Color(0xFF241A1A)
         : Colors.white;
     final borderWidth = switch (urgency) {
-      WarningDisplayUrgency.imminent => 3.0,
-      WarningDisplayUrgency.action => 2.0,
-      WarningDisplayUrgency.monitoring => 1.5,
+      WarningDisplayUrgency.imminent => 2.5,
+      WarningDisplayUrgency.action => 1.8,
+      WarningDisplayUrgency.monitoring => 1.2,
     };
-    final labelSize = urgency == WarningDisplayUrgency.imminent ? 26.0 : 22.0;
-    final minHeight = urgency == WarningDisplayUrgency.imminent ? 46.0 : 38.0;
+    // **チップは小さくてよい。** 漕いでいる最中に文字は読まない(読めない)。
+    // 読むのは止まってからで、そのときは近づいて見られる。走行中に必要な
+    // のは「何かが出た」ことに気づくことで、それは色・枠・脈動が担う。
+    // 従来の 26/22px から約3割落とし、その分を計器と地図へ返す。
+    final labelSize = urgency == WarningDisplayUrgency.imminent ? 17.0 : 15.0;
+    final minHeight = urgency == WarningDisplayUrgency.imminent ? 30.0 : 25.0;
     final seconds = warning.secondsUntilDanger;
     final predictionText = seconds == null ? null : '約$seconds秒後に危険';
     final displayLabel = _displayLabel(warning);
     final detail = _detailLabel(warning);
     final semanticParts = [
       warning.title,
-      if (warning.directionLabel != null) warning.directionLabel!,
       if (predictionText != null) predictionText,
       if (count > 1) '$count件',
       if (warning.message.isNotEmpty) warning.message,
@@ -151,10 +154,10 @@ class _WarningChip extends StatelessWidget {
         child: Container(
           key: ValueKey('safety-warning-${warning.key}'),
           constraints: BoxConstraints(minHeight: minHeight),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(7),
             border: Border.all(
               color: isQuiet ? baseColor.withValues(alpha: 0.75) : Colors.white,
               width: borderWidth,
@@ -162,7 +165,7 @@ class _WarningChip extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.24),
-                blurRadius: 4,
+                blurRadius: 3,
                 offset: const Offset(0, 1),
               ),
             ],
@@ -175,9 +178,9 @@ class _WarningChip extends StatelessWidget {
                     ? Icons.schedule_rounded
                     : Icons.warning_amber_rounded,
                 color: foreground,
-                size: 18,
+                size: 13,
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +207,7 @@ class _WarningChip extends StatelessWidget {
                           '×$count',
                           style: TextStyle(
                             color: foreground,
-                            fontSize: 13,
+                            fontSize: 11,
                             height: 1.05,
                             fontWeight: FontWeight.w700,
                           ),
@@ -219,7 +222,7 @@ class _WarningChip extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: foreground,
-                        fontSize: 14,
+                        fontSize: 11,
                         height: 1.1,
                         fontWeight: FontWeight.w700,
                       ),
@@ -233,14 +236,15 @@ class _WarningChip extends StatelessWidget {
     );
   }
 
-  /// 「右 5秒」。方向も秒数も無ければ2行目を出さない。
-  static String? _detailLabel(NavigationWarning warning) {
-    final parts = <String>[
-      if (warning.directionLabel != null) warning.directionLabel!,
-      if (warning.secondsUntilDanger != null) '${warning.secondsUntilDanger}秒',
-    ];
-    return parts.isEmpty ? null : parts.join(' ');
-  }
+  /// 残り秒数だけ。秒数が無ければ2行目を出さない。
+  ///
+  /// **方向は出さない。** 漕手は後ろ向きで、地図も進行方位に合わせて回る。
+  /// そこへ「右」「前方」と文字で足しても、どちらの右かを翻訳する手間が
+  /// 増えるだけで、一瞥では読めない。振り向く先は地図と目視で決める。
+  static String? _detailLabel(NavigationWarning warning) =>
+      warning.secondsUntilDanger == null
+          ? null
+          : '${warning.secondsUntilDanger}秒';
 
   static String _displayLabel(NavigationWarning warning) =>
       switch (warning.category) {
@@ -249,21 +253,33 @@ class _WarningChip extends StatelessWidget {
         'bridgePier' => '橋脚',
         'island' => '中洲',
         'driftwood' => '流木',
+        'pile' => '杭',
         'other_boat' => '他艇',
         'curve' => 'カーブ',
         'reverse' => '逆走',
         'testZone' => 'テスト',
+        'generic' => '危険区域',
         'gps_unavailable' => 'GPS',
         'position_sharing_unavailable' => '位置共有',
         'other_boat_receive_unavailable' => '他艇受信',
         'other_boat_track_lost' => '他艇途絶',
         'static_profile_unavailable' => '危険区域',
-        'outside_operational_coverage' => '水域外',
-        'operational_coverage_unverified' => '未検証',
         'audio_unavailable' => '警告音',
         'pipeline_unresponsive' => '警告停止',
-        _ => warning.title,
+        // 未知の種別は title を出すしかないが、「〜に接近」の語尾は落とす。
+        // 接近したから鳴っているのであって、対象名だけで用は足りる。
+        _ => _withoutApproachSuffix(warning.title),
       };
+
+  /// 「岸に接近」→「岸」。語尾が無ければそのまま返す。
+  static String _withoutApproachSuffix(String title) {
+    for (final suffix in const ['に接近', 'に注意', 'に接近中']) {
+      if (title.endsWith(suffix) && title.length > suffix.length) {
+        return title.substring(0, title.length - suffix.length);
+      }
+    }
+    return title;
+  }
 }
 
 /// 連続音が鳴っている警告のまわりだけ、白い縁を1秒周期で明滅させる。
@@ -334,9 +350,9 @@ class _PulseFrameState extends State<_PulseFrame>
       animation: _controller,
       child: widget.child,
       builder: (context, child) => Container(
-        padding: const EdgeInsets.all(3),
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(9),
           color:
               Colors.white.withValues(alpha: 0.15 + 0.55 * _controller.value),
         ),

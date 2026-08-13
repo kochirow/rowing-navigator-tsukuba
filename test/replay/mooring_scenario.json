@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "description": "匿名化した桟橋静音 replay。座標はテスト用の固定点で、実機ログの艇ID・航跡を含まない。",
+  "mooringAreas": [
+    {
+      "points": [
+        {"lat": 36.0830, "lng": 140.2140},
+        {"lat": 36.0830, "lng": 140.2150},
+        {"lat": 36.0836, "lng": 140.2150},
+        {"lat": 36.0836, "lng": 140.2140}
+      ]
+    }
+  ],
+  "otherBoats": [
+    {
+      "boatId": "scenario-stationary",
+      "boatType": "r_1x",
+      "case": "both_low_speed_silent",
+      "samples": [
+        {"elapsedMs": 7493000, "lat": 36.0833, "lng": 140.2145, "heading": 90, "speed": 0.2},
+        {"elapsedMs": 7593000, "lat": 36.0833, "lng": 140.2145, "heading": 90, "speed": 0.2}
+      ]
+    },
+    {
+      "boatId": "scenario-moving",
+      "boatType": "r_1x",
+      "case": "other_boat_moving_audible",
+      "samples": [
+        {"elapsedMs": 7595000, "lat": 36.0833, "lng": 140.2145, "heading": 90, "speed": 2.0},
+        {"elapsedMs": 7695000, "lat": 36.0833, "lng": 140.2145, "heading": 90, "speed": 2.0}
+      ]
+    },
+    {
+      "boatId": "scenario-unknown-speed",
+      "boatType": "r_1x",
+      "case": "other_boat_speed_unknown_audible",
+      "samples": [
+        {"elapsedMs": 7697000, "lat": 36.0833, "lng": 140.2145, "heading": 90},
+        {"elapsedMs": 7797000, "lat": 36.0833, "lng": 140.2145, "heading": 90}
+      ]
+    }
+  ]
+}

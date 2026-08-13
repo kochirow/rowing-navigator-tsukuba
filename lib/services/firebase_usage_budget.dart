@@ -41,6 +41,40 @@ class FirebaseUsageBudget {
       monthlyPositionDownloadBytes(intervalSeconds: intervalSeconds) ~/
       practicesPerMonth;
 
+  /// 1ストロークの艇速波形1件ぶんの上限バイト数。
+  ///
+  /// base64波形64文字 + 10個ほどの整数フィールド + キー名で実測160前後。
+  /// RTDBのフレーム overhead を見込んで保証側へ切り上げる。
+  static const maxStrokeTraceBytes = 300;
+
+  /// 監視端末が同時に開ける艇速変化グラフの数。
+  ///
+  /// シートは1枚しか開けないので実際は1。監視端末が2台ある・切替を
+  /// 繰り返す運用を見込んで4倍で見積もる。
+  static const concurrentWatchedStrokeTraces = 4;
+
+  /// 艇速波形のRTDB download [バイト/月]。
+  ///
+  /// **位置と決定的に違うのは fan-out が無いこと。** 位置は全12艇が
+  /// 全12艇ぶんを受け取るので 144倍で効くが、波形は監視端末が開いた
+  /// 艇のぶんしか転送されない。ここへ 12x12 が現れたら設計を誤っている。
+  static int monthlyStrokeTraceDownloadBytes({
+    required int strokeIntervalSeconds,
+    int watchedBoats = concurrentWatchedStrokeTraces,
+  }) {
+    if (strokeIntervalSeconds <= 0) {
+      throw ArgumentError.value(strokeIntervalSeconds, 'strokeIntervalSeconds');
+    }
+    if (watchedBoats < 0) {
+      throw ArgumentError.value(watchedBoats, 'watchedBoats');
+    }
+    final strokesPerPractice = (practiceSeconds / strokeIntervalSeconds).ceil();
+    return strokesPerPractice *
+        watchedBoats *
+        practicesPerMonth *
+        maxStrokeTraceBytes;
+  }
+
   static int firestoreReadsPerPracticeDay({
     int temporaryObstacleCount = maxTemporaryObstaclesPerSync,
   }) {

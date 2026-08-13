@@ -80,6 +80,10 @@ void main() {
       diagnosticMetadata: SessionDiagnosticMetadata(
         appVersion: '1.0.0',
         buildNumber: '1',
+        gitCommitSha: '0123456789abcdef',
+        buildTimestampUtc: '2026-08-13T00:00:00Z',
+        buildFlavor: 'production',
+        operatingSystemVersion: 'iOS 19.0',
         platform: 'ios',
         hazardProfileVersion: 3,
         hazardProfileSha256: 'abc',
@@ -150,10 +154,25 @@ void main() {
     expect(files['manifest.json'], contains('fixedObstacleCalibrations'));
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
-    expect(manifest['diagnosticPackageSchemaVersion'], 3);
-    expect(manifest['diagnosticCatalogVersion'], 1);
+    expect(manifest['diagnosticPackageSchemaVersion'], 5);
+    expect(manifest['diagnosticCatalogVersion'], 5);
+    expect(manifest['app'], containsPair('gitCommitSha', '0123456789abcdef'));
+    expect(manifest['app'], containsPair('buildFlavor', 'production'));
+    expect(
+      manifest['device'],
+      containsPair('operatingSystemVersion', 'iOS 19.0'),
+    );
     expect(files['diagnostic_event_catalog.json'],
         contains('H1_AUDIO_APP_COMPETITION'));
+    expect(
+      files['diagnostic_event_catalog.json'],
+      contains('gps_dead_reckoning_prediction'),
+    );
+    expect(
+      files['diagnostic_event_catalog.json'],
+      contains('H7_IMU_FUSION_AND_STROKE_MOTION'),
+    );
+    expect(files['track.csv'], contains('raw_gnss_speed_mps'));
     final profile =
         Map<String, dynamic>.from(manifest['fixedObstacleProfile'] as Map);
     expect(profile['sha256'], 'abc');

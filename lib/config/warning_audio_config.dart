@@ -85,6 +85,7 @@ const warningAudioAssets = <String>[
   'audio/bridge_pier_warning.mp3',
   'audio/island_warning.mp3',
   'audio/driftwood_warning.mp3',
+  'audio/pile_warning.mp3',
   'audio/curve_warning.mp3',
   'audio/reverse_warning.mp3',
   'audio/test_warning.mp3',
@@ -120,6 +121,8 @@ String defaultWarningAudioAssetFor(StaticObstacleKind? kind) {
       return 'audio/island_warning.mp3';
     case StaticObstacleKind.driftwood:
       return 'audio/driftwood_warning.mp3';
+    case StaticObstacleKind.pile:
+      return 'audio/pile_warning.mp3';
     case StaticObstacleKind.curve:
       return 'audio/curve_warning.mp3';
     case StaticObstacleKind.reverse:
@@ -131,3 +134,13 @@ String defaultWarningAudioAssetFor(StaticObstacleKind? kind) {
       return genericWarningAudioAsset;
   }
 }
+
+/// 端末の出力音量がこれを下回ったら「小さい」とみなす [0.0〜1.0]。
+///
+/// 2026-08-06 実機ログ: 8+ に載せた1台が全期間 0.30 固定だった
+/// (他3台は 1.00)。読み上げが実際に聞こえたかはログからは判定できないが、
+/// `audio_route_snapshot.outputVolume` は毎回取れている。
+///
+/// **画面へ出すだけにする。** 音量が小さいことを音で知らせるのは矛盾している。
+/// 閾値は暫定で、実機で聞こえ方を確認できたら調整する。
+const audioLowOutputVolumeThreshold = 0.5;

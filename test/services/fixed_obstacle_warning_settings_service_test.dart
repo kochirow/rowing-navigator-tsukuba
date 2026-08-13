@@ -10,10 +10,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('初期状態では島2（上流）だけを警告対象から外す', () async {
+  test('初期状態では旧ポリゴン2件を警告対象から外す', () async {
     final settings = await FixedObstacleWarningSettingsService().load();
 
     expect(settings.isEnabled('island_upstream'), isFalse);
+    expect(settings.isEnabled('reverse_main_channel'), isFalse);
     expect(settings.isEnabled('island_sakuragawa_bridge'), isTrue);
     expect(settings.isEnabled('bridge_suigo'), isTrue);
   });
@@ -29,6 +30,7 @@ void main() {
     final restored = await service.load();
 
     expect(restored.isEnabled('island_upstream'), isFalse);
+    expect(restored.isEnabled('reverse_main_channel'), isFalse);
     expect(restored.isEnabled('bridge_suigo'), isFalse);
   });
 
@@ -40,6 +42,7 @@ void main() {
     final settings = await FixedObstacleWarningSettingsService().load();
 
     expect(settings.isEnabled('island_upstream'), isFalse);
+    expect(settings.isEnabled('reverse_main_channel'), isFalse);
     expect(settings.isEnabled('bridge_suigo'), isTrue);
   });
 }

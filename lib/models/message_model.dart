@@ -1,6 +1,8 @@
 import '../types/boat_type.dart';
 import '../config/protocol_config.dart';
 import '../config/display_name_config.dart';
+import 'remote_boat_message.dart';
+import 'presentation_state_protocol.dart';
 
 class Message {
   static const currentProtocolVersion = currentPositionProtocolVersion;
@@ -95,6 +97,74 @@ class Message {
   String? get presentationState => _presentationState;
   String? get safetyRunMode => _safetyRunMode;
   bool get audioSuppressedAshore => _audioSuppressedAshore;
+
+  /// RTDB Rulesの位置payload契約に反する最初の項目。
+  ///
+  /// サーバーの `permission-denied` は認証失敗とは限らない。
+  /// 例えば精度1026.5mは端末内のGPS判定には使えるが、
+  /// Rulesの `z <= 1000` に反する。不確かさを1000mへ切り下げるのは
+  /// 危険なので、送信側がこのfixを送らず次の正常fixを待つ。
+  String? get compactRtdbContractViolation {
+    final now = DateTime.now().toUtc();
+    final observedAt = _timestamp.toUtc();
+    if (_sessionId.isEmpty || _sessionId.length > 128) return 'sessionId';
+    if (_sequence < 0 || _sequence > RemoteBoatMessage.maxSafeInteger) {
+      return 'sequence';
+    }
+    if (!_lat.isFinite || _lat < -90 || _lat > 90) return 'latitude';
+    if (!_lng.isFinite || _lng < -180 || _lng > 180) return 'longitude';
+    if (!_heading.isFinite) return 'course';
+    if (!_speed.isFinite ||
+        _speed < 0 ||
+        _speed > RemoteBoatMessage.maxSpeedMetersPerSecond) {
+      return 'speed';
+    }
+    if (observedAt.isAfter(now.add(const Duration(seconds: 5))) ||
+        observedAt.isBefore(now.subtract(const Duration(seconds: 60)))) {
+      return 'observedAt';
+    }
+    if (_accuracy == null ||
+        !_accuracy!.isFinite ||
+        _accuracy! <= 0 ||
+        _accuracy! > RemoteBoatMessage.maxAccuracyMeters) {
+      return 'accuracy';
+    }
+    if (_battery != null && (_battery! < 0 || _battery! > 100)) {
+      return 'battery';
+    }
+    if (_courseAccuracy != null &&
+        (!_courseAccuracy!.isFinite ||
+            _courseAccuracy! < 0 ||
+            _courseAccuracy! > 180)) {
+      return 'courseAccuracy';
+    }
+    if (_speedAccuracy != null &&
+        (!_speedAccuracy!.isFinite ||
+            _speedAccuracy! < 0 ||
+            _speedAccuracy! > 30)) {
+      return 'speedAccuracy';
+    }
+    if (_presentationState != null &&
+        !PresentationStateProtocol.isValid(_presentationState!)) {
+      return 'presentationState';
+    }
+    if (_safetyRunMode != null &&
+        !RegExp(r'^[fdu]$').hasMatch(_safetyRunMode!)) {
+      return 'safetyRunMode';
+    }
+    if (_displayName.isEmpty || _displayName.length > maxDisplayNameLength) {
+      return 'displayName';
+    }
+    if (_protocolVersion < 1 ||
+        _protocolVersion > RemoteBoatMessage.maxSafeInteger) {
+      return 'protocolVersion';
+    }
+    if (_appVersion.isEmpty || _appVersion.length > 64) return 'appVersion';
+    if (_profileVersion.isEmpty || _profileVersion.length > 128) {
+      return 'profileVersion';
+    }
+    return null;
+  }
 
   static BoatType _parseBoatType(dynamic value) {
     return BoatType.values.any((elm) => elm.toString().split('.').last == value)

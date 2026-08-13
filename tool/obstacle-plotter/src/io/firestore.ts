@@ -70,15 +70,21 @@ export function asCoordinate(value: GeoPoint): Coordinate { return { lat: value.
 export async function readTeamSafety(teamId: string): Promise<FirestoreImport> {
   const db = await database();
   const root = `teams/${teamId}`;
-  // 最新v4を優先し、存在しない間だけ旧文書を読む。いずれにも書き込まない。
-  const v4 = await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v4`));
-  const v3 = v4.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v3`));
-  const v2 = v4.exists() || v3?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v2`));
+  // 最新v10を優先し、存在しない間だけ旧文書を読む。いずれにも書き込まない。
+  const v10 = await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v10`));
+  const v9 = v10.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v9`));
+  const v8 = v10.exists() || v9?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v8`));
+  const v7 = v10.exists() || v9?.exists() || v8?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v7`));
+  const v6 = v10.exists() || v9?.exists() || v8?.exists() || v7?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v6`));
+  const v5 = v10.exists() || v9?.exists() || v8?.exists() || v7?.exists() || v6?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v5`));
+  const v4 = v10.exists() || v9?.exists() || v8?.exists() || v7?.exists() || v6?.exists() || v5?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v4`));
+  const v3 = v10.exists() || v9?.exists() || v8?.exists() || v7?.exists() || v6?.exists() || v5?.exists() || v4?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v3`));
+  const v2 = v10.exists() || v9?.exists() || v8?.exists() || v7?.exists() || v6?.exists() || v5?.exists() || v4?.exists() || v3?.exists() ? null : await getDoc(doc(db, `${root}/managed_hazards/fixed_obstacle_calibrations_v2`));
   const driftwood = await getDoc(doc(db, `${root}/managed_hazards/fixed_driftwood_01`));
   const temporary = await getDocs(query(collection(db, `${root}/temporary_obstacles`), limit(100)));
   return {
     teamId,
-    calibration: v4.exists() ? v4.data() : v3?.exists() ? v3.data() : v2?.exists() ? v2.data() : null,
+    calibration: v10.exists() ? v10.data() : v9?.exists() ? v9.data() : v8?.exists() ? v8.data() : v7?.exists() ? v7.data() : v6?.exists() ? v6.data() : v5?.exists() ? v5.data() : v4?.exists() ? v4.data() : v3?.exists() ? v3.data() : v2?.exists() ? v2.data() : null,
     managedDriftwood: driftwood.exists() ? driftwood.data() : null,
     temporaryObstacles: temporary.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
   };

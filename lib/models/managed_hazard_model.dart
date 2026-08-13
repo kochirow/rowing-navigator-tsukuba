@@ -9,6 +9,10 @@ import '../utils/metric_polygon_buffer.dart';
 /// 固定流木の同梱形状に適用する、小さな永続更新値。
 class ManagedHazardState {
   static const documentId = 'fixed_driftwood_01';
+
+  /// 共有校正を持つ、従来からの固定流木のプロフィールID。
+  /// 追加の流木は通常の基準線として扱い、この1件の校正を誤適用しない。
+  static const sourceId = 'driftwood_estuary';
   static const kind = 'fixed_driftwood';
   static const baseShapeVersion = 1;
   static const minScale = 0.5;

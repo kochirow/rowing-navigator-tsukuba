@@ -99,9 +99,31 @@ export function polygonsOverlap(first: Coordinate[], second: Coordinate[]): bool
       if (segmentsIntersect(first[firstIndex], first[firstNext], second[secondIndex], second[secondNext])) return true;
     }
   }
-  const firstCenter = first.reduce((total, point) => ({ lat: total.lat + point.lat / first.length, lng: total.lng + point.lng / first.length }), { lat: 0, lng: 0 });
-  const secondCenter = second.reduce((total, point) => ({ lat: total.lat + point.lat / second.length, lng: total.lng + point.lng / second.length }), { lat: 0, lng: 0 });
-  return pointInPolygon(firstCenter, second) || pointInPolygon(secondCenter, first);
+  // 全頂点が境界上にある同一ポリゴン等も検出するため内部点を使う。ただし
+  // 凹ポリゴンでは頂点の単純平均が自身の外側へ出るため、自身に内包される
+  // 候補だけを採用する。
+  const interiorPoint = (polygon: Coordinate[]) => {
+    const average = polygon.reduce(
+      (total, point) => ({
+        lat: total.lat + point.lat / polygon.length,
+        lng: total.lng + point.lng / polygon.length,
+      }),
+      { lat: 0, lng: 0 },
+    );
+    if (pointInPolygon(average, polygon)) return average;
+    for (let index = 0; index < polygon.length; index += 1) {
+      const candidate = {
+        lat: (polygon[index].lat + polygon[(index + 1) % polygon.length].lat + polygon[(index + 2) % polygon.length].lat) / 3,
+        lng: (polygon[index].lng + polygon[(index + 1) % polygon.length].lng + polygon[(index + 2) % polygon.length].lng) / 3,
+      };
+      if (pointInPolygon(candidate, polygon)) return candidate;
+    }
+    return null;
+  };
+  const firstInterior = interiorPoint(first);
+  const secondInterior = interiorPoint(second);
+  return (firstInterior !== null && pointInPolygon(firstInterior, second))
+    || (secondInterior !== null && pointInPolygon(secondInterior, first));
 }
 
 /// 点から地理座標の線分までの近似距離 [m]。桜川の作図範囲では局所平面近似で

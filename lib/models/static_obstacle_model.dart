@@ -12,6 +12,7 @@ enum StaticObstacleKind {
   bridgePier,
   island,
   driftwood,
+  pile,
   curve,
   reverse,
   testZone;
@@ -41,6 +42,9 @@ enum StaticObstacleKind {
         return islandProximityCautionDistanceMeters;
       case StaticObstacleKind.driftwood:
         return driftwoodProximityCautionDistanceMeters;
+      case StaticObstacleKind.pile:
+        // 杭は流木と同じく水面下・視認しづらく、局所的な衝突帰結が大きい。
+        return driftwoodProximityCautionDistanceMeters;
       case StaticObstacleKind.testZone:
         return testZoneProximityCautionDistanceMeters;
       case StaticObstacleKind.curve:
@@ -68,6 +72,7 @@ enum StaticObstacleKind {
       case StaticObstacleKind.bridgePier:
       case StaticObstacleKind.island:
       case StaticObstacleKind.driftwood:
+      case StaticObstacleKind.pile:
       case StaticObstacleKind.testZone:
       case StaticObstacleKind.curve:
       case StaticObstacleKind.reverse:
@@ -104,6 +109,8 @@ enum StaticObstacleKind {
         return '中州';
       case StaticObstacleKind.driftwood:
         return '流木';
+      case StaticObstacleKind.pile:
+        return '杭';
       case StaticObstacleKind.generic:
         return '危険区域';
     }
@@ -127,6 +134,8 @@ enum StaticObstacleKind {
         return '島';
       case StaticObstacleKind.driftwood:
         return '流木';
+      case StaticObstacleKind.pile:
+        return '杭';
       case StaticObstacleKind.generic:
         return '危険区域';
     }
@@ -134,6 +143,13 @@ enum StaticObstacleKind {
 }
 
 class StaticObstacle {
+  /// 現在は運用していない旧ポリゴン。警告設定をオンに戻したときだけ、
+  /// 航行地図にも戻す。航路中心線ベースの逆走判定はこの一覧とは別経路。
+  static const navigationMapHiddenWhenDisabledSourceIds = <String>{
+    'reverse_main_channel',
+    'island_upstream',
+  };
+
   final String id;
 
   /// 同梱プリセット上の元ID。
@@ -180,8 +196,19 @@ class StaticObstacle {
   final double? circleRadiusMeters;
 
   /// falseなら地図には表示するが、衝突判定・音声・画面警告の対象にしない。
+  /// ただし現在未使用の旧ポリゴン2件だけは、警告をオフにした間は
+  /// 航行地図からも隠す。設定をオンに戻すと、警告と地図表示を同時に戻す。
   /// 臨時危険区域は常にtrueで作成する。
   final bool isWarningEnabled;
+
+  bool get isVisibleOnNavigationMap =>
+      // カーブは川の形そのものなので、地図を見れば分かる。塗りを重ねても
+      // 水面を隠すだけで新しい情報にならない。**警告音・画面警告は従来どおり
+      // 出す**(区域進入イベントとして評価は続く)。地図に描かないだけである。
+      // 位置合わせの画面では従来どおり描く(そこでは形を見て校正する)。
+      kind != StaticObstacleKind.curve &&
+      (isWarningEnabled ||
+          !navigationMapHiddenWhenDisabledSourceIds.contains(sourceId));
 
   /// Firestoreの変形値で更新できる永続障害物かどうか。
   final bool isManaged;

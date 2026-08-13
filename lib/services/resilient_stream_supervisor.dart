@@ -6,6 +6,22 @@ import 'dart:async';
 class ResilientStreamSupervisor<T> {
   final List<Duration> retryBackoff;
   final Duration? silenceTimeout;
+
+  /// 無通知とみなすまでの時間を、状況に応じて差し替える。
+  ///
+  /// null を返したときは [silenceTimeout] を使う。
+  ///
+  /// **なぜ可変にするか。** iOS は端末が止まっているとき、位置更新の配信を
+  /// 意図的に絞る。そこへ固定の短い閾値で購読を張り直すと、
+  /// `stopUpdatingLocation` → `startUpdatingLocation` の暖機を毎回失い、
+  /// 正常な省電力動作を自分で悪化させる。2026-08-05 の実機ログでは
+  /// 停止に近づくほど配信間隔が伸び、8秒の閾値で251回の再購読が起きていた。
+  ///
+  /// **真の途絶の検知は遅らせない。** GPS品質の判定と `gps_unavailable` の
+  /// 確定(10秒)はこの値と独立しており、閾値を延ばしても system fault の
+  /// タイミングは変わらない。
+  final Duration? Function()? silenceTimeoutResolver;
+
   final Duration subscriptionCancelTimeout;
 
   Stream<T> Function()? _streamFactory;
@@ -16,6 +32,7 @@ class ResilientStreamSupervisor<T> {
   Timer? _silenceTimer;
   var _retryAttempt = 0;
   var _generation = 0;
+  var _connectionGeneration = 0;
   var _running = false;
 
   ResilientStreamSupervisor({
@@ -26,6 +43,7 @@ class ResilientStreamSupervisor<T> {
       Duration(seconds: 10),
     ],
     this.silenceTimeout,
+    this.silenceTimeoutResolver,
     this.subscriptionCancelTimeout = const Duration(seconds: 2),
   })  : assert(retryBackoff.isNotEmpty),
         assert(retryBackoff.every((duration) => !duration.isNegative)),
@@ -53,6 +71,7 @@ class ResilientStreamSupervisor<T> {
   Future<void> stop() async {
     _running = false;
     _generation += 1;
+    _connectionGeneration += 1;
     _retryTimer?.cancel();
     _retryTimer = null;
     _silenceTimer?.cancel();
@@ -66,6 +85,10 @@ class ResilientStreamSupervisor<T> {
 
   Future<void> _connect(int generation) async {
     if (!_isCurrent(generation)) return;
+    // start/stopの世代とは別に、再購読ごとに古いcallbackを
+    // 無効化する。platform側のcancelがtimeoutしても、新旧streamの
+    // 測位が同じGPSフィルタへ混ざらないための境界である。
+    final connectionGeneration = ++_connectionGeneration;
     _retryTimer?.cancel();
     _retryTimer = null;
     final previous = _subscription;
@@ -77,7 +100,7 @@ class ResilientStreamSupervisor<T> {
       final stream = _streamFactory!.call();
       _subscription = stream.listen(
         (value) {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           _retryAttempt = 0;
           _retryTimer?.cancel();
           _retryTimer = null;
@@ -85,12 +108,12 @@ class ResilientStreamSupervisor<T> {
           _onData?.call(value);
         },
         onError: (Object error, StackTrace stackTrace) {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           _notifyError(error, stackTrace);
           _scheduleReconnect(generation);
         },
         onDone: () {
-          if (!_isCurrent(generation)) return;
+          if (!_isCurrentConnection(generation, connectionGeneration)) return;
           final error = StateError('位置情報streamが終了しました。');
           _notifyError(error, StackTrace.current);
           _scheduleReconnect(generation);
@@ -105,10 +128,21 @@ class ResilientStreamSupervisor<T> {
     }
   }
 
+  bool _isCurrentConnection(int generation, int connectionGeneration) =>
+      _isCurrent(generation) && connectionGeneration == _connectionGeneration;
+
   void _armSilenceTimer(int generation) {
     _silenceTimer?.cancel();
-    final timeout = silenceTimeout;
-    if (timeout == null) return;
+    // 解決関数が null を返したら既定へ落とす。解決関数の例外で
+    // 監視そのものを止めない(原則1)。
+    Duration? resolved;
+    try {
+      resolved = silenceTimeoutResolver?.call();
+    } catch (_) {
+      resolved = null;
+    }
+    final timeout = resolved ?? silenceTimeout;
+    if (timeout == null || timeout <= Duration.zero) return;
     _silenceTimer = Timer(timeout, () {
       if (!_isCurrent(generation)) return;
       final error = TimeoutException(

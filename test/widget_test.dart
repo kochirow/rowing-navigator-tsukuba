@@ -46,7 +46,9 @@ void main() {
     await tester.pumpWidget(wrap(const SafetyBanner(warning: warning)));
     expect(find.text('橋'), findsOneWidget);
     expect(find.text('桜川橋に接近'), findsNothing);
-    expect(tester.widget<Text>(find.text('橋')).style?.fontSize, 22);
+    // 漕いでいる最中に文字は読まない。読むのは止まってからなので、
+    // チップは小さくてよい(従来22px)。気づかせるのは色・枠・脈動が担う。
+    expect(tester.widget<Text>(find.text('橋')).style?.fontSize, 15);
     expect(
       tester.widget<Text>(find.text('橋')).style?.color,
       const Color(0xFF241A1A),
@@ -87,7 +89,7 @@ void main() {
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
   });
 
-  testWidgets('振り向く側と残り秒数を対象名の下に添える', (tester) async {
+  testWidgets('残り秒数だけを対象名の下に添え、方向は出さない', (tester) async {
     await tester.pumpWidget(
       wrap(
         const SafetyBanner(
@@ -107,7 +109,11 @@ void main() {
     );
 
     expect(find.text('他艇'), findsOneWidget);
-    expect(find.text('右 5秒'), findsOneWidget);
+    expect(find.text('5秒'), findsOneWidget);
+    // 漕手は後ろ向きで、地図も進行方位に合わせて回る。そこへ「右」と
+    // 文字で足しても、どちらの右かを翻訳する手間が増えるだけ。
+    expect(find.text('右 5秒'), findsNothing);
+    expect(find.textContaining('右'), findsNothing);
   });
 
   testWidgets('連続音が鳴っている警告は文字を大きくし脈動枠で囲む', (tester) async {
@@ -129,7 +135,8 @@ void main() {
     );
 
     final label = tester.widget<Text>(find.text('岸'));
-    expect(label.style?.fontSize, 26);
+    // 連続音の段階だけは他より大きい(15 < 17)。比が保たれていればよい。
+    expect(label.style?.fontSize, 17);
 
     // 脈動は無限に繰り返すため pumpAndSettle は使わない。
     // 2フレーム進めて枠の色が変化することだけを確かめる。
@@ -290,25 +297,6 @@ void main() {
     expect(find.byIcon(Icons.schedule_rounded), findsNothing);
   });
 
-  testWidgets('物理警告と別に通信・対応水域の能力低下を常時表示する', (tester) async {
-    await tester.pumpWidget(
-      wrap(
-        const NavStatusCard(
-          paceSeconds: 120,
-          distanceMeters: 500,
-          elapsedTimeSeconds: 60,
-          positionSharingUnavailable: true,
-          otherBoatReceiveUnavailable: true,
-          operationalCoverageLimited: true,
-        ),
-      ),
-    );
-
-    expect(find.text('他艇受信: 利用不可'), findsOneWidget);
-    expect(find.text('自艇共有: 利用不可'), findsOneWidget);
-    expect(find.text('固定危険区域: 未検証水域'), findsOneWidget);
-  });
-
   testWidgets('SPM計測OFFでは表示領域を完全に取り除く', (tester) async {
     await tester.pumpWidget(
       wrap(
@@ -343,15 +331,21 @@ void main() {
 
     final card = find.byKey(const ValueKey('nav-status-card-compact'));
     expect(card, findsOneWidget);
-    expect(tester.getSize(card).width, lessThanOrEqualTo(260));
-    expect(tester.getSize(card).height, lessThan(120));
+    // 主計器を大きく出すため幅は従来より広い。それでも横向き画面の
+    // 左上に収まり、地図の大部分を空ける。
+    expect(tester.getSize(card).width, lessThanOrEqualTo(380));
+    // 艇速グラフ(84px)を外し、そのぶんを副計器の面(52px)へ回した。
+    // 全体としてはグラフ表示時より低い。
+    expect(tester.getSize(card).height, lessThan(200));
     expect(find.text('2:00'), findsOneWidget);
     expect(find.text('1:00'), findsOneWidget);
-    expect(find.text('500 m'), findsOneWidget);
+    // 副計器は数値と単位を分けて組む(数字が主で単位は従)。
+    expect(find.text('500'), findsOneWidget);
+    expect(find.text('m'), findsOneWidget);
     expect(find.textContaining('spm'), findsNothing);
   });
 
-  testWidgets('縦向き用カードはペース文字を保ち、SPMなしではさらに細くなる', (tester) async {
+  testWidgets('縦向き用カードは画面幅の9割を使い、主計器を大きく出す', (tester) async {
     tester.view
       ..physicalSize = const Size(375, 667)
       ..devicePixelRatio = 1;
@@ -377,9 +371,10 @@ void main() {
     );
 
     final card = find.byKey(const ValueKey('nav-status-card-portrait-compact'));
-    expect(tester.getSize(card).width, lessThanOrEqualTo(230));
-    expect(tester.getSize(card).height, lessThan(120));
-    expect(tester.widget<Text>(find.text('2:00')).style?.fontSize, 46);
+    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
+    expect(tester.getSize(card).height, lessThan(200));
+    // 表示上の高さで見る(FittedBoxで拡大するため style は基準値)。
+    expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
     expect(find.textContaining('spm'), findsNothing);
 
     await tester.pumpWidget(
@@ -399,12 +394,14 @@ void main() {
     );
     await tester.pump();
 
-    expect(tester.getSize(card).width, greaterThan(230));
-    expect(tester.getSize(card).width, lessThanOrEqualTo(268));
-    expect(find.text('18 spm'), findsOneWidget);
+    // SPMの有無で幅は変えない(計器の位置が動くと読み取りが遅れる)。
+    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
+    expect(find.text('18'), findsOneWidget);
+    // 単位は面の中で数字の隣に置くので、前置きの空白を持たない。
+    expect(find.text('spm'), findsOneWidget);
   });
 
-  testWidgets('SE相当・文字1.3倍でも計器と全能力低下表示が破綻しない', (tester) async {
+  testWidgets('SE相当・文字1.3倍でも計器が破綻しない', (tester) async {
     tester.view.physicalSize = const Size(375, 667);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -421,11 +418,6 @@ void main() {
               paceSeconds: 599,
               distanceMeters: 12345,
               elapsedTimeSeconds: 3723,
-              gpsAgeSeconds: 30,
-              positionSharingUnavailable: true,
-              otherBoatReceiveUnavailable: true,
-              temporaryObstacleReceiveUnavailable: true,
-              operationalCoverageLimited: true,
             ),
           ),
         ),
@@ -433,11 +425,8 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('他艇受信: 利用不可'), findsOneWidget);
-    expect(find.text('自艇共有: 利用不可'), findsOneWidget);
-    expect(find.text('臨時危険区域: 受信不可'), findsOneWidget);
-    expect(find.text('固定危険区域: 未検証水域'), findsOneWidget);
-    expect(find.textContaining('周囲を目視確認'), findsOneWidget);
+    expect(find.text('12.35 km'), findsOneWidget);
+    expect(find.text('1:02:03'), findsOneWidget);
   });
 
   testWidgets('経過時間の1秒更新を独立パネル内で行う', (tester) async {
@@ -449,7 +438,6 @@ void main() {
           paceSeconds: 120,
           distanceMeters: 500,
           sessionStartedAt: startedAt,
-          lastGpsTimestamp: startedAt,
           clock: () => now,
         ),
       ),
@@ -477,7 +465,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, strokeRateEnabled) async {
+              onPressStartNav: (displayName, strokeRateEnabled, _) async {
                 submittedName = displayName;
                 submittedStrokeRate = strokeRateEnabled;
               },
@@ -506,7 +494,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
-            body: NavSettingModal(onPressStartNav: (_, __) async {}),
+            body: NavSettingModal(onPressStartNav: (_, __, ___) async {}),
           ),
         ),
       ),
@@ -538,7 +526,7 @@ void main() {
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
                   builder: (_) =>
-                      NavSettingModal(onPressStartNav: (_, __) async {}),
+                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
@@ -573,7 +561,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __) async {},
+              onPressStartNav: (_, __, ___) async {},
               onPressTestAudio: () async {
                 tapped = true;
               },
@@ -599,7 +587,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, _) async {
+              onPressStartNav: (displayName, _, __) async {
                 submittedName = displayName;
               },
             ),
@@ -626,7 +614,7 @@ void main() {
     expect(submittedName, '後藤');
   });
 
-  testWidgets('SPM(レート)計測は既定ONで航行開始へ渡せる', (tester) async {
+  testWidgets('レート計測は既定ONで航行開始へ渡せる', (tester) async {
     useNavigationSettingsViewport(tester);
     bool? submittedStrokeRateEnabled;
     await tester.pumpWidget(
@@ -634,7 +622,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, strokeRateEnabled) async {
+              onPressStartNav: (_, strokeRateEnabled, __) async {
                 submittedStrokeRateEnabled = strokeRateEnabled;
               },
             ),
@@ -644,10 +632,12 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('SPM(レート)を計測する'));
+    await tester.ensureVisible(find.text('レート(SPM)を計測する'));
     await tester.pumpAndSettle();
-    expect(find.text('SPM(レート)計測'), findsOneWidget);
-    expect(find.text('バッテリーが残り少ない場合はオフ推奨'), findsOneWidget);
+    expect(find.text('レート(SPM)'), findsOneWidget);
+    expect(find.textContaining('艇にスマホを固定して使用'), findsOneWidget);
+    // 航行中の艇速変化グラフは廃止した(2026-08-13)。表示の切替も出さない。
+    expect(find.textContaining('艇速変化を表示'), findsNothing);
 
     await tester.ensureVisible(find.text('航行スタート'));
     await tester.pumpAndSettle();
@@ -665,7 +655,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __) {
+              onPressStartNav: (_, __, ___) {
                 startCount += 1;
                 return startCompleter.future;
               },

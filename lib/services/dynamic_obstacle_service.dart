@@ -5,6 +5,13 @@ import 'package:rowing_navigator/models/boat_model.dart';
 import '../services/message_service.dart';
 
 class DynamicObstacleService {
+  // `summarize` は Firebase に触れない純粋な変換としてテストできるよう、
+  // 実際に購読を始めるまで既定の MessageService を生成しない。
+  final MessageService? _messageService;
+
+  DynamicObstacleService({MessageService? messageService})
+      : _messageService = messageService;
+
   Stream<Map<String, dynamic>> getDynamicObstaclesStream() {
     return getBoatsStream();
   }
@@ -37,7 +44,7 @@ class DynamicObstacleService {
   /// 別物として扱う(要件定義 2026-07-26 提案5-2)。前者で fault を立てると、
   /// RTDB に壊れたレコードが1件残っているだけで永久にフラップする。
   Stream<Map<String, dynamic>> getBoatsStream() {
-    final messageService = MessageService();
+    final messageService = _messageService ?? MessageService();
     return messageService
         .getMessagesStream()
         .map((messages) => summarize(messages, now: DateTime.now()));
