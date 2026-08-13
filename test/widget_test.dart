@@ -465,8 +465,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav:
-                  (displayName, strokeRateEnabled, _) async {
+              onPressStartNav: (displayName, strokeRateEnabled, _) async {
                 submittedName = displayName;
                 submittedStrokeRate = strokeRateEnabled;
               },
@@ -526,8 +525,8 @@ void main() {
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
-                  builder: (_) => NavSettingModal(
-                      onPressStartNav: (_, __, ___) async {}),
+                  builder: (_) =>
+                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
