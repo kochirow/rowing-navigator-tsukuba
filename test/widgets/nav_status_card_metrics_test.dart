@@ -92,6 +92,20 @@ void main() {
     expect(spm.right - pace.left, greaterThan(card.width * 0.8));
   });
 
+  testWidgets('主計器の数字はカード幅に対する取り分を保つ', (tester) async {
+    await pumpCard(tester, portraitCompact: true);
+
+    final card = tester.getRect(
+        find.byKey(const ValueKey('nav-status-card-portrait-compact')));
+    final pace = tester.getRect(find.text('2:00'));
+
+    // 主計器の実寸は「カード幅 ÷ 行全体の基準幅」で決まる。単位や面の余白を
+    // 太らせると、カードの大きさは変わらないまま数字だけが縮む。
+    // 2026-08-13 に単位・余白・間隔を詰めて数字を約8%大きくした取り分を、
+    // ここで固定する(実測でカード幅の約13%)。
+    expect(pace.height, greaterThan(card.width * 0.125));
+  });
+
   testWidgets('縦向き小型の副計器は面を持ち、行いっぱいに置く', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 

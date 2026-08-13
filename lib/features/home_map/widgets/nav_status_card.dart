@@ -226,16 +226,25 @@ class NavStatusCard extends StatelessWidget {
   /// レートはペースの約77%(ペース80pxならレート62px)。レートは2桁固定で
   /// 幅が出ないため、同じ比でも小さく見える。かといって近づけすぎると
   /// 「主計器が2つある」ように見えて、視線がどちらへ行くか決まらない。
+  ///
+  /// **単位・余白は数字の取り分を削る(2026-08-13)。** 主計器の実寸は
+  /// 「カード幅 ÷ 行全体の基準幅」で決まるので、単位や余白を1px縮めると
+  /// そのぶん数字が大きくなる。艇速グラフを外したときに、縦に空いた高さは
+  /// 主計器の大きさに効かない(横幅で決まる)ため、代わりに単位
+  /// (16→14 / 14→12)・面の余白(12→8)・面の間隔(10→6)を詰めて
+  /// 数字へ回した。**実測で数字は約8%大きくなる。**
+  /// 単位はラベルであって値ではないので、ここは数字を優先してよい。
+  /// ただし読めなくなるまで詰めない(実機で単位が10px台前半になる)。
   static const double _paceBaseFontSize = 92;
-  static const double _paceUnitBaseFontSize = 16;
+  static const double _paceUnitBaseFontSize = 14;
   static const double _spmBaseFontSize = 71;
-  static const double _spmUnitBaseFontSize = 14;
+  static const double _spmUnitBaseFontSize = 12;
 
   /// 計器の面どうしの間隔(基準寸法。[FittedBox] が一緒に縮小する)。
-  static const double _plateGap = 10;
+  static const double _plateGap = 6;
 
-  /// 面の左右の余白(基準寸法)。
-  static const double _platePaddingHorizontal = 12;
+  /// 面の左右の余白(基準寸法)。数字の取り分を増やすため詰めてある。
+  static const double _platePaddingHorizontal = 8;
 
   /// 面の高さ(基準寸法)。
   ///
@@ -383,7 +392,7 @@ class NavStatusCard extends StatelessWidget {
         constraints: width == null
             ? const BoxConstraints(maxWidth: _landscapeMaxWidth)
             : null,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           // 文字の輪郭影(`_outlineShadows`)だけでは、地図の明るい部分
           // (建物・砂地・白い橋)の上で数字が沈む。実機では日光下で読めない
