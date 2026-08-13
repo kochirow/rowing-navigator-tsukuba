@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../services/rowing_motion_fusion.dart';
-import '../../../services/stroke_speed_trace.dart';
 import 'nav_status_card.dart';
 
 /// 時刻による1秒更新を地図画面全体から切り離すためのパネル。
@@ -11,10 +9,6 @@ class NavigationStatusPanel extends StatefulWidget {
   final int paceSeconds;
   final int distanceMeters;
   final double? spm;
-  final RowingMotionMetrics? strokeMotion;
-  final bool strokeMotionDisplayEnabled;
-  final StrokeSpeedTraceWindow? Function(DateTime now)?
-      strokeTraceWindowBuilder;
   final bool spmMeasurementEnabled;
   final bool compact;
   final bool portraitCompact;
@@ -28,9 +22,6 @@ class NavigationStatusPanel extends StatefulWidget {
     required this.distanceMeters,
     required this.sessionStartedAt,
     this.spm,
-    this.strokeMotion,
-    this.strokeMotionDisplayEnabled = false,
-    this.strokeTraceWindowBuilder,
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
@@ -81,9 +72,6 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       distanceMeters: widget.distanceMeters,
       elapsedTimeSeconds: _ageSeconds(widget.sessionStartedAt),
       spm: widget.spm,
-      strokeMotion: widget.strokeMotion,
-      strokeMotionDisplayEnabled: widget.strokeMotionDisplayEnabled,
-      strokeTraceWindowBuilder: widget.strokeTraceWindowBuilder,
       spmMeasurementEnabled: widget.spmMeasurementEnabled,
       compact: widget.compact,
       portraitCompact: widget.portraitCompact,

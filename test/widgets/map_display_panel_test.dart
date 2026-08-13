@@ -8,20 +8,20 @@ void main() {
   late ValueNotifier<MapType> mapType;
   late ValueNotifier<bool> centerline;
   late ValueNotifier<bool> highContrast;
-  late ValueNotifier<bool> strokeMotion;
+  late ValueNotifier<bool> laneCrossSection;
 
   setUp(() {
     mapType = ValueNotifier(MapType.normal);
     centerline = ValueNotifier(true);
     highContrast = ValueNotifier(false);
-    strokeMotion = ValueNotifier(false);
+    laneCrossSection = ValueNotifier(false);
   });
 
   tearDown(() {
     mapType.dispose();
     centerline.dispose();
     highContrast.dispose();
-    strokeMotion.dispose();
+    laneCrossSection.dispose();
   });
 
   Widget wrap({bool navigating = true}) => MaterialApp(
@@ -34,9 +34,9 @@ void main() {
             onShowChannelCenterlineChanged: (value) => centerline.value = value,
             highContrast: highContrast,
             onHighContrastChanged: (value) => highContrast.value = value,
-            strokeMotion: navigating ? strokeMotion : null,
-            onStrokeMotionChanged:
-                navigating ? (value) => strokeMotion.value = value : null,
+            laneCrossSection: navigating ? laneCrossSection : null,
+            onLaneCrossSectionChanged:
+                navigating ? (value) => laneCrossSection.value = value : null,
           ),
         ),
       );
@@ -68,12 +68,18 @@ void main() {
     expect(find.text('航空写真では適用されません'), findsOneWidget);
   });
 
-  testWidgets('監視端末では艇速の行そのものを出さない', (tester) async {
+  testWidgets('監視端末では航行中だけの行そのものを出さない', (tester) async {
     // 使えない項目を無効表示で並べるより、その状態に無い機能は
     // 最初から現れないほうが読む量が減る。
     await tester.pumpWidget(wrap(navigating: false));
 
-    expect(find.text('1ストロークの艇速'), findsNothing);
+    expect(find.text('航路の断面'), findsNothing);
     expect(find.text('航路の中央線'), findsOneWidget);
+  });
+
+  testWidgets('1ストロークの艇速の行は無い(航行中の波形は廃止)', (tester) async {
+    await tester.pumpWidget(wrap());
+
+    expect(find.text('1ストロークの艇速'), findsNothing);
   });
 }
