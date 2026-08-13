@@ -31,13 +31,9 @@ class MapDisplayPanel extends StatelessWidget {
   final ValueListenable<bool> highContrast;
   final ValueChanged<bool> onHighContrastChanged;
 
-  /// 航行中だけ渡す。監視端末は自艇の波形を持たないので、行ごと出さない。
-  /// 「使えない項目を無効表示で並べる」より、その状態に無い機能は
-  /// 最初から現れないほうが読む量が減る。
-  final ValueListenable<bool>? strokeMotion;
-  final ValueChanged<bool>? onStrokeMotionChanged;
-
-  /// 航路の断面インジケータ。航行中だけ渡す。
+  /// 航路の断面インジケータ。航行中だけ渡す。監視端末は自艇の位置を
+  /// 持たないので、行ごと出さない。「使えない項目を無効表示で並べる」より、
+  /// その状態に無い機能は最初から現れないほうが読む量が減る。
   final ValueListenable<bool>? laneCrossSection;
   final ValueChanged<bool>? onLaneCrossSectionChanged;
 
@@ -49,8 +45,6 @@ class MapDisplayPanel extends StatelessWidget {
     required this.onShowChannelCenterlineChanged,
     required this.highContrast,
     required this.onHighContrastChanged,
-    this.strokeMotion,
-    this.onStrokeMotionChanged,
     this.laneCrossSection,
     this.onLaneCrossSectionChanged,
   });
@@ -59,8 +53,6 @@ class MapDisplayPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final dimens = context.dimens;
-    final strokeMotion = this.strokeMotion;
-    final onStrokeMotionChanged = this.onStrokeMotionChanged;
     final laneCrossSection = this.laneCrossSection;
     final onLaneCrossSectionChanged = this.onLaneCrossSectionChanged;
 
@@ -193,14 +185,6 @@ class MapDisplayPanel extends StatelessWidget {
                   description: '中央線のどちら側かを帯で出します（警告ではありません）',
                   value: laneCrossSection,
                   onChanged: onLaneCrossSectionChanged,
-                ),
-              if (strokeMotion != null && onStrokeMotionChanged != null)
-                _DisplaySwitch(
-                  icon: Icons.insights,
-                  title: '1ストロークの艇速',
-                  description: '計器のすぐ下に波形を出します',
-                  value: strokeMotion,
-                  onChanged: onStrokeMotionChanged,
                 ),
               SizedBox(height: dimens.space4),
             ],

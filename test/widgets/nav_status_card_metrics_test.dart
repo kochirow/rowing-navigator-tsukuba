@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_status_card.dart';
-import 'package:rowing_navigator/features/home_map/widgets/stroke_speed_chart.dart';
-import 'package:rowing_navigator/services/rowing_motion_fusion.dart';
-import 'package:rowing_navigator/services/stroke_speed_trace.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 
 /// 計器の大きさが状況で変わらないことを守るテスト。
@@ -11,15 +8,16 @@ import 'package:rowing_navigator/theme/app_theme.dart';
 /// 元の実装は連続音の警告中に主計器を縮めていた(`deemphasized`)。
 /// 大きさが変わること自体が読み取りを遅らせるため廃止した。
 /// 「警告中だから縮める」たぐいの分岐が戻ってきたら、ここで落ちる。
+///
+/// あわせて、**航行中の計器カードに艇速変化グラフを戻さない**ことも
+/// ここで固定する(2026-08-13に廃止)。グラフが占めていた高さは
+/// 副計器(経過時間・距離)へ回した。
 void main() {
   Future<void> pumpCard(
     WidgetTester tester, {
     bool spmEnabled = true,
     bool compact = false,
     bool portraitCompact = false,
-    RowingMotionMetrics? strokeMotion,
-    bool showStrokeMotion = false,
-    StrokeSpeedTraceWindow? Function(DateTime now)? traceWindowBuilder,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -31,9 +29,6 @@ void main() {
             elapsedTimeSeconds: 60,
             spm: 24,
             spmMeasurementEnabled: spmEnabled,
-            strokeMotion: strokeMotion,
-            strokeMotionDisplayEnabled: showStrokeMotion,
-            strokeTraceWindowBuilder: traceWindowBuilder,
             compact: compact,
             portraitCompact: portraitCompact,
           ),
@@ -52,11 +47,12 @@ void main() {
     expect(fontSizeOf(tester, '24'), 44);
   });
 
-  testWidgets('補助情報(距離・経過時間)は主計器よりはっきり小さい', (tester) async {
+  testWidgets('副計器(距離・経過時間)は主計器より小さく、添え物には落とさない', (tester) async {
     await pumpCard(tester);
 
-    expect(fontSizeOf(tester, '1.00 km'), 16);
-    expect(fontSizeOf(tester, '1:00'), 16);
+    // 16px(グラフがあった頃の添え物)まで戻したら落ちる。
+    expect(fontSizeOf(tester, '1.00 km'), 24);
+    expect(fontSizeOf(tester, '1:00'), 24);
     expect(fontSizeOf(tester, '1.00 km'), lessThan(fontSizeOf(tester, '2:00')));
   });
 
@@ -65,7 +61,7 @@ void main() {
     final normalPace = fontSizeOf(tester, '2:00');
     final normalSpm = fontSizeOf(tester, '24');
 
-    await pumpCard(tester, showStrokeMotion: true);
+    await pumpCard(tester);
 
     expect(fontSizeOf(tester, '2:00'), normalPace);
     expect(fontSizeOf(tester, '24'), normalSpm);
@@ -96,11 +92,29 @@ void main() {
     expect(spm.right - pace.left, greaterThan(card.width * 0.8));
   });
 
+  testWidgets('縦向き小型の副計器は面を持ち、行いっぱいに置く', (tester) async {
+    await pumpCard(tester, portraitCompact: true);
+
+    final card = tester.getRect(
+        find.byKey(const ValueKey('nav-status-card-portrait-compact')));
+    final elapsed = tester.getRect(find.text('1:00'));
+    final distance = tester.getRect(find.text('1.00'));
+
+    // 経過時間が左、距離が右。上下に積むと高さだけ取って読まれない。
+    expect(elapsed.left, lessThan(distance.left));
+    expect(elapsed.center.dy, closeTo(distance.center.dy, 2));
+    // 2つで行の左右へ広がる(グラフの左に58pxで畳まれていた頃に戻さない)。
+    expect(distance.right - elapsed.left, greaterThan(card.width * 0.6));
+    // 主計器の下にある。
+    expect(elapsed.top, greaterThan(tester.getRect(find.text('2:00')).bottom));
+  });
+
   testWidgets('主計器はフィールドごとの面で分け、字には縁取りを掛けない', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
-    // 面はペースとレートで2枚。色が読めなくても「計器が2つある」ことが
-    // 形で分かる。カード自身の面は descendant に含まれない。
+    // 面はペース・レート・経過時間・距離で4枚。色が読めなくても
+    // 「計器が並んでいる」ことが形で分かる。
+    // カード自身の面は descendant に含まれない。
     final plates = tester
         .widgetList<Container>(find.descendant(
       of: find.byKey(const ValueKey('nav-status-card-portrait-compact')),
@@ -110,7 +124,7 @@ void main() {
       final decoration = container.decoration;
       return decoration is BoxDecoration && decoration.color != null;
     }).toList();
-    expect(plates.length, 2, reason: '主計器の面が2枚でない');
+    expect(plates.length, 4, reason: '計器の面が4枚でない');
     // レート側だけが縁を持つ。**面の色と縁が背景と別の系統になる**ことが
     // 「枠が効かない」への答えなので、縁を落とさないよう固定する。
     expect(
@@ -123,7 +137,7 @@ void main() {
 
     // 下地が濃紺1種類に確定したので、字の縁取りはコストだけが残る。
     // (字画の内側を食って数字を鈍らせる)。掛けないことを固定する。
-    for (final text in ['2:00', '24']) {
+    for (final text in ['2:00', '24', '1:00', '1.00']) {
       final style = tester.widget<Text>(find.text(text)).style!;
       expect(
         style.shadows ?? const [],
@@ -156,156 +170,16 @@ void main() {
     expect(card.center.dx, closeTo(screenWidth / 2, 1));
   });
 
-  testWidgets('1ストローク指標は既定で畳み、グラフのタップで開閉する', (tester) async {
-    await pumpCard(
-      tester,
-      portraitCompact: true,
-      strokeMotion: _metrics(),
-      showStrokeMotion: true,
-      traceWindowBuilder: (_) => null,
-    );
+  testWidgets('航行中の計器カードに艇速変化グラフ・1ストローク指標を出さない', (tester) async {
+    for (final compact in [false, true]) {
+      await pumpCard(tester, portraitCompact: compact);
 
-    // 既定は非表示。航行中に読むものではなく、記録には残る。
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('stroke-metrics-toggle')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('stroke-metrics-toggle')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
-  });
-
-  testWidgets('1ストローク艇速指標を信頼度付き計測時だけ表示する', (tester) async {
-    final metrics = RowingMotionMetrics(
-      calculatedAt: DateTime(2026, 8, 3),
-      latestStrokeBoundary: DateTime(2026, 8, 3),
-      quality: RowingMotionQuality.good,
-      confidence: 0.9,
-      spm: 24,
-      fusedSpeedMetersPerSecond: 4,
-      fusedSpeedAccuracyMetersPerSecond: 0.5,
-      fusedHeadingDegrees: 90,
-      distancePerStrokeMeters: 10.2,
-      catchSpeedLossMetersPerSecond: 0.31,
-      lateDriveSpeedGainMetersPerSecond: 0.18,
-      recoverySpeedRetention: 0.84,
-      strokeSpeedRangeMetersPerSecond: 0.8,
-      strokeDurationSeconds: 2.5,
-      finishPhaseFraction: 0.62,
-      accelerometerSampleCount: 125,
-      gyroscopeSampleCount: 125,
-    );
-    await pumpCard(
-      tester,
-      strokeMotion: metrics,
-      showStrokeMotion: true,
-    );
-
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
-    // 値はラベルと数値に分けて並べる。符号を隠さない。
-    // ラベルは競技の用語(キャッチ・ドライブ・リカバリー)に揃える。
-    expect(find.text('1ストローク'), findsOneWidget);
-    expect(find.text('10.2m'), findsOneWidget);
-    expect(find.text('キャッチ減速'), findsOneWidget);
-    expect(find.text('−0.31'), findsOneWidget);
-    expect(find.text('リカバリー保持'), findsOneWidget);
-    expect(find.text('84%'), findsOneWidget);
-    expect(find.text('ドライブ後半加速'), findsOneWidget);
-    expect(find.text('+0.18'), findsOneWidget);
-
-    await pumpCard(tester, strokeMotion: metrics);
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
-
-    await pumpCard(
-      tester,
-      spmEnabled: false,
-      strokeMotion: metrics,
-      showStrokeMotion: true,
-    );
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsOneWidget);
-  });
-
-  testWidgets('艇速分析は主計器の直下に表示する', (tester) async {
-    final metrics = RowingMotionMetrics(
-      calculatedAt: DateTime(2026, 8, 3),
-      latestStrokeBoundary: DateTime(2026, 8, 3),
-      quality: RowingMotionQuality.good,
-      confidence: 0.9,
-      spm: 24,
-      fusedSpeedMetersPerSecond: 4,
-      fusedSpeedAccuracyMetersPerSecond: 0.5,
-      fusedHeadingDegrees: 90,
-      distancePerStrokeMeters: 10.2,
-      catchSpeedLossMetersPerSecond: 0.31,
-      lateDriveSpeedGainMetersPerSecond: 0.18,
-      recoverySpeedRetention: 0.84,
-      strokeSpeedRangeMetersPerSecond: 0.8,
-      strokeDurationSeconds: 2.5,
-      finishPhaseFraction: 0.62,
-      accelerometerSampleCount: 125,
-      gyroscopeSampleCount: 125,
-    );
-    await pumpCard(tester, strokeMotion: metrics, showStrokeMotion: true);
-
-    final analysisY = tester
-        .getTopLeft(find.byKey(const ValueKey('stroke-motion-metrics')))
-        .dy;
-    final distanceY = tester.getTopLeft(find.text('1.00 km')).dy;
-    expect(analysisY, lessThan(distanceY));
-  });
-
-  testWidgets('ドライブ後半の失速は符号ごとラベルを切り替えて出す', (tester) async {
-    await pumpCard(
-      tester,
-      strokeMotion: _metrics(lateDriveSpeedGainMetersPerSecond: -0.22),
-      showStrokeMotion: true,
-    );
-
-    expect(find.text('ドライブ後半失速'), findsOneWidget);
-    expect(find.text('−0.22'), findsOneWidget);
-    expect(find.text('ドライブ後半加速'), findsNothing);
-  });
-
-  testWidgets('解析が確定する前でもグラフの枠は出す(壊れて見せない)', (tester) async {
-    await pumpCard(
-      tester,
-      showStrokeMotion: true,
-      // 立ち上がり直後は窓を作れない。それでもグラフ領域は残す(原則1)。
-      traceWindowBuilder: (_) => null,
-    );
-
-    expect(find.byType(StrokeSpeedChart), findsOneWidget);
-    expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
-  });
-
-  testWidgets('表示OFFならグラフごと領域を取り除く', (tester) async {
-    await pumpCard(tester, traceWindowBuilder: (_) => null);
-
-    expect(find.byType(StrokeSpeedChart), findsNothing);
+      // 波形は監視端末(StrokeTraceSheet)だけの機能に戻した。
+      expect(find.byKey(const ValueKey('stroke-speed-chart')), findsNothing);
+      expect(find.byKey(const ValueKey('stroke-metrics-toggle')), findsNothing);
+      expect(find.byKey(const ValueKey('stroke-motion-metrics')), findsNothing);
+      expect(find.text('分析'), findsNothing);
+      expect(find.textContaining('艇速変化'), findsNothing);
+    }
   });
 }
-
-RowingMotionMetrics _metrics({
-  double lateDriveSpeedGainMetersPerSecond = 0.18,
-}) =>
-    RowingMotionMetrics(
-      calculatedAt: DateTime(2026, 8, 3),
-      latestStrokeBoundary: DateTime(2026, 8, 3),
-      quality: RowingMotionQuality.good,
-      confidence: 0.9,
-      spm: 24,
-      fusedSpeedMetersPerSecond: 4,
-      fusedSpeedAccuracyMetersPerSecond: 0.5,
-      fusedHeadingDegrees: 90,
-      distancePerStrokeMeters: 10.2,
-      catchSpeedLossMetersPerSecond: 0.31,
-      lateDriveSpeedGainMetersPerSecond: lateDriveSpeedGainMetersPerSecond,
-      recoverySpeedRetention: 0.84,
-      strokeSpeedRangeMetersPerSecond: 0.8,
-      strokeDurationSeconds: 2.5,
-      finishPhaseFraction: 0.62,
-      accelerometerSampleCount: 125,
-      gyroscopeSampleCount: 125,
-    );

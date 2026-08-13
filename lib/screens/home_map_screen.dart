@@ -40,7 +40,6 @@ import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
-import '../services/rowing_motion_fusion.dart';
 import '../services/swept_outline_service.dart';
 import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
@@ -235,15 +234,14 @@ class HomeMapScreen extends HookConsumerWidget {
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     final showDeveloperSafetyShapeOverlay = useState(false);
-    // 計測と表示を分離する。表示OFFでもIMU融合とログは継続する。
-    final strokeMotionDisplayEnabled = useState(false);
     // 航路の断面インジケータは補助表示。既定は非表示で、航行開始時の設定か
     // 「表示」パネルで出す。中央線からの位置は地図でも読めるので、
     // 必要な人だけが出す。
     final laneCrossSectionEnabled = useState(false);
     useStrokeTraceSharing(
-      // 監視への共有は計測と一体で、切替を持たない。オプションにするのは
-      // 「自分の画面に出すか」だけ。共有先は位置共有と同じチーム内で、
+      // 監視への共有は計測と一体で、切替を持たない。航行中の画面には
+      // 波形を出さない(2026-08-13に廃止)が、陸上で見る監視端末では
+      // 有用なので共有は残す。共有先は位置共有と同じチーム内で、
       // 増える転送量は位置の1/20未満(2026-08-03 設計メモ)。
       // 共有は安全経路の外側。ここが失敗しても位置共有・警告は動き続ける。
       enabled: navigator.mode.value == NavMode.navigator &&
@@ -489,21 +487,6 @@ class HomeMapScreen extends HookConsumerWidget {
                         .saveLaneCrossSectionEnabled(next)
                         .catchError((Object error) {
                       debugPrint('Failed to save lane cross section display: '
-                          '$error');
-                    }),
-                  );
-                }
-              : null,
-          // 監視端末は自艇の波形を持たないので、行ごと出さない。
-          strokeMotion: isNavigating ? strokeMotionDisplayEnabled : null,
-          onStrokeMotionChanged: isNavigating
-              ? (next) {
-                  strokeMotionDisplayEnabled.value = next;
-                  unawaited(
-                    navigationDefaults
-                        .saveStrokeMotionDisplayEnabled(next)
-                        .catchError((Object error) {
-                      debugPrint('Failed to save stroke analysis display: '
                           '$error');
                     }),
                   );
@@ -1584,16 +1567,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                           sessionStartedAt:
                                               navigator.sessionStartedAt.value,
                                           spm: navigator.spm.value,
-                                          strokeMotion: navigator.strokeMotion
-                                                      .value?.quality ==
-                                                  RowingMotionQuality.good
-                                              ? navigator.strokeMotion.value
-                                              : null,
-                                          strokeMotionDisplayEnabled:
-                                              strokeMotionDisplayEnabled.value,
-                                          strokeTraceWindowBuilder: (now) =>
-                                              navigator.strokeTraceWindow(
-                                                  now: now),
                                           spmMeasurementEnabled: navigator
                                                   .config
                                                   .value
@@ -1922,7 +1895,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   },
                                                   onPressStartNav: (displayName,
                                                       strokeRateEnabled,
-                                                      showStrokeMotion,
                                                       showLaneCrossSection) async {
                                                     if (!navMap.isReady.value) {
                                                       ScaffoldMessenger.of(
@@ -1969,10 +1941,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                               .bestForNavigation,
                                                           strokeRateEnabled:
                                                               strokeRateEnabled);
-                                                      strokeMotionDisplayEnabled
-                                                              .value =
-                                                          strokeRateEnabled &&
-                                                              showStrokeMotion;
                                                       laneCrossSectionEnabled
                                                               .value =
                                                           showLaneCrossSection;

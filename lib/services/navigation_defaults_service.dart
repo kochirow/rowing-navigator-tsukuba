@@ -7,7 +7,6 @@ class NavigationDefaults {
   final BoatType boatType;
   final int seatPosition;
   final bool strokeRateEnabled;
-  final bool strokeMotionDisplayEnabled;
 
   /// 航路の断面インジケータを出すか。既定は false。
   ///
@@ -20,7 +19,6 @@ class NavigationDefaults {
     required this.boatType,
     required this.seatPosition,
     required this.strokeRateEnabled,
-    required this.strokeMotionDisplayEnabled,
     required this.laneCrossSectionEnabled,
   });
 }
@@ -35,8 +33,6 @@ class NavigationDefaultsService {
   static const _boatTypeKey = 'navigation_boat_type_v1';
   static const _seatPositionKey = 'navigation_seat_position_v1';
   static const _strokeRateEnabledKey = 'navigation_stroke_rate_enabled_v1';
-  static const _strokeMotionDisplayEnabledKey =
-      'navigation_stroke_motion_display_enabled_v1';
   static const _laneCrossSectionEnabledKey =
       'navigation_lane_cross_section_enabled_v1';
 
@@ -66,10 +62,7 @@ class NavigationDefaultsService {
       // 未保存の端末ではSPM(レート)計測を既定で有効にする。
       // 明示的にオフを保存した利用者の選択は維持する。
       strokeRateEnabled: prefs.getBool(_strokeRateEnabledKey) ?? true,
-      // 艇速分析は補助表示なので、未選択の端末では表示しない。
-      strokeMotionDisplayEnabled:
-          prefs.getBool(_strokeMotionDisplayEnabledKey) ?? false,
-      // 断面インジケータも補助表示なので、未選択の端末では出さない。
+      // 断面インジケータは補助表示なので、未選択の端末では出さない。
       laneCrossSectionEnabled:
           prefs.getBool(_laneCrossSectionEnabledKey) ?? false,
     );
@@ -80,7 +73,6 @@ class NavigationDefaultsService {
     required BoatType boatType,
     required int seatPosition,
     bool strokeRateEnabled = true,
-    bool strokeMotionDisplayEnabled = false,
     bool laneCrossSectionEnabled = false,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -89,18 +81,8 @@ class NavigationDefaultsService {
       prefs.setString(_boatTypeKey, boatType.name),
       prefs.setInt(_seatPositionKey, seatPosition),
       prefs.setBool(_strokeRateEnabledKey, strokeRateEnabled),
-      prefs.setBool(
-        _strokeMotionDisplayEnabledKey,
-        strokeMotionDisplayEnabled,
-      ),
       prefs.setBool(_laneCrossSectionEnabledKey, laneCrossSectionEnabled),
     ]);
-  }
-
-  /// 航行中の表示切替だけを保存する。計測のON/OFFは変えない。
-  Future<void> saveStrokeMotionDisplayEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_strokeMotionDisplayEnabledKey, enabled);
   }
 
   /// 航行中の表示切替だけを保存する。

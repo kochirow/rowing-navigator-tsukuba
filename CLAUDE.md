@@ -119,9 +119,10 @@ flutter run
 | ---- | ---- |
 | `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過で音とバナーを出す。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
-| `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング |
+| `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
 | `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
-| `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側 |
+| `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側。**波形を見る口はここ(監視端末の `stroke_trace_sheet.dart`)だけ**で、艇側は送るだけ |
+| `lib/features/home_map/widgets/nav_status_card.dart` | 航行中の計器カード(ペース・レート・経過時間・距離)。**艇速変化グラフは置かない**(2026-08-13に廃止。漕ぎながら波形を読む場面が無く、上部の一等地を主計器と取り合っていた)。理由と寸法の根拠は同ファイル冒頭 |
 | `lib/services/message_service.dart` | 位置共有。RTDB(既定)/Firestoreをフラグで切替。onDisconnect対応 |
 | `lib/services/other_boat_track_store.dart` | 受信メッセージの検証・順序付け・鮮度管理(純Dart) |
 | `lib/services/send_policy.dart` | 適応送信の間隔決定 |

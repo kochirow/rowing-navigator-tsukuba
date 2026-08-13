@@ -1,19 +1,21 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
-import '../../../services/rowing_motion_fusion.dart';
-import '../../../services/stroke_speed_trace.dart';
 import '../../../theme/app_theme.dart';
-import 'stroke_metrics_chips.dart';
-import 'stroke_speed_chart.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
 /// 計器と補助値だけを表示し、GPS・通信・安全設定などのシステム状態は
 /// 上部の警告や専用画面へ集約する。
 ///   1. 主計器: ペース。SPM計測がONの時はレートを併記。
-///   2. 補助: 距離・経過時間(16px)。
+///   2. 副計器: 経過時間・距離。主計器と同じ「面」で、行いっぱいに置く。
+///
+/// **1ストロークの艇速変化グラフは航行中には出さない(2026-08-13)。**
+/// 漕ぎながら波形を読む場面が実際には無く、上部の一等地を主計器と
+/// 取り合っていた。空いた高さは副計器(経過時間・距離)へ回し、
+/// 14〜15pxの添え物だったものを面のある計器に戻してある。
+/// 波形そのものは監視端末側(`stroke_trace_sheet.dart`)に残っており、
+/// 艇側は従来どおり計測・共有する(陸上で見るぶんには有用なため)。
+/// **戻すときは「漕ぎながら読むのか」を先に確かめること。**
 ///
 /// **小型表示の主計器は、カード幅が許す限り大きくする。**
 /// ペース・レート・単位を1つの [FittedBox] に入れて横いっぱいへ拡大する
@@ -36,16 +38,6 @@ class NavStatusCard extends StatelessWidget {
   final int distanceMeters;
   final int elapsedTimeSeconds;
   final double? spm; // ストロークレート(計測不能時はnull)
-  final RowingMotionMetrics? strokeMotion;
-  final bool strokeMotionDisplayEnabled;
-
-  /// 艇速変化グラフ1画面ぶんの切り出し。
-  ///
-  /// **`ValueNotifier` ではなく関数で受ける。** 25Hzで値を配ると計器カード
-  /// 全体が毎フレーム再buildされ、ペース・SPMの文字まで作り直しになる。
-  /// グラフは自前のTickerでこの関数を引き、CustomPaintだけを描き直す。
-  final StrokeSpeedTraceWindow? Function(DateTime now)?
-      strokeTraceWindowBuilder;
   final bool spmMeasurementEnabled; // ユーザーがSPM計測をONにしているか
   final bool compact; // 横向き用。左上へ寄せ、幅だけを絞る
   final bool portraitCompact; // 縦向き用。横幅9割を中央寄せで使う
@@ -55,9 +47,6 @@ class NavStatusCard extends StatelessWidget {
     required this.distanceMeters,
     required this.elapsedTimeSeconds,
     this.spm,
-    this.strokeMotion,
-    this.strokeMotionDisplayEnabled = false,
-    this.strokeTraceWindowBuilder,
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
@@ -117,9 +106,9 @@ class NavStatusCard extends StatelessWidget {
       ),
       padding: EdgeInsets.fromLTRB(
         dimens.space5,
-        dimens.space3,
+        dimens.space4,
         dimens.space5,
-        dimens.space2,
+        dimens.space4,
       ),
       decoration: BoxDecoration(
         color: colors.mapPanelScrim,
@@ -197,34 +186,27 @@ class NavStatusCard extends StatelessWidget {
               ],
             ],
           ),
-          if (strokeMotionDisplayEnabled) ...[
-            SizedBox(height: dimens.space2),
-            _StrokeMotionSection(
-              metrics: strokeMotion,
-              windowBuilder: strokeTraceWindowBuilder,
-              chartHeight: 82,
-            ),
-          ],
-          SizedBox(height: dimens.space2),
+          SizedBox(height: dimens.space3),
           Divider(height: 1, color: onDark.withValues(alpha: 0.2)),
-          SizedBox(height: dimens.space2),
-          // ---- 第2階層(補助) ----
+          SizedBox(height: dimens.space3),
+          // ---- 第2階層(副計器): 経過時間・距離 ----
+          //
+          // 艇速グラフを外したぶんの高さをここへ回している。横に2つ並べ、
+          // 行いっぱいを使う。縦に積んで16pxで書いていた頃は、主計器の
+          // 下に付いた添え物にしか見えず、揺れる艇の上では読めなかった。
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _InlineMetric(
-                      icon: Icons.straighten,
-                      value: _formatDistance(distanceMeters),
-                    ),
-                    SizedBox(height: dimens.space1),
-                    _InlineMetric(
-                      icon: Icons.timer_outlined,
-                      value: _formatTime(elapsedTimeSeconds),
-                    ),
-                  ],
+                child: _InlineMetric(
+                  icon: Icons.timer_outlined,
+                  value: _formatTime(elapsedTimeSeconds),
+                ),
+              ),
+              SizedBox(width: dimens.space3),
+              Expanded(
+                child: _InlineMetric(
+                  icon: Icons.straighten,
+                  value: _formatDistance(distanceMeters),
                 ),
               ),
             ],
@@ -272,18 +254,22 @@ class NavStatusCard extends StatelessWidget {
   /// 実寸で1.5px程度になる値を置く。
   static const double _plateBorderWidth = 2;
 
-  /// 縮小カードで艇速グラフに与える高さ。
+  /// 副計器(経過時間・距離)の面の高さ。
   ///
-  /// 経過時間・距離をグラフの左へ畳んだぶん、独立した行(約26px)が不要に
-  /// なったので、その分をここへ回している。
-  static const double _compactChartHeight = 84;
+  /// **主計器の半分強にする。** 同じ高さにすると計器が4つ横並びに見えて、
+  /// ペースとレートがどれか分からなくなる。艇速グラフ(84px)を外して
+  /// 空いた高さのうち、ここへ回すのは面1枚ぶんだけで、残りは地図へ返す。
+  static const double _secondaryPlateHeight = 52;
 
-  /// グラフ左の細い列の幅。
+  /// 副計器の数値・単位・アイコンの寸法。**実寸**(拡大しない)。
   ///
-  /// アイコンを外し、数値を列の左端へ寄せてある。アイコンぶんの18pxを
-  /// 削れたので、空きは数値とグラフのあいだ(=ふつうの余白)に見える。
-  /// これ以上広げるとグラフの横(=時間軸)が痩せて、2ストロークが詰まる。
-  static const double _compactMetricRailWidth = 58;
+  /// 主計器と違って [FittedBox] で行いっぱいへ引き伸ばさない。桁数が
+  /// 変わるたびに(`9:59` → `10:00`、`999 m` → `1.00 km`)大きさが跳ねると、
+  /// 目が毎回そこへ引かれて主計器から離れる。**桁で揺れないことが、
+  /// 数pxの大きさより効く。**
+  static const double _secondaryValueFontSize = 30;
+  static const double _secondaryUnitFontSize = 14;
+  static const double _secondaryIconSize = 20;
 
   /// 主計器のうち、レートだけに与える色。
   ///
@@ -323,94 +309,20 @@ class NavStatusCard extends StatelessWidget {
   /// 縦向きカードが使う画面幅の割合。
   static const double _portraitWidthFactor = 0.9;
 
-  /// 縁取り(キーライン)の色。
+  /// **文字の縁取り(輪郭影)はもう持たない(2026-08-05 / 2026-08-13)。**
   ///
-  /// **わずかに暖色へ振った不透明の黒。** カードの面はどれも寒色の紺
-  /// (`panelScrim` = #002E4D 系)なので、同じ寒色の黒だと面と同系色に
-  /// なって縁が沈む。暖色側へ寄せると、明度差だけでなく色相差でも
-  /// 分離するため、暗い面の上でも縁が縁として見える。
-  static const Color _outlineColor = Color(0xFF120A04);
-
-  /// 縁取りの太さ(文字サイズに対する比)。
+  /// 半透明のカードに白文字を置いていた頃は、「明るいにじみ + 黒の
+  /// キーライン」の二重縁取りで、明るい地図の上でも暗い水面の上でも
+  /// 対比が残るようにしていた。その後
+  ///   1. カードの面を alpha 0.86 まで濃くして下地を濃紺1種類に確定させ、
+  ///   2. 計器をフィールドごとの面([_MetricPlate] / [_SecondaryPlate])で分けた
+  /// ため、縁取りは対比を作らずに字画の内側を食うだけになった
+  /// (ペース92pxで7.4px)。**対比は面の明度差で作る。**
   ///
-  /// [FittedBox] が文字ごと縮小するので、比で持たないと縮小時に
-  /// 縁だけが相対的に太くなって数字が潰れる。
-  static const double _outlineWidthRatio = 0.08;
-
-  /// 白文字を「明るいにじみ + 黒のキーライン」の二重で縁取る影。
-  ///
-  /// **主計器(ペース・レート)はもうこれを使わない(2026-08-05)。**
-  /// 以下の設計は「文字の背後に濃色の面と透けた地図が混在する」ことが
-  /// 前提だった。その後カードの面を alpha 0.86 まで濃くしたので、
-  /// **下地は常に濃紺1種類に確定した**。すると、
-  ///   - 黒のキーライン(`_outlineColor`)は濃紺の上でほぼ不可視になり、
-  ///     字画の内側を `fontSize × 0.08`(ペース92pxなら7.4px)食うだけになる
-  ///   - 明るいにじみは、白い字のまわりに薄靄を作って輪郭を甘くする
-  /// という、コストだけが残る状態になっていた。実機でレートの数字が
-  /// ペースより鈍く見えたのはこれが理由(水色のほうが黒に食われる差が出る)。
-  ///
-  /// いまは主計器を **フィールドごとの面([_MetricPlate])** で分け、
-  /// 対比は面の明度差で作る。字には縁取りを掛けない。屋外ディスプレイの
-  /// 定石(明るい対象を暗い下地へ置く・要素を絞る)にも合う。
-  ///
-  /// **この関数はまだ補助情報(14px)が使っている。** 距離・経過時間・
-  /// 「分析」ラベルは、艇速グラフの上や地図が透ける端に掛かるため、
-  /// 下地が確定していない。戻すときは「下地が本当に混在するのか」を
-  /// 先に確かめること。
-  ///
-  /// **黒一色の縁取りだけでは足りない。** このカードは半透明なので、
-  /// 文字の背後には「濃色の面」と「透けた地図」が混在する。
-  ///   - 地図が明るいとき(白い建物・空・砂地): 黒の縁が効く
-  ///   - 面が暗いとき・夕暮れの水面: 黒の縁は背景に沈んで見えない
-  ///
-  /// そこで字幕やコミックの組版で使う二重縁取りを使う。
-  ///   1. いちばん下に**明るいにじみ**を広めに敷く
-  ///   2. その上に**ぼかさない黒**を8方向へ置いてキーラインを作る
-  ///   3. いちばん上が白い字面
-  ///
-  /// 黒のキーラインが明るいにじみの内側を覆うので、実際に見えるのは
-  /// 「白い字 → 黒い細線 → ほのかな明るい縁」の三層になる。
-  /// 背景が明るければ黒線が、暗ければ明るい縁が効く。どちらの下地でも
-  /// 必ずどこかの層が対比を作るのがこの積み方の要点。
-  ///
-  /// 影は list の先頭から順に描かれ、字面はいちばん最後に乗る。
-  /// **順番を入れ替えないこと。** 黒を先に置くとにじみが黒を覆い、
-  /// 単に眠い文字になる。
-  ///
-  /// なお文字を2枚重ねる(`PaintingStyle.stroke` + 塗り)方式は使わない。
-  /// Textが1つのままならベースライン揃えも寸法も変わらないため。
-  ///
-  /// **方向の数は縁の太さから決める(重要)。** この方式の輪郭は
-  /// 「字を N 方向へずらした複製の和」なので、字の角は半径 d の正N角形に
-  /// なる。8方向のままキーラインを太くすると、角が目に見える多角形に
-  /// なって「フォントがギザギザ」に見える。1辺の長さは
-  /// `2*d*sin(π/N)` なので、これが約1px以下に収まる N を選ぶ。
-  static List<Shadow> _outlineShadows(double fontSize) {
-    final d = fontSize * _outlineWidthRatio;
-    // 1辺 ≒ 1px 以下。細い縁では8方向で十分(描画回数を無駄にしない)。
-    final steps =
-        d <= 1.5 ? 8 : (math.pi / math.asin(0.5 / d)).ceil().clamp(8, 32);
-    return [
-      // 1. 明るいにじみ。暗い下地に対して字の塊を浮かせる。
-      //    強くするとカードの上で灰色のもやに見えるので控えめに。
-      Shadow(
-        color: const Color(0x40C8E8F7),
-        blurRadius: fontSize * 0.18,
-      ),
-      // 2. 黒のキーライン。明るい下地に対して輪郭を切る。
-      for (var i = 0; i < steps; i++)
-        Shadow(
-          color: _outlineColor,
-          offset: Offset(
-            d * math.cos(2 * math.pi * i / steps),
-            d * math.sin(2 * math.pi * i / steps),
-          ),
-        ),
-    ];
-  }
-
-  /// 補助情報(距離・経過時間・アイコン)用。文字が小さいので比ではなく実寸。
-  static final List<Shadow> _smallOutlineShadows = _outlineShadows(14);
+  /// 最後まで残っていた補助情報(14px)の縁取りは、艇速グラフを外して
+  /// 経過時間・距離を面に載せた時点で下地が確定したので落とした。
+  /// 戻すときは「下地が本当に混在するのか」を先に確かめること。
+  /// 実装は git 履歴(`_outlineShadows`)にある。
 
   Widget _buildCompact({
     required AppColors colors,
@@ -536,164 +448,33 @@ class NavStatusCard extends StatelessWidget {
                 ),
               ),
             ),
-            // グラフを出すときは、経過時間と距離をグラフの左へ寄せる。
+            // 副計器(経過時間・距離)。**主計器と同じ「面」に載せる。**
             //
-            // 両者はグラフより1段低い情報なので、下に独立した行を持たせると
-            // 高さだけを取って読まれない。左端の細い列へ畳むと、空いた分を
-            // そのままグラフの縦幅へ回せる(65 → 84px、約3割増)。
-            // 波形は上下の振れ幅を読むものなので、縦が効く。
-            if (strokeMotionDisplayEnabled) ...[
-              const SizedBox(height: 5),
-              // 高さは固定しない。1ストローク指標を開くとグラフの下へ
-              // 行が増えるので、外側を固定すると溢れる。左の列だけを
-              // グラフと同じ高さにして、上端を揃える。
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _compactMetricRailWidth,
-                    height: _compactChartHeight,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _RailMetric(value: _formatTime(elapsedTimeSeconds)),
-                        _RailMetric(value: _formatDistance(distanceMeters)),
-                      ],
-                    ),
+            // 艇速グラフを外して空いた高さをここへ回した。以前は14pxの
+            // 文字を1行に並べただけで、面も持たず、グラフを出すと左端の
+            // 58px幅の列へ畳まれていた。ピースの経過時間は漕ぎながら
+            // いちばん見る値の1つなので、面のある計器に戻す。
+            const SizedBox(height: _plateGap),
+            Row(
+              children: [
+                Expanded(
+                  child: _SecondaryPlate(
+                    icon: Icons.timer_outlined,
+                    value: _formatTime(elapsedTimeSeconds),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _StrokeMotionSection(
-                      metrics: strokeMotion,
-                      windowBuilder: strokeTraceWindowBuilder,
-                      chartHeight: _compactChartHeight,
-                      compact: true,
-                    ),
+                ),
+                const SizedBox(width: _plateGap),
+                Expanded(
+                  child: _SecondaryPlate(
+                    icon: Icons.straighten,
+                    value: _formatDistance(distanceMeters),
                   ),
-                ],
-              ),
-            ] else ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: _CompactMetric(
-                      icon: Icons.timer_outlined,
-                      value: _formatTime(elapsedTimeSeconds),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _CompactMetric(
-                      icon: Icons.straighten,
-                      value: _formatDistance(distanceMeters),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// 艇速変化グラフと、その下の1ストローク指標。
-///
-/// **指標が出せなくてもグラフは出す。** 解析が確定するのは数ストローク
-/// あとなので、そこまで何も出さないと「壊れている」ように見える(原則1)。
-///
-/// **1ストローク指標(距離・キャッチ減速など)は既定で畳む。**
-/// 漕ぎながら読むものではなく、常時2行を占めると地図と主計器を圧迫する。
-/// グラフをタップした時だけ開き、同じタップで閉じる。値そのものは
-/// 練習ログに残るので、畳んでも失われる情報はない。
-/// 監視端末側(`stroke_trace_sheet.dart`)は陸上で見るものなので常時表示のまま。
-class _StrokeMotionSection extends StatefulWidget {
-  final RowingMotionMetrics? metrics;
-  final StrokeSpeedTraceWindow? Function(DateTime now)? windowBuilder;
-  final double chartHeight;
-  final bool compact;
-
-  const _StrokeMotionSection({
-    required this.metrics,
-    required this.windowBuilder,
-    required this.chartHeight,
-    this.compact = false,
-  });
-
-  @override
-  State<_StrokeMotionSection> createState() => _StrokeMotionSectionState();
-}
-
-class _StrokeMotionSectionState extends State<_StrokeMotionSection> {
-  bool _metricsExpanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final windowBuilder = widget.windowBuilder;
-    final metrics = widget.metrics;
-    final onDark = context.colors.onDark;
-    final canExpand = metrics != null && windowBuilder != null;
-    // グラフが無ければ畳む手段(タップ先)も無い。その場合は指標を出す。
-    final showMetrics = metrics != null && (_metricsExpanded || !canExpand);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (windowBuilder != null)
-          GestureDetector(
-            key: const ValueKey('stroke-metrics-toggle'),
-            behavior: HitTestBehavior.opaque,
-            onTap: canExpand
-                ? () => setState(() => _metricsExpanded = !_metricsExpanded)
-                : null,
-            child: Stack(
-              children: [
-                StrokeSpeedChart(
-                  key: const ValueKey('stroke-speed-chart'),
-                  windowBuilder: windowBuilder,
-                  height: widget.chartHeight,
-                  emptyLabel: 'ストロークの艇速変化を計測中',
-                ),
-                // 畳んでいることと、開く手段があることを示す最小の目印。
-                // グラフの上に重ねるので高さを1pxも増やさない。
-                if (canExpand)
-                  Positioned(
-                    left: 4,
-                    bottom: 2,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _metricsExpanded
-                              ? Icons.expand_less
-                              : Icons.expand_more,
-                          size: 14,
-                          color: onDark.withValues(alpha: 0.85),
-                          shadows: NavStatusCard._smallOutlineShadows,
-                        ),
-                        Text(
-                          '分析',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: onDark.withValues(alpha: 0.85),
-                            shadows: NavStatusCard._smallOutlineShadows,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        if (showMetrics) ...[
-          SizedBox(height: widget.compact ? 4 : 6),
-          StrokeMetricsChips.fromMetrics(metrics, compact: widget.compact),
-        ],
-      ],
     );
   }
 }
@@ -799,13 +580,14 @@ class _InlineMetric extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: onDark.withValues(alpha: 0.7)),
-          SizedBox(width: context.dimens.space1),
+          Icon(icon, size: 22, color: onDark.withValues(alpha: 0.75)),
+          SizedBox(width: context.dimens.space2),
           Text(
             value,
             style: TextStyle(
-              // 補助情報。主計器(ペース52px・SPM44px)との差を明確にする。
-              fontSize: 16,
+              // 副計器。主計器(ペース52px・SPM44px)との差は保ちつつ、
+              // 艇速グラフを外して空いた高さのぶんだけ大きくする。
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: onDark,
               fontFeatures: NavStatusCard._tabularFigures,
@@ -817,54 +599,23 @@ class _InlineMetric extends StatelessWidget {
   }
 }
 
-class _CompactMetric extends StatelessWidget {
+/// 副計器(経過時間・距離)1つぶんの面。
+///
+/// **主計器と同じ形で、一段小さい。** 面・角丸・等幅数字は [_MetricPlate]
+/// と揃え、高さと文字だけを落とす。同じ形なら「同じ種類のもの(計器)が
+/// 4つある」と読め、大きさの差だけが主従を伝える。
+///
+/// アイコンは種類の印として残す。`0:14` と `120 m` は形でも見分けが
+/// つくが、日光下でちらりと見るときは時計と物差しの形のほうが速い。
+///
+/// 面を持つので、文字の縁取り([NavStatusCard._smallOutlineShadows])は
+/// 掛けない。下地が濃紺1種類に確定していれば縁は字画を食うだけになる、
+/// という主計器と同じ理由。
+class _SecondaryPlate extends StatelessWidget {
   final IconData icon;
   final String value;
 
-  const _CompactMetric({required this.icon, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final onDark = context.colors.onDark;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: onDark.withValues(alpha: 0.8),
-          shadows: NavStatusCard._smallOutlineShadows,
-        ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: TextStyle(
-              color: onDark,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              fontFeatures: NavStatusCard._tabularFigures,
-              shadows: NavStatusCard._smallOutlineShadows,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 艇速グラフの左に置く、経過時間と距離。
-///
-/// **アイコンを持たない。** `0:14` は時計、`120 m` は距離だと形で分かる
-/// (コロンと単位が印になる)。アイコンを外したぶん列を18px細くでき、
-/// その分がグラフの時間軸へ回る。
-class _RailMetric extends StatelessWidget {
-  final String value;
-
-  const _RailMetric({required this.value});
+  const _SecondaryPlate({required this.icon, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -872,37 +623,61 @@ class _RailMetric extends StatelessWidget {
     // 「12.35 km」の単位側だけを小さくする。数字が主で単位は従。
     final spaceIndex = value.indexOf(' ');
     final number = spaceIndex < 0 ? value : value.substring(0, spaceIndex);
-    final unit = spaceIndex < 0 ? null : value.substring(spaceIndex);
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text(
-            number,
-            style: TextStyle(
-              color: onDark,
-              fontSize: 15,
-              height: 1,
-              fontWeight: FontWeight.bold,
-              fontFeatures: NavStatusCard._tabularFigures,
-              shadows: NavStatusCard._smallOutlineShadows,
+    final unit = spaceIndex < 0 ? null : value.substring(spaceIndex + 1);
+    return Container(
+      height: NavStatusCard._secondaryPlateHeight,
+      padding: const EdgeInsets.symmetric(
+        horizontal: NavStatusCard._platePaddingHorizontal,
+      ),
+      decoration: BoxDecoration(
+        color: NavStatusCard._plateColor,
+        borderRadius: BorderRadius.circular(NavStatusCard._plateRadius),
+      ),
+      // 桁が増えても面から溢れないよう、中身だけを縮める。
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        // アイコンはベースライン揃えの行の外へ出す。文字ではないので
+        // ベースラインを持たず、中へ入れると縦位置が決められない。
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: NavStatusCard._secondaryIconSize,
+              color: onDark.withValues(alpha: 0.75),
             ),
-          ),
-          if (unit != null)
-            Text(
-              unit,
-              style: TextStyle(
-                color: onDark.withValues(alpha: 0.75),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                shadows: NavStatusCard._smallOutlineShadows,
-              ),
+            const SizedBox(width: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  number,
+                  style: TextStyle(
+                    color: onDark,
+                    fontSize: NavStatusCard._secondaryValueFontSize,
+                    height: 1,
+                    fontWeight: FontWeight.bold,
+                    fontFeatures: NavStatusCard._tabularFigures,
+                  ),
+                ),
+                if (unit != null) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    unit,
+                    style: TextStyle(
+                      color: onDark.withValues(alpha: 0.8),
+                      fontSize: NavStatusCard._secondaryUnitFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

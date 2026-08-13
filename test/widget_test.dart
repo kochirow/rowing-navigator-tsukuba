@@ -334,10 +334,14 @@ void main() {
     // 主計器を大きく出すため幅は従来より広い。それでも横向き画面の
     // 左上に収まり、地図の大部分を空ける。
     expect(tester.getSize(card).width, lessThanOrEqualTo(380));
-    expect(tester.getSize(card).height, lessThan(140));
+    // 艇速グラフ(84px)を外し、そのぶんを副計器の面(52px)へ回した。
+    // 全体としてはグラフ表示時より低い。
+    expect(tester.getSize(card).height, lessThan(200));
     expect(find.text('2:00'), findsOneWidget);
     expect(find.text('1:00'), findsOneWidget);
-    expect(find.text('500 m'), findsOneWidget);
+    // 副計器は数値と単位を分けて組む(数字が主で単位は従)。
+    expect(find.text('500'), findsOneWidget);
+    expect(find.text('m'), findsOneWidget);
     expect(find.textContaining('spm'), findsNothing);
   });
 
@@ -368,7 +372,7 @@ void main() {
 
     final card = find.byKey(const ValueKey('nav-status-card-portrait-compact'));
     expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
-    expect(tester.getSize(card).height, lessThan(140));
+    expect(tester.getSize(card).height, lessThan(200));
     // 表示上の高さで見る(FittedBoxで拡大するため style は基準値)。
     expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
     expect(find.textContaining('spm'), findsNothing);
@@ -462,7 +466,7 @@ void main() {
           home: Scaffold(
             body: NavSettingModal(
               onPressStartNav:
-                  (displayName, strokeRateEnabled, showStrokeMotion, _) async {
+                  (displayName, strokeRateEnabled, _) async {
                 submittedName = displayName;
                 submittedStrokeRate = strokeRateEnabled;
               },
@@ -491,7 +495,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
-            body: NavSettingModal(onPressStartNav: (_, __, ___, ____) async {}),
+            body: NavSettingModal(onPressStartNav: (_, __, ___) async {}),
           ),
         ),
       ),
@@ -523,7 +527,7 @@ void main() {
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
                   builder: (_) => NavSettingModal(
-                      onPressStartNav: (_, __, ___, ____) async {}),
+                      onPressStartNav: (_, __, ___) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
@@ -558,7 +562,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __, ___, ____) async {},
+              onPressStartNav: (_, __, ___) async {},
               onPressTestAudio: () async {
                 tapped = true;
               },
@@ -584,7 +588,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, _, __, ___) async {
+              onPressStartNav: (displayName, _, __) async {
                 submittedName = displayName;
               },
             ),
@@ -611,19 +615,16 @@ void main() {
     expect(submittedName, '後藤');
   });
 
-  testWidgets('レート・ストローク分析は既定ONで航行開始へ渡せる', (tester) async {
+  testWidgets('レート計測は既定ONで航行開始へ渡せる', (tester) async {
     useNavigationSettingsViewport(tester);
     bool? submittedStrokeRateEnabled;
-    bool? submittedStrokeMotionDisplayEnabled;
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav:
-                  (_, strokeRateEnabled, showStrokeMotion, __) async {
+              onPressStartNav: (_, strokeRateEnabled, __) async {
                 submittedStrokeRateEnabled = strokeRateEnabled;
-                submittedStrokeMotionDisplayEnabled = showStrokeMotion;
               },
             ),
           ),
@@ -632,48 +633,18 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('レート(SPM)・ストロークの艇速変化を計測する'));
+    await tester.ensureVisible(find.text('レート(SPM)を計測する'));
     await tester.pumpAndSettle();
-    expect(find.text('レート(SPM)・ストローク分析'), findsOneWidget);
+    expect(find.text('レート(SPM)'), findsOneWidget);
     expect(find.textContaining('艇にスマホを固定して使用'), findsOneWidget);
-    expect(find.text('1ストロークの艇速変化を表示'), findsOneWidget);
+    // 航行中の艇速変化グラフは廃止した(2026-08-13)。表示の切替も出さない。
+    expect(find.textContaining('艇速変化を表示'), findsNothing);
 
     await tester.ensureVisible(find.text('航行スタート'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('航行スタート'));
     await tester.pump();
     expect(submittedStrokeRateEnabled, isTrue);
-    expect(submittedStrokeMotionDisplayEnabled, isFalse);
-  });
-
-  testWidgets('1ストロークの艇速変化は開始前に表示ONを選べる', (tester) async {
-    useNavigationSettingsViewport(tester);
-    bool? submitted;
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: NavSettingModal(
-              onPressStartNav: (_, __, showStrokeMotion, ___) async {
-                submitted = showStrokeMotion;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    final displayOption = find.text('1ストロークの艇速変化を表示');
-    await tester.ensureVisible(displayOption);
-    await tester.pumpAndSettle();
-    await tester.tap(displayOption);
-    await tester.ensureVisible(find.text('航行スタート'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('航行スタート'));
-    await tester.pump();
-
-    expect(submitted, isTrue);
   });
 
   testWidgets('航行開始処理中の二重押しを無視する', (tester) async {
@@ -685,7 +656,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __, ___, ____) {
+              onPressStartNav: (_, __, ___) {
                 startCount += 1;
                 return startCompleter.future;
               },

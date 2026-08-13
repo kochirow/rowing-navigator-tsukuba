@@ -8,17 +8,16 @@ import '../config/stroke_rate_config.dart';
 import '../models/shared_stroke_trace.dart';
 import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_rate_analyzer.dart';
-import '../services/stroke_speed_trace.dart';
 
 /// 加速度センサからストロークレート(SPM)を計測するフック。
 /// [active]かつ[enabled]がtrueの間だけセンサを購読する(電池への配慮)。
 /// SPM不要の運用では[enabled]をfalseにし、加速度センサと解析タイマーを
 /// 完全に停止できる。
 ///
-/// グラフ用の連続波形は[enabled]と同時に動き出す。表示ON/OFFや監視共有の
-/// ON/OFFでは切らない。**1サンプルあたりの追加処理は積分1回**で、
-/// リングバッファも14秒ぶん(350点)しかない。ここを別スイッチにすると、
-/// 「計測はONなのにグラフだけ出ない」状態を作るだけで得るものがない。
+/// 1ストロークの艇速波形も[enabled]と同時に動き出す。**航行中の画面には
+/// 出さない**(2026-08-13に廃止)が、監視端末へ共有する元データなので
+/// 計測は続ける。**1サンプルあたりの追加処理は積分1回**で、リングバッファも
+/// 14秒ぶん(350点)しかない。ここを別スイッチにしても得るものがない。
 UseStrokeRate useStrokeRate({
   required bool active,
   bool enabled = false,
@@ -165,13 +164,6 @@ UseStrokeRate useStrokeRate({
     spm: spm,
     motion: motion,
     latestStrokeTrace: latestStrokeTrace,
-    // 描画フレームごとに呼ばれる。状態を変えず、リングから切り出すだけ。
-    traceWindow: ({required DateTime now, double? windowSeconds}) =>
-        fusion.traceWindow(
-      now: now,
-      windowSeconds:
-          windowSeconds ?? strokeTraceWindowSecondsFor(spm: spm.value),
-    ),
     observeGnss: ({
       required timestamp,
       required speedMetersPerSecond,
@@ -201,13 +193,6 @@ class UseStrokeRate {
   /// **作るだけで送らない。** 送るかどうかは共有の設定が決める。
   final ValueNotifier<SharedStrokeTrace?> latestStrokeTrace;
 
-  /// グラフ1画面ぶんの切り出し。**再buildを起こさない**ため
-  /// ValueNotifierではなく関数で渡す(描画側がフレームごとに引く)。
-  final StrokeSpeedTraceWindow? Function({
-    required DateTime now,
-    double? windowSeconds,
-  }) traceWindow;
-
   final void Function({
     required DateTime timestamp,
     required double speedMetersPerSecond,
@@ -219,7 +204,6 @@ class UseStrokeRate {
     required this.spm,
     required this.motion,
     required this.latestStrokeTrace,
-    required this.traceWindow,
     required this.observeGnss,
   });
 }

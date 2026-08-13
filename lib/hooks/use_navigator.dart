@@ -65,7 +65,6 @@ import '../services/risk_evaluator_settings_service.dart';
 import '../services/resilient_stream_supervisor.dart';
 import '../services/robust_position_estimator.dart';
 import '../services/rowing_motion_fusion.dart';
-import '../services/stroke_speed_trace.dart';
 import '../services/team_service.dart';
 import '../services/safety_orchestrator.dart';
 import '../services/warning_presenter.dart';
@@ -5176,7 +5175,6 @@ UseNavigator useNavigator() {
     spm: strokeRate.spm,
     strokeMotion: strokeRate.motion,
     latestStrokeTrace: strokeRate.latestStrokeTrace,
-    strokeTraceWindow: strokeRate.traceWindow,
     audioError: alert.error,
     getCurrentPosition: getCurrentPosition,
     startNavigation: startNavigation,
@@ -5251,11 +5249,6 @@ class UseNavigator {
   /// 直近1ストロークの共有用波形。監視共有がONのときだけ送られる。
   final ValueNotifier<SharedStrokeTrace?> latestStrokeTrace;
 
-  /// 艇速変化グラフ1画面ぶんの切り出し。**表示専用**で、安全経路は読まない。
-  final StrokeSpeedTraceWindow? Function({
-    required DateTime now,
-    double? windowSeconds,
-  }) strokeTraceWindow;
   final ValueNotifier<String?> audioError;
   final Future<Position> Function(LocationAccuracy accuracy) getCurrentPosition;
   final Future<void> Function(NavConfig config) startNavigation;
@@ -5320,7 +5313,6 @@ class UseNavigator {
     required this.spm,
     required this.strokeMotion,
     required this.latestStrokeTrace,
-    required this.strokeTraceWindow,
     required this.audioError,
     required this.getCurrentPosition,
     required this.startNavigation,
