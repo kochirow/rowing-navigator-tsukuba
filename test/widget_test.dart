@@ -345,7 +345,7 @@ void main() {
     expect(find.textContaining('spm'), findsNothing);
   });
 
-  testWidgets('縦向き用カードは画面幅の9割を使い、主計器を大きく出す', (tester) async {
+  testWidgets('縦向き用カードは画面幅の96%を使い、主計器を大きく出す', (tester) async {
     tester.view
       ..physicalSize = const Size(375, 667)
       ..devicePixelRatio = 1;
@@ -371,8 +371,8 @@ void main() {
     );
 
     final card = find.byKey(const ValueKey('nav-status-card-portrait-compact'));
-    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
-    expect(tester.getSize(card).height, lessThan(200));
+    expect(tester.getSize(card).width, closeTo(375 * 0.96, 1));
+    expect(tester.getSize(card).height, lessThan(240));
     // 表示上の高さで見る(FittedBoxで拡大するため style は基準値)。
     expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
     expect(find.textContaining('spm'), findsNothing);
@@ -395,7 +395,7 @@ void main() {
     await tester.pump();
 
     // SPMの有無で幅は変えない(計器の位置が動くと読み取りが遅れる)。
-    expect(tester.getSize(card).width, closeTo(375 * 0.9, 1));
+    expect(tester.getSize(card).width, closeTo(375 * 0.96, 1));
     expect(find.text('18'), findsOneWidget);
     // 単位は面の中で数字の隣に置くので、前置きの空白を持たない。
     expect(find.text('spm'), findsOneWidget);

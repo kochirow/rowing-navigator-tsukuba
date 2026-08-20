@@ -18,13 +18,14 @@ void main() {
     bool spmEnabled = true,
     bool compact = false,
     bool portraitCompact = false,
+    int paceSeconds = 120,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(),
         home: Scaffold(
           body: NavStatusCard(
-            paceSeconds: 120,
+            paceSeconds: paceSeconds,
             distanceMeters: 1000,
             elapsedTimeSeconds: 60,
             spm: 24,
@@ -101,9 +102,31 @@ void main() {
 
     // 主計器の実寸は「カード幅 ÷ 行全体の基準幅」で決まる。単位や面の余白を
     // 太らせると、カードの大きさは変わらないまま数字だけが縮む。
-    // 2026-08-13 に単位・余白・間隔を詰めて数字を約8%大きくした取り分を、
-    // ここで固定する(実測でカード幅の約13%)。
-    expect(pace.height, greaterThan(card.width * 0.125));
+    // 幅から逆算する方式(2026-08-13)にしてからの取り分をここで固定する。
+    expect(pace.height, greaterThan(card.width * 0.14));
+  });
+
+  testWidgets('主計器の大きさは表示する値でも状態でも変わらない', (tester) async {
+    // 桁で揺れないこと。等幅数字なので `2:00` と `5:59` は同じ幅の型に入る。
+    await pumpCard(tester, portraitCompact: true);
+    final base = tester.getRect(find.text('2:00')).height;
+
+    await pumpCard(tester, portraitCompact: true, paceSeconds: 359);
+    expect(tester.getRect(find.text('5:59')).height, closeTo(base, 0.5));
+
+    // SPM計測のON/OFFでも変えない。面は広がるが数字は同じ大きさ。
+    await pumpCard(tester, portraitCompact: true, spmEnabled: false);
+    expect(tester.getRect(find.text('2:00')).height, closeTo(base, 0.5));
+  });
+
+  testWidgets('意味を持たない遅さは値ではなく代替表示にする', (tester) async {
+    // 10分/500m より遅いのは漂流・係留であってペースではない。
+    // ここを値として出すと桁が5つになり、漕行中の数字まで小さくなる。
+    await pumpCard(tester, portraitCompact: true, paceSeconds: 601);
+    expect(find.text('--:--'), findsOneWidget);
+
+    await pumpCard(tester, portraitCompact: true, paceSeconds: 599);
+    expect(find.text('9:59'), findsOneWidget);
   });
 
   testWidgets('縦向き小型の副計器は面を持ち、行いっぱいに置く', (tester) async {
@@ -173,14 +196,14 @@ void main() {
     expect(tester.getRect(find.text('2:00')).height, greaterThan(40));
   });
 
-  testWidgets('縦向き小型は画面幅の9割を使い中央に寄せる', (tester) async {
+  testWidgets('縦向き小型は画面幅の96%を使い中央に寄せる', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
     final screenWidth =
         tester.view.physicalSize.width / tester.view.devicePixelRatio;
     final card = tester.getRect(
         find.byKey(const ValueKey('nav-status-card-portrait-compact')));
-    expect(card.width, closeTo(screenWidth * 0.9, 1));
+    expect(card.width, closeTo(screenWidth * 0.96, 1));
     expect(card.center.dx, closeTo(screenWidth / 2, 1));
   });
 
