@@ -2,9 +2,9 @@
 # 「動くか」を機械的に確かめる smoke check。軽量版レビュー(動作確認レビュー)の起点。
 #
 # 使い方(リポジトリ直下で):
-#   bash .claude/skills/full-app-review/scripts/smoke_check.sh            # 既定。CIで担保済みかを見て自動判定
-#   bash .claude/skills/full-app-review/scripts/smoke_check.sh --static   # 静的チェックだけ(実測1.3秒)
-#   bash .claude/skills/full-app-review/scripts/smoke_check.sh --full     # 必ず解析+テスト全実行(実測108秒)
+#   bash tool/review/smoke_check.sh            # 既定。CIで担保済みかを見て自動判定
+#   bash tool/review/smoke_check.sh --static   # 静的チェックだけ(実測1.3秒)
+#   bash tool/review/smoke_check.sh --full     # 必ず解析+テスト全実行(実測108秒)
 #
 # **アプリのビルドは一切しない。** flutter build / flutter run / Xcode / Gradle は
 # このスクリプトも skill も実行しない。実機ビルドと配布は利用者の作業(AGENTS.md)。
@@ -177,7 +177,7 @@ dart run tool/generate_hazard_constants.dart --check >/dev/null 2>&1 &&
 
 note "結果"
 if [ "$fail" -eq 0 ]; then
-  echo "  機械的な検査は通った。ここから先は人が読む工程(軽量版_動作確認レビュー.md の F1〜F6)。"
+  echo "  機械的な検査は通った。ここから先は人が読む工程(docs/review_guide/quick_review.md の F1〜F6)。"
 else
   echo "  NG がある。まずそこを潰してからレビューを進めること。"
 fi

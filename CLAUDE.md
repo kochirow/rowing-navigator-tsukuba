@@ -367,6 +367,15 @@ flutter run
 - 警告関連の設定値はハードコードせず `lib/config/` に置く
 - 安全判定に関わる純粋ロジックは `services/` の純Dartクラスへ切り出し、単体テストを付ける
 
+## レビュー
+
+レビュー(動作確認・総合レビュー)を依頼されたら、自己流で読み始めず
+[docs/review_guide/README.md](docs/review_guide/README.md) の手順に従う。
+Claude Code も codex も同じ文書を使う(Claude の入口は
+`.claude/skills/full-app-review/SKILL.md`、codex の入口は `AGENTS.md`)。
+機械チェックは `bash tool/review/smoke_check.sh`(引数なし)。
+衝突判定本体だけを深く見るときは `.claude/skills/collision-safety-review/SKILL.md`。
+
 ## GitHub運用
 
 コミット、作業ブランチへのpush、PR作成に関する共通規約は
