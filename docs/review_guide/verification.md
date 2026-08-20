@@ -21,7 +21,7 @@ flutter test test/services/<レビュー中の対象>_test.dart
 ```
 
 **全実行(`flutter test`・約101秒)を払うかは、いまの状態が CI に担保されているかで決める。**
-`smoke_check.sh` の既定がそれを自動判定する(SKILL.md §1.1)。未コミットの変更がある
+`tool/review/smoke_check.sh` の既定がそれを自動判定する([README.md](README.md) §1.1)。未コミットの変更がある
 ワーキングツリーをレビューしているなら払う価値がある。CI が緑と分かっているコミットなら
 払わない。パスの途中で確かめたいときは、いま読んでいる範囲のテストだけを指定する。
 

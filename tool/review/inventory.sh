@@ -2,9 +2,9 @@
 # 総合レビューの棚卸し。規模・テスト有無・前回レビュー以降の変更を出す。
 #
 # 使い方(リポジトリ直下で):
-#   bash .claude/skills/full-app-review/scripts/inventory.sh            # 規模とテスト有無だけ
-#   bash .claude/skills/full-app-review/scripts/inventory.sh 44a762a    # 指定コミットからの変更も出す
-#   bash .claude/skills/full-app-review/scripts/inventory.sh 2026-07-27 # 日付でも可
+#   bash tool/review/inventory.sh            # 規模とテスト有無だけ
+#   bash tool/review/inventory.sh 44a762a    # 指定コミットからの変更も出す
+#   bash tool/review/inventory.sh 2026-07-27 # 日付でも可
 #
 # 読み取りのみ。ファイルを書き換えない。
 

@@ -83,6 +83,34 @@
 必要なら作業記録の整合を確認してからコミットする。CIの成功だけで本番Rules、署名済み
 ビルド、実機、または水上での安全性が確認されたとは書かない。
 
+## レビューを依頼されたとき
+
+「レビュー」「動作確認」「ちゃんと動くか見て」「リリース前の点検」「総合レビュー」
+「全体レビュー」などを依頼されたら、**自己流で読み始めず、
+[`docs/review_guide/README.md`](docs/review_guide/README.md) を読んで、そこの手順に従う。**
+Claude Code も codex も同じ文書を使う。
+
+| 何 | パス |
+| --- | --- |
+| 手順の本体(モード選択・共通ルール・重大度・完了条件) | `docs/review_guide/README.md` |
+| 軽量版(壊れ方 F1〜F6 を症状から辿る。1〜2セッション) | `docs/review_guide/quick_review.md` |
+| 総合版(実装全体を P00〜P17 で網羅) | `docs/review_guide/full_review_passes.md` |
+| 観点 A〜N | `docs/review_guide/viewpoints.md` |
+| 検証手段(数値検算・replay・実機ログ・自己反証) | `docs/review_guide/verification.md` |
+| 報告書テンプレート | `docs/review_guide/report_templates.md` |
+| 衝突判定本体の安全レビュー(総合版 P05 で使う) | `.claude/skills/collision-safety-review/SKILL.md` |
+
+最初に `bash tool/review/smoke_check.sh` を実行する(引数なし。いまの状態が CI に
+担保されているかを見て、解析とテストを流すかを自動判定する)。
+`bash tool/review/inventory.sh <前回レビューのSHAか日付>` は総合版の棚卸しに使う。
+
+レビュー中の約束は3つだけ先に書いておく。詳細は上の文書にある。
+
+- **指摘のみ。修正はしない。** 優先度を確定してから別作業で直す。
+- **根拠のない OK を書かない。見ていないものは「見ていない」と書く。**
+- **アプリのビルドは実行しない**(`flutter build` / `flutter run` / Xcode / Gradle /
+  シミュレータ起動)。実機ビルドと配布は利用者の作業。
+
 ## 人が行うこと
 
 通常の実装コミット・作業ブランチへのpush・PR作成・PRのmainへのマージは、エージェントが
