@@ -17,11 +17,18 @@ import '../../../theme/app_theme.dart';
 /// 艇側は従来どおり計測・共有する(陸上で見るぶんには有用なため)。
 /// **戻すときは「漕ぎながら読むのか」を先に確かめること。**
 ///
-/// **小型表示の主計器は、カード幅が許す限り大きくする。**
-/// ペース・レート・単位を1つの [FittedBox] に入れて横いっぱいへ拡大する
-/// ので、実寸は幅で決まる(`_paceBaseFontSize` 他は比率)。地図との両立は
-/// 文字を縮めることではなく、**縦向きは横幅9割の中央寄せ・横向きは
-/// 左上寄せで幅を絞ること**と、**カード面を半透明にすること**で取る。
+/// **小型表示の主計器は、与えられた幅を必ず使い切る。**
+/// 行の幅をペース7:レート3で先に分け、その幅から文字サイズを逆算する
+/// (`_valueFontSizeFor`)。逆算には表示中の値ではなく**桁数の型**
+/// (`_paceSlot` = `0:00`)を使うので、`2:05` でも `9:59` でも大きさは同じ。
+/// 地図との両立は文字を縮めることではなく、**縦向きは横幅96%の中央寄せ・
+/// 横向きは左上寄せで幅を絞ること**と、**カード面を半透明にすること**で取る。
+///
+/// 以前は2枚の面を1つの [FittedBox] に入れて縮小していた。これは
+///   - [BoxFit.scaleDown] が縮小専用なので、幅が余っても拡大しない
+///   - 縮尺が「いま表示している文字列」の幅で決まるので、桁が増えると縮む
+/// という2つの理由で数字を小さいままにしていた(実機 iPhone 14 で、
+/// 停止中 `24:48` 表示時に約70pt)。**幅を先に決めて逆算すれば両方消える。**
 ///
 /// **主計器の大きさは状況で変えない(`deemphasized` を廃止した記録)。**
 ///
@@ -67,9 +74,17 @@ class NavStatusCard extends StatelessWidget {
     }
   }
 
-  /// 停止中や極端な低速時は無意味な巨大ペースになるため '--:--' を表示
+  /// 停止中や極端な低速時は無意味な巨大ペースになるため '--:--' を表示。
+  ///
+  /// **上限は10分/500m(2026-08-13に30分から変更)。** これより遅いのは
+  /// 漂流・係留・岸での待機であって「ペース」ではない。上限を30分に
+  /// 置いていた頃は `24:48` のような5桁が表示され、**主計器の桁数の型が
+  /// 4桁から5桁へ広がるぶん、数字そのものが小さくなっていた**。
+  /// 値として意味のない表示のために、漕いでいる間の可読性を払っていた。
+  ///
+  /// 桁数の型は [_paceSlot] が持つ。ここを緩めるときは型も一緒に見ること。
   String _formatPace(int seconds) {
-    if (seconds <= 0 || seconds > 1800) return '--:--';
+    if (seconds <= 0 || seconds > _paceDisplayLimitSeconds) return '--:--';
     return _formatTime(seconds);
   }
 
@@ -216,29 +231,51 @@ class NavStatusCard extends StatelessWidget {
     );
   }
 
-  /// 主計器の基準寸法。**実寸ではなく比率**として使う。
+  /// 主計器の寸法は**幅から逆算する**。基準となる文字サイズは持たない。
   ///
-  /// ペース・レート・単位を1つの [FittedBox] へ入れて横幅いっぱいまで
-  /// 拡大するので、実際の文字サイズは「カード幅 ÷ この組の基準幅」で決まる。
-  /// ここの値どうしの比だけが見た目を決める。単位を小さくすると
-  /// そのぶん数字が大きくなる。
+  /// レートがペースの約75%になるのは [_paceWidthShare] の結果であって、
+  /// 比を直接置いているのではない。レートは2桁固定で幅が出ないため、
+  /// 同じ比でも小さく見える。かといって近づけすぎると「主計器が2つある」
+  /// ように見えて、視線がどちらへ行くか決まらない。
+
+  /// 主計器の**桁数の型**。実際の値ではなくこれを測って文字サイズを決める。
   ///
-  /// レートはペースの約77%(ペース80pxならレート62px)。レートは2桁固定で
-  /// 幅が出ないため、同じ比でも小さく見える。かといって近づけすぎると
-  /// 「主計器が2つある」ように見えて、視線がどちらへ行くか決まらない。
+  /// 等幅数字([_tabularFigures])なので、`2:05` も `9:59` も `0:00` と
+  /// 同じ幅になる。**値で測ると、桁が変わるたびに数字の大きさが跳ねる。**
+  /// 型より長い表示(`--:--`)は面の中で縮めて収める(値ではなく代替表示
+  /// なので、そこだけ小さくなってよい)。
+  static const String _paceSlot = '0:00';
+  static const String _spmSlot = '00';
+
+  /// ペース表示の上限。これを超えたら '--:--'([_formatPace] 参照)。
+  static const int _paceDisplayLimitSeconds = 600;
+
+  /// 主計器の行を、ペースとレートで分ける比。
   ///
-  /// **単位・余白は数字の取り分を削る(2026-08-13)。** 主計器の実寸は
-  /// 「カード幅 ÷ 行全体の基準幅」で決まるので、単位や余白を1px縮めると
-  /// そのぶん数字が大きくなる。艇速グラフを外したときに、縦に空いた高さは
-  /// 主計器の大きさに効かない(横幅で決まる)ため、代わりに単位
-  /// (16→14 / 14→12)・面の余白(12→8)・面の間隔(10→6)を詰めて
-  /// 数字へ回した。**実測で数字は約8%大きくなる。**
-  /// 単位はラベルであって値ではないので、ここは数字を優先してよい。
-  /// ただし読めなくなるまで詰めない(実機で単位が10px台前半になる)。
-  static const double _paceBaseFontSize = 92;
-  static const double _paceUnitBaseFontSize = 14;
-  static const double _spmBaseFontSize = 71;
-  static const double _spmUnitBaseFontSize = 12;
+  /// ペース4桁を7割へ、レート2桁を3割へ収めるとレートはペースの約75%に
+  /// なり、従来の「レートはペースの約77%」をほぼそのまま引き継げる。
+  /// **比を先に決めるので、どちらかの表示が変わっても他方は動かない。**
+  static const double _paceWidthShare = 0.7;
+
+  /// 面の中の単位(`/500m` `spm`)。**数字の下に置く。**
+  ///
+  /// 数字と同じ行に置くと、単位の幅ぶん数字の取り分が減る。縦は艇速グラフを
+  /// 外して余っているので、単位は下へ逃がすほうが数字を大きくできる
+  /// (実測で約20%ぶんの横幅が数字へ回る)。大きさは数字に連動させず固定に
+  /// する。単位はラベルであって値ではなく、小さくなりすぎると読めない。
+  static const double _plateUnitFontSize = 13;
+  static const double _plateUnitLineFactor = 1.25;
+
+  /// 面の上下の余白。
+  static const double _plateVerticalPadding = 8;
+
+  /// 逆算した文字サイズの上下限。
+  ///
+  /// 上限は、タブレットのような広い画面で数字だけが伸びて面が縦に
+  /// 割れないようにするため。下限は、極端に狭い幅でも計器として
+  /// 読める大きさを残すため(その場合は面からはみ出す前に縮む)。
+  static const double _valueFontSizeMax = 160;
+  static const double _valueFontSizeMin = 28;
 
   /// 計器の面どうしの間隔(基準寸法。[FittedBox] が一緒に縮小する)。
   static const double _plateGap = 6;
@@ -246,15 +283,44 @@ class NavStatusCard extends StatelessWidget {
   /// 面の左右の余白(基準寸法)。数字の取り分を増やすため詰めてある。
   static const double _platePaddingHorizontal = 8;
 
-  /// 面の高さ(基準寸法)。
+  /// 幅から主計器の文字サイズを逆算する。
   ///
-  /// **2枚を同じ高さにする。** ペースとレートは字の大きさが違うので、
-  /// 面を字なりに作ると高さの違う箱が2つ並び、「格の違う2つ」に見える。
-  /// 大きいほうの字([_paceBaseFontSize])に上下の余白を足した値で固定する。
+  /// **[FittedBox] をやめてここで計算する理由。** [BoxFit.scaleDown] は
+  /// 縮小しかしないので、幅が余っても数字は基準値より大きくならなかった。
+  /// また縮尺が「いま表示している文字列の自然幅」で決まるため、桁が増える
+  /// たびに数字が縮んだ。幅を先に決めて逆算すれば、どちらも起きない。
   ///
-  /// [FittedBox] の中は縦が無制限なので、`CrossAxisAlignment.stretch` では
-  /// 高さを揃えられない(レイアウトが解けない)。実寸で決め打つ。
-  static const double _plateHeight = _paceBaseFontSize + 12;
+  /// 端末の文字サイズ設定([MediaQuery.textScalerOf])を掛けた実寸で測るので、
+  /// 文字を大きくする設定でも面からあふれない(そのぶん数字は小さくなる)。
+  static double _valueFontSizeFor(
+    BuildContext context, {
+    required String slot,
+    required double availableWidth,
+  }) {
+    if (availableWidth <= 0) return _valueFontSizeMin;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: slot,
+        style: const TextStyle(
+          fontSize: _baseMeasurementFontSize,
+          height: 1,
+          fontWeight: FontWeight.bold,
+          fontFeatures: _tabularFigures,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final slotWidth = painter.width;
+    painter.dispose();
+    if (slotWidth <= 0) return _valueFontSizeMin;
+    return (_baseMeasurementFontSize * availableWidth / slotWidth)
+        .clamp(_valueFontSizeMin, _valueFontSizeMax);
+  }
+
+  /// 測定用の基準サイズ。文字幅はサイズに比例するので、どの値でも結果は
+  /// 同じになる。実サイズと混同しないよう、あえて基準寸法と別に置く。
+  static const double _baseMeasurementFontSize = 100;
 
   /// 面の角丸。
   static const double _plateRadius = 14;
@@ -316,7 +382,12 @@ class NavStatusCard extends StatelessWidget {
   static const double _landscapeMaxWidth = 360;
 
   /// 縦向きカードが使う画面幅の割合。
-  static const double _portraitWidthFactor = 0.9;
+  ///
+  /// **0.9 → 0.96(2026-08-13)。** 主計器の大きさはカード幅で決まるので、
+  /// ここが数字の大きさに直接効く(6%広げると数字も6%大きくなる)。
+  /// 左右には端末の縁と地図が数mm残る。全幅(1.0)にしないのは、カードが
+  /// 画面に貼り付いて見え、下の地図と地続きに感じられなくなるため。
+  static const double _portraitWidthFactor = 0.96;
 
   /// **文字の縁取り(輪郭影)はもう持たない(2026-08-05 / 2026-08-13)。**
   ///
@@ -416,46 +487,86 @@ class NavStatusCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ペースとレートを1つの FittedBox に入れ、カード幅いっぱいまで
-            // 拡大する。2つを別々に縮小すると、間に無駄な余白が空いたまま
-            // 数字だけが小さいという最悪の組合せになる。
+            // 主計器は**行の幅を7:3で分け、面ごとに独立して幅いっぱいまで
+            // 拡大する**。1つの [FittedBox] に2枚まとめて入れていた頃は、
+            // 行全体の自然幅で縮尺が決まるため、
+            //   - 桁が増える(`2:05` → `24:48`)たびに両方が縮む
+            //   - 余白が余っても拡大しない([BoxFit.scaleDown] は縮小専用)
+            // という二重の縛りで数字が小さいままだった。
             //
-            SizedBox(
-              width: double.infinity,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+            // いまは幅を先に決め、その幅から文字サイズを逆算する
+            // ([_valueFontSizeFor])。**値そのものではなく桁数の型
+            // ([_paceSlot] / [_spmSlot])で測る**ので、表示が変わっても
+            // 大きさは動かない。7:3という配分は、ペース4桁・レート2桁を
+            // それぞれの幅へ収めるとレートがペースの約75%になる比で、
+            // 従来の「レートはペースの約77%」をそのまま引き継ぐ。
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final inner = constraints.maxWidth;
+                // **文字サイズはSPMの有無で変えない。** 面はSPMが無ければ
+                // 行いっぱいへ広がるが、数字は同じ7割の幅から逆算する。
+                // 計測をONにした日とOFFの日で計器の大きさが変わると、
+                // 「いつもの大きさ」で読めなくなる(原則: 主計器の大きさは
+                // 状況で変えない)。広がったぶんは面の余白になる。
+                final paceSlotWidth = (inner - _plateGap) * _paceWidthShare;
+                final paceFontSize = _valueFontSizeFor(
+                  context,
+                  slot: _paceSlot,
+                  availableWidth: paceSlotWidth - _platePaddingHorizontal * 2,
+                );
+                final spmFontSize = _valueFontSizeFor(
+                  context,
+                  slot: _spmSlot,
+                  availableWidth: (inner - _plateGap) * (1 - _paceWidthShare) -
+                      _platePaddingHorizontal * 2 -
+                      _plateBorderWidth * 2,
+                );
+                // 面の高さは大きいほう(=ペース)で決めて2枚を揃える。
+                // 単位の行は端末の文字サイズ設定で伸びるので、その実寸で計る
+                // (計らないと、文字を大きくする設定で単位が面からはみ出す)。
+                final unitLineHeight =
+                    MediaQuery.textScalerOf(context).scale(_plateUnitFontSize) *
+                        _plateUnitLineFactor;
+                final plateHeight =
+                    paceFontSize + unitLineHeight + _plateVerticalPadding * 2;
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _MetricPlate(
-                      plateColor: _plateColor,
-                      borderColor: null,
-                      value: _formatPace(paceSeconds),
-                      valueColor: onDark,
-                      valueFontSize: _paceBaseFontSize,
-                      unit: '/500m',
-                      unitColor: onDark.withValues(alpha: 0.82),
-                      unitFontSize: _paceUnitBaseFontSize,
+                    Expanded(
+                      flex: spmMeasurementEnabled
+                          ? (_paceWidthShare * 10).round()
+                          : 1,
+                      child: _MetricPlate(
+                        plateColor: _plateColor,
+                        borderColor: null,
+                        value: _formatPace(paceSeconds),
+                        valueColor: onDark,
+                        valueFontSize: paceFontSize,
+                        height: plateHeight,
+                        unit: '/500m',
+                        unitColor: onDark.withValues(alpha: 0.82),
+                      ),
                     ),
                     if (spmMeasurementEnabled) ...[
                       const SizedBox(width: _plateGap),
-                      _MetricPlate(
-                        plateColor: _plateColor,
-                        borderColor: _ratePlateBorderColor,
-                        value: spmValueText,
-                        valueKey: const ValueKey('compact-spm'),
-                        valueColor: _rateValueColor,
-                        valueFontSize: _spmBaseFontSize,
-                        unit: 'spm',
-                        unitColor: _rateValueColor.withValues(alpha: 0.9),
-                        unitFontSize: _spmUnitBaseFontSize,
+                      Expanded(
+                        flex: ((1 - _paceWidthShare) * 10).round(),
+                        child: _MetricPlate(
+                          plateColor: _plateColor,
+                          borderColor: _ratePlateBorderColor,
+                          value: spmValueText,
+                          valueKey: const ValueKey('compact-spm'),
+                          valueColor: _rateValueColor,
+                          valueFontSize: spmFontSize,
+                          height: plateHeight,
+                          unit: 'spm',
+                          unitColor: _rateValueColor.withValues(alpha: 0.9),
+                        ),
                       ),
                     ],
                   ],
-                ),
-              ),
+                );
+              },
             ),
             // 副計器(経過時間・距離)。**主計器と同じ「面」に載せる。**
             //
@@ -504,9 +615,9 @@ class _MetricPlate extends StatelessWidget {
   final Key? valueKey;
   final Color valueColor;
   final double valueFontSize;
+  final double height;
   final String unit;
   final Color unitColor;
-  final double unitFontSize;
 
   const _MetricPlate({
     required this.plateColor,
@@ -514,9 +625,9 @@ class _MetricPlate extends StatelessWidget {
     required this.value,
     required this.valueColor,
     required this.valueFontSize,
+    required this.height,
     required this.unit,
     required this.unitColor,
-    required this.unitFontSize,
     this.valueKey,
   });
 
@@ -524,9 +635,10 @@ class _MetricPlate extends StatelessWidget {
   Widget build(BuildContext context) {
     final border = borderColor;
     return Container(
-      height: NavStatusCard._plateHeight,
+      height: height,
       padding: const EdgeInsets.symmetric(
         horizontal: NavStatusCard._platePaddingHorizontal,
+        vertical: NavStatusCard._plateVerticalPadding,
       ),
       decoration: BoxDecoration(
         color: plateColor,
@@ -538,37 +650,41 @@ class _MetricPlate extends StatelessWidget {
                 width: NavStatusCard._plateBorderWidth,
               ),
       ),
-      // 高さを決め打つので、中身は面の中央へ置く。`widthFactor: 1` で
-      // 横幅だけは字なりに縮める(面の幅が字で決まる)。
-      child: Center(
-        widthFactor: 1,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              key: valueKey,
-              style: TextStyle(
-                color: valueColor,
-                fontSize: valueFontSize,
-                height: 1,
-                fontWeight: FontWeight.bold,
-                fontFeatures: NavStatusCard._tabularFigures,
+      // 単位は数字の下。横に並べると単位の幅ぶん数字が小さくなる。
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 桁数の型より長い表示(`--:--`)だけをここで縮める。
+          // 値そのものは型どおりなので縮まない。
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                key: valueKey,
+                maxLines: 1,
+                style: TextStyle(
+                  color: valueColor,
+                  fontSize: valueFontSize,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: NavStatusCard._tabularFigures,
+                ),
               ),
             ),
-            const SizedBox(width: 4),
-            Text(
-              unit,
-              style: TextStyle(
-                color: unitColor,
-                fontSize: unitFontSize,
-                fontWeight: FontWeight.w600,
-              ),
+          ),
+          Text(
+            unit,
+            maxLines: 1,
+            style: TextStyle(
+              color: unitColor,
+              fontSize: NavStatusCard._plateUnitFontSize,
+              height: NavStatusCard._plateUnitLineFactor,
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
