@@ -218,6 +218,54 @@ void main() {
       // 中心線が無ければマージンは加えない(従来と同じ判定)。
       expect(evaluator.channelCurvatureMarginMeters(onTight, 10, null), 0);
     });
+
+    test('逆向き航行ではalongが減る側の非対称カーブを参照する', () {
+      // 始点側だけが曲がり、終点側は直線の中心線。直線との接続点から
+      // 正方向へ進めば曲率0、逆方向へ進めばカーブへ入る配置にする。
+      final asymmetric = ChannelCenterline.fromPolyline([
+        at(east: -60, north: -30),
+        at(east: -45, north: -10),
+        at(east: -25, north: 5),
+        at(east: 0, north: 10),
+        at(east: 80, north: 10),
+        at(east: 160, north: 10),
+      ])!;
+      final startFrame = asymmetric.project(at(east: 5, north: 10));
+      final tangent = startFrame.tangentBearingDegrees;
+      final forward = boatAt(
+        at(east: 5, north: 10),
+        heading: tangent,
+        speed: 4,
+      );
+      final reverse = boatAt(
+        at(east: 5, north: 10),
+        heading: (tangent + 180) % 360,
+        speed: 4,
+      );
+      final unknownHeading = boatAt(
+        at(east: 5, north: 10),
+        heading: double.nan,
+        speed: 4,
+      );
+
+      final reverseMargin =
+          evaluator.channelCurvatureMarginMeters(reverse, 10, asymmetric);
+      expect(
+        evaluator.channelCurvatureMarginMeters(forward, 10, asymmetric),
+        closeTo(0, 0.05),
+        reason: '正方向は直線側なので曲率余裕を足さない',
+      );
+      expect(
+        reverseMargin,
+        greaterThan(0.5),
+        reason: '逆方向はalongが減る側のカーブを参照する',
+      );
+      expect(
+        evaluator.channelCurvatureMarginMeters(unknownHeading, 10, asymmetric),
+        closeTo(reverseMargin, 1e-9),
+        reason: '方位不明を理由に曲率余裕を小さくしない',
+      );
+    });
   });
 
   group('すれ違い間隔(DCPA)', () {

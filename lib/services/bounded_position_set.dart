@@ -338,11 +338,31 @@ class CapsuleSet implements BoundedPositionSet {
       (double, double) c, (double, double) d) {
     double cross((double, double) p, (double, double) q, (double, double) r) =>
         (q.$1 - p.$1) * (r.$2 - p.$2) - (q.$2 - p.$2) * (r.$1 - p.$1);
+    const epsilon = 1e-9;
+    bool onSegment((double, double) p, (double, double) q, (double, double) r) {
+      if (cross(p, q, r).abs() > epsilon) return false;
+      return r.$1 >= math.min(p.$1, q.$1) - epsilon &&
+          r.$1 <= math.max(p.$1, q.$1) + epsilon &&
+          r.$2 >= math.min(p.$2, q.$2) - epsilon &&
+          r.$2 <= math.max(p.$2, q.$2) + epsilon;
+    }
+
     final abC = cross(a, b, c);
     final abD = cross(a, b, d);
     final cdA = cross(c, d, a);
     final cdB = cross(c, d, b);
-    return abC * abD <= 0 && cdA * cdB <= 0;
+    final properIntersection = ((abC > epsilon && abD < -epsilon) ||
+            (abC < -epsilon && abD > epsilon)) &&
+        ((cdA > epsilon && cdB < -epsilon) ||
+            (cdA < -epsilon && cdB > epsilon));
+    if (properIntersection) return true;
+
+    // 共線の場合は外積がすべて0になる。符号だけを見ると、互いに離れた
+    // 線分まで交差扱いになるため、端点が相手の投影範囲に入るかも確認する。
+    return onSegment(a, b, c) ||
+        onSegment(a, b, d) ||
+        onSegment(c, d, a) ||
+        onSegment(c, d, b);
   }
 
   static double _distanceToSegment(

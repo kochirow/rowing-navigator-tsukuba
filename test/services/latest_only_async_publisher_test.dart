@@ -151,13 +151,15 @@ void main() {
     final first = Completer<void>();
     final startedAt = <DateTime>[];
     final published = <int>[];
+    const minimumInterval = Duration(milliseconds: 30);
+    const clockTolerance = Duration(milliseconds: 1);
     final publisher = LatestOnlyAsyncPublisher<int>(
       publish: (value) {
         published.add(value);
         startedAt.add(DateTime.now());
         return value == 1 ? first.future : Future.value();
       },
-      minPublishInterval: const Duration(milliseconds: 30),
+      minPublishInterval: minimumInterval,
     );
 
     publisher.start();
@@ -165,6 +167,7 @@ void main() {
     await _pumpMicrotasks();
     publisher.add(2);
     publisher.add(3);
+    final firstCompletionSignaledAt = DateTime.now();
     first.complete();
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(published, [1]);
@@ -172,8 +175,13 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 35));
     await _pumpMicrotasks();
     expect(published, [1, 3]);
-    expect(startedAt[1].difference(startedAt[0]),
-        greaterThanOrEqualTo(const Duration(milliseconds: 30)));
+    // 実装契約は「前回writeの完了から次の開始まで」。開始時刻同士を
+    // 比べると、最初のwrite所要時間を含み、契約を検証できない。
+    // DateTimeとStopwatchの読み取り差だけ1ms許容し、CIの境界揺れを除く。
+    expect(
+      startedAt[1].difference(firstCompletionSignaledAt),
+      greaterThanOrEqualTo(minimumInterval - clockTolerance),
+    );
     publisher.stop();
   });
 }

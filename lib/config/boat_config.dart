@@ -81,9 +81,19 @@ class SeatPosition {
 // ============================
 // Boat Config
 // ============================
-const tp = 0.5; // perception time
-const td = 2.0; // decision time
-const tr = 1.0; // reaction time
+// 安全定数の来歴:
+// - 認知・判断・反応時間と停止係数は 2024-11-30 の 809ad831 で導入。
+// - 船体・排他領域寸法は 2024-12-03 の 9fc93930 で導入。
+// - 元の実測記録・文献出典はリポジトリに残っていない。
+//
+// したがって現時点では「現場実測済みの物理モデル」ではなく、既存運用を
+// 維持するlegacy engineering assumptionとして扱う。値を変えるときは、
+// 艇種・速度・停止操作・水流を記録した実測か引用可能な文献を根拠台帳へ追記し、
+// 停止距離・領域不変条件・実データ回帰を同時に更新すること。
+// 詳細: docs/design_notes/2026-08-20_艇種別安全定数の根拠台帳.md
+const tp = 0.5; // 認知時間 [s]（出典未記録の継承値）
+const td = 2.0; // 判断時間 [s]（出典未記録の継承値）
+const tr = 1.0; // 反応時間 [s]（出典未記録の継承値）
 BoatConfigs boatConfigs = BoatConfigs(
   r_1x_: BoatConfig(
     type: BoatType.r_1x,
@@ -94,6 +104,7 @@ BoatConfigs boatConfigs = BoatConfigs(
     ),
     displayHullWidthMeters: 0.55,
     stoppingDistanceFormula: (speed) {
+      // 反応まで3.5秒 + 艇種別の減速相当3.45秒 = 6.95秒分。
       return (tp + td + tr) * speed + 3.45 * speed;
     },
     seatPosList: [
@@ -109,6 +120,7 @@ BoatConfigs boatConfigs = BoatConfigs(
     ),
     displayHullWidthMeters: 0.6,
     stoppingDistanceFormula: (speed) {
+      // 反応まで3.5秒 + 艇種別の減速相当3.10秒 = 6.60秒分。
       return (tp + td + tr) * speed + 3.10 * speed;
     },
     seatPosList: [
@@ -125,6 +137,7 @@ BoatConfigs boatConfigs = BoatConfigs(
     ),
     displayHullWidthMeters: 0.65,
     stoppingDistanceFormula: (speed) {
+      // 反応まで3.5秒 + 艇種別の減速相当3.18秒 = 6.68秒分。
       return (tp + td + tr) * speed + 3.18 * speed;
     },
     seatPosList: [
@@ -143,6 +156,7 @@ BoatConfigs boatConfigs = BoatConfigs(
     ),
     displayHullWidthMeters: 0.7,
     stoppingDistanceFormula: (speed) {
+      // 反応まで3.5秒 + 艇種別の減速相当4.65秒 = 8.15秒分。
       return (tp + td + tr) * speed + 4.65 * speed;
     },
     seatPosList: [

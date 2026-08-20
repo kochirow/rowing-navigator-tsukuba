@@ -194,11 +194,11 @@ flutter run
 
 | バンド | 条件(TTE = 到達までの秒数) | 音 |
 | --- | --- | --- |
-| `imminent` | TTE ≤ 7s、または現在すでに重複 | **連続音** |
-| `approaching` | 7s < TTE ≤ 10s | **3秒間隔の断続音** |
+| `imminent` | TTE ≤ 本警告時間（既定10s）、または現在すでに重複 | **連続音** |
+| `approaching` | 本警告時間 < TTE ≤ 予告時間（既定13s） | **3秒間隔の断続音** |
 | `monitoring` | 到達予測なし(近接注意・DCPA) | 表示のみ |
 
-- 上限10秒は予測地平(`defaultWarningTimeSeconds`)と一致させている。
+- 予告時間の既定13秒は予測地平(`advanceWarningLeadSeconds`)と一致させている。
   「予測が届かない先では音が鳴らない」が不変条件。
 - **確度が低い候補は1バンド下げる。** 連続音の信頼性を守るため。該当するのは2つ。
   - GPS帯込みでのみ重なる(`gps_guard_entry`)
@@ -216,17 +216,14 @@ flutter run
   (重ねると「他艇に注意」と「カーブに注意」が混ざって両方聞き取れない)。
 - 橋も同じ理由で2本目のプレイヤーへ回さない。band 1 なので持続音チャンネルで
   対等に競い、負けるのはより期限の近い衝突警告がいるときだけ。
-- system fault は `persistentSystemFault`(周期音・`systemFaultPeriodicRepeatSec` = 15秒)。
-  **音声を持つのは `gps_unavailable` と `pipeline_unresponsive` の2つだけ。**
-  この2つは能力欠如が `capabilityFaultConfirmSec`(10秒)続いて初めて**鳴り始め**、
-  回復したら即座に止まる(非対称)。橋の下・木立での数秒のGPS欠測は正常な運用であり、
-  そこで鳴る警告は不具合である(原則4)。
-  **待たせるのは音声だけで、候補・表示・`runMode` は即座に立てる。**
-  候補まで遅らせると、`AlertDataQuality.unusable` で物理警告が3秒で終わるのに
-  理由が表示されない窓が空き、データ欠損が警告を消す根拠になる(不変条件3・原則6)。
-  他の fault(受信途絶・送信停止・区域データ・他艇ロスト)は**表示のみ**。
-  漕ぎながら対処できない情報を読み上げると、本当に鳴るべき衝突警告を覆い隠す。
-  **表示・バナー・`runMode` は従来どおり残る**(原則1・原則6)。
+- system fault は候補の寿命管理に `persistentSystemFault` を使うが、
+  **カテゴリによらずすべて表示のみで、音声チャンネルには入れない。**
+  GPS途絶・評価停止も、バナー・能力バッジ・`runMode` で明示する。
+  橋の下・木立での数秒のGPS欠測や、漕ぎながら対処できない通信情報を
+  読み上げると、本当に鳴るべき物理的な衝突警告を覆い隠すためである。
+  `AlertDataQuality.unusable` で古い物理警告を3秒で終える場合も、対応する
+  system faultの表示は残し、データ欠損を安全の根拠にしない(不変条件3・原則6)。
+  **候補・表示・バナー・`runMode` は残す**(原則1・原則6)。
   `NavigationWarningService` で `?? genericWarningAudioAsset` のような
   既定音フォールバックを書かないこと。音の有無は提示ポリシーが決める。
 
@@ -309,8 +306,8 @@ flutter run
   ZIPで共有する。サーバー送信はしない。**記録はOFFにできない**(監視機能の一部)
 - **記録される提示状態は「実際にどう鳴っていたか」である。** `PresentationStateCodec`
   は `AlertBehavior` ではなく `SafetySnapshot.audioDirective` の対象と `mode` から
-  バンドを作る。behavior から作ると、周期音で鳴る `gps_unavailable` /
-  `pipeline_unresponsive` が「表示のみ」として残り、音が鳴っていた事実が消える
+  バンドを作る。音声対象がなければ表示primaryをband 0として記録するため、
+  system faultは実際の提示どおり「表示のみ」で残る
 - **欠測は必ず書く。** 艇側の途絶(`seq` の飛び = `gap`)と監視端末側の中断
   (`recorder_gap`)は別イベントにする。空白を「そこに艇がいなかった」と読ませない(原則6)
 - **記録の失敗が監視表示・安全経路を止めてはならない。** 保存失敗は表示のみで継続する

@@ -240,14 +240,31 @@ class CollisionRiskEvaluatorService {
         frame.crossMeters.abs() > maxChannelProjectionOffsetMeters) {
       return 0;
     }
-    final endAlong =
-        (frame.alongMeters + travel).clamp(0.0, centerline.lengthMeters);
-    var turn = (centerline.tangentBearingAt(endAlong) -
-            centerline.tangentBearingAt(frame.alongMeters)) %
-        360;
-    if (turn > 180) turn -= 360;
-    final turnRadians = degreesToRadians(turn).abs();
-    return min(maxChannelCurvatureMarginMeters, travel * turnRadians / 8);
+    double marginToward(double signedTravel) {
+      final endAlong = (frame.alongMeters + signedTravel)
+          .clamp(0.0, centerline.lengthMeters);
+      var turn = (centerline.tangentBearingAt(endAlong) -
+              centerline.tangentBearingAt(frame.alongMeters)) %
+          360;
+      if (turn > 180) turn -= 360;
+      final turnRadians = degreesToRadians(turn).abs();
+      return min(maxChannelCurvatureMarginMeters, travel * turnRadians / 8);
+    }
+
+    final relativeRadians =
+        degreesToRadians(boat.heading - frame.tangentBearingDegrees);
+    final alongRatio = cos(relativeRadians);
+    if (!alongRatio.isFinite) {
+      return max(marginToward(travel), marginToward(-travel));
+    }
+
+    // 中心線の並び順と逆へ進む艇は along が減る側の曲率を見る。
+    // ほぼ横断中は進行側を一意に決められないため、両側の大きい方を採り、
+    // 不確かな方位を理由に保護余裕を小さくしない。
+    if (alongRatio.abs() < minimumChannelAlongSpeedRatio) {
+      return max(marginToward(travel), marginToward(-travel));
+    }
+    return marginToward(alongRatio < 0 ? -travel : travel);
   }
 
   /// 異常値(NaN/Infinity/範囲外)を安全に扱えるよう艇情報を正規化する。

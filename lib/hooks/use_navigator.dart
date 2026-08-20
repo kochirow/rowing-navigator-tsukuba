@@ -21,6 +21,7 @@ import '../hooks/use_screen_wakelock.dart';
 import '../hooks/use_stroke_rate.dart';
 import '../config/log_config.dart';
 import '../config/build_provenance.dart';
+import '../config/protocol_config.dart';
 import '../config/stroke_rate_config.dart';
 import '../config/system_fault_config.dart';
 import '../config/warning_audio_config.dart';
@@ -369,6 +370,9 @@ UseNavigator useNavigator() {
   final sessionAlertEvents = useRef<List<AlertDiagnosticEvent>>([]);
   final sessionDiagnosticEvents = useRef<List<SessionDiagnosticEvent>>([]);
   final sessionDiagnosticMetadata = useRef<SessionDiagnosticMetadata?>(null);
+  // 航行開始時にPackageInfoから読んだ実際のプロダクト版。取得不能時だけ
+  // pubspecとの一致テストで固定した既定値へ縮退する。
+  final positionAppVersion = useRef(Message.currentAppVersion);
   final diagnosticBoatAliases = useRef(<String, String>{});
   final diagnosticAlertAliases = useRef(<String, String>{});
   final diagnosticCandidates = useRef(<String, AlertCandidate>{});
@@ -1333,10 +1337,7 @@ UseNavigator useNavigator() {
       // 診断用スナップショットの失敗で航行開始を止めない。
       debugPrint('Failed to capture diagnostic settings: $error');
     }
-    var appVersion = const String.fromEnvironment(
-      'FLUTTER_BUILD_NAME',
-      defaultValue: 'unknown',
-    );
+    var appVersion = currentPositionAppVersion;
     var buildNumber = const String.fromEnvironment(
       'FLUTTER_BUILD_NUMBER',
       defaultValue: 'unknown',
@@ -1344,14 +1345,15 @@ UseNavigator useNavigator() {
     try {
       final packageInfo =
           await PackageInfo.fromPlatform().timeout(_platformReadTimeout);
-      if (packageInfo.version.isNotEmpty) appVersion = packageInfo.version;
+      appVersion = positionAppVersionFor(packageInfo.version);
       if (packageInfo.buildNumber.isNotEmpty) {
         buildNumber = packageInfo.buildNumber;
       }
     } catch (error) {
-      // package infoが読めない場合も、compile-timeの値を使って航行は継続する。
+      // package infoが読めない場合も、pubspec同期済みの既定値で航行を継続する。
       debugPrint('Failed to capture runtime app version: $error');
     }
+    positionAppVersion.value = appVersion;
     var operatingSystemVersion = 'unknown';
     try {
       final device = await deviceRuntimeDiagnostics
@@ -2766,11 +2768,10 @@ UseNavigator useNavigator() {
       audioPresentationWhilePausedCount.value += 1;
     }
 
-    // 単発の合図(橋・カーブ・逆走・視覚優先のsystem fault)は、
-    // 持続音とは別チャンネルで即座に鳴らす。orchestrator が eventId を
-    // 一度しか発行しないため、毎ティック呼んでも重複しない
-    // (`playCue` 側でも eventId で重複排除する二重防御)。
-    // 陸上判定中は鳴らさない。
+    // 将来、持続音と競合しない短い合図が追加された場合の再生経路。
+    // 現行ポリシーでは全アセットが読み上げなのでcueは常に空であり、
+    // 橋・カーブ・逆走も持続音の単一チャンネルで調停する。
+    // 陸上判定中は将来のcueも鳴らさない。
     if (!isAshore.value) {
       for (final cue in result.snapshot.oneShotAudioCues) {
         unawaited(alert.playCue(cue.asset, eventId: cue.eventId));
@@ -3416,6 +3417,7 @@ UseNavigator useNavigator() {
       recordBatteryLevelIfChanged(batteryLevel);
       if (!isCurrentNavigation(generation)) return;
       final message = Message(
+        appVersion: positionAppVersion.value,
         sessionId: messageSessionId.value ?? 'unavailable-session',
         sequence: messageSequence.value++,
         boatId: latestMyBoat.boatId,

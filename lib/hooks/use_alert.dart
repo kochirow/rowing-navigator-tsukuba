@@ -310,9 +310,9 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
   // 合図自身が次の提示に追い越されて捨てられる。実機ログで、検知されていた
   // カーブ・逆走の合図が一度も鳴らなかったのはこれが原因である。
   //
-  // 音声セッションは mixWithOthers なので、2本目のプレイヤーを重ねられる。
   // cue側は既存プレイヤーの状態(activeAsset / activeMode / state / error /
-  // 再生ウォッチドッグ)を一切触らない。
+  // 再生ウォッチドッグ)を一切触らない。現行ポリシーは読み上げを重ねない
+  // ためcueを発行しないが、将来の短いチャイム等に備えて機構だけ残す。
   final cuePlayer = useMemoized(AudioPlayer.new);
   final cueQueue = useMemoized(AlertCueQueue.new);
   final cueInitialization = useRef<Future<void>?>(null);
