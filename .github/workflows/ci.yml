@@ -35,6 +35,11 @@ jobs:
       - name: Verify generated hazard allowlists
         run: dart run tool/generate_hazard_constants.dart --check
 
+      # 集中的に責務を持つ2ファイルは、現状超過を警告し、約5%の余白を
+      # 使い切った場合だけ失敗させる。安全修正の小さな増加は妨げない。
+      - name: Check hotspot growth budgets
+        run: dart run tool/check_hotspot_budget.dart
+
       # 警告音の音圧が揃っているかを検証する。ファイル間で差があると
       # 端末のボリューム1つでは両立できず、どちらかが聞こえなくなる。
       # 聞こえない警告は警告漏れと同じ(CLAUDE.md 安全方針)。
