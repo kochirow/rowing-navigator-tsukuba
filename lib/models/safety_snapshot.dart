@@ -138,6 +138,9 @@ class SafetySnapshot {
   final AudioDirective? audioDirective;
 
   /// 持続音とは別チャンネルで1回だけ鳴らす合図の一覧。
+  ///
+  /// 現行ポリシーでは読み上げ同士を重ねないため常に空。将来、持続音と
+  /// 競合しない短いチャイム等を追加するときの互換用の受け皿として残す。
   final List<AudioCue> oneShotAudioCues;
   final VisualDirective visualDirective;
 

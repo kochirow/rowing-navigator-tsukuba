@@ -256,12 +256,26 @@ GPS帯1.5mと合わせて**岸の基準線から11mで発報**していた。
 
 つまり、狭所で 8+ 同士が規定どおりすれ違うと、領域間の隙間はちょうど 2m である。
 
+**艇種別の停止距離と領域寸法の証拠境界:** `boat_config.dart` の停止係数と
+船体・排他領域寸法は既存運用から継承した値で、元の実測記録・文献出典は
+リポジトリに残っていない。実測済みと推測せず、次の停止時間相当を
+回帰契約として維持する。来歴、代表速度での計算、更新条件は
+[艇種別安全定数の根拠台帳](design_notes/2026-08-20_艇種別安全定数の根拠台帳.md)に記録する。
+
+| 艇種 | 停止時間相当 | 証拠の状態 |
+| --- | ---: | --- |
+| 1x | 6.95秒 | 継承値。実測・文献は未記録 |
+| 2x | 6.60秒 | 継承値。実測・文献は未記録 |
+| 4x | 6.68秒 | 継承値。実測・文献は未記録 |
+| 8+ | 8.15秒 | 継承値。実測・文献は未記録 |
+
 ### 3.3 カーブ・予測
 
 | 設定値 | 現在値 | 根拠となる前提 |
 | --- | --- | --- |
 | `enableChannelAwarePrediction` | true | 1.1 カーブ間隔 200〜700m。直線予測では 50m 先が外岸へ突っ込む |
-| `defaultWarningTimeSeconds` | 10.0秒 | 5m/s で 50m 先。カーブ1つ分より短い |
+| `primaryWarningLeadSeconds` | 10.0秒 | 8+の停止時間8.15秒を上回る本警告の切替点 |
+| `advanceWarningLeadSeconds` / `defaultWarningTimeSeconds` | 13.0秒 | 5m/sで65m先。断続音の予告開始と予測地平を一致させる |
 | `minimumChannelHalfWidthMeters` | 8.0m | 1.1 川幅の実測より広めのガード |
 | `maximumChannelHalfWidthMeters` | 60.0m | 同上 |
 | `maxChannelCurvatureMarginMeters` | 3.0m | 折れ線近似の残差 + 川なりに曲がる見込み |
@@ -310,14 +324,18 @@ GPS帯1.5mと合わせて**岸の基準線から11mで発報**していた。
 GPS品質が good でないとき・accuracy が取れないときは判定しない。
 画面に常時表示し、「音を戻す」で手動解除できる(原則2)。
 
-### 3.4.2 system fault の鳴らし方
+### 3.4.2 system fault の提示
 
 | 設定値 | 現在値 | 根拠となる前提 |
 | --- | --- | --- |
 | `dynamicReceiveFaultConfirmSec` / `ClearSec` | 15秒 | 3.4 停止中送信10秒 + 通信ジッタでは発報しない。15秒 < 鮮度上限30秒 |
-| `visualFirstSystemFaultCategories` | 受信・共有系 | 通信の途絶は、いま行動を変える必要があるものではない |
-| `systemFaultRecueInterval` | 5分 | 表示は消さず(原則1・6)、音だけ減らす |
-| `systemFaultWarningAudioAsset` | 専用音 | 衝突音の流用をやめる。実機で音173回中99回が衝突音だった(原則4) |
+| `safetyEvaluationStallSeconds` | 3秒 | GPS入力途絶と評価停止を分離し、評価停止を常設表示する |
+| `persistentSystemFault` | 全カテゴリ表示のみ | 漕ぎながら対処できない能力情報で物理警告の音声を覆わない |
+| `systemFaultWarningAudioAsset` | 航行中は未使用 | 監視機能用の資産は残すが、自艇航行のsystem faultへは割り当てない |
+
+system faultは消さない。候補・バナー・能力バッジ・`runMode` に残し、
+データ欠損を「安全」と誤認させない(原則1・6)。音声だけを全カテゴリから外し、
+物理的な衝突警告を聞き取れる単一チャンネルとして保つ。
 
 ### 3.5 前提と噛み合っていない疑いがある値(要検討)
 

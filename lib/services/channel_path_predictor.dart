@@ -129,7 +129,6 @@ class ChannelPathPredictor {
           boat: boat,
           stepSeconds: stepSeconds,
           consumedSegments: index - 1,
-          totalSegments: segmentCount,
           horizonSeconds: safeHorizon,
           fallback: straight,
         );
@@ -146,7 +145,6 @@ class ChannelPathPredictor {
     required Boat boat,
     required double stepSeconds,
     required int consumedSegments,
-    required int totalSegments,
     required double horizonSeconds,
     required PredictedMotionSegment fallback,
   }) {

@@ -70,4 +70,48 @@ void main() {
     expect(grown.radiusMeters, closeTo(5.6, .01));
     expect(grown.radiusMeters, lessThan(12));
   });
+
+  test('離れた共線カプセルは交差しない', () {
+    const first = CapsuleSet(
+      start: LatLng(36, 140),
+      end: LatLng(36, 140.00001),
+      radiusMeters: 0,
+    );
+    const detached = CapsuleSet(
+      start: LatLng(36, 140.00002),
+      end: LatLng(36, 140.00003),
+      radiusMeters: 0,
+    );
+    const overlapping = CapsuleSet(
+      start: LatLng(36, 140.000005),
+      end: LatLng(36, 140.000015),
+      radiusMeters: 0,
+    );
+
+    expect(first.intersectsSet(detached), isFalse);
+    expect(first.intersectsSet(overlapping), isTrue);
+  });
+
+  test('離れたポリゴンの共線辺を現在接触中と判定しない', () {
+    const set = CapsuleSet(
+      start: LatLng(36, 140),
+      end: LatLng(36, 140.00001),
+      radiusMeters: 0,
+    );
+    const detachedPolygon = <LatLng>[
+      LatLng(36, 140.00002),
+      LatLng(36, 140.00003),
+      LatLng(36.00001, 140.00003),
+      LatLng(36.00001, 140.00002),
+    ];
+    const touchingPolygon = <LatLng>[
+      LatLng(36, 140.000005),
+      LatLng(36, 140.000015),
+      LatLng(36.00001, 140.000015),
+      LatLng(36.00001, 140.000005),
+    ];
+
+    expect(set.intersectsPolygon(detachedPolygon), isFalse);
+    expect(set.intersectsPolygon(touchingPolygon), isTrue);
+  });
 }
