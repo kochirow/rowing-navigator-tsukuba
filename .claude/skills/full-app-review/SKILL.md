@@ -35,11 +35,29 @@ description: 桜川アプリ(rowing_navigator)を「現場で機能が動くか�
 - 軽量版 → [references/軽量版_動作確認レビュー.md](references/軽量版_動作確認レビュー.md) に従う
 - 総合版 → 本ファイルの §3 以降 + [references/パス割り.md](references/パス割り.md)
 
-どちらのモードでも、最初に必ず実行する:
+どちらのモードでも、最初に必ず実行する(既定は静的チェックのみ・実測1.3秒):
 
 ```bash
 bash .claude/skills/full-app-review/scripts/smoke_check.sh
 ```
+
+## 1.1 時間のかかることをしない
+
+**アプリのビルドは絶対に実行しない。** `flutter build` / `flutter run` /
+Xcode / Gradle / `pod install` / エミュレータ・シミュレータの起動は、この skill の作業に含まない。
+実機ビルド・署名・配布は利用者の作業である(AGENTS.md「人が行うこと」)。
+
+| したいこと | 実測 | 既定 |
+| --- | --- | --- |
+| `smoke_check.sh`(静的のみ) | 1.3秒 | **これを使う** |
+| `smoke_check.sh --analyze`(+ `dart analyze` + カタログ1本) | 約18秒 | 安全経路を読んだ後に1回 |
+| `smoke_check.sh --full`(+ `flutter test` 全149本) | 約101秒 | **原則やらない。PR で CI が必ず実行する** |
+| 対象を絞ったテスト `flutter test test/services/<対象>_test.dart` | 数秒〜10秒 | レビュー中の範囲はこれ |
+| replay(実機ログ) | ログの長さ次第 | **実行前に利用者へ一声かける** |
+
+`flutter analyze` / `flutter test` の全実行と format 検査は CI(`.github/workflows/ci.yml`)の
+担当である。ローカルで繰り返しても新しい情報は増えない。
+**CI が担保している層に時間を使わず、CI が見られない層に時間を使う**、が §2 の方針。
 
 ## 2. 共通のルール(両モード)
 
