@@ -23,6 +23,7 @@ String positionAppVersionFor(String? runtimeVersion) {
       ? currentPositionAppVersion
       : productVersion;
 }
+
 const currentHazardProfileVersion = 'sakuragawa-v3';
 
 /// 現行アプリが自身で生成する版。受信の拒否リストではない。
