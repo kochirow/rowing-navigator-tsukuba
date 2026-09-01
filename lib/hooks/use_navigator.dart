@@ -351,6 +351,10 @@ UseNavigator useNavigator() {
   final audioDirective = useState<AudioDirective?>(null);
   // 鳴っている音のカテゴリ(診断ログ用)。表示primaryとは別になりうる。
   final audioDirectiveCategory = useState<String?>(null);
+  // 逆走注意の読み上げだけを、この航行中に利用者が止められるようにする。
+  // 検知・表示・記録は止めない。次回航行へ黙って持ち越さないよう、開始時に
+  // 必ずtrueへ戻す。
+  final reverseGuidanceAudioEnabled = useState(true);
   // 陸上判定中は持続音を止める。検知・表示・記録は止めない。
   final isAshore = useState(false);
   final ashoreDetector = useRef<AshoreDetector?>(null);
@@ -1186,6 +1190,7 @@ UseNavigator useNavigator() {
       'audioDirectiveWhilePausedCount': audioDirectiveWhilePausedCount.value,
       'audioPresentationWhilePausedCount':
           audioPresentationWhilePausedCount.value,
+      'reverseGuidanceAudioEnabled': reverseGuidanceAudioEnabled.value,
     });
     scheduleAudioRouteSnapshot('diagnostic_heartbeat');
     recordGpsEnvironmentSnapshot('diagnostic_heartbeat', generation);
@@ -1204,6 +1209,7 @@ UseNavigator useNavigator() {
       'warningTimeSeconds': warningTimeSeconds.value,
       'primaryWarningLeadSeconds': primaryWarningLeadTimeSeconds.value,
       'advanceWarningLeadSeconds': warningTimeSeconds.value,
+      'reverseGuidanceAudioEnabled': reverseGuidanceAudioEnabled.value,
       'strokeRateEnabled': navConfig.strokeRateEnabled,
       'imuFusion': {
         'enabled': navConfig.strokeRateEnabled,
@@ -1838,6 +1844,37 @@ UseNavigator useNavigator() {
         'advanceWarningLeadSeconds': warningTimeSeconds.value,
       },
       if (sharedRevision != null) 'sharedRevision': sharedRevision,
+    });
+  }
+
+  /// 航行中の逆走注意の音声だけを即時に切り替える。
+  ///
+  /// 逆走候補そのものは [SafetyOrchestrator] に残るので、表示・ログ・6秒の
+  /// 方向確認は継続する。いま逆走音が鳴っているときは、次の1Hz評価を待たず
+  /// その場で止める。他の警告音が鳴っているときは触らない。
+  void setReverseGuidanceAudioEnabled(bool enabled) {
+    if (mode.value != NavMode.navigator ||
+        reverseGuidanceAudioEnabled.value == enabled) {
+      return;
+    }
+    final previous = reverseGuidanceAudioEnabled.value;
+    reverseGuidanceAudioEnabled.value = enabled;
+    safetyOrchestrator.value?.setReverseGuidanceAudioEnabled(enabled);
+
+    final wasPresentingReverse =
+        audioDirectiveCategory.value == StaticObstacleKind.reverse.name;
+    if (!enabled && wasPresentingReverse) {
+      audioDirective.value = null;
+      audioDirectiveCategory.value = null;
+      warningPresenter.value.apply(null, ashore: isAshore.value);
+    }
+
+    appendRuntimeDiagnostic('setting_changed_during_navigation', {
+      'key': 'reverseGuidanceAudio',
+      'from': previous,
+      'to': enabled,
+      'scope': 'current_navigation_only',
+      'stoppedCurrentReverseAudio': !enabled && wasPresentingReverse,
     });
   }
 
@@ -3997,6 +4034,9 @@ UseNavigator useNavigator() {
     if (mode.value == NavMode.navigator) return;
     navigationStartInProgress.value = true;
     isTransitioning.value = true;
+    // 前回の航行で逆走注意を静音にしていても、次の出艇で気付かないまま
+    // 警告が出ない状態を作らない。
+    reverseGuidanceAudioEnabled.value = true;
     final generation = ++navigationGeneration.value;
     positionBatchCollector.clear();
     void ensureStartIsCurrent() {
@@ -4360,7 +4400,7 @@ UseNavigator useNavigator() {
             milliseconds: (warningTimeSeconds.value * 1000).round(),
           ),
         ),
-      );
+      )..setReverseGuidanceAudioEnabled(reverseGuidanceAudioEnabled.value);
       safetySnapshotGate.value = SafetySnapshotGate();
       activeWarningCount.value = 0;
       positionPublisher.start();
@@ -5167,6 +5207,7 @@ UseNavigator useNavigator() {
     dangerZoneSettingsSource: dangerZoneSettingsSource,
     appliedSharedSafetyRevision: appliedSharedSafetyRevision,
     pendingSharedSafetyRevision: pendingSharedSafetyRevision,
+    reverseGuidanceAudioEnabled: reverseGuidanceAudioEnabled,
     isWatching: isWatching,
     isTransitioning: isTransitioning,
     preProcessTime: preProcessTime,
@@ -5192,6 +5233,7 @@ UseNavigator useNavigator() {
     applyNavigationObstacleSettings: applyNavigationObstacleSettings,
     applyWarningLeadTimesDuringNavigation:
         applyWarningLeadTimesDuringNavigation,
+    setReverseGuidanceAudioEnabled: setReverseGuidanceAudioEnabled,
     applyPendingSharedSafetySettings: applyPendingSharedSafetySettings,
   );
 }
@@ -5238,6 +5280,7 @@ class UseNavigator {
   final ValueNotifier<DangerZoneSettingsSource?> dangerZoneSettingsSource;
   final ValueNotifier<int?> appliedSharedSafetyRevision;
   final ValueNotifier<int?> pendingSharedSafetyRevision;
+  final ValueNotifier<bool> reverseGuidanceAudioEnabled;
   final ValueNotifier<bool> isWatching;
   final ValueNotifier<bool> isTransitioning;
   final ValueNotifier<DateTime> preProcessTime;
@@ -5273,6 +5316,7 @@ class UseNavigator {
     WarningLeadTimes previous,
     int? sharedRevision,
   ) applyWarningLeadTimesDuringNavigation;
+  final void Function(bool enabled) setReverseGuidanceAudioEnabled;
   final Future<void> Function() applyPendingSharedSafetySettings;
 
   UseNavigator({
@@ -5305,6 +5349,7 @@ class UseNavigator {
     required this.dangerZoneSettingsSource,
     required this.appliedSharedSafetyRevision,
     required this.pendingSharedSafetyRevision,
+    required this.reverseGuidanceAudioEnabled,
     required this.isWatching,
     required this.isTransitioning,
     required this.preProcessTime,
@@ -5327,6 +5372,7 @@ class UseNavigator {
     required this.reloadDefaultObstacles,
     required this.applyNavigationObstacleSettings,
     required this.applyWarningLeadTimesDuringNavigation,
+    required this.setReverseGuidanceAudioEnabled,
     required this.applyPendingSharedSafetySettings,
   });
 }

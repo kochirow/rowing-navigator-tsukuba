@@ -30,6 +30,8 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
     int? sharedRevision,
   }) onApplyObstacles;
   final Future<void> Function() onApplyPendingSharedSafetySettings;
+  final bool reverseGuidanceAudioEnabled;
+  final ValueChanged<bool> onReverseGuidanceAudioEnabledChanged;
 
   const NavigationSafetySettingsSheet({
     super.key,
@@ -40,6 +42,8 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
     required this.onApplyWarningLeadTimes,
     required this.onApplyObstacles,
     required this.onApplyPendingSharedSafetySettings,
+    required this.reverseGuidanceAudioEnabled,
+    required this.onReverseGuidanceAudioEnabledChanged,
   });
 
   @override
@@ -60,6 +64,7 @@ class _NavigationSafetySettingsSheetState
   FixedObstacleWarningSettings? _fixedWarnings;
   List<FixedObstacleCalibrationTarget>? _targets;
   int? _sharedRevision;
+  late bool _reverseGuidanceAudioEnabled;
   bool _busy = false;
   String? _error;
 
@@ -67,6 +72,7 @@ class _NavigationSafetySettingsSheetState
   void initState() {
     super.initState();
     _sharedRevision = widget.appliedSharedSafetyRevision;
+    _reverseGuidanceAudioEnabled = widget.reverseGuidanceAudioEnabled;
     _load();
   }
 
@@ -397,6 +403,24 @@ class _NavigationSafetySettingsSheetState
                               ),
                             ),
                           ),
+                        Card(
+                          child: SwitchListTile.adaptive(
+                            secondary: const Icon(Icons.directions_boat),
+                            title: const Text('逆走注意の音声'),
+                            subtitle: const Text(
+                              'オフにしても逆走の表示・判定・記録は続きます。この航行だけの設定です。',
+                            ),
+                            value: _reverseGuidanceAudioEnabled,
+                            onChanged: (enabled) {
+                              setState(
+                                () => _reverseGuidanceAudioEnabled = enabled,
+                              );
+                              widget.onReverseGuidanceAudioEnabledChanged(
+                                enabled,
+                              );
+                            },
+                          ),
+                        ),
                         ExpansionTile(
                           initiallyExpanded: true,
                           leading: const Icon(Icons.timer_outlined),
