@@ -44,6 +44,7 @@ class SafetyOrchestrator {
   final Map<String, _ThreatPresentationContext> _threatContexts = {};
   final Map<String, _GuidancePresentationContext> _guidanceContexts = {};
   final Map<String, ReverseGuidanceDebouncer> _reverseGuidanceDebouncers = {};
+  final Set<String> _reverseGuidanceAlertIds = {};
   final Set<String> _stableExistingThreatIds = {};
 
   /// どちらかのチャンネルで処理済みの音声イベント。alertIdごとに最後の1件。
@@ -88,6 +89,35 @@ class SafetyOrchestrator {
   /// 解除する経路になり得るため、設定だけを更新する。
   void updatePresentationConfig(AlertPresentationConfig config) {
     _presentationConfig = config;
+  }
+
+  /// この航行中だけ、逆走注意の読み上げを出すかを切り替える。
+  ///
+  /// 逆走そのものの判定、表示、記録、6秒の方向確認は変えない。音だけを
+  /// 外すことで、利用者が必要なときに静かにしても、安全状態を消したと
+  /// 誤解させない。
+  bool _reverseGuidanceAudioEnabled = true;
+
+  bool get reverseGuidanceAudioEnabled => _reverseGuidanceAudioEnabled;
+
+  void setReverseGuidanceAudioEnabled(bool enabled) {
+    if (_reverseGuidanceAudioEnabled == enabled) return;
+    _reverseGuidanceAudioEnabled = enabled;
+    if (!enabled) {
+      // すでに出した単発読み上げを、再オン後に同じeventIdのまま再生しようと
+      // しても、再生側の重複防止で黙る。次の新しい読み上げ時刻まで待つよう
+      // ここで明示的に抑制する。
+      for (final alertId in _reverseGuidanceAlertIds) {
+        _guidanceContexts[alertId]?.suppressAudioUntilNextAnnouncement();
+      }
+    } else {
+      // 利用者がオンへ戻したときは、既に消費済みのeventIdではなく、次の
+      // 安全評価で新しい読み上げIDを発行する。再生側の重複防止をすり抜けず、
+      // 次の通常周期(最大60秒)まで待たせない。
+      for (final alertId in _reverseGuidanceAlertIds) {
+        _guidanceContexts[alertId]?.requestAudioReannouncement();
+      }
+    }
   }
 
   Set<String> get activeBoatIds => (_lastState?.activeAlerts ?? const [])
@@ -751,6 +781,9 @@ class SafetyOrchestrator {
       candidate.alertId,
       _GuidancePresentationContext.new,
     );
+    if (candidate.category == StaticObstacleKind.reverse.name) {
+      _reverseGuidanceAlertIds.add(candidate.alertId);
+    }
     // 逆走はカーブと違い、区域の境界付近を行き来しても鳴り直さないよう
     // 長い再武装間隔を使う。実機ログでは77分で16回出入りしていた。
     final entry = context.enter(
@@ -773,8 +806,13 @@ class SafetyOrchestrator {
             .putIfAbsent(candidate.alertId, ReverseGuidanceDebouncer.new)
             .update(isReverse: true, at: evaluatedAt)
         : true;
+    final reverseAudioDisabled =
+        candidate.category == StaticObstacleKind.reverse.name &&
+            !_reverseGuidanceAudioEnabled;
     final shouldPlay = entry.shouldPlay &&
+        entry.canPlayCurrentAudio &&
         reverseConfirmed &&
+        !reverseAudioDisabled &&
         !(_lowSpeedAudioMuted &&
             lowSpeedMutedCategories.contains(candidate.category));
     return candidate.copyWith(
@@ -787,6 +825,8 @@ class SafetyOrchestrator {
         ...candidate.reasonCodes,
         if (!reverseConfirmed)
           'REVERSE_CONFIRM_PENDING'
+        else if (reverseAudioDisabled)
+          'REVERSE_AUDIO_DISABLED'
         else if (!entry.shouldPlay)
           'GUIDANCE_REARM_PENDING'
         else if (entry.repeatIndex == 0)
@@ -1468,6 +1508,20 @@ class _GuidancePresentationContext {
   /// この滞在で終えた組の数。静寂を伸ばすのに使う。
   int _completedBursts = 0;
 
+  /// 利用者が逆走注意の音声をオフにした後、オフにする前のeventIdを
+  /// 再利用しない。単発音の再生側もeventIdで重複排除するため、同じIDを
+  /// 渡すと鳴らないだけでなく停止要求になり得る。
+  bool _suppressAudioUntilNextAnnouncement = false;
+  bool _requestNewAudioEvent = false;
+
+  void suppressAudioUntilNextAnnouncement() {
+    _suppressAudioUntilNextAnnouncement = true;
+  }
+
+  void requestAudioReannouncement() {
+    _requestNewAudioEvent = true;
+  }
+
   /// 次の組までの静寂。組を重ねるごとに倍にし、上限で頭打ちにする。
   ///
   /// 進入直後は短い間隔で確実に気づかせ、状態が続くにつれて落ち着かせる。
@@ -1495,6 +1549,8 @@ class _GuidancePresentationContext {
     _repeatIndex = 0;
     _burstIndex = 0;
     _completedBursts = 0;
+    _suppressAudioUntilNextAnnouncement = false;
+    _requestNewAudioEvent = false;
   }
 
   _GuidanceEntry enter(
@@ -1512,8 +1568,24 @@ class _GuidancePresentationContext {
         // 再武装待ちの滞在。この滞在では一度も鳴らさない。
         return const _GuidanceEntry(
           shouldPlay: false,
+          canPlayCurrentAudio: false,
           audioEventId: null,
           repeatIndex: 0,
+        );
+      }
+      if (_requestNewAudioEvent) {
+        _requestNewAudioEvent = false;
+        _suppressAudioUntilNextAnnouncement = false;
+        // 切替操作そのものでは鳴らさず、次の安全評価で新しいeventIdを
+        // 作る。ここを既存IDのままにすると、単発音の重複防止により
+        // 「オンへ戻したのに無音」になる。
+        _lastAnnouncedAt = evaluatedAt;
+        _audioEventId = nextEventId();
+        return _GuidanceEntry(
+          shouldPlay: true,
+          canPlayCurrentAudio: true,
+          audioEventId: _audioEventId,
+          repeatIndex: _repeatIndex,
         );
       }
       final lastAt = _lastAnnouncedAt;
@@ -1550,9 +1622,11 @@ class _GuidancePresentationContext {
           _completedBursts += 1;
         }
         _audioEventId = nextEventId();
+        _suppressAudioUntilNextAnnouncement = false;
       }
       return _GuidanceEntry(
         shouldPlay: true,
+        canPlayCurrentAudio: !_suppressAudioUntilNextAnnouncement,
         audioEventId: _audioEventId,
         repeatIndex: _repeatIndex,
       );
@@ -1565,10 +1639,13 @@ class _GuidancePresentationContext {
     _outsideSince = null;
     _shouldPlayForCurrentEntry = rearmed;
     _audioEventId = rearmed ? nextEventId() : null;
+    _suppressAudioUntilNextAnnouncement = false;
+    _requestNewAudioEvent = false;
     _lastAnnouncedAt = rearmed ? evaluatedAt : null;
     _repeatIndex = 0;
     return _GuidanceEntry(
       shouldPlay: _shouldPlayForCurrentEntry,
+      canPlayCurrentAudio: !_suppressAudioUntilNextAnnouncement,
       audioEventId: _audioEventId,
       repeatIndex: 0,
     );
@@ -1577,6 +1654,7 @@ class _GuidancePresentationContext {
 
 class _GuidanceEntry {
   final bool shouldPlay;
+  final bool canPlayCurrentAudio;
   final String? audioEventId;
 
   /// 現在の滞在での発行回数。0 が進入時の1回目。
@@ -1584,6 +1662,7 @@ class _GuidanceEntry {
 
   const _GuidanceEntry({
     required this.shouldPlay,
+    required this.canPlayCurrentAudio,
     required this.audioEventId,
     required this.repeatIndex,
   });

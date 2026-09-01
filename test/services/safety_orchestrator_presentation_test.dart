@@ -861,6 +861,76 @@ void main() {
       expect(reentered.reasonCodes, contains('REVERSE_CONFIRM_PENDING'));
       expect(reentered.audioAsset, isNull);
     });
+
+    test('逆走音声をオフにしても表示を残し、オンに戻せば次の読み上げで鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-reverse-audio-toggle',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second) =>
+          orchestrator.processAssessment(
+            assessment: assessment([
+              guidanceThreat(
+                StaticObstacleKind.reverse,
+                reverseDirectionConfirmed: true,
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 4,
+          );
+
+      // 方向確認を完了してから止める。検知・表示は設定とは独立である。
+      for (var second = 0; second <= 6; second++) {
+        step(second);
+      }
+      final beforeMute = step(6).snapshot.audioDirective!;
+      expect(beforeMute.asset, 'audio/reverse_warning.mp3');
+
+      orchestrator.setReverseGuidanceAudioEnabled(false);
+      final muted = step(7).snapshot;
+      expect(muted.activeAlerts, hasLength(1));
+      expect(muted.visualDirective.orderedAlertIds, hasLength(1));
+      expect(muted.activeAlerts.single.candidate.category, 'reverse');
+      expect(muted.activeAlerts.single.candidate.audioAsset, isNull);
+      expect(
+        muted.activeAlerts.single.candidate.reasonCodes,
+        contains('REVERSE_AUDIO_DISABLED'),
+      );
+      expect(muted.audioDirective, isNull);
+
+      // オンへ戻しても、オフにする前のeventIdを再利用しない。単発音の
+      // 重複防止が同じIDを二度再生しないため、次の評価で新しいIDを作る。
+      orchestrator.setReverseGuidanceAudioEnabled(true);
+      final resumed = step(8).snapshot.audioDirective!;
+      expect(resumed.asset, 'audio/reverse_warning.mp3');
+      expect(resumed.eventId, isNot(beforeMute.eventId));
+    });
+
+    test('逆走音声をオフにしても他艇の警告音はそのまま鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-reverse-audio-toggle-other-boat',
+        sessionGeneration: 1,
+      )..setReverseGuidanceAudioEnabled(false);
+
+      final result = orchestrator.processAssessment(
+        assessment: assessment([
+          boatThreat(boatId: 'boat-a'),
+          guidanceThreat(StaticObstacleKind.reverse),
+        ]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 4,
+      );
+
+      expect(result.snapshot.audioDirective?.asset,
+          'audio/other_boat_warning.mp3');
+      final reverse = result.snapshot.activeAlerts.firstWhere(
+        (alert) => alert.candidate.category == 'reverse',
+      );
+      expect(reverse.candidate.audioAsset, isNull);
+      expect(reverse.candidate.reasonCodes, contains('REVERSE_AUDIO_DISABLED'));
+    });
   });
 
   group('低速時の音声静音', () {

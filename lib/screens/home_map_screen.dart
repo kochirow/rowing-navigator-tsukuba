@@ -28,6 +28,7 @@ import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/lane_cross_section_strip.dart';
 import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
+import '../features/home_map/widgets/reverse_guidance_audio_notice.dart';
 import '../features/home_map/widgets/rounded_button.dart';
 import '../features/home_map/widgets/safety_banner.dart';
 import '../features/home_map/widgets/stroke_trace_sheet.dart';
@@ -584,6 +585,10 @@ class HomeMapScreen extends HookConsumerWidget {
                   onApplyObstacles: navigator.applyNavigationObstacleSettings,
                   onApplyPendingSharedSafetySettings:
                       navigator.applyPendingSharedSafetySettings,
+                  reverseGuidanceAudioEnabled:
+                      navigator.reverseGuidanceAudioEnabled.value,
+                  onReverseGuidanceAudioEnabledChanged:
+                      navigator.setReverseGuidanceAudioEnabled,
                 ),
               );
               return;
@@ -1516,6 +1521,14 @@ class HomeMapScreen extends HookConsumerWidget {
                                       onRestoreAudio:
                                           navigator.overrideAshoreToWater,
                                     ),
+                                  // 逆走だけを静音にした状態は、設定シートを閉じても
+                                  // 消さない。音以外の安全経路は継続していることを
+                                  // 誤解させず、次の出艇には持ち越さない。
+                                  if (navigator.mode.value ==
+                                          NavMode.navigator &&
+                                      !navigator
+                                          .reverseGuidanceAudioEnabled.value)
+                                    const ReverseGuidanceAudioNotice(),
                                   // 安全レベルに応じた警告バナー(音声警告と併用)。
                                   // 警告は最優先のため高さ制限の外に置き、常に全体表示する。
                                   if (navigator.mode.value == NavMode.navigator)

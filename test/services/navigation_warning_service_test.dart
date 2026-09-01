@@ -110,6 +110,22 @@ void main() {
     expect(warning('reverse').title, '逆走注意');
   });
 
+  test('静音にした逆走注意は表示だけとして変換し、既定音を補わない', () {
+    final warning = service.fromCandidate(AlertCandidate.stable(
+      detectorId: 'guidance_zone_entry',
+      category: 'reverse',
+      targetId: 'reverse-zone',
+      behavior: AlertBehavior.entryEvent,
+      evaluatedAt: DateTime.utc(2026, 9, 1),
+      observationId: 'reverse-muted',
+      reasonCodes: const ['REVERSE_AUDIO_DISABLED'],
+    ));
+
+    expect(warning?.audioAsset, isNull);
+    expect(warning?.audioMode, WarningAudioMode.none);
+    expect(warning?.urgency, WarningDisplayUrgency.monitoring);
+  });
+
   test('行動警告は単発、表示だけの注意は無音として変換する', () {
     AlertCandidate candidate(AlertBehavior behavior, {String? audioAsset}) =>
         AlertCandidate.stable(

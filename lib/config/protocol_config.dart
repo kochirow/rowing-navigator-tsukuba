@@ -11,7 +11,7 @@ const currentPositionProtocolVersion = 1;
 /// `PackageInfo` を利用できない変換・テスト経路で使う既定値。
 /// `test/config/protocol_config_test.dart` が `pubspec.yaml` と一致することを
 /// 検証するため、リリース版更新時に古い値が静かに残らない。
-const currentPositionAppVersion = '1.2.0';
+const currentPositionAppVersion = '1.2.1';
 
 /// 端末から読んだプロダクト版を共有payload用に正規化する。
 ///

@@ -11,16 +11,25 @@ class NavigationWarningService {
   /// 候補が持つ null をそのまま保つ。
   NavigationWarning? fromCandidate(AlertCandidate? candidate) {
     if (candidate == null) return null;
-    final audioMode = switch (candidate.behavior) {
-      AlertBehavior.continuousAction => WarningAudioMode.loop,
-      AlertBehavior.singleAction => WarningAudioMode.once,
-      AlertBehavior.entryEvent => WarningAudioMode.once,
-      AlertBehavior.visualOnly => WarningAudioMode.none,
-      AlertBehavior.persistentSystemFault => WarningAudioMode.none,
-    };
+    // 利用者がこの航行だけ逆走読み上げを止めた候補は、entryEventのまま
+    // 残る。behaviorだけで変換すると、画面が「単発音あり」と表示し直して
+    // 実際の静音状態と食い違う。
+    final reverseAudioDisabled =
+        candidate.reasonCodes.contains('REVERSE_AUDIO_DISABLED');
+    final audioMode = reverseAudioDisabled
+        ? WarningAudioMode.none
+        : switch (candidate.behavior) {
+            AlertBehavior.continuousAction => WarningAudioMode.loop,
+            AlertBehavior.singleAction => WarningAudioMode.once,
+            AlertBehavior.entryEvent => WarningAudioMode.once,
+            AlertBehavior.visualOnly => WarningAudioMode.none,
+            AlertBehavior.persistentSystemFault => WarningAudioMode.none,
+          };
     // 画面の切迫度は、音の鳴り方をそのまま写すだけにする。ここで別の
     // しきい値を持つと、鳴っている音と見えている段階がずれる。
-    final urgency = _urgencyOf(candidate.behavior);
+    final urgency = reverseAudioDisabled
+        ? WarningDisplayUrgency.monitoring
+        : _urgencyOf(candidate.behavior);
 
     if (candidate.category == 'other_boat') {
       return NavigationWarning(
@@ -127,9 +136,10 @@ class NavigationWarningService {
       category: candidate.category,
       title: _titleFor(kind),
       message: '',
-      audioAsset: candidate.behavior == AlertBehavior.visualOnly
-          ? null
-          : candidate.audioAsset ?? defaultWarningAudioAssetFor(kind),
+      audioAsset:
+          candidate.behavior == AlertBehavior.visualOnly || reverseAudioDisabled
+              ? null
+              : candidate.audioAsset ?? defaultWarningAudioAssetFor(kind),
       audioMode: audioMode,
       urgency: urgency,
       audioEventId: candidate.audioEventId,
