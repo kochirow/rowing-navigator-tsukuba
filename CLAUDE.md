@@ -24,8 +24,9 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 
 ## 設計原則(最上位規範)
 
-**設定値を変える・機能を足す・警告の出し方を変える前に、必ず
-[docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) を読むこと。**
+**安全・航行・共有・警告に関わる設計や設定を変更するときは、
+[docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) の運用前提と関連節を読む。**
+誤字・文書・影響の限定された表示修正では、無関係な全章の再読は不要。
 運用前提(川幅・右側通行・片側1レーン・カーブ間隔・艇数・休憩場所)と、
 そこから導かれる設計原則・設定値の根拠がそこにある。判断はすべてそこから導く。
 
@@ -60,7 +61,7 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
   DESIGN_PRINCIPLES.md 1.3・1.4 が根拠。
   **`WakelockPlus` を呼ぶのは `lib/hooks/use_screen_wakelock.dart` だけにすること。**
   持ち主を分けると、片方の後片付けがもう片方の点灯を打ち消す。
-- 警告ロジックを変更する場合は、必ず `test/` の単体テストを更新すること。
+- 警告ロジックを変更する場合は、変更した挙動を関連テストで検証する。既存テストで十分なら、形式的なテスト追加・書換えは不要。
   特に**実データ(`assets/data/sakuragawa_obstacles.json`)を使う統合テスト**は、
   設定値の意図と実効値の乖離を検出する唯一の手段なので必ず維持する。
 
@@ -349,7 +350,7 @@ flutter run
 
 - ナビ終了時に `SessionStoreService` が端末内にJSON保存(サーバー送信なし)
 - 途中チェックポイントは60秒ごと。解析(`SessionAnalyzerService`)は5分ごとにだけ作り直す
-- 解析ロジック変更時は必ず `test/services/session_analyzer_test.dart` を更新
+- 解析ロジック変更時は `test/services/session_analyzer_test.dart` で検証し、新しい挙動や未保護の回帰がある場合に更新
 - GPXはStrava互換。形式変更時は `test/services/gpx_export_test.dart` で検証
 
 ## してはいけないこと
@@ -365,19 +366,14 @@ flutter run
 
 ## コード規約
 
-- 既存のスタイル(flutter_lints)に従う。ファイル名は既存の慣習(hooks は useXxx.dart、widgets はパスカルケース)を踏襲
+- 既存のスタイル(flutter_lints)に従う。Dartファイル名は現行の snake_case を踏襲する（例：`use_navigator.dart`）。
 - コメント・UI文言は日本語
 - 警告関連の設定値はハードコードせず `lib/config/` に置く
 - 安全判定に関わる純粋ロジックは `services/` の純Dartクラスへ切り出し、単体テストを付ける
 
 ## レビュー
 
-レビュー(動作確認・総合レビュー)を依頼されたら、自己流で読み始めず
-[docs/review_guide/README.md](docs/review_guide/README.md) の手順に従う。
-Claude Code も codex も同じ文書を使う(Claude の入口は
-`.claude/skills/full-app-review/SKILL.md`、codex の入口は `AGENTS.md`)。
-機械チェックは `bash tool/review/smoke_check.sh`(引数なし)。
-衝突判定本体だけを深く見るときは `.claude/skills/collision-safety-review/SKILL.md`。
+対象範囲・修正権限・検証の入口は `AGENTS.md`「レビューを依頼されたとき」を正本とする。差分・限定レビューに全体監査を自動適用しない。動作確認・総合監査だけ `docs/review_guide/README.md` へ進む。
 
 ## GitHub運用
 

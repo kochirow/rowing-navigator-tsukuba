@@ -1,102 +1,123 @@
 #!/usr/bin/env bash
-# 「動くか」を機械的に確かめる smoke check。軽量版レビュー(動作確認レビュー)の起点。
-#
-# 使い方(リポジトリ直下で):
-#   bash tool/review/smoke_check.sh            # 既定。CIで担保済みかを見て自動判定
-#   bash tool/review/smoke_check.sh --static   # 静的チェックだけ(実測1.3秒)
-#   bash tool/review/smoke_check.sh --full     # 必ず解析+テスト全実行(実測108秒)
-#
-# **アプリのビルドは一切しない。** flutter build / flutter run / Xcode / Gradle は
-# このスクリプトも skill も実行しない。実機ビルドと配布は利用者の作業(AGENTS.md)。
-#
-# ## 既定(auto)がすること
-#
-# レビュー対象は「現在のワーキングツリー」であって、CI が見たコミットとは限らない。
-# そこで**いまの状態が CI に担保されているか**を判定し、担保されていなければ
-# 解析(7秒)とテスト全実行(101秒)を走らせる。担保されていれば静的のみで済ませる。
-#
-#   未コミットの変更がある                       → 走らせる(CIは見ていない)
-#   HEAD の CI が success                        → 静的のみ(CIの結果を引用する)
-#   HEAD の CI が失敗・未実行・状態を取れない    → 走らせる(不明を担保の根拠にしない)
-#
-# 「テストが赤い」は、このアプリで最も直接的な「動かない」の証拠なので、
-# 100秒はレビュー1回あたりのコストとして払う価値がある。逆に、CI が緑だと
-# 分かっているコミットで同じ100秒を払っても新しい情報は増えない。
-#
-# 読み取りのみ。ファイルを書き換えない。
-# ここが全部通っても「動く」証明にはならない。実機・本番Rules・水上は別の証拠(AGENTS.md)。
-
+# 動作確認・総合監査の共通チェック。差分レビューでは関連検証を直接選んでもよい。
+# auto: 文書だけなら差分確認、限定コードは指定された関連テスト、その他の変更は全検証。
+# --base REF: REF..HEAD と未コミット変更を分類（指定なしは未コミット変更のみ）。
+# --targeted TEST...: 限定コードの関連Flutterテストを明示。安全・基盤変更は全検証を維持。
+# --static / --analyze / --full: 共通静的 / 解析と診断カタログ / 全解析・全テスト。
+# ビルド・署名・本番アクセスは行わない。CI・ローカル・実機の証拠を区別する。
 set -uo pipefail
 
-# auto=CIの担保状況で決める / static=静的のみ / full=必ず解析+テスト
 MODE=auto
-case "${1:-}" in
-  --full) MODE=full ;;
-  --static | --fast) MODE=static ;;  # --fast は旧引数の互換
-  --analyze) MODE=analyze ;;
-  "") MODE=auto ;;
-  *) echo "不明な引数: $1(--static / --analyze / --full のみ)" >&2; exit 1 ;;
-esac
+BASE=""
+TARGETS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --full) MODE=full; shift ;;
+    --static|--fast) MODE=static; shift ;;
+    --analyze) MODE=analyze; shift ;;
+    --base)
+      [ "$#" -ge 2 ] || { echo "--base に比較元が必要" >&2; exit 2; }
+      BASE=$2; shift 2 ;;
+    --targeted)
+      shift
+      while [ "$#" -gt 0 ] && [[ "$1" != --* ]]; do
+        [ -f "$1" ] && [[ "$1" == test/*_test.dart ]] || {
+          echo "対象テストが存在しないか test/*_test.dart 形式ではない: $1" >&2; exit 2;
+        }
+        TARGETS+=("$1"); shift
+      done
+      [ "${#TARGETS[@]}" -gt 0 ] || { echo "--targeted にテストが必要" >&2; exit 2; } ;;
+    *) echo "不明な引数: $1" >&2; exit 2 ;;
+  esac
+done
 
-if [ ! -f pubspec.yaml ]; then
-  echo "リポジトリ直下で実行してください。" >&2
-  exit 1
+[ -f pubspec.yaml ] || { echo "リポジトリ直下で実行してください。" >&2; exit 1; }
+git rev-parse --verify HEAD >/dev/null 2>&1 || { echo "Git HEAD を確認できない" >&2; exit 1; }
+if [ -n "$BASE" ]; then
+  git rev-parse --verify "${BASE}^{commit}" >/dev/null 2>&1 || { echo "比較元を確認できない: $BASE" >&2; exit 2; }
 fi
-
 fail=0
 note() { printf '\n==== %s ====\n' "$1"; }
 ng() { printf '  [NG] %s\n' "$1"; fail=1; }
 ok() { printf '  [OK] %s\n' "$1"; }
+ci_verdict=unknown
+ci_reason="CI結果は参照していない"
+run_analyze=0
+run_tests=0
+run_targeted=0
+changed=0
+code_changed=0
+broad_changed=0
 
-# ------------------------------------------------- 0. いまの状態はCIに担保されているか
-ci_verdict=""   # covered / uncovered
-ci_reason=""
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  ci_verdict=uncovered; ci_reason="未コミットの変更があり、この状態でCIは走っていない"
-elif ! command -v gh >/dev/null 2>&1; then
-  ci_verdict=uncovered; ci_reason="gh が無く、HEAD のCI結果を確認できない"
-else
-  # --commit は完全なSHAでないと一致しない(短縮SHAだと常に0件になる)。
-  head_sha=$(git rev-parse HEAD 2>/dev/null)
-  run=$(gh run list --commit "$head_sha" --workflow ci.yml --limit 1 \
-    --json status,conclusion --jq '.[0] | "\(.status)/\(.conclusion)"' 2>/dev/null)
-  case "$run" in
-    completed/success) ci_verdict=covered; ci_reason="HEAD(${head_sha:0:7})のCIが success" ;;
-    "") ci_verdict=uncovered; ci_reason="HEAD(${head_sha:0:7})でCIの実行が見つからない" ;;
-    */"") ci_verdict=uncovered; ci_reason="HEAD(${head_sha:0:7})のCIが実行中(${run%/*})" ;;
-    *) ci_verdict=uncovered; ci_reason="HEAD(${head_sha:0:7})のCIが ${run#*/}" ;;
+# --no-renames で改名前後の双方を分類する。未追跡ファイルも含める。
+while IFS= read -r -d '' file; do
+  changed=1
+  case "$file" in
+    *.md) ;;
+    lib/screens/*.dart|lib/features/*.dart|lib/widgets/*.dart|lib/theme/*.dart|test/*_test.dart)
+      code_changed=1 ;;
+    *) broad_changed=1 ;;
   esac
-fi
+done < <(
+  git diff --no-renames --name-only -z HEAD --
+  if [ -n "$BASE" ]; then git diff --no-renames --name-only -z "$BASE" HEAD --; fi
+  git ls-files --others --exclude-standard -z
+)
 
 case "$MODE" in
   full) run_analyze=1; run_tests=1; decision="--full の指定" ;;
-  analyze) run_analyze=1; run_tests=0; decision="--analyze の指定" ;;
-  static) run_analyze=0; run_tests=0; decision="--static の指定" ;;
-  *)
-    if [ "$ci_verdict" = covered ]; then
-      run_analyze=0; run_tests=0; decision="CIで担保済み($ci_reason)"
+  analyze) run_analyze=1; decision="--analyze の指定" ;;
+  static) decision="--static の指定（共通静的チェックのみ）" ;;
+  auto)
+    if [ "$changed" -eq 1 ] && [ "$code_changed" -eq 0 ] && [ "$broad_changed" -eq 0 ]; then
+      echo "文書のみの変更: 差分の空白エラーを確認。参照・内容はレビューで確認する。"
+      git diff --check HEAD -- || exit 1
+      if [ -n "$BASE" ]; then git diff --check "$BASE" HEAD -- || exit 1; fi
+      echo "アプリの解析・テストは未実施。文書変更から実行時の安全性は認定しない。"
+      exit 0
+    elif [ "$broad_changed" -eq 1 ]; then
+      run_analyze=1; run_tests=1; decision="安全・基盤または影響を限定できない変更"
+    elif [ "$code_changed" -eq 1 ]; then
+      run_analyze=1
+      if [ "${#TARGETS[@]}" -gt 0 ]; then
+        run_targeted=1; decision="限定コード変更: 指定された関連テスト"
+      else
+        run_tests=1; decision="コード変更の対象テスト未指定: 全検証"
+      fi
+    elif [ "${#TARGETS[@]}" -gt 0 ]; then
+      run_analyze=1; run_targeted=1; decision="指定された関連検証"
     else
-      run_analyze=1; run_tests=1; decision="CI未担保($ci_reason)"
+      head_sha=$(git rev-parse HEAD)
+      run=""
+      if command -v gh >/dev/null 2>&1; then
+        run=$(gh run list --commit "$head_sha" --workflow ci.yml --limit 1 \
+          --json status,conclusion --jq '.[0] | "\(.status)/\(.conclusion)"' 2>/dev/null) || run=""
+      fi
+      case "$run" in
+        completed/success) ci_verdict=covered; ci_reason="HEAD(${head_sha:0:7})のCIがsuccess" ;;
+        completed/failure|completed/timed_out|completed/action_required)
+          run_analyze=1; run_tests=1; ci_reason="HEADのCIに未解決の失敗: $run" ;;
+        *) ci_reason="HEADのCIが未確認または未完了。アプリ全体の検証済みとは扱わない" ;;
+      esac
+      decision="${ci_reason}（コミット済み変更の検証には --base、総合検証には --full）"
     fi ;;
 esac
 
-# ---------------------------------------------------------------- 1. 解析とテスト
 note "1-2. 解析とテスト"
 echo "  判断: $decision"
 if [ "$run_analyze" -eq 1 ]; then
-  # flutter analyze は日本語パスで必ずクラッシュするため使わない(CLAUDE.md)。
   if dart analyze lib test tool; then ok "解析エラーなし"; else ng "解析エラーあり"; fi
 else
-  echo "  (解析はスキップ。--analyze で約7秒)"
+  echo "  解析は今回未実施。"
 fi
 if [ "$run_tests" -eq 1 ]; then
-  echo "  flutter test を実行する(全149本・約101秒)..."
-  if flutter test; then ok "テスト全緑"; else ng "テスト失敗あり"; fi
+  if flutter test; then ok "全テスト成功"; else ng "テスト失敗あり"; fi
+elif [ "$run_targeted" -eq 1 ]; then
+  if flutter test "${TARGETS[@]}"; then ok "対象テスト成功"; else ng "対象テスト失敗あり"; fi
 elif [ "$ci_verdict" = covered ]; then
-  ok "テストはCIの結果を引用($ci_reason)"
+  ok "テストはCI結果を引用($ci_reason)"
 else
-  echo "  (テスト全実行はスキップ。--full で約101秒)"
-  echo "  レビュー中の範囲だけなら: flutter test test/services/<対象>_test.dart"
+  echo "  全テストは今回未実施。依頼・影響範囲に応じて関連検証を行う。"
 fi
 
 # ------------------------------------------------------- 3. 鮮度の階層(不変条件2)
@@ -157,8 +178,16 @@ fi
 
 # ------------------------------------------------- 6. 診断イベントの記録経路
 note "6. 診断イベントカタログ(失敗が記録に残るか)"
-if [ "$run_analyze" -eq 1 ]; then
-  # テスト1本だけ(実測6秒)。
+catalog_covered=0
+for target in ${TARGETS[@]+"${TARGETS[@]}"}; do
+  [ "$target" != test/config/diagnostic_event_catalog_test.dart ] || catalog_covered=1
+done
+if [ "$run_tests" -eq 1 ]; then
+  echo "  全テストに含まれるため再実行しない。"
+elif [ "$run_targeted" -eq 1 ] && [ "$catalog_covered" -eq 1 ]; then
+  echo "  指定テストに含まれるため再実行しない。"
+elif [ "$run_analyze" -eq 1 ]; then
+  # 全テスト未実施時だけ単独で確認する。
   if flutter test test/config/diagnostic_event_catalog_test.dart >/dev/null 2>&1; then
     ok "発報される診断イベントはすべてカタログに載っている"
   else
@@ -179,6 +208,6 @@ note "結果"
 if [ "$fail" -eq 0 ]; then
   echo "  機械的な検査は通った。ここから先は人が読む工程(docs/review_guide/quick_review.md の F1〜F6)。"
 else
-  echo "  NG がある。まずそこを潰してからレビューを進めること。"
+  echo "  NG がある。所見を記録し、修正も許可されている場合だけ修正・再検証する。"
 fi
-exit 0
+exit "$fail"
