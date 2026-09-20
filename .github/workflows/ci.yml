@@ -25,6 +25,9 @@ jobs:
           flutter-version: ${{ steps.fvm.outputs.version }}
           cache: true
 
+      - name: Verify review check routing
+        run: python3 tool/review/test_smoke_check.py
+
       - run: flutter pub get
 
       # 危険区域データとハッシュの乖離を検出する。乖離しても実機は動作するが、
