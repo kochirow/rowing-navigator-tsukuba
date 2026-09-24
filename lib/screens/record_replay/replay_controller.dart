@@ -31,7 +31,7 @@ class ReplayController extends ChangeNotifier {
   ChartZoom _zoom = ChartZoom.none;
   int _speed = 30;
   Timer? _timer;
-  DateTime? _lastTick;
+  static const _tickInterval = Duration(milliseconds: 50);
 
   /// 地図を選択区間へ寄せる要求の番号（増えたら地図が寄せる）。
   int _mapFitRequest = 0;
@@ -211,8 +211,7 @@ class ReplayController extends ChangeNotifier {
     if (_cursor >= end - 0.5) {
       _cursor = end == _selection.end ? _selection.start : 0;
     }
-    _lastTick = DateTime.now();
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
+    _timer = Timer.periodic(_tickInterval, (_) => _tick());
     _changed();
   }
 
@@ -223,9 +222,8 @@ class ReplayController extends ChangeNotifier {
   }
 
   void _tick() {
-    final now = DateTime.now();
-    final dt = math.min(0.1, now.difference(_lastTick!).inMilliseconds / 1000);
-    _lastTick = now;
+    // 1回の更新で進める量は一定（端末が重くて更新が遅れたら、再生もゆっくりになるだけ）。
+    final dt = _tickInterval.inMilliseconds / 1000;
     final inSelection =
         _cursor >= _selection.start && _cursor <= _selection.end + _speed * 0.1;
     final end = inSelection ? _selection.end : duration;

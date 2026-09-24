@@ -95,19 +95,75 @@ class MetricChartCard extends StatelessWidget {
   }
 }
 
-/// グラフ本体。タップ=再生位置（2本以上のセットでは、その本を選ぶ）、左右のなぞり=再生位置。
-class MetricChart extends StatelessWidget {
+/// グラフ本体。
+///
+/// - タップ: 再生位置。2本以上のセットでは、その本を選んで拡大する
+/// - 左右のなぞり: 再生位置（拡大中は表示を左右に動かす）
+/// - 2本指のピンチ: 横軸の拡大縮小。ダブルタップで元に戻す
+///
+/// ピンチは指の本数を直接見て扱う（ジェスチャーの取り合いに参加しない）。
+/// ページの縦スクロールを奪わないため。
+class MetricChart extends StatefulWidget {
   final ReplayController controller;
   const MetricChart({super.key, required this.controller});
 
+  @override
+  State<MetricChart> createState() => _MetricChartState();
+}
+
+class _MetricChartState extends State<MetricChart> {
+  final Map<int, Offset> _pointers = {};
+  double? _pinchStartDistance;
+  double _pinchStartMid = 0;
+  ChartZoom _pinchStartZoom = ChartZoom.none;
+  DateTime? _lastTapAt;
+
+  ReplayController get c => widget.controller;
+  bool get _pinching => _pointers.length >= 2;
+
   ChartLayout _layout(double width) => ChartLayout.compute(
-        track: controller.track,
-        ranges: controller.chartRanges,
-        axis: controller.axis,
+        track: c.track,
+        ranges: c.chartRanges,
+        axis: c.axis,
         plotLeft: _plotLeft,
         plotWidth: width - _plotLeft - _plotRight,
-        zoom: controller.zoom,
+        zoom: c.zoom,
       );
+
+  void _onPointerDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.localPosition;
+    if (_pointers.length == 2) {
+      final ps = _pointers.values.toList();
+      _pinchStartDistance = math.max(1, (ps[0].dx - ps[1].dx).abs());
+      _pinchStartMid = (ps[0].dx + ps[1].dx) / 2;
+      _pinchStartZoom = c.zoom;
+      c.pause();
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent e, double width) {
+    if (!_pointers.containsKey(e.pointer)) return;
+    _pointers[e.pointer] = e.localPosition;
+    if (!_pinching || _pinchStartDistance == null) return;
+    final ps = _pointers.values.take(2).toList();
+    final d = math.max(1.0, (ps[0].dx - ps[1].dx).abs());
+    final mid = (ps[0].dx + ps[1].dx) / 2;
+    final plot = width - _plotLeft - _plotRight;
+    // 指を置いた位置の時刻が、指の中点についてくるように拡大・移動する
+    final z0 = _pinchStartZoom;
+    final pivot0 = ((_pinchStartMid - _plotLeft) / plot).clamp(0.0, 1.0);
+    final anchor = z0.start + pivot0 * z0.span;
+    final span =
+        (z0.span * _pinchStartDistance! / d).clamp(ChartZoom.minSpan, 1.0);
+    final pivot = ((mid - _plotLeft) / plot).clamp(0.0, 1.0);
+    final start = (anchor - pivot * span).clamp(0.0, 1.0 - span);
+    c.setZoom(ChartZoom(start, start + span));
+  }
+
+  void _onPointerUp(PointerEvent e) {
+    _pointers.remove(e.pointer);
+    if (_pointers.length < 2) _pinchStartDistance = null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,39 +171,135 @@ class MetricChart extends StatelessWidget {
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
       final layout = _layout(w);
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapUp: (d) {
-          controller.pause();
-          final x = d.localPosition.dx;
-          final set = controller.selectedSet;
-          final seg = layout.segmentAt(x);
-          if (set != null && set.bouts.length > 1 && seg != null) {
-            final bout = set.bouts.firstWhere((b) => b.range == seg.range);
-            controller.selectBout(bout, cursorAt: layout.timeAt(x));
-          } else {
-            controller.seek(layout.timeAt(x));
-          }
-        },
-        onHorizontalDragStart: (_) => controller.pause(),
-        onHorizontalDragUpdate: (d) {
-          if (controller.zoom.isZoomed) {
-            controller.setZoom(controller.zoom
-                .panned(-d.delta.dx / (w - _plotLeft - _plotRight)));
-          } else {
-            controller.seek(layout.timeAt(d.localPosition.dx));
-          }
-        },
-        child: SizedBox(
-          height: _chartHeight,
-          width: w,
-          child: CustomPaint(
-            painter: _ChartPainter(
-                controller: controller, layout: layout, palette: p),
+      final plot = w - _plotLeft - _plotRight;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Listener(
+          onPointerDown: _onPointerDown,
+          onPointerMove: (e) => _onPointerMove(e, w),
+          onPointerUp: _onPointerUp,
+          onPointerCancel: _onPointerUp,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) {
+              c.pause();
+              final now = DateTime.now();
+              final isDouble = _lastTapAt != null &&
+                  now.difference(_lastTapAt!) <
+                      const Duration(milliseconds: 320);
+              _lastTapAt = now;
+              if (isDouble && c.zoom.isZoomed) {
+                c.setZoom(ChartZoom.none);
+                _lastTapAt = null;
+                return;
+              }
+              final x = d.localPosition.dx;
+              final set = c.selectedSet;
+              final seg = layout.segmentAt(x);
+              if (set != null && set.bouts.length > 1 && seg != null) {
+                final bout = set.bouts.firstWhere((b) => b.range == seg.range);
+                c.selectBout(bout, cursorAt: layout.timeAt(x));
+              } else {
+                c.seek(layout.timeAt(x));
+              }
+            },
+            onHorizontalDragStart: (_) => c.pause(),
+            onHorizontalDragUpdate: (d) {
+              if (_pinching) return;
+              if (c.zoom.isZoomed) {
+                c.setZoom(c.zoom.panned(-d.delta.dx / plot));
+              } else {
+                c.seek(layout.timeAt(d.localPosition.dx));
+              }
+            },
+            child: SizedBox(
+              height: _chartHeight,
+              width: w,
+              child: CustomPaint(
+                painter:
+                    _ChartPainter(controller: c, layout: layout, palette: p),
+              ),
+            ),
           ),
         ),
-      );
+        if (c.zoom.isZoomed) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: _plotLeft, right: _plotRight),
+            child: _ZoomBar(controller: c, palette: p, width: plot),
+          ),
+        ],
+        const SizedBox(height: 4),
+        Text.rich(
+          TextSpan(children: [
+            TextSpan(
+                text: c.zoom.isZoomed
+                    ? '拡大 ×${c.zoom.factor.toStringAsFixed(1)} ・ 左右になぞるか下のバーで移動  '
+                    : '2本指で広げると拡大'),
+            if (c.zoom.isZoomed)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: GestureDetector(
+                  onTap: () => c.setZoom(ChartZoom.none),
+                  child: Text('元に戻す',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: p.accent)),
+                ),
+              ),
+          ]),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: p.textMute),
+        ),
+      ]);
     });
+  }
+}
+
+/// 拡大中の表示範囲を示し、ドラッグで動かせるバー。
+class _ZoomBar extends StatelessWidget {
+  final ReplayController controller;
+  final RecordPalette palette;
+  final double width;
+  const _ZoomBar(
+      {required this.controller, required this.palette, required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final z = controller.zoom;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: (d) =>
+          controller.setZoom(z.panned(d.delta.dx / width / z.span)),
+      child: SizedBox(
+        height: 18,
+        child: Stack(children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 7,
+            height: 4,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                  color: palette.surfaceHigh,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Positioned(
+            left: z.start * width,
+            width: math.max(12, z.span * width),
+            top: 3,
+            height: 12,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 }
 
