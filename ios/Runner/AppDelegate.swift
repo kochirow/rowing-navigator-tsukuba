@@ -5,7 +5,7 @@ import AVFoundation
 import Darwin
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -20,10 +20,17 @@ import Darwin
       )
     }
 
-    if let controller = window?.rootViewController as? FlutterViewController {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let messenger = engineBridge.applicationRegistrar.messenger()
+
+    do {
       let audioChannel = FlutterMethodChannel(
         name: "jp.kosei.rowingnavigator.tsukuba/audio_diagnostics",
-        binaryMessenger: controller.binaryMessenger
+        binaryMessenger: messenger
       )
       audioChannel.setMethodCallHandler { call, result in
         guard call.method == "snapshot" else {
@@ -51,7 +58,7 @@ import Darwin
 
       let deviceDiagnosticsChannel = FlutterMethodChannel(
         name: "jp.kosei.rowingnavigator.tsukuba/device_diagnostics",
-        binaryMessenger: controller.binaryMessenger
+        binaryMessenger: messenger
       )
       deviceDiagnosticsChannel.setMethodCallHandler { call, result in
         guard call.method == "snapshot" else {
@@ -82,9 +89,6 @@ import Darwin
         ])
       }
     }
-    
-    GeneratedPluginRegistrant.register(with: self)
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   private func machineIdentifier() -> String {
