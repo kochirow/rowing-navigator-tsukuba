@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>練習記録リプレイ 試作 v8</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+--bg:#07090c;--s1:#10141a;--s2:#171c24;--s3:#232a36;--line:#262e3a;
+--tx:#f3f6f9;--sub:#98a3b1;--mute:#65707e;
+--acc:#35d6c8;--acc-ink:#04221f;--hot:#ff6b4a;
+--m-pace:#35d6c8;--m-spm:#ffb547;--m-dps:#a78bfa;--m-speed:#6ea8ff;
+--glass:rgba(12,15,20,.72);
+}
+[data-theme=light]{
+--bg:#eef1f5;--s1:#ffffff;--s2:#f2f4f7;--s3:#e3e8ee;--line:#dde2e9;
+--tx:#0f1720;--sub:#5d6978;--mute:#8a95a3;
+--acc:#0a8f86;--acc-ink:#ffffff;--hot:#e5482a;
+--m-pace:#0a8f86;--m-spm:#d08300;--m-dps:#7c5cf0;--m-speed:#2f6fe0;
+--glass:rgba(255,255,255,.82);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg)}
+body{font-family:Inter,"Noto Sans JP",-apple-system,"Hiragino Sans",sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased}
+.app{max-width:430px;margin:0 auto;background:var(--bg);min-height:100vh}
+.num{font-family:Inter,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+button{font-family:inherit;color:inherit}
+.sticky{position:sticky;top:0;z-index:600;background:var(--bg)}
+.hero{position:relative;height:38vh;min-height:250px}
+#map{position:absolute;inset:0;background:var(--s1)}
+.hero .top{position:absolute;left:0;right:0;top:0;z-index:700;padding:12px 14px 30px;display:flex;align-items:flex-start;gap:8px;background:linear-gradient(180deg,rgba(7,9,12,.82),rgba(7,9,12,0));pointer-events:none}
+[data-theme=light] .hero .top{background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,0))}
+.hero .top>*{pointer-events:auto}
+.ttl{flex:1;min-width:0}
+.ttl .d{font-size:11px;color:var(--sub);font-weight:600;letter-spacing:.03em}
+.ttl .t{font-size:19px;font-weight:800;line-height:1.25;margin-top:2px}
+.ttl .m{font-size:12px;color:var(--sub);margin-top:3px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{width:38px;height:38px;border-radius:19px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:grid;place-items:center;cursor:pointer;font-size:16px;flex:none}
+.sel{position:relative;flex:none}
+.sel select{appearance:none;-webkit-appearance:none;height:38px;border-radius:19px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx);font-size:12px;font-weight:700;padding:0 26px 0 12px;font-family:inherit;max-width:128px}
+.sel:after{content:"";position:absolute;right:11px;top:15px;width:6px;height:6px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);pointer-events:none}
+.legend{position:absolute;left:12px;bottom:50px;z-index:700;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:10px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:7px}
+.legend i{display:block;width:70px;height:6px;border-radius:3px;background:linear-gradient(90deg,#4f7cff,#35d6c8,#b6f25a,#ffd84d,#ff6b4a)}
+.mapbtns{position:absolute;right:12px;bottom:12px;z-index:700;display:flex;gap:6px}
+.mapbtns button{height:30px;border-radius:15px;padding:0 11px;font-size:11px;font-weight:700;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);cursor:pointer}
+.mapbtns button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.player{display:flex;align-items:center;gap:10px;padding:10px 14px 2px}
+.play{width:46px;height:46px;border-radius:23px;border:0;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;cursor:pointer;flex:none;box-shadow:0 6px 18px rgba(53,214,200,.3)}
+.play svg{width:18px;height:18px}
+.speeds{display:flex;background:var(--s2);border-radius:12px;padding:3px;gap:1px}
+.speeds button{border:0;background:transparent;height:30px;min-width:33px;padding:0 4px;border-radius:9px;font-size:11px;font-weight:800;color:var(--sub);cursor:pointer;font-family:Inter,sans-serif}
+.speeds button.on{background:var(--s3);color:var(--tx)}
+.clock{margin-left:auto;text-align:right;min-width:0}
+.clock b{font-size:25px;font-weight:800;line-height:1}
+.clock .v{font-size:11px;color:var(--sub);margin-top:3px;white-space:nowrap;font-weight:600;line-height:1.35}
+#tlWrap{padding:6px 14px 0;touch-action:none}
+#tl{display:block;width:100%;height:62px;touch-action:none;user-select:none;-webkit-user-select:none}
+.crumb2{margin-left:auto;font-size:12px;color:var(--acc);font-weight:700;cursor:pointer}.now{display:grid;grid-template-columns:1.25fr 1fr .7fr .8fr;gap:6px;padding:4px 14px 10px}.now>div{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:5px 8px 6px;min-width:0}.now b{display:block;font-size:22px;font-weight:800;line-height:1.1;white-space:nowrap}.now span{display:block;font-size:10px;color:var(--sub);font-weight:700;margin-top:1px;white-space:nowrap}.now .nv{border-top:3px solid var(--c)}.now .nt b{font-size:20px}.crumb{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);padding:0 14px 8px;min-height:22px;align-items:center;font-weight:600}
+.crumb a{color:var(--acc);cursor:pointer;font-weight:700}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:22px;padding:16px;margin:12px 14px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--sub)}
+.h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.selname{font-size:21px;font-weight:800;margin-top:3px}
+.selrange{font-size:12px;color:var(--sub);margin-top:2px;font-weight:600}
+.pill{height:34px;border-radius:17px;padding:0 14px;border:1px solid var(--line);background:var(--s2);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.pill.acc{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.pill:active,.nudge button:active,.pc:active{transform:scale(.97)}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.tile{background:var(--s2);border-radius:16px;padding:12px 12px 11px;position:relative;overflow:hidden}
+.tile:before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 2px 2px 0;background:var(--c)}
+.tile .k{font-size:11px;color:var(--sub);font-weight:700;padding-left:5px}
+.tile .v{font-size:30px;font-weight:800;line-height:1.1;margin-top:5px;padding-left:5px;white-space:nowrap}
+.tile .v small{font-size:13px;font-weight:600;color:var(--sub);margin-left:3px}
+.note{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.5}
+.fine{margin-top:12px;display:grid;gap:8px}.adj{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}.card.compact{padding:6px 16px}.card.compact details{margin:0;padding:10px 0;border-top:1px solid var(--line)}.card.compact details:first-child{border-top:0}.card.compact summary .eyebrow{font-size:11px}.card.compact table{font-size:12px}.card.compact td{padding:6px 3px}.adj summary{font-size:13px;font-weight:700;color:var(--sub);gap:8px}.adj summary span:first-child{flex:1}.adjsub{font-size:12px;color:var(--mute);font-weight:600}
+.frow{display:flex;align-items:center;gap:8px;background:var(--s2);border-radius:14px;padding:6px 6px 6px 12px}
+.frow .lab{font-size:11px;color:var(--sub);font-weight:700;width:30px}
+.frow .val{font-size:17px;font-weight:800;flex:1;min-width:0}
+.nudge{display:flex;gap:4px}
+.nudge button{height:36px;min-width:0;padding:0 8px;white-space:nowrap;border-radius:11px;border:0;background:var(--s3);font-size:12px;font-weight:800;cursor:pointer;font-family:Inter,"Noto Sans JP",sans-serif}
+.nudge .gap{width:4px}
+.seg{display:flex;background:var(--s2);border-radius:14px;padding:3px;gap:2px;margin-top:12px}
+.seg button{flex:1;border:0;background:transparent;height:32px;border-radius:11px;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer}
+.seg button.on{background:var(--s3);color:var(--mc)}.zbar{height:14px;margin:4px 6px 0 40px;position:relative;touch-action:none;display:none}.zbar:before{content:"";position:absolute;left:0;right:0;top:5px;height:4px;border-radius:2px;background:var(--s2)}.zbar span{position:absolute;top:2px;height:10px;border-radius:5px;background:var(--acc);opacity:.8}.zinfo{font-size:11px;color:var(--mute);font-weight:700;text-align:center;margin-top:4px}.zinfo a,.chback a{color:var(--acc);cursor:pointer;margin-left:6px;font-weight:800}.chback{font-size:12px;min-height:0;margin-top:8px}.axisrow{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px;font-size:12px;color:var(--sub);font-weight:700}.seg2{display:flex;background:var(--s2);border-radius:10px;padding:2px}.seg2 button{border:0;background:transparent;height:28px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer}.seg2 button.on{background:var(--s3);color:var(--tx)}
+#ch{display:block;width:100%;height:206px;touch-action:none;margin-top:12px}
+.pickrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.pickrow .pill{width:100%}.timein{display:flex;gap:6px;align-items:center;margin-top:8px}.timein input.tm{flex:1;width:auto;min-width:0}.timein .pill{flex:none}
+input.tm{width:70px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--s2);color:var(--tx);font:700 14px Inter,sans-serif;text-align:center;font-variant-numeric:tabular-nums}
+input.tm:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.err{color:#ff7a7a;font-size:12px;min-height:14px;margin-top:6px}
+.pieces{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 2px;scrollbar-width:none;scroll-snap-type:x proximity}
+.pieces::-webkit-scrollbar{display:none}
+.pc{flex:none;scroll-snap-align:start;width:124px;border-radius:18px;background:var(--s1);border:1px solid var(--line);padding:10px 11px 11px;cursor:pointer;text-align:left}
+.pc .n{font-size:11px;color:var(--sub);font-weight:800;display:flex;justify-content:space-between}
+.kind{font-weight:800;font-size:10px}.pc .n span:first-child{white-space:nowrap}.kindbig{font-size:14px;font-weight:800;margin-left:4px;vertical-align:2px}#brk table{margin-top:6px}.ov{margin-top:14px}.ovh{display:flex;justify-content:space-between;align-items:flex-end}.ovh b{display:block;font-size:26px;font-weight:800;margin-top:2px}.ovbar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:10px;background:var(--s2)}.ovbar span{display:block;height:100%}.ovt td{padding:7px 4px}.ovt td i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px}.ovt small{color:var(--mute);font-size:10px}.ovt tr.sep td{border-top:1px solid var(--line)}.brkh{display:flex;justify-content:space-between;align-items:center;margin-top:14px}.brkh a{font-size:12px;color:var(--acc);font-weight:700;cursor:pointer}.brow{cursor:pointer}.brow.on td{background:var(--s2)}.pc .p{font-size:21px;font-weight:800;margin-top:5px}.pc .p .avg,.avgtag{font-size:10px;font-weight:700;color:var(--mute);margin-right:4px;letter-spacing:.02em}
+.pc .s{font-size:10.5px;color:var(--sub);margin-top:2px;font-weight:600;white-space:nowrap;line-height:1.35}
+.pc .bar{height:4px;border-radius:2px;margin-top:9px;background:var(--pcol)}
+.pc.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--s2)}
+.pc.all{width:74px;display:grid;place-items:center;font-weight:800;font-size:14px}
+.rows{margin-top:8px}
+.r{display:grid;grid-template-columns:12px 1fr 58px 24px 30px 34px 44px;gap:8px;align-items:center;padding:11px 6px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;border-radius:12px}
+.r:last-child{border-bottom:0}
+.r.on{background:var(--s2);border-bottom-color:transparent}
+.r .i{color:var(--mute);font-weight:800}
+.r .b{height:8px;border-radius:4px;background:var(--s3);position:relative;overflow:hidden}
+.r .b span{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--pcol)}
+.r .p{font-weight:800;white-space:nowrap}.pdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}.r.head span{white-space:nowrap;font-size:9.5px}
+.r .x{color:var(--sub);text-align:right;font-size:12px;font-weight:600;white-space:nowrap}
+.r.head{cursor:default;font-size:10px;color:var(--mute);font-weight:700;padding-top:0;letter-spacing:.04em}
+.best{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.bx{background:var(--s2);border-radius:16px;padding:11px 10px;cursor:pointer}
+.bx .k{font-size:11px;color:var(--sub);font-weight:700}
+.bx .v{font-size:21px;font-weight:800;margin-top:4px}
+.bx .s{font-size:11px;color:var(--sub);font-weight:600}
+.bx.off{opacity:.4;cursor:default}
+details summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+details summary::-webkit-details-marker{display:none}
+details summary:after{content:"";width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);margin-right:4px}
+details[open] summary:after{transform:rotate(-135deg)}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th{font-weight:700;color:var(--mute);font-size:10px;text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);letter-spacing:.04em}
+td{text-align:right;padding:9px 4px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+.dpos{color:#ff8f7a;font-weight:700}.dneg{color:var(--acc);font-weight:700}
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,10px);background:var(--s3);color:var(--tx);border:1px solid var(--line);padding:12px 16px;border-radius:14px;font-size:13px;opacity:0;transition:all .22s;z-index:1000;max-width:88%;white-space:pre-wrap;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.foot{font-size:11px;color:var(--mute);padding:6px 18px 40px;line-height:1.6}
+.leaflet-container{background:var(--s1);font-family:inherit}
+.leaflet-control-attribution{background:transparent!important;color:var(--mute)!important;font-size:8px!important;margin-bottom:46px!important}
+.leaflet-control-attribution a{color:var(--mute)!important}
+.leaflet-tooltip.br{background:transparent;border:0;box-shadow:none;font-size:10px;font-weight:700;padding:0;color:var(--sub);text-shadow:0 0 3px var(--bg),0 0 3px var(--bg),0 0 2px var(--bg)}
+.leaflet-tooltip.br:before{display:none}
+.boat{width:30px;height:30px;position:relative}
+.boat .halo{position:absolute;inset:0;border-radius:50%;background:rgba(255,107,74,.3);animation:pulse 2s infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.6);opacity:0}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="sticky">
+<div class="hero">
+<div id="map"></div>
+<div class="top">
+<div class="ttl"><div class="d num" id="tDate">--</div><div class="t" id="tBoat">--</div><div class="m num" id="tMeta">--</div></div>
+<div class="sel"><select id="sessSel" aria-label="記録を選ぶ"></select></div>
+<button class="ibtn" id="theme" aria-label="明暗を切り替える">◐</button>
+</div>
+<div class="legend"><span>遅い</span><i></i><span>速い</span></div>
+<div class="mapbtns"><button id="hazBtn">危険区域</button><button id="laneBtn" class="on">航路</button><button id="photo">写真</button><button id="fit">全体</button></div>
+</div>
+<div class="player">
+<button class="play" id="play" aria-label="再生"><svg viewBox="0 0 24 24" id="playIco"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg></button>
+<div class="speeds" id="speeds"></div>
+<a id="crumb" class="crumb2"></a>
+</div>
+<div id="tlWrap"><svg id="tl"></svg></div>
+<div class="now num"><div class="nt"><b id="cT">0:00</b><span id="cClock"></span></div><div class="nv" style="--c:var(--m-pace)"><b id="nP">--</b><span id="nPl">/500m</span></div><div class="nv" style="--c:var(--m-spm)"><b id="nS">--</b><span>SR</span></div><div class="nv" style="--c:var(--m-dps)"><b id="nD">--</b><span>DPS m</span></div></div>
+</div>
+
+<div class="pieces" id="pieces"></div>
+
+<div class="card">
+<div class="h">
+<div><div class="eyebrow" id="selKind">選択区間</div><div class="selname num" id="selName">--</div><div class="selrange num" id="selRange">--</div></div>
+<div style="display:flex;gap:6px"><button class="pill" id="zoomIn">絞る</button><button class="pill acc" id="share">共有</button></div>
+</div>
+<div class="big">
+<div class="tile" style="--c:var(--m-pace)"><div class="k">平均 /500m</div><div class="v num" id="sP">--</div></div>
+<div class="tile" style="--c:var(--m-spm)"><div class="k">平均SR</div><div class="v num" id="sR">--</div></div>
+<div class="tile" style="--c:var(--m-dps)"><div class="k">平均DPS</div><div class="v num" id="sD">--</div></div>
+<div class="tile" style="--c:var(--sub)"><div class="k">距離 ・ 時間</div><div class="v num" id="sL">--</div></div>
+</div>
+<div class="note num" id="selNote"></div>
+<div id="brk"></div>
+
+</div>
+
+<div class="card">
+<div class="h"><div class="eyebrow">推移</div><div style="display:flex;gap:6px"><button class="pill" id="oldToggle" style="height:28px;font-size:11px;padding:0 11px">補正前と比べる</button></div></div>
+<div class="seg">
+<button class="on" data-m="pace" style="--mc:var(--m-pace)">/500m</button>
+<button data-m="spm" style="--mc:var(--m-spm)">SR</button>
+<button data-m="dps" style="--mc:var(--m-dps)">DPS</button>
+</div>
+<div id="chBack" class="chback"></div><svg id="ch"></svg>
+<div class="zbar" id="zbar"><span id="zthumb"></span></div>
+<div class="zinfo" id="zoomInfo"></div>
+<div class="axisrow"><span>横軸</span><div class="seg2" id="xSeg"><button data-x="time" class="on">時間</button><button data-x="dist">距離</button></div></div>
+<div class="note" id="chNote"></div>
+<details id="fuseBox" style="margin-top:12px"><summary><span class="eyebrow">タイムの推定に使った記録</span></summary><div id="fuseInfo"></div></details>
+</div>
+
+<div class="card compact">
+<details id="brkBox"><summary><span class="eyebrow">内訳（各本・区間）</span><span class="adjsub num" id="brkSub"></span></summary><div id="brk2"></div></details>
+<details class="adj sm" id="adjBox"><summary><span>区間を細かく調整</span><span class="adjsub num" id="adjSub"></span></summary>
+<div class="note" style="margin-top:4px">ふだんは時間軸のつまみで選べます。ここでは秒単位で合わせたり、時刻を入力したりできます。</div>
+<div class="fine">
+<div class="frow"><span class="lab">開始</span><span class="val num" id="fA">0:00</span><div class="nudge"><button data-f="A" data-d="-30">−30秒</button><button data-f="A" data-d="-1">−1秒</button><span class="gap"></span><button data-f="A" data-d="1">+1秒</button><button data-f="A" data-d="30">+30秒</button></div></div>
+<div class="frow"><span class="lab">終了</span><span class="val num" id="fB">0:00</span><div class="nudge"><button data-f="B" data-d="-30">−30秒</button><button data-f="B" data-d="-1">−1秒</button><span class="gap"></span><button data-f="B" data-d="1">+1秒</button><button data-f="B" data-d="30">+30秒</button></div></div>
+</div>
+<div class="pickrow"><button class="pill" id="setA">再生位置を開始にする</button><button class="pill" id="setB">再生位置を終了にする</button></div>
+<div class="timein"><input class="tm" id="inA" aria-label="開始（分:秒）"><span style="color:var(--sub)">–</span><input class="tm" id="inB" aria-label="終了（分:秒）"><button class="pill" id="apply">時間で指定</button></div>
+<div class="err" id="err"></div>
+</details>
+<details id="splitBox" class="adj sm"><summary><span class="eyebrow">250mラップ</span></summary><div id="splits"></div></details>
+</div>
+
+<div class="card">
+<div class="eyebrow">各セット（自動検出）</div>
+<div class="rows" id="rows"></div>
+</div>
+
+<div class="card">
+<div class="eyebrow">この日の最速</div>
+<div class="best" id="best"></div>
+<div class="note">橋から橋の固定区間は R4 で追加予定。</div>
+</div>
+
+<div class="foot">試作 v8 ・ 2026-08-05〜06 の実機ログ（track.csv）を使用。端末内だけで動き、データはどこにも送りません。地図: Esri World Gray Canvas / 国土地理院。</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="data.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const PROFILE={'4x':180,'8+':165,'2x':195,'1x':225};
+const MERGE_GAP=25,MIN_SHOW_DUR=60,MIN_SHOW_DIST=250;
+const MIN_WORK=500/240,MOVE=0.5,PIECE_MIN_DUR=30,PIECE_GAP=15,PIECE_MIN_DIST=75,SMOOTH=15;
+const SPEEDS=[10,30,60,100,200];
+// セットの判定（British Rowing の区分: UT2 SR18-22 / UT1 22-26 / AT 26-28 / TR・AN 32-40 を参考に、部の言い方へ寄せる）
+const SR_UT_MAX=24,SR_HIGH=28,HR_MIN_DUR=15,HR_MIN_DIST=60,HR_GAP=6,HR_SET_REST=300,UT_SET_REST=240;
+const KIND_J={UT:'UT',AT:'AT',HR:'ハイレート'},KIND_COL={UT:'var(--m-pace)',AT:'var(--m-spm)',HR:'var(--hot)'},UNIT={UT:'区間',AT:'区間',HR:'本'};
+let sets=[],selStat=null,selSet=-1;
+const hav=(a,b,c,d)=>{const R=6371000,dl=(c-a)*Math.PI/180,dg=(d-b)*Math.PI/180,x=Math.sin(dl/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(x));};
+const fm=x=>{if(x==null||!isFinite(x))return'--';const n=Math.round(x),s=n<0?'-':'';const a=Math.abs(n);const h=Math.floor(a/3600),m=Math.floor(a%3600/60),ss=a%60;return s+(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0');};
+const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2400);};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const STOPS=[[79,124,255],[53,214,200],[182,242,90],[255,216,77],[255,107,74]];
+function ramp(r){r=Math.max(0,Math.min(1,r));const k=r*(STOPS.length-1),i=Math.min(STOPS.length-2,Math.floor(k)),f=k-i;const a=STOPS[i],b=STOPS[i+1];return`rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`;}
+
+let S,P,T,cd,pieces,paceAt,colPace,paceOld,inP,minDisp,mouth,pLo,pHi;
+let showOld=false,showHaz=false,showLane=true;
+let cur=0,A=0,B=0,view=[0,0],metric='pace',xmode='time',timer=null,speedMul=30;
+
+const map=L.map('map',{zoomControl:false,attributionControl:true});
+const tiles={dark:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:16,attribution:'Esri'}),
+light:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:16,attribution:'Esri'}),
+photo:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxZoom:18,attribution:'国土地理院'})};
+let base='dark';tiles.dark.addTo(map);
+const canvas=L.canvas({padding:.3});
+BRIDGES.forEach(b=>L.circleMarker([b.lat,b.lng],{radius:2,color:'#8b96a5',weight:1,fillOpacity:1,renderer:canvas,interactive:false}).addTo(map).bindTooltip(b.name,{permanent:true,direction:'top',className:'br',offset:[0,-3]}));
+const dimLayer=L.layerGroup().addTo(map);
+const selLayer=L.layerGroup().addTo(map);
+const mA=L.circleMarker([0,0],{radius:6,color:'#fff',weight:3,fillColor:'#07090c',fillOpacity:1,renderer:canvas,interactive:false}).addTo(map);
+const mB=L.circleMarker([0,0],{radius:6,color:'#fff',weight:3,fillColor:'#fff',fillOpacity:1,renderer:canvas,interactive:false}).addTo(map);
+const boatIcon=L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],html:'<div class="boat"><div class="halo"></div><svg viewBox="-15 -15 30 30" style="position:absolute;inset:0"><g id="boatRot"><path d="M0,-13 L6,-3 L-6,-3 Z" fill="#ff6b4a"/><circle r="7" fill="#ff6b4a" stroke="#fff" stroke-width="2.5"/></g></svg></div>'});
+const boat=L.marker([0,0],{icon:boatIcon,interactive:false,zIndexOffset:1000}).addTo(map);
+
+function idxAt(t){let lo=0,hi=P.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(P[m].t<=t)lo=m;else hi=m-1;}return lo;}
+function interp(t){const i=idxAt(t);if(i>=P.length-1)return P[P.length-1];const a=P[i],b=P[i+1],r=Math.max(0,Math.min(1,(t-a.t)/Math.max(.001,b.t-a.t)));return{lat:a.lat+(b.lat-a.lat)*r,lng:a.lng+(b.lng-a.lng)*r,hd:a.hd};}
+function cdAt(t){const i=idxAt(t);if(i>=P.length-1)return cd[P.length-1];const r=(t-P[i].t)/Math.max(.001,P[i+1].t-P[i].t);return cd[i]+(cd[i+1]-cd[i])*Math.max(0,Math.min(1,r));}
+function tAtCd(x,i0,i1){for(let i=Math.max(1,i0);i<=Math.min(P.length-1,i1);i++){if(cd[i]>=x){const r=(x-cd[i-1])/Math.max(1e-6,cd[i]-cd[i-1]);return P[i-1].t+(P[i].t-P[i-1].t)*r;}}return null;}
+function movingTime(i0,i1){let s=0;for(let i=i0+1;i<=i1;i++){if(P[i].v>=MOVE)s+=Math.min(P[i].t-P[i-1].t,10);}return s;}
+function seatJ(s){return s==='bow'?'バウ':s==='stroke'?'整調':s==='cox'?'コックス':s+'番';}
+function boatJ(l){return l==='4x'?'クォドルプル 4x':l==='8+'?'エイト 8+':l==='2x'?'ダブルスカル 2x':'シングル 1x';}
+const paceColor=v=>v==null?'#5b6572':ramp(1-(v-pLo)/Math.max(1,pHi-pLo));
+
+// ===== 艇速の推定（表示専用） =====
+// アプリが記録した値も含めて、艇速の手がかりを全部「候補」として並べる。
+//  pos : 生GPS位置の前後5秒の弦（直線距離）÷時間
+//  dop : GPSが直接測る速度（ドップラー。速度精度1.5m/s以下のときだけ）
+//  filt: アプリの推定器が記録した艇速（speed_mps）
+//  imu : アプリがIMUで記録したDPS × SR ÷ 60
+//  rate: SR × DPS基準 ÷ 60（DPS基準は前後60秒で pos と dop が一致した点の中央値）
+// 1) 全候補を同じ10秒の中心平均にそろえる（ストローク内の速度の波を誤差と取り違えないため）
+// 2) 記録ごとに、各候補が「ほかの候補の中央値」からどれだけずれるか（中央値・相対）を測る
+// 3) 一番ずれの小さい候補の1.6倍（最低2%）以内の候補だけを採用する。アプリの記録値が
+//    良ければ自動で採用され、悪ければ自動で外れる。版ごとに決め打ちしない
+// 4) 採用した候補の点ごとの中央値 → 世界最高速度の上限 → 加速度0.3m/s²の制限 → 10秒中心平均
+const WORLD_BEST_2K={'1x':390.74,'2x':359.72,'4x':332.03,'8+':317.75};
+const ACC_MAX=0.3,REL_ADOPT=1.6,MIN_ADOPT=0.02;
+const CAND_NAME={pos:'GPS位置',dop:'GPS速度',filt:'アプリ推定艇速',imu:'IMU（DPS×SR）',rate:'SR×DPS'};
+let fusionInfo=[];
+const med=a=>{const b=a.slice().sort((x,y)=>x-y);const n=b.length;return n?(n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2):null;};
+function centerMean(v,h=5){const n=P.length,out=new Array(n).fill(null);let a=0,b=0;for(let i=0;i<n;i++){while(P[i].t-P[a].t>h)a++;while(b+1<n&&P[b+1].t-P[i].t<=h)b++;let s=0,c=0;for(let k=a;k<=b;k++)if(v[k]!=null&&isFinite(v[k])){s+=v[k];c++;}out[i]=c?s/c:null;}return out;}
+function estimateSpeed(){
+const n=P.length;
+for(let i=0;i<n;i++){let sl=0,sg=0,c=0;for(let k=Math.max(0,i-1);k<=Math.min(n-1,i+1);k++){if(Math.abs(P[k].t-P[i].t)>3.5)continue;sl+=P[k].rlat;sg+=P[k].rlng;c++;}P[i].lat=sl/c;P[i].lng=sg/c;}
+const C={pos:new Array(n).fill(null),dop:new Array(n).fill(null),filt:P.map(p=>p.vOld),imu:P.map(p=>p.dpsImu&&p.spm?p.dpsImu*p.spm/60:null),rate:new Array(n).fill(null)};
+let a=0,b=0;for(let i=0;i<n;i++){while(a<i&&P[i].t-P[a+1].t>=5)a++;while(b+1<n&&P[b+1].t-P[i].t<=5)b++;const dt=P[b].t-P[a].t;if(dt>=6&&dt<=14)C.pos[i]=hav(P[a].lat,P[a].lng,P[b].lat,P[b].lng)/dt;}
+for(let i=0;i<n;i++){if(P[i].vd!=null&&(P[i].va==null||P[i].va<=1.5))C.dop[i]=P[i].vd;}
+const obs=[];for(let i=0;i<n;i++){const sr=P[i].spm,x=C.pos[i],y=C.dop[i];if(sr&&x&&y&&x>MIN_WORK&&Math.abs(x-y)/Math.max(x,y)<0.1)obs.push([P[i].t,(x+y)/2*60/sr]);}
+let j0=0,j1=0;for(let i=0;i<n;i++){const t=P[i].t;while(j0<obs.length&&obs[j0][0]<t-60)j0++;while(j1<obs.length&&obs[j1][0]<=t+60)j1++;if(P[i].spm&&j1-j0>=3)C.rate[i]=P[i].spm*med(obs.slice(j0,j1).map(o=>o[1]))/60;}
+const keys=Object.keys(C),Sm={};keys.forEach(k=>Sm[k]=centerMean(C[k]));
+const score={};keys.forEach(k=>{const dev=[];for(let i=0;i<n;i++){const x=Sm[k][i];if(x==null)continue;const o=keys.filter(j=>j!==k&&Sm[j][i]!=null).map(j=>Sm[j][i]);if(!o.length)continue;const m=med(o);if(m<MIN_WORK)continue;dev.push(Math.abs(x-m)/m);}score[k]={dev:dev.length>=60?med(dev):null,n:dev.length};});
+const best=Math.min(...keys.map(k=>score[k].dev??9));const use=keys.filter(k=>score[k].dev!=null&&score[k].dev<=Math.max(best*REL_ADOPT,MIN_ADOPT));
+fusionInfo=keys.map(k=>({k,name:CAND_NAME[k],dev:score[k].dev,n:score[k].n,use:use.includes(k)}));
+const cap=2000/(WORLD_BEST_2K[S.label]||390.74)*1.02;
+const raw=new Array(n);let prev=null;
+for(let i=0;i<n;i++){const c=use.map(k=>Sm[k][i]).filter(v=>v!=null);let v=c.length?med(c):(prev??P[i].vOld);v=Math.min(v,cap);raw[i]=v;prev=v;}
+const f=raw.slice();for(let i=1;i<n;i++){const d=ACC_MAX*Math.max(.5,P[i].t-P[i-1].t);f[i]=Math.max(f[i-1]-d,Math.min(f[i-1]+d,f[i]));}
+const g=raw.slice();for(let i=n-2;i>=0;i--){const d=ACC_MAX*Math.max(.5,P[i+1].t-P[i].t);g[i]=Math.max(g[i+1]-d,Math.min(g[i+1]+d,g[i]));}
+const out=centerMean(raw.map((_,i)=>(f[i]+g[i])/2));
+for(let i=0;i<n;i++){P[i].v=out[i]??0;P[i].dps=P[i].spm&&P[i].v>=MIN_WORK?P[i].v*60/P[i].spm:null;}
+}
+
+function load(k){
+S=SESSIONS[k];
+P=S.pts.map(a=>({t:a[0],flat:a[1],flng:a[2],vOld:a[3],hd:a[4],spm:a[5],dpsImu:a[6],lv:a[7],rlat:a[9]??a[1],rlng:a[10]??a[2],vd:a[11],va:a[12]}));
+{let lr=null;for(let i=0;i<P.length;i++){if(P[i].spm!=null){lr=P[i];continue;}if(lr&&P[i].t-lr.t<=6&&(P[i].vd??P[i].vOld)>=MIN_WORK){P[i].spm=lr.spm;}}}
+T=P[P.length-1].t;minDisp=500/(PROFILE[S.label]||225);
+estimateSpeed();
+cd=new Float64Array(P.length);
+for(let i=1;i<P.length;i++){const dt=Math.min(10,P[i].t-P[i-1].t);const vm=(P[i].v+P[i-1].v)/2;cd[i]=cd[i-1]+(dt>0&&vm>=MOVE?vm*dt:0);}
+paceAt=P.map(p=>p.v>=MIN_WORK?500/p.v:null);colPace=paceAt;
+{const cdo=new Float64Array(P.length);for(let i=1;i<P.length;i++)cdo[i]=cdo[i-1]+(P[i].vOld>=MOVE&&P[i].t>P[i-1].t?hav(P[i-1].flat,P[i-1].flng,P[i].flat,P[i].flng):0);
+paceOld=new Array(P.length).fill(null);let w=0;for(let i=1;i<P.length;i++){while(w+1<i&&P[i].t-P[w].t>SMOOTH)w++;const d=cdo[i]-cdo[w];let tm=0;for(let k=w+1;k<=i;k++)if(P[k].vOld>=MOVE)tm+=Math.min(P[k].t-P[k-1].t,10);if(d>=10&&tm>0&&P[i].vOld>=MIN_WORK)paceOld[i]=tm*500/d;}}
+detectSets();
+inP=new Uint8Array(P.length);pieces.forEach(p=>{for(let i=idxAt(p.a);i<=idxAt(p.b);i++)inP[i]=1;});
+const est=CENTERLINES.find(c=>c.name.includes('河口')),lake=CENTERLINES.find(c=>c.name.includes('霞ヶ浦'));
+if(est&&lake){const e=[est.pts[0],est.pts[est.pts.length-1]],lc=lake.pts[0];mouth=hav(e[0][0],e[0][1],lc[0],lc[1])<hav(e[1][0],e[1][1],lc[0],lc[1])?e[0]:e[1];}
+const nearestCl=(lat,lng)=>{let bn='',bd=1e18;CENTERLINES.forEach(c=>c.pts.forEach(q=>{const d=hav(lat,lng,q[0],q[1]);if(d<bd){bd=d;bn=c.name;}}));return bn;};
+const ps=[];pieces.forEach(p=>{for(let i=idxAt(p.a);i<=idxAt(p.b);i++)if(paceAt[i])ps.push(paceAt[i]);});ps.sort((a,b)=>a-b);
+pLo=ps.length?ps[Math.floor(ps.length*.05)]:100;pHi=ps.length?ps[Math.floor(ps.length*.95)]:160;
+pieces.forEach(p=>{const a=P[idxAt(p.a)],b=P[idxAt(p.b)],m=P[idxAt((p.a+p.b)/2)];p.s=stats(p.a,p.b);if(!mouth){p.dir='';return;}const da=hav(a.lat,a.lng,mouth[0],mouth[1]),db=hav(b.lat,b.lng,mouth[0],mouth[1]);const lk=nearestCl(m.lat,m.lng).includes('霞ヶ浦');p.dir=Math.abs(da-db)<80?'往復':lk?(db<da?'戻り':'沖へ'):(db<da?'下り':'上り');});
+sets.forEach(x=>{const ds=[...new Set(x.bouts.map(b=>b.dir))];x.dir=ds.length===1?ds[0]:'往復';});
+const st=new Date(new Date(S.startedAt).getTime()+9*3600e3);const wd='日月火水木金土'[st.getUTCDay()];
+$('tDate').textContent=`${st.getUTCFullYear()}年${st.getUTCMonth()+1}月${st.getUTCDate()}日(${wd}) ${String(st.getUTCHours()).padStart(2,'0')}:${String(st.getUTCMinutes()).padStart(2,'0')}`;
+$('tBoat').textContent=`${S.label} ・ ${seatJ(S.seat)}`;
+$('tMeta').textContent=`${(cd[P.length-1]/1000).toFixed(2)} km ・ ${fm(T)} ・ ${sets.length}セット`;
+selKey='';buildFuse();buildTrack();buildPieces();buildRows();buildBest();
+view=[0,T];A=0;B=T;cur=0;draw();fitAll();
+}
+function buildFuse(){let h='<div class="note" style="margin-top:6px">艇速の手がかりを並べ、この記録でほかの手がかりと食い違いが大きいものを外しています。アプリが記録した値も、よく一致していれば使います。</div><table class="num"><tr><th>手がかり</th><th>ずれ（中央値）</th><th>この記録で</th></tr>';
+fusionInfo.forEach(x=>{h+=`<tr><td>${x.name}</td><td>${x.dev==null?'データ不足':(x.dev*100).toFixed(1)+'%'}</td><td style="color:${x.use?'var(--acc)':'var(--mute)'};font-weight:700">${x.use?'使う':'使わない'}</td></tr>`;});
+$('fuseInfo').innerHTML=h+'</table>';}
+function detectPieces(mask){
+pieces=[];let s0=null,lf=null;
+const sm=i=>{let ws=0,el=0;for(let k=i;k>0;k--){const dt=P[k].t-P[k-1].t;if(dt<=0)continue;if(P[i].t-P[k-1].t>SMOOTH)break;ws+=P[k].v*dt;el+=dt;}return el>0?ws/el:P[i].v;};
+const close=e=>{if(s0==null)return;const dur=P[e].t-P[s0].t,dist=cd[e]-cd[s0];if(dur>=PIECE_MIN_DUR&&dist>=PIECE_MIN_DIST)pieces.push({a:P[s0].t,b:P[e].t});s0=null;lf=null;};
+for(let i=0;i<P.length;i++){const f=(!mask||!mask[i])&&(P[i].v>minDisp||sm(i)>minDisp);if(f){if(s0==null)s0=i;lf=i;}else if(s0!=null&&lf!=null&&P[i].t-P[lf].t>PIECE_GAP)close(lf);}
+if(s0!=null&&lf!=null)close(lf);
+const mg=[];pieces.forEach(p=>{const q=mg[mg.length-1];if(q&&p.a-q.b<=MERGE_GAP)q.b=p.b;else mg.push({...p});});
+pieces=mg.filter(p=>p.b-p.a>=MIN_SHOW_DUR&&cdAt(p.b)-cdAt(p.a)>=MIN_SHOW_DIST);
+}
+function detectSets(){
+const n=P.length;
+// SRは動いているときだけ使う（陸上で艇を運ぶ揺れでSR60前後が出るため）。前後4秒の中央値でならす
+const srs=new Array(n).fill(null);
+for(let i=0;i<n;i++){const v=[];for(let k=i;k>=0&&P[i].t-P[k].t<=4;k--)if(P[k].spm&&P[k].spm>=10&&P[k].spm<=50&&P[k].v>=MOVE)v.push(P[k].spm);for(let k=i+1;k<n&&P[k].t-P[i].t<=4;k++)if(P[k].spm&&P[k].spm>=10&&P[k].spm<=50&&P[k].v>=MOVE)v.push(P[k].spm);srs[i]=v.length?med(v):null;}
+// 1) ハイレートの本: SR28以上が15秒・60m以上。立ち上がりのSR25以上は本に含める
+const hb=[];let s0=null,lh=null;
+const isHigh=i=>srs[i]!=null&&srs[i]>=SR_HIGH&&P[i].v>=MIN_WORK;
+const closeH=()=>{if(s0==null)return;let a=s0;while(a>0&&P[s0].t-P[a-1].t<=6&&srs[a-1]!=null&&srs[a-1]>=SR_HIGH-3&&P[a-1].v>=MIN_WORK)a--;if(P[lh].t-P[a].t>=HR_MIN_DUR&&cd[lh]-cd[a]>=HR_MIN_DIST)hb.push({a:P[a].t,b:P[lh].t,kind:'HR'});s0=null;lh=null;};
+for(let i=0;i<n;i++){if(isHigh(i)){if(s0==null)s0=i;lh=i;}else if(s0!=null&&P[i].t-P[lh].t>HR_GAP)closeH();}closeH();
+// 2) 5分以内に続くハイレートの本を1つのセットにまとめる。本と本の間はパドルでもイージーでもレスト
+const out=[];hb.forEach(b=>{const q=out[out.length-1];if(q&&q.kind==='HR'&&b.a-q.b<=HR_SET_REST){q.bouts.push(b);q.b=b.b;}else out.push({kind:'HR',a:b.a,b:b.b,bouts:[b]});});
+// 3) 残りの時間から、一定のペースで漕いだ区間（UT/AT）を探す
+const mask=new Uint8Array(n);out.forEach(x=>{for(let i=idxAt(x.a-5);i<=Math.min(n-1,idxAt(x.b+5));i++)mask[i]=1;});
+detectPieces(mask);
+const ut=[];pieces.forEach(p=>{const q=stats(p.a,p.b);p.kind=q.spm==null||q.spm<SR_UT_MAX?'UT':q.spm<SR_HIGH?'AT':'HR';const last=ut[ut.length-1];
+if(last&&last.kind===p.kind&&p.a-last.b<=UT_SET_REST){last.bouts.push(p);last.b=p.b;}else ut.push({kind:p.kind,a:p.a,b:p.b,bouts:[p]});});
+sets=[...out,...ut].sort((x,y)=>x.a-y.a);
+pieces=[];sets.forEach((x,si)=>{x.bouts.forEach((b,j)=>{b.set=si;b.j=j;pieces.push(b);});x.stat=statsMulti(x.bouts);x.work=x.bouts.reduce((t,b)=>t+(b.b-b.a),0);x.rest=(x.b-x.a)-x.work;});
+}
+function stats(a,b){
+const i0=idxAt(a),ib=idxAt(b),i1=Math.min(P.length-1,ib+(P[ib].t<b?1:0));
+const d=cdAt(b)-cdAt(a);let mv=0,stop=0,sp=0,sn=0,dp=0,dn=0;
+for(let i=i0+1;i<=i1;i++){const dt=Math.min(P[i].t,b)-Math.max(P[i-1].t,a);if(dt<=0)continue;if(P[i].v>=MOVE)mv+=dt;else stop+=dt;if(P[i].v>=MIN_WORK){if(P[i].spm){sp+=P[i].spm*dt;sn+=dt;}if(P[i].dps){dp+=P[i].dps*dt;dn+=dt;}}}
+return{d,tm:b-a,mv,stop,sp,sn,dp,dn,pace:d>=20&&mv>0?mv*500/d:null,spm:sn?sp/sn:null,dps:dn?dp/dn:null};
+}
+function statsMulti(list){let d=0,tm=0,mv=0,stop=0,sp=0,sn=0,dp=0,dn=0;list.forEach(x=>{const q=stats(x.a,x.b);d+=q.d;tm+=q.tm;mv+=q.mv;stop+=q.stop;sp+=q.sp;sn+=q.sn;dp+=q.dp;dn+=q.dn;});
+return{d,tm,mv,stop,sp,sn,dp,dn,pace:d>=20&&mv>0?mv*500/d:null,spm:sn?sp/sn:null,dps:dn?dp/dn:null};}
+function splits(a,b,step){const out=[];const i0=idxAt(a),i1=idxAt(b);const base=cdAt(a),end=cdAt(b);let k=1,pt=a;
+while(base+k*step<=end){const t=tAtCd(base+k*step,i0,i1+1);if(t==null)break;out.push({from:(k-1)*step,to:k*step,...stats(pt,t)});pt=t;k++;}
+const rem=end-(base+(k-1)*step);if(rem>=50)out.push({from:(k-1)*step,to:Math.round((k-1)*step+rem),partial:true,...stats(pt,b)});return out;}
+function mval(i,m){const p=P[i];if(p.v<MIN_WORK)return null;if(m==='pace')return paceAt[i];if(m==='spm')return p.spm;if(m==='dps')return p.dps;return p.v;}
+function fmtM(v,m){if(v==null)return'--';if(m==='pace')return fm(v);if(m==='spm')return Math.round(v)+'';if(m==='dps')return v.toFixed(1)+'m';return v.toFixed(1)+'m/s';}
+
+function runs(i0,i1){const out=[];let c=null;for(let i=Math.max(1,i0);i<=i1;i++){const rest=P[i].v<MIN_WORK||!inP[i];const q=Math.max(0,Math.min(6,Math.round(((colPace[i]??pHi)-pLo)/Math.max(1,pHi-pLo)*6)));const key=rest?'r':'p'+q;if(!c||c.key!==key){if(c)out.push(c);c={key,col:rest?'#5b6572':paceColor(pLo+q/6*(pHi-pLo)),pts:[[P[i-1].lat,P[i-1].lng]]};}c.pts.push([P[i].lat,P[i].lng]);}if(c)out.push(c);return out;}
+function buildTrack(){dimLayer.clearLayers();runs(0,P.length-1).forEach(r=>L.polyline(r.pts,{color:r.col,weight:3,opacity:.25,renderer:canvas,interactive:false}).addTo(dimLayer));}
+let selKey='';
+function buildSel(){const k=A.toFixed(1)+'_'+B.toFixed(1)+document.documentElement.dataset.theme;if(k===selKey)return;selKey=k;selLayer.clearLayers();const i0=idxAt(A),i1=Math.min(P.length-1,idxAt(B)+1);const rs=runs(i0,i1);
+const casing=document.documentElement.dataset.theme==='light'?'#ffffff':'#000000';
+rs.forEach(r=>L.polyline(r.pts,{color:casing,weight:9,opacity:.55,lineCap:'round',lineJoin:'round',renderer:canvas,interactive:false}).addTo(selLayer));
+rs.forEach(r=>L.polyline(r.pts,{color:r.col,weight:5,opacity:1,lineCap:'round',lineJoin:'round',renderer:canvas,interactive:false}).addTo(selLayer));}
+function fitSel(){const i0=idxAt(A),i1=idxAt(B);const b=L.latLngBounds(P.slice(i0,i1+1).map(p=>[p.lat,p.lng]));if(b.isValid())map.flyToBounds(b,{paddingTopLeft:[24,96],paddingBottomRight:[24,50],maxZoom:17,duration:.5});}
+function fitAll(){map.fitBounds(L.latLngBounds(P.map(p=>[p.lat,p.lng])),{paddingTopLeft:[20,96],paddingBottomRight:[20,46]});}
+
+function buildPieces(){let h='<button class="pc all" data-s="all">全体</button>';
+sets.forEach((x,i)=>{const n=x.bouts.length,q=x.stat;const km=q.d>=1000?(q.d/1000).toFixed(2)+'km':Math.round(q.d)+'m';const sub=x.kind==='HR'?`${n}本 ・ ${km}<br>SR${q.spm?Math.round(q.spm):'--'}`:`${fm(x.work)} ・ ${km}<br>SR${q.spm?Math.round(q.spm):'--'}`;
+h+=`<button class="pc" data-s="${i}" style="--pcol:${paceColor(q.pace)}"><div class="n"><span>${i+1}セット目</span><span class="kind" style="color:${KIND_COL[x.kind]}">${KIND_J[x.kind]}</span></div><div class="p num"><span class="avg">ave.</span>${fm(q.pace)}</div><div class="s num">${sub}</div><div class="bar"></div></button>`;});
+$('pieces').innerHTML=h;}
+function buildRows(){if(!sets.length){$('rows').innerHTML='<div class="note">一定のペースで漕いだ区間は見つかりませんでした。</div>';return;}
+let h='<div class="r head"><span></span><span>種類</span><span style="text-align:right">平均 /500m</span><span style="text-align:right">SR</span><span style="text-align:right">DPS</span><span style="text-align:right">距離</span><span style="text-align:right">漕いだ時間</span></div>';
+sets.forEach((x,i)=>{const q=x.stat;h+=`<div class="r num" data-s="${i}"><span class="i">${i+1}</span><span class="x" style="text-align:left;color:${KIND_COL[x.kind]};font-weight:800">${KIND_J[x.kind]}${x.kind==='HR'?' <small style="color:var(--mute)">'+x.bouts.length+'本</small>':''}</span><span class="p" style="text-align:right"><i class="pdot" style="background:${paceColor(q.pace)}"></i>${fm(q.pace)}</span><span class="x">${q.spm?Math.round(q.spm):'--'}</span><span class="x">${q.dps?q.dps.toFixed(1):'--'}</span><span class="x">${q.d>=1000?(q.d/1000).toFixed(1)+'k':Math.round(q.d)}</span><span class="x" style="color:var(--tx);font-weight:800">${fm(x.work)}</span></div>`;});
+$('rows').innerHTML=h;}
+function buildOverall(){let mv=0,st=0;for(let i=1;i<P.length;i++){const dt=Math.min(10,P[i].t-P[i-1].t);if(dt<=0)continue;if(P[i].v>=MOVE)mv+=dt;else st+=dt;}
+const by={UT:0,AT:0,HR:0};sets.forEach(x=>by[x.kind]+=x.work);const work=by.UT+by.AT+by.HR;const other=Math.max(0,mv-work);const tot=mv+st;
+const parts=[['UT',by.UT,'var(--m-pace)'],['AT',by.AT,'var(--m-spm)'],['ハイレート',by.HR,'var(--hot)'],['パドル・アップ等',other,'var(--mute)'],['停止',st,'var(--s3)']];
+let h=`<div class="ov"><div class="ovh"><div><span class="eyebrow">漕いでいた時間</span><b class="num">${fm(work)}</b></div><div style="text-align:right"><span class="eyebrow">練習時間</span><b class="num" style="color:var(--sub)">${fm(mv)}</b></div></div><div class="ovbar">`;
+parts.forEach(([n,t,c])=>{if(t>0)h+=`<span style="width:${t/tot*100}%;background:${c}"></span>`;});h+='</div><table class="num ovt">';
+parts.forEach(([n,t,c],k)=>{h+=`<tr${k===3?' class="sep"':''}><td><i style="background:${c}"></i>${n}</td><td>${fm(t)}</td><td style="color:var(--mute)">${Math.round(t/tot*100)}%</td></tr>`;});
+h+=`</table><div class="note">漕いでいた時間 = 各セットの本・区間の合計（練習の強度で漕いだ時間）。練習時間 = 艇が動いていた時間の合計（パドル・アップを含む）。記録の長さ ${fm(T)}。</div></div>`;$('brk').innerHTML=h;}
+function buildBreakdown(si,bi){$('brk').innerHTML='';const el=$('brk2');$('brkBox').style.display=si<0?'none':'';if(si<0){if(A<=0.5&&B>=T-0.5)buildOverall();el.innerHTML='';return;}$('brkSub').textContent=`${si+1}セット目 ・ ${sets[si].bouts.length}${UNIT[sets[si].kind]}`;const x=sets[si];if(x.bouts.length<2&&bi<0){$('brkBox').style.display='none';el.innerHTML='';return;}
+const u=UNIT[x.kind];let h=`<div class="brkh">${bi>=0?`<a data-back="${si}">‹ ${si+1}セット目の全体に戻る</a>`:''}</div><table class="num"><tr><th>${u}</th><th>時間</th><th>距離</th><th>平均 /500m</th><th>SR</th><th>${x.kind==='HR'?'レスト':'間'}</th></tr>`;
+x.bouts.forEach((b,j)=>{const q=b.s||stats(b.a,b.b);const nx=x.bouts[j+1];const rest=nx?nx.a-b.b:null;const gi=pieces.indexOf(b);
+h+=`<tr class="brow${gi===bi?' on':''}" data-b="${gi}"><td>${j+1}${u}目</td><td>${fm(b.b-b.a)}</td><td>${Math.round(q.d)}m</td><td><b>${fm(q.pace)}</b></td><td>${q.spm?Math.round(q.spm):'--'}</td><td style="color:var(--mute)">${rest!=null?fm(rest)+'<br><small>'+gapKind(b.b,nx.a)+' '+Math.round(cdAt(nx.a)-cdAt(b.b))+'m</small>':''}</td></tr>`;});
+el.innerHTML=h+'</table>';}
+function bestEffort(D){let best=null;pieces.forEach(p=>{const i0=idxAt(p.a),i1=idxAt(p.b);let j=i0;for(let i=i0;i<=i1;i++){while(j<=i1&&cd[j]-cd[i]<D)j++;if(j>i1)break;const r=(cd[i]+D-cd[j-1])/Math.max(1e-6,cd[j]-cd[j-1]);const te=P[j-1].t+(P[j].t-P[j-1].t)*r;const tm=te-P[i].t;if(!best||tm<best.tm)best={a:P[i].t,b:te,tm};}});return best;}
+function buildBest(){let h='';[500,1000,2000].forEach(D=>{const b=bestEffort(D);h+=b?`<div class="bx" data-a="${b.a}" data-b="${b.b}"><div class="k">最速 ${D}m</div><div class="v num">${fm(b.tm)}</div><div class="s num">${fm(b.tm*500/D)} /500m</div></div>`:`<div class="bx off"><div class="k">最速 ${D}m</div><div class="v num">--</div><div class="s">対象なし</div></div>`;});$('best').innerHTML=h;}
+
+const tl=$('tl');
+const tlW=()=>tl.getBoundingClientRect().width||380;
+const tx=t=>(t-view[0])/(view[1]-view[0])*tlW();
+const tt=x=>view[0]+x/tlW()*(view[1]-view[0]);
+function drawTimeline(){
+const W=tlW(),H=62,y0=10,hh=30;tl.setAttribute('viewBox',`0 0 ${W} ${H}`);
+let h=`<defs><clipPath id="tc"><rect x="0" y="${y0}" width="${W}" height="${hh}" rx="9"/></clipPath></defs><rect x="0" y="${y0}" width="${W}" height="${hh}" rx="9" fill="${css('--s2')}"/><g clip-path="url(#tc)">`;
+const i0=idxAt(view[0]),i1=Math.min(P.length-1,idxAt(view[1])+1),s3=css('--s3');
+for(let i=Math.max(1,i0);i<=i1;i++){const x0=tx(P[i-1].t),x1=tx(P[i].t);if(x1<0||x0>W)continue;const v=P[i].v;if(v<MOVE)continue;const w=Math.max(.6,x1-x0+.4);
+if(v<MIN_WORK)h+=`<rect x="${x0.toFixed(1)}" y="${y0+hh/2-3}" width="${w.toFixed(1)}" height="6" fill="${s3}"/>`;
+else if(!inP[i])h+=`<rect x="${x0.toFixed(1)}" y="${y0+hh/2-5}" width="${w.toFixed(1)}" height="10" fill="${s3}"/>`;else{h+=`<rect x="${x0.toFixed(1)}" y="${y0+4}" width="${w.toFixed(1)}" height="${hh-8}" fill="${paceColor(colPace[i]??paceAt[i])}"/>`;}}
+h+='</g>';
+sets.forEach((x,i)=>{const x0=tx(x.a),x1=tx(x.b);if(x1<0||x0>W)return;const c=css(x.kind==='HR'?'--hot':x.kind==='AT'?'--m-spm':'--m-pace');h+=`<rect x="${Math.max(0,x0)}" y="${y0+hh+1}" width="${Math.max(2,Math.min(W,x1)-Math.max(0,x0))}" height="3" rx="1.5" fill="${c}" opacity=".85"/>`;});
+const sa=tx(A),sb=tx(B),acc=css('--acc'),bg=css('--bg');
+h+=`<rect x="0" y="${y0}" width="${Math.max(0,sa)}" height="${hh}" fill="${bg}" opacity=".6"/><rect x="${sb}" y="${y0}" width="${Math.max(0,W-sb)}" height="${hh}" fill="${bg}" opacity=".6"/>`;
+h+=`<rect x="${sa}" y="${y0-2}" width="${Math.max(2,sb-sa)}" height="${hh+4}" rx="8" fill="none" stroke="${acc}" stroke-width="2.5"/>`;
+[[sa,-9],[sb,-1]].forEach(([x,o])=>{h+=`<rect x="${x+o}" y="${y0-2}" width="10" height="${hh+4}" rx="5" fill="${acc}"/><rect x="${x+o+4}" y="${y0+hh/2-6}" width="2" height="12" rx="1" fill="${css('--acc-ink')}"/>`;});
+const span=view[1]-view[0];const step=span>5400?900:span>2400?600:span>1200?300:span>480?60:span>150?30:10;
+for(let s=Math.ceil(view[0]/step)*step;s<=view[1]+.1;s+=step){const x=tx(s);h+=`<text x="${Math.min(W-1,Math.max(1,x))}" y="${H-3}" font-size="10" font-weight="700" text-anchor="${x<12?'start':x>W-12?'end':'middle'}" fill="${css('--mute')}" font-family="Inter">${step>=60?Math.round(s/60)+'分':fm(s)}</text>`;}
+const cx=tx(cur);if(cx>=-2&&cx<=W+2){const hot=css('--hot');h+=`<line x1="${cx}" x2="${cx}" y1="${y0-5}" y2="${y0+hh+4}" stroke="${hot}" stroke-width="2.5" stroke-linecap="round"/><circle cx="${cx}" cy="${y0-6}" r="4.5" fill="${hot}" stroke="${bg}" stroke-width="2"/>`;}
+tl.innerHTML=h;
+$('crumb').textContent=(view[0]>0.5||view[1]<T-0.5)?'時間軸を全体に戻す':'';
+}
+
+// グラフの横軸: 本（区間）ごとに0から始まる区間を並べる。本と本の間は固定幅のすき間にして、レストの時間・距離を書く
+const REST_GAP=34,PACE_SPAN_MAX=40;
+// 本と本のすき間の中身: 向きが120°以上変わった=ターン / 6割以上止まっていた=停止 / それ以外=パドル（軽く漕いでつないだ）
+function gapKind(a,b){let st=0,tot=0;for(let i=idxAt(a)+1;i<=Math.min(P.length-1,idxAt(b)+1);i++){const dt=Math.min(P[i].t,b)-Math.max(P[i-1].t,a);if(dt<=0)continue;tot+=dt;if(P[i].v<MOVE)st+=dt;}
+let dh=Math.abs(P[idxAt(b)].hd-P[idxAt(a)].hd)%360;if(dh>180)dh=360-dh;if(dh>=120)return'ターン';if(tot&&st/tot>=.6)return'停止';return'パドル';}
+let zv=[0,1],zKey='';
+function chartSegs(){let bs;if(selSet>=0)bs=sets[selSet].bouts.map(b=>({a:b.a,b:b.b}));else bs=[{a:A,b:B}];
+bs.forEach(x=>{x.len=xmode==='time'?x.b-x.a:Math.max(1,cdAt(x.b)-cdAt(x.a));});return bs;}
+function chartLayout(W,pl,pr){const sg=chartSegs();const n=sg.length,gap=n>1?REST_GAP:0;const tot=sg.reduce((t,x)=>t+x.len,0);const wp=W-pl-pr-gap*(n-1);let acc=0;
+sg.forEach((x,k)=>{x.x0=pl+acc/tot*wp+k*gap;x.w=x.len/tot*wp;acc+=x.len;});const Wi=W-pl-pr,zs=1/(zv[1]-zv[0]);sg.forEach(x=>{x.x0=pl+((x.x0-pl)/Wi-zv[0])*zs*Wi;x.w*=zs;});sg.gapW=gap*zs;return sg;}
+const uOf=(x,t)=>xmode==='time'?t-x.a:cdAt(t)-cdAt(x.a);
+const tOfU=(x,u)=>xmode==='time'?x.a+u:(tAtCd(cdAt(x.a)+u,idxAt(x.a),idxAt(x.b)+1)??x.a);
+function niceStep(len,w,dist){const st=dist?[25,50,100,200,250,500,1000,2000,5000]:[5,10,15,20,30,60,120,300,600,900,1200,1800];for(const s2 of st)if(s2/len*w>=30)return s2;return st[st.length-1];}
+function drawChart(){
+const svg=$('ch'),W=svg.getBoundingClientRect().width||360,H=206,pl=40,pr=6,pt=20,pb=38;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+const mc=css('--m-'+metric),sub=css('--mute'),line=css('--line'),tx2=css('--tx');
+const zk=A+'_'+B+'_'+xmode;if(zk!==zKey){zKey=zk;zv=[0,1];}
+const sg=chartLayout(W,pl,pr),dist=xmode==='dist';
+const pts=[];// {x,v,core}
+sg.forEach((x,k)=>{const i0=idxAt(x.a),i1=Math.min(P.length-1,idxAt(x.b)+1);const arr=[];for(let i=i0;i<=i1;i++){const t=P[i].t;if(t<x.a||t>x.b)continue;const v=mval(i,metric);
+const core=(selSet>=0||inP[i])&&t-x.a>=8&&x.b-t>=8&&(selSet<0?inP[i]:true);arr.push({x:x.x0+uOf(x,t)/x.len*x.w,v,core});}pts.push(arr);});
+let pool=pts.flat().filter(p=>p.v!=null&&isFinite(p.v)&&p.core).map(p=>p.v);if(pool.length<8)pool=pts.flat().filter(p=>p.v!=null&&isFinite(p.v)).map(p=>p.v);
+if(!pool.length){svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" font-size="13" fill="${sub}">この区間には漕いでいる時間がありません</text>`;$('chNote').textContent='';return;}
+// 縦軸: 練習として漕いでいる部分（本・区間の中、最初と最後の8秒を除く）の3〜97パーセンタイルに合わせる。
+// パドルや加速中の遅い値は枠の端に張り付かせ、練習中の細かい変化を大きく見せる
+pool.sort((a,b)=>a-b);const pq=q=>pool[Math.min(pool.length-1,Math.max(0,Math.floor(pool.length*q)))];const m0=med(pool),sg0=Math.max(1.4826*med(pool.map(v=>Math.abs(v-m0))),{pace:1,spm:.5,dps:.1}[metric]);
+// スプリット: 上端=練習中の速い側2%、下端=そこから最大40秒（かつ遅い側10%まで）。
+// 1本の中の数秒の変化が常に見える縦幅にする。それより遅い値（パドル・減速・ターン）は下端に張り付く
+let lo,hi;if(metric==='pace'){lo=pq(.02);hi=Math.min(pq(.90),lo+PACE_SPAN_MAX);}else{lo=pq(.05);hi=pq(.95);}
+const minW={pace:6,spm:3,dps:.6}[metric];if(hi-lo<minW){const m=(hi+lo)/2;lo=m-minW/2;hi=m+minW/2;}
+// 目盛りはきりのよい値（スプリット5秒、SR2、DPS0.5m）。範囲も目盛りに合わせて外側へ丸める
+const span=hi-lo,ystep=metric==='pace'?(span<=45?5:span<=90?10:30):metric==='spm'?(span<=16?2:4):(span<=4?.5:1);lo=Math.floor((lo-1e-9)/ystep)*ystep;hi=Math.ceil((hi+1e-9)/ystep)*ystep;if(hi-lo<ystep*2)hi=lo+ystep*2;
+const inv=metric==='pace';const Y=v=>{const r=(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo);return pt+(inv?r:1-r)*(H-pt-pb);};const out=v=>v<lo||v>hi;
+let h=`<defs><linearGradient id="gf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${mc}" stop-opacity=".38"/><stop offset="1" stop-color="${mc}" stop-opacity="0"/></linearGradient><clipPath id="cc"><rect x="${pl}" y="${pt-1}" width="${W-pl-pr}" height="${H-pt-pb+2}"/></clipPath><clipPath id="cx"><rect x="${pl-1}" y="0" width="${W-pl-pr+2}" height="${H}"/></clipPath></defs>`;
+{const nT=Math.round((hi-lo)/ystep),lstep=nT>7?2:1;for(let g=0;g<=nT;g++){const v=lo+g*ystep,y=Y(v);h+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="${line}" stroke-dasharray="2 4"/>`;if(g%lstep===0)h+=`<text x="${pl-6}" y="${y+3.5}" text-anchor="end" font-size="10" font-weight="700" fill="${sub}" font-family="Inter">${metric==='dps'?v.toFixed(ystep<1?1:0):fmtM(v,metric)}</text>`;}}
+h+='<g clip-path="url(#cx)">';
+const base=H-pb;
+sg.forEach((x,k)=>{// レストのすき間
+if(k>0){const pv=sg[k-1],gx=pv.x0+pv.w,gw=x.x0-gx;const rt=x.a-pv.b,rd=cdAt(x.a)-cdAt(pv.b);h+=`<rect x="${gx+3}" y="${pt}" width="${gw-6}" height="${base-pt}" rx="4" fill="${css('--s2')}"/><text x="${gx+gw/2}" y="${selSet>=0&&sets[selSet].kind==='HR'?base-41:base-30}" text-anchor="middle" font-size="9" font-weight="800" fill="${sub}">${selSet>=0&&sets[selSet].kind==='HR'?'レスト':gapKind(pv.b,x.a)}</text>${selSet>=0&&sets[selSet].kind==='HR'?`<text x="${gx+gw/2}" y="${base-30}" text-anchor="middle" font-size="8.5" font-weight="700" fill="${sub}">${gapKind(pv.b,x.a)}</text>`:''}<text x="${gx+gw/2}" y="${base-18}" text-anchor="middle" font-size="9.5" font-weight="800" fill="${tx2}" font-family="Inter">${fm(rt)}</text><text x="${gx+gw/2}" y="${base-7}" text-anchor="middle" font-size="9" font-weight="700" fill="${sub}" font-family="Inter">${Math.round(rd)}m</text>`;}
+// 目盛り（本ごとに0から）
+const step=niceStep(x.len,x.w,dist);const endLab=dist?Math.round(x.len):fm(x.len);const endW=String(endLab).length*5.6;h+=`<line x1="${x.x0+x.w}" x2="${x.x0+x.w}" y1="${base}" y2="${base+4}" stroke="${sub}"/><text x="${x.x0+x.w}" y="${base+15}" text-anchor="end" font-size="9.5" font-weight="800" fill="${tx2}" font-family="Inter">${endLab}</text>`;for(let u=0;u<=x.len+.01;u+=step){const X=x.x0+u/x.len*x.w;if(x.x0+x.w-X<endW+10)continue;h+=`<line x1="${X}" x2="${X}" y1="${base}" y2="${base+4}" stroke="${sub}"/><text x="${X}" y="${base+15}" text-anchor="${u===0?'start':'middle'}" font-size="9.5" font-weight="${u===0?800:600}" fill="${sub}" font-family="Inter">${u===0?'0':dist?Math.round(u):fm(u)}</text>`;}
+if(sg.length>1)h+=`<text x="${x.x0+x.w/2}" y="${pt-6}" text-anchor="middle" font-size="9.5" font-weight="800" fill="${sub}">${x.w>44?(k+1)+UNIT[sets[selSet].kind]+'目':k+1}</text>`;
+// 線
+const segs=[];let cs=null,last=null;pts[k].forEach(p=>{const bad=p.v==null||!isFinite(p.v);if(bad||(last!=null&&!dist&&(p.x-last)/x.w*x.len>12)){if(cs&&cs.length>1)segs.push(cs);cs=null;if(bad){last=null;return;}}if(!cs)cs=[];cs.push([p.x,Y(p.v),out(p.v)]);last=p.x;});if(cs&&cs.length>1)segs.push(cs);
+segs.forEach(q=>{const d=q.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join('');h+=`<g clip-path="url(#cc)"><path d="${d}L${q[q.length-1][0].toFixed(1)} ${base}L${q[0][0].toFixed(1)} ${base}Z" fill="url(#gf)"/><path d="${d}" fill="none" stroke="${mc}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></g>`;});
+});
+h+='</g>';h+=`<line x1="${pl}" x2="${W-pr}" y1="${base}" y2="${base}" stroke="${line}"/>`;
+if(showOld&&metric==='pace'){sg.forEach(x=>{let d='',pen=false;for(let i=idxAt(x.a);i<=Math.min(P.length-1,idxAt(x.b)+1);i++){const t=P[i].t,v=paceOld[i];if(t<x.a||t>x.b||v==null){pen=false;continue;}d+=(pen?'L':'M')+(x.x0+uOf(x,t)/x.len*x.w).toFixed(1)+' '+Y(v).toFixed(1);pen=true;}h+=`<path d="${d}" fill="none" stroke="${css('--sub')}" stroke-opacity=".7" stroke-width="1.4" clip-path="url(#cc)"/>`;});}
+const s2=selStat||stats(A,B);const avg={pace:s2.pace,spm:s2.spm,dps:s2.dps}[metric];
+if(avg!=null){const y=Y(avg);const lab='平均 '+fmtM(avg,metric),lw=lab.length*6.4+12;h+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="${tx2}" stroke-opacity=".5" stroke-dasharray="5 4"/><rect x="${W-pr-lw}" y="${y-8}" width="${lw}" height="16" rx="8" fill="${css('--s3')}"/><text x="${W-pr-lw/2}" y="${y+3.5}" text-anchor="middle" font-size="10" font-weight="800" fill="${tx2}" font-family="Inter">${lab}</text>`;}
+h+=`<text x="${W-pr}" y="${H-3}" text-anchor="end" font-size="9.5" font-weight="700" fill="${sub}">${dist?'m（本ごとに0から）':'分:秒（本ごとに0から）'}</text>`;
+const xc=sg.find(x=>cur>=x.a&&cur<=x.b);if(xc){const X=xc.x0+uOf(xc,cur)/xc.len*xc.w,hot=css('--hot'),ci=idxAt(cur),cv=mval(ci,metric);h+=`<line x1="${X}" x2="${X}" y1="${pt-2}" y2="${base}" stroke="${hot}" stroke-width="1.5"/>`;
+if(cv!=null){const y=Y(cv),lab=fmtM(cv,metric),bw=lab.length*7+16,bx=Math.min(W-pr-bw,Math.max(pl,X-bw/2));h+=`<circle cx="${X}" cy="${y}" r="5" fill="${hot}" stroke="${css('--s1')}" stroke-width="2"/><rect x="${bx}" y="0" width="${bw}" height="17" rx="8.5" fill="${hot}"/><text x="${bx+bw/2}" y="12" text-anchor="middle" font-size="10.5" font-weight="800" fill="#fff" font-family="Inter">${lab}</text>`;}}
+svg.innerHTML=h;
+const zoomed=zv[1]-zv[0]<.999;$('zoomInfo').innerHTML=zoomed?`拡大 ×${(1/(zv[1]-zv[0])).toFixed(1)} ・ 左右になぞるか下のバーで移動 <a id="zReset">元に戻す</a>`:'2本指で広げると拡大';$('zbar').style.display=zoomed?'block':'none';$('zthumb').style.left=(zv[0]*100)+'%';$('zthumb').style.width=((zv[1]-zv[0])*100)+'%';
+const bpx=pieces.find(p=>Math.abs(p.a-A)<.5&&Math.abs(p.b-B)<.5);$('chBack').innerHTML=bpx&&sets[bpx.set].bouts.length>1&&selSet<0?`<a data-back="${bpx.set}">‹ ${bpx.set+1}セット目の全体に戻る</a>`:'';
+$('chNote').textContent=(sg.length>1?'レストを詰めて、漕いだ部分だけを並べています。本をタップするとその本を拡大します。':'')+(metric==='pace'?'上が速い。':'')+'縦軸は練習中のタイムに合わせているので、遅いパドルなどは下端に張り付きます。';
+}
+
+function draw(){
+const pos=interp(cur);boat.setLatLng([pos.lat,pos.lng]);const rot=document.getElementById('boatRot');if(rot)rot.setAttribute('transform',`rotate(${pos.hd||0})`);
+buildSel();const a=interp(A),b=interp(B);mA.setLatLng([a.lat,a.lng]);mB.setLatLng([b.lat,b.lng]);
+const ci=idxAt(cur),cp=P[ci];
+$('cT').textContent=fm(cur);
+const clk=new Date(new Date(S.startedAt).getTime()+cur*1000+9*3600e3);$('cClock').textContent=`経過 ・ 時刻 ${String(clk.getUTCHours()).padStart(2,'0')}:${String(clk.getUTCMinutes()).padStart(2,'0')}:${String(clk.getUTCSeconds()).padStart(2,'0')}`;
+{const mv=cp.v>=MOVE;$('nP').textContent=mv?fm(500/cp.v):'--';$('nPl').textContent=mv?(cp.v<MIN_WORK?'/500m（パドル）':'/500m'):'停止中';$('nS').textContent=mv&&cp.spm&&cp.v>=MIN_WORK?Math.round(cp.spm):'--';$('nD').textContent=mv&&cp.dps?cp.dps.toFixed(1):'--';}
+const si=sets.findIndex(x=>Math.abs(x.a-A)<.5&&Math.abs(x.b-B)<.5);
+const bi=si>=0?-1:pieces.findIndex(p=>Math.abs(p.a-A)<.5&&Math.abs(p.b-B)<.5);
+selSet=si;const s=si>=0?sets[si].stat:stats(A,B);selStat=s;
+$('sP').innerHTML=fm(s.pace);$('sR').innerHTML=s.spm?`${Math.round(s.spm)}<small>spm</small>`:'--';$('sD').innerHTML=s.dps?`${s.dps.toFixed(1)}<small>m</small>`:'--';
+$('sL').innerHTML=(s.d>=1000?`${(s.d/1000).toFixed(2)}<small>km</small>`:`${Math.round(s.d)}<small>m</small>`)+`<small style="display:block;margin:2px 0 0;font-size:12px">${fm(s.tm)}</small>`;
+const all=A<=0.5&&B>=T-0.5;const bp=bi>=0?pieces[bi]:null,bs=bp?sets[bp.set]:null;
+$('selKind').textContent=si>=0?'セット':bp?`${bp.set+1}セット目 ・ ${KIND_J[bs.kind]}`:all?'全体':'選択区間';
+$('selName').innerHTML=si>=0?`${si+1}セット目 <span class="kindbig" style="color:${KIND_COL[sets[si].kind]}">${KIND_J[sets[si].kind]}</span>`:bp?`${bp.j+1}${UNIT[bs.kind]}目 ・ ${bp.dir}`:all?'この日の練習':`${fm(A)} – ${fm(B)}`;
+$('selRange').textContent=si>=0?`${fm(A)} – ${fm(B)}${sets[si].kind==='HR'?' ・ '+sets[si].bouts.length+'本':''} ・ ${sets[si].dir}`:bp||all?`${fm(A)} – ${fm(B)}`:`長さ ${fm(B-A)}`;
+$('selNote').textContent=si>=0&&sets[si].rest>=3?(sets[si].kind==='HR'?`レスト ${fm(sets[si].rest)} を除いた、${sets[si].bouts.length}本の平均です`:`ターン・停止 ${fm(sets[si].rest)} を除いた平均です`):s.stop>=3?`イージー（停止）${fm(s.stop)} を除いた平均です`:'';
+buildBreakdown(si>=0?si:bp?bp.set:-1,bi);
+$('fA').textContent=fm(A);$('fB').textContent=fm(B);$('adjSub').textContent=`${fm(A)} – ${fm(B)}`;
+if(document.activeElement!==$('inA'))$('inA').value=fm(A);if(document.activeElement!==$('inB'))$('inB').value=fm(B);
+const hs=si>=0?si:bp?bp.set:-2;
+document.querySelectorAll('.pc').forEach(c=>c.classList.toggle('on',c.dataset.s==='all'?all:+c.dataset.s===hs));
+document.querySelectorAll('.r[data-s]').forEach(r=>r.classList.toggle('on',+r.dataset.s===hs));
+drawTimeline();drawChart();if($('splitBox').open)drawSplits();
+}
+function drawSplits(){const sp=splits(A,B,250);if(!sp.length){$('splits').innerHTML='<div class="note">250mに満たない区間です</div>';return;}
+const ps=sp.filter(x=>!x.partial&&x.pace).map(x=>x.pace);const av=ps.length?ps.reduce((a,b)=>a+b,0)/ps.length:null;
+let h='<table class="num"><tr><th>区間</th><th>ラップ</th><th>/500m</th><th>SR</th><th>DPS</th><th>平均差</th></tr>';
+sp.forEach(x=>{const df=av&&x.pace&&!x.partial?x.pace-av:null;h+=`<tr><td>${x.from}–${x.to}${x.partial?' <span style="color:var(--mute)">端数</span>':''}</td><td>${fm(x.tm)}</td><td><b>${fm(x.pace)}</b></td><td>${x.spm?Math.round(x.spm):'--'}</td><td>${x.dps?x.dps.toFixed(1):'--'}</td><td class="${df>0?'dpos':'dneg'}">${df==null?'':(df>0?'+':'')+df.toFixed(1)}</td></tr>`;});
+$('splits').innerHTML=h+'</table>';}
+$('splitBox').addEventListener('toggle',()=>{if($('splitBox').open)drawSplits();});
+
+function selectRange(a,b,fit=true){A=Math.max(0,Math.min(a,b));B=Math.min(T,Math.max(a,b));if(B-A<2)B=Math.min(T,A+2);if(cur<A||cur>B)cur=A;draw();if(fit)fitSel();}
+function snap(t){const tol=Math.max(1,6*(view[1]-view[0])/tlW());for(const p of pieces){if(Math.abs(t-p.a)<tol)return p.a;if(Math.abs(t-p.b)<tol)return p.b;}return t;}
+let g=null,raf=0;const schedule=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;draw();});};
+tl.addEventListener('pointerdown',e=>{const r=tl.getBoundingClientRect(),x=e.clientX-r.left;tl.setPointerCapture(e.pointerId);stopPlay();const sa=tx(A),sb=tx(B);
+if(Math.abs(x-sa)<16&&Math.abs(x-sa)<=Math.abs(x-sb))g={mode:'hA'};else if(Math.abs(x-sb)<16)g={mode:'hB'};
+else{g={mode:'wait',x0:x,t0:tt(x)};g.timer=setTimeout(()=>{if(g&&g.mode==='wait'){g.mode='range';g.anchor=g.t0;if(navigator.vibrate)navigator.vibrate(10);toast('なぞって区間を選べます');}},380);cur=Math.max(0,Math.min(T,tt(x)));schedule();}});
+tl.addEventListener('pointermove',e=>{if(!g)return;const r=tl.getBoundingClientRect(),x=e.clientX-r.left,t=Math.max(view[0],Math.min(view[1],tt(x)));
+if(g.mode==='hA'){A=Math.min(snap(t),B-2);cur=A;}else if(g.mode==='hB'){B=Math.max(snap(t),A+2);cur=B;}
+else if(g.mode==='wait'&&Math.abs(x-g.x0)>6){clearTimeout(g.timer);g.mode='scrub';}
+if(g.mode==='scrub')cur=t;else if(g.mode==='range'){A=Math.min(g.anchor,t);B=Math.max(g.anchor,t);cur=t;}schedule();});
+tl.addEventListener('pointerup',()=>{if(!g)return;clearTimeout(g.timer);
+if(g.mode==='wait'){const t=g.t0;const x=sets.find(x=>t>=x.a&&t<=x.b);if(x){const already=Math.abs(x.a-A)<.5&&Math.abs(x.b-B)<.5;const p=pieces.find(p=>t>=p.a&&t<=p.b);if(already&&p&&x.bouts.length>1)selectRange(p.a,p.b);else selectRange(x.a,x.b);cur=t;draw();}}
+else if(g.mode!=='scrub')fitSel();g=null;});
+$('crumb').onclick=()=>{view=[0,T];draw();};
+$('zoomIn').onclick=()=>{const m=Math.max(10,(B-A)*.06);view=[Math.max(0,A-m),Math.min(T,B+m)];draw();toast('時間軸を選択区間に合わせました');};
+$('pieces').onclick=e=>{const c=e.target.closest('[data-s]');if(!c)return;stopPlay();if(c.dataset.s==='all'){view=[0,T];A=0;B=T;cur=0;draw();fitAll();}else{const x=sets[+c.dataset.s];selectRange(x.a,x.b);}};
+$('brk2').onclick=e=>{const bk=e.target.closest('[data-back]');if(bk){const x=sets[+bk.dataset.back];selectRange(x.a,x.b);return;}const r=e.target.closest('[data-b]');if(!r)return;const p=pieces[+r.dataset.b];selectRange(p.a,p.b);};
+$('rows').onclick=e=>{const r=e.target.closest('.r[data-s]');if(!r)return;const x=sets[+r.dataset.s];selectRange(x.a,x.b);window.scrollTo({top:0,behavior:'smooth'});};
+$('best').onclick=e=>{const r=e.target.closest('.bx[data-a]');if(!r)return;selectRange(+r.dataset.a,+r.dataset.b);window.scrollTo({top:0,behavior:'smooth'});};
+$('setA').onclick=()=>{if(cur>=B-1){toast('「ここから」は終了より前にしてください');return;}A=cur;draw();};
+$('setB').onclick=()=>{if(cur<=A+1){toast('「ここまで」は開始より後にしてください');return;}B=cur;draw();};
+document.querySelectorAll('.nudge button').forEach(b=>b.onclick=()=>{const d=+b.dataset.d;if(b.dataset.f==='A'){A=Math.max(0,Math.min(B-2,A+d));cur=A;}else{B=Math.min(T,Math.max(A+2,B+d));cur=B;}if(A<view[0]||B>view[1])view=[Math.min(view[0],A),Math.max(view[1],B)];draw();});
+const parse=s=>{const m=/^\s*(?:(\d+):)?(\d{1,3}):([0-5]\d)\s*$/.exec(s);if(!m)return null;return(+(m[1]||0))*3600+(+m[2])*60+(+m[3]);};
+$('apply').onclick=()=>{const a=parse($('inA').value),b=parse($('inB').value);if(a==null||b==null){$('err').textContent='「分:秒」で入力してください（例 12:30）';return;}if(b<=a){$('err').textContent='終了は開始より後にしてください';return;}if(b>T+1){$('err').textContent=`この記録は ${fm(T)} までです`;return;}$('err').textContent='';$('inA').blur();$('inB').blur();selectRange(a,Math.min(b,T));};
+['inA','inB'].forEach(id=>{$(id).addEventListener('input',()=>$('err').textContent='');$(id).addEventListener('keydown',e=>{if(e.key==='Enter')$('apply').click();});});
+map.on('click',e=>{stopPlay();let best=-1,bd=1e18;const cand=[];for(let i=0;i<P.length;i++){const d=hav(e.latlng.lat,e.latlng.lng,P[i].lat,P[i].lng);if(d<30)cand.push(i);if(d<bd){bd=d;best=i;}}
+if(bd>80)return;const pick=cand.length?cand.reduce((a,i)=>Math.abs(P[i].t-cur)<Math.abs(P[a].t-cur)?i:a,cand[0]):best;cur=P[pick].t;if(cur<view[0]||cur>view[1])view=[0,T];draw();});
+const ch=$('ch');const ptrs=new Map();let pinch=null,tapInfo=null,lastTap=0;
+function chSeek(e){const r=ch.getBoundingClientRect(),W=r.width,x=e.clientX-r.left;const sg=chartLayout(W,40,6);let best=sg[0];for(const q of sg){if(x>=q.x0-sg.gapW/2)best=q;}const u=Math.max(0,Math.min(best.len,(x-best.x0)/best.w*best.len));cur=tOfU(best,u);schedule();}
+function segAt(x){const W=ch.getBoundingClientRect().width;const sg=chartLayout(W,40,6);return sg.find(q=>x>=q.x0&&x<=q.x0+q.w);}
+function zoomAround(px,factor){const W=ch.getBoundingClientRect().width,Wi=W-46;const span=zv[1]-zv[0];const uc=zv[0]+(px-40)/Wi*span;let ns=Math.max(.04,Math.min(1,span/factor));let z0=uc-(px-40)/Wi*ns;z0=Math.max(0,Math.min(1-ns,z0));zv=[z0,z0+ns];drawChart();}
+ch.addEventListener('pointerdown',e=>{ch.setPointerCapture(e.pointerId);stopPlay();ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+if(ptrs.size===2){const [p1,p2]=[...ptrs.values()];pinch={d:Math.abs(p1.x-p2.x)||1,mid:(p1.x+p2.x)/2-ch.getBoundingClientRect().left,z:zv.slice()};tapInfo=null;return;}
+tapInfo={x:e.clientX,t:Date.now()};ch._lx=e.clientX;if(zv[1]-zv[0]>=.999)chSeek(e);});
+ch.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+if(pinch&&ptrs.size===2){const [p1,p2]=[...ptrs.values()];const d=Math.abs(p1.x-p2.x)||1,mid=(p1.x+p2.x)/2-ch.getBoundingClientRect().left;const W=ch.getBoundingClientRect().width,Wi=W-46;
+const span0=pinch.z[1]-pinch.z[0],uc=pinch.z[0]+(pinch.mid-40)/Wi*span0;let ns=Math.max(.04,Math.min(1,span0*pinch.d/d));let z0=uc-(mid-40)/Wi*ns;z0=Math.max(0,Math.min(1-ns,z0));zv=[z0,z0+ns];drawChart();return;}
+if(ptrs.size===1){const zoomed=zv[1]-zv[0]<.999;if(tapInfo&&Math.abs(e.clientX-tapInfo.x)>6){tapInfo=null;}
+if(zoomed){const W=ch.getBoundingClientRect().width,Wi=W-46;const dx=e.clientX-(ch._lx??e.clientX);ch._lx=e.clientX;const span=zv[1]-zv[0];let z0=zv[0]-dx/Wi*span;z0=Math.max(0,Math.min(1-span,z0));zv=[z0,z0+span];drawChart();}else chSeek(e);}});
+const endPtr=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;
+if(tapInfo&&ptrs.size===0&&Date.now()-tapInfo.t<350){const now=Date.now();const x=tapInfo.x-ch.getBoundingClientRect().left;if(zv[1]-zv[0]<.999)chSeek({clientX:tapInfo.x});
+if(now-lastTap<320){zv=[0,1];drawChart();lastTap=0;tapInfo=null;return;}lastTap=now;
+if(selSet>=0&&sets[selSet].bouts.length>1){const q=segAt(x);if(q){const bt=sets[selSet].bouts.find(b=>Math.abs(b.a-q.a)<.5);if(bt){const c=cur;selectRange(bt.a,bt.b);cur=Math.max(bt.a,Math.min(bt.b,c));draw();}}}}
+tapInfo=null;};
+ch.addEventListener('pointerup',endPtr);ch.addEventListener('pointercancel',endPtr);
+ch.addEventListener('wheel',e=>{if(!e.ctrlKey&&Math.abs(e.deltaX)>Math.abs(e.deltaY)&&zv[1]-zv[0]<.999){e.preventDefault();const span=zv[1]-zv[0];let z0=zv[0]+e.deltaX/ch.getBoundingClientRect().width*span;z0=Math.max(0,Math.min(1-span,z0));zv=[z0,z0+span];drawChart();return;}if(!e.ctrlKey)return;e.preventDefault();zoomAround(e.clientX-ch.getBoundingClientRect().left,Math.exp(-e.deltaY*.01));},{passive:false});
+{const zb=$('zbar');let zd=null;zb.addEventListener('pointerdown',e=>{zb.setPointerCapture(e.pointerId);zd={x:e.clientX,z:zv.slice()};});zb.addEventListener('pointermove',e=>{if(!zd)return;const w=zb.getBoundingClientRect().width,span=zd.z[1]-zd.z[0];let z0=zd.z[0]+(e.clientX-zd.x)/w;z0=Math.max(0,Math.min(1-span,z0));zv=[z0,z0+span];drawChart();});zb.addEventListener('pointerup',()=>zd=null);}
+document.addEventListener('click',e=>{if(e.target.id==='zReset'){zv=[0,1];drawChart();}const bk=e.target.closest('#chBack [data-back]');if(bk){const x=sets[+bk.dataset.back];selectRange(x.a,x.b);}});
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{metric=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));drawChart();});
+$('xSeg').onclick=e=>{const b=e.target.closest('[data-x]');if(!b)return;xmode=b.dataset.x;document.querySelectorAll('#xSeg button').forEach(x=>x.classList.toggle('on',x===b));drawChart();};
+$('speeds').innerHTML=SPEEDS.map(s=>`<button data-s="${s}" class="${s===speedMul?'on':''}">×${s}</button>`).join('');
+$('speeds').onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;speedMul=+b.dataset.s;document.querySelectorAll('#speeds button').forEach(x=>x.classList.toggle('on',x===b));};
+const PLAY='<path d="M7 4.5v15l13-7.5z" fill="currentColor"/>',PAUSE='<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/>';
+function stopPlay(){if(timer){cancelAnimationFrame(timer);timer=null;$('playIco').innerHTML=PLAY;}}
+$('play').onclick=()=>{if(timer){stopPlay();return;}const end=(cur>=A&&cur<B-.5)?B:T;if(cur>=end-.5)cur=(end===B?A:0);$('playIco').innerHTML=PAUSE;let last=performance.now();
+const step=now=>{const dt=Math.min(.1,(now-last)/1000);last=now;cur+=speedMul*dt;const e=(cur>=A&&cur<=B+speedMul*.1)?B:T;if(cur>=e){cur=e;draw();stopPlay();return;}if(cur>view[1]||cur<view[0])view=[0,T];draw();if(!map.getBounds().pad(-.12).contains(boat.getLatLng()))map.panTo(boat.getLatLng(),{animate:true,duration:.4});timer=requestAnimationFrame(step);};timer=requestAnimationFrame(step);};
+$('share').onclick=async()=>{const si=selSet,s=selStat||stats(A,B);const st=new Date(new Date(S.startedAt).getTime()+9*3600e3);const head=`${st.getUTCMonth()+1}/${st.getUTCDate()} ${S.label}`;let txt;
+if(si>=0){const x=sets[si],u=UNIT[x.kind];txt=`${head} ${si+1}セット目 ${KIND_J[x.kind]} ${x.bouts.length}${u}\n平均 ${fm(s.pace)}/500m SR${s.spm?Math.round(s.spm):'--'} DPS ${s.dps?s.dps.toFixed(1):'--'}m`+(x.bouts.length>1?`\n各${u}: ${x.bouts.map(b=>fm((b.s||stats(b.a,b.b)).pace)).join(' / ')}`:'');}
+else{const sp=splits(A,B,250).filter(x=>!x.partial).map(x=>fm(x.tm)).join(' / ');txt=`${head} ${fm(A)}〜${fm(B)}\n${Math.round(s.d)}m 平均 ${fm(s.pace)}/500m SR${s.spm?Math.round(s.spm):'--'} DPS ${s.dps?s.dps.toFixed(1):'--'}m`+(sp?`\n250mラップ: ${sp}`:'');}
+try{await navigator.clipboard.writeText(txt);toast('コピーしました\n\n'+txt);}catch(_){toast(txt);}};
+$('photo').onclick=()=>{const on=base==='photo';map.removeLayer(tiles[base]);base=on?document.documentElement.dataset.theme:'photo';tiles[base].addTo(map);$('photo').classList.toggle('on',!on);};
+$('fit').onclick=()=>fitAll();
+$('theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';if(base!=='photo'){map.removeLayer(tiles[base]);base=r.dataset.theme;tiles[base].addTo(map);}selKey='';draw();};
+map.createPane('haz');map.getPane('haz').style.zIndex=390;
+const hazR=L.canvas({pane:'haz',padding:.3});
+const HCOL={shore:'#FF6B6B',bridge:'#FFA04D',bridgePier:'#FF6B6B',island:'#C9A227',driftwood:'#A1887F',pile:'#BCAAA4',curve:'#64B5F6',reverse:'#BA68C8',testZone:'#26C6DA'};
+const HOP={shore:.18,bridge:.28,curve:.28,reverse:.28,bridgePier:.52,pile:.48};
+const hazLayer=L.layerGroup(),laneLayer=L.layerGroup();
+HAZARDS.forEach(h=>{const c=HCOL[h.kind]||'#90A4AE',o=HOP[h.kind]??.45;if(h.kind==='testZone')return;
+if(h.type==='line')L.polyline(h.pts,{color:c,weight:h.kind==='shore'?6:9,opacity:Math.min(1,o+.25),renderer:hazR,interactive:false,lineCap:'butt'}).addTo(hazLayer);
+else if(h.type==='poly')L.polygon(h.pts,{color:c,weight:h.kind==='shore'?1:2,opacity:.85,fillColor:c,fillOpacity:o,renderer:hazR,interactive:false}).addTo(hazLayer);
+else L.circle(h.pts[0],{radius:3,color:c,weight:2,fillColor:c,fillOpacity:o,renderer:hazR,interactive:false}).addTo(hazLayer);});
+CENTERLINES.forEach(c=>{L.polyline(c.pts,{color:'#000',opacity:.55,weight:5,renderer:hazR,interactive:false}).addTo(laneLayer);L.polyline(c.pts,{color:'#fff',opacity:.9,weight:2.5,dashArray:'12 8',renderer:hazR,interactive:false}).addTo(laneLayer);});
+laneLayer.addTo(map);
+$('hazBtn').onclick=()=>{showHaz=!showHaz;$('hazBtn').classList.toggle('on',showHaz);showHaz?hazLayer.addTo(map):map.removeLayer(hazLayer);};
+$('laneBtn').onclick=()=>{showLane=!showLane;$('laneBtn').classList.toggle('on',showLane);showLane?laneLayer.addTo(map):map.removeLayer(laneLayer);};
+$('oldToggle').onclick=()=>{showOld=!showOld;$('oldToggle').classList.toggle('acc',showOld);drawChart();};
+
+SESSIONS.forEach((s,i)=>{const st=new Date(new Date(s.startedAt).getTime()+9*3600e3);const o=document.createElement('option');o.value=i;o.textContent=`${st.getUTCMonth()+1}/${st.getUTCDate()} ${s.label} ${seatJ(s.seat)}`;$('sessSel').appendChild(o);});
+$('sessSel').onchange=e=>{stopPlay();load(+e.target.value);};
+window.addEventListener('resize',()=>draw());
+load(0);
+</script>
+</body>
+</html>
