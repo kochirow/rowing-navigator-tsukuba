@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/models/session_model.dart';
 import 'package:rowing_navigator/screens/record_list_screen.dart';
+import 'package:rowing_navigator/screens/record_replay/record_replay_screen.dart';
 
 void main() {
   Session session(String id, DateTime startedAt) => Session(
@@ -79,29 +80,58 @@ void main() {
     expect(find.text('記録一覧'), findsOneWidget);
   });
 
-  testWidgets('詳細に分析・警告評価・診断共有の説明を表示する', (tester) async {
-    final startedAt = DateTime(2026, 7, 23, 6);
-    final base = session('detail', startedAt);
-    final detailed = base.copyWith(
+  /// ハイレート×5本（40秒・5m/s・SR34）をSR20のパドル（80秒・2.3m/s）でつなぐ練習。
+  Session intervalSession(DateTime startedAt) {
+    final points = <TrackPoint>[];
+    var y = 0.0;
+    var t = 0;
+    void leg(int seconds, double v, double? spm) {
+      for (var k = 0; k < seconds; k++) {
+        y += v;
+        final lat = 36.08 + y / 111320.0;
+        points.add(TrackPoint(
+          t: startedAt.add(Duration(seconds: t)),
+          elapsedMs: t * 1000,
+          lat: lat,
+          lng: 140.21,
+          speed: v,
+          heading: 0,
+          spm: spm,
+          safetyLevel: 'safe',
+          rawLat: lat,
+          rawLng: 140.21,
+          rawGnssSpeedMetersPerSecond: v,
+          speedAccuracyMetersPerSecond: 0.5,
+        ));
+        t++;
+      }
+    }
+
+    leg(60, 0, null);
+    for (var k = 0; k < 5; k++) {
+      leg(40, 5.0, 34);
+      leg(80, 2.3, 20);
+    }
+    leg(60, 0, null);
+    return Session(
+      id: 'interval',
+      startedAt: startedAt,
+      endedAt: startedAt.add(Duration(seconds: t)),
+      boatTypeName: 'r_4x',
+      seatPosLabel: 'バウ',
+      points: points,
       summary: SessionSummary(
-        totalDistanceMeters: 500,
-        durationSec: 300,
-        maxSpeed: 3,
-        avgSpeed: 2.5,
-        movingTimeSec: 240,
-        restTimeSec: 60,
-        splits250: [
-          Split(index: 1, distanceMeters: 250, timeSec: 100),
-        ],
-        splits: [
-          Split(index: 1, distanceMeters: 500, timeSec: 200),
-        ],
+        totalDistanceMeters: 0,
+        durationSec: t.toDouble(),
+        maxSpeed: 5,
+        avgSpeed: 3,
+        splits: const [],
         pieces: const [],
-        alertCounts: const {'warning': 2},
+        alertCounts: const {},
       ),
       alertEvents: [
         AlertDiagnosticEvent(
-          t: startedAt.add(const Duration(seconds: 10)),
+          t: startedAt.add(const Duration(seconds: 100)),
           event: 'observation',
           alertId: 'bridge-1',
           detectorId: 'static_collision',
@@ -115,30 +145,70 @@ void main() {
         ),
       ],
     );
+  }
 
+  Future<void> pumpReplay(WidgetTester tester, Session s) async {
+    tester.view.physicalSize = const Size(390, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          home: RecordDetailScreen(session: detailed),
+          home: RecordReplayScreen(
+            session: s,
+            mapBuilderForTest: (overlay) => Stack(
+                children: [const ColoredBox(color: Colors.black), overlay]),
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+  }
 
-    expect(find.text('ワーク時間'), findsOneWidget);
-    expect(find.text('休憩時間'), findsOneWidget);
-    expect(find.text('250m区間'), findsNothing);
-    expect(find.text('500mスプリット'), findsNothing);
-    expect(find.text('警告エピソード'), findsOneWidget);
-    expect(find.text('診断データを共有'), findsOneWidget);
+  final list = find.byKey(const Key('record-replay-scroll'));
 
-    await tester.tap(find.text('診断データを共有'));
+  testWidgets('詳細は全体のサマリから始まり、セットのカードを選ぶとレストを除いた平均になる', (tester) async {
+    await pumpReplay(tester, intervalSession(DateTime(2026, 8, 6, 6)));
+
+    expect(find.text('この日の練習'), findsOneWidget);
+    expect(find.text('漕いでいた時間'), findsOneWidget);
+    expect(find.text('練習時間'), findsOneWidget);
+    expect(find.text('1セット目'), findsOneWidget);
+    expect(find.textContaining('スプリット'), findsNothing,
+        reason: 'ペースは「/500m」だけで書く（2026-09-24 利用者）');
+
+    await tester.tap(find.text('1セット目'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('診断ZIPには正確な航路'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('本の平均です'), findsOneWidget);
+    expect(find.text('漕いでいた時間'), findsNothing, reason: '内訳のサマリは全体のときだけ');
+    await tester.scrollUntilVisible(find.text('内訳（各本・区間）'), 200,
+        scrollable:
+            find.descendant(of: list, matching: find.byType(Scrollable)).first);
+    expect(find.text('1本目'), findsNothing, reason: '内訳は既定で畳む');
+  });
+
+  testWidgets('警告エピソードと診断データの共有を旧画面から引き継ぐ', (tester) async {
+    await pumpReplay(tester, intervalSession(DateTime(2026, 8, 6, 6)));
+    final scrollable =
+        find.descendant(of: list, matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('診断データを共有'), 300,
+        scrollable: scrollable);
+    expect(find.text('警告エピソード'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('診断データを共有'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('診断データを共有'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('診断ZIPには正確な航路'), findsOneWidget);
     expect(find.text('共有先を選ぶ'), findsOneWidget);
+  });
+
+  testWidgets('航跡の無い記録でも詳細画面が落ちない', (tester) async {
+    await pumpReplay(tester, session('empty', DateTime(2026, 8, 6, 6)));
+    expect(find.text('この日の練習'), findsOneWidget);
   });
 }
