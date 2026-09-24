@@ -171,25 +171,19 @@ class NavSettingModal extends HookConsumerWidget {
       ),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          // シートは画面の8割で頭打ちにしてあるため、キーボードが出ると
-          // その分だけ表示領域が狭くなる。同じ高さをスクロール領域の下へ
-          // 足して、入力中の欄がキーボードに隠れないようにする。
-          padding: EdgeInsets.fromLTRB(
-            20,
-            8,
-            20,
-            20 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // つまみと「閉じる」。
-              //
-              // シート外の暗い部分をタップしても閉じられるが、それは見えない
-              // 操作なので、揺れる艇の上で迷わない出口を明示しておく。
-              SizedBox(
+        // つまみと「閉じる」は、スクロールする本体の外に固定する。
+        // 中に置くと、下の項目を見ようとスクロールした時点で出口が
+        // 画面外へ消え、閉じる手段を探すことになる。
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // つまみと「閉じる」。
+            //
+            // シート外の暗い部分をタップしても閉じられるが、それは見えない
+            // 操作なので、揺れる艇の上で迷わない出口を明示しておく。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: SizedBox(
                 height: 40,
                 child: Stack(
                   alignment: Alignment.center,
@@ -219,235 +213,262 @@ class NavSettingModal extends HookConsumerWidget {
                   ],
                 ),
               ),
-              // 出艇直前に毎回7項目をスクロールして確認するのは現実的でない。
-              // 前回設定を復元できたときは、まずそのまま開始できる道を出し、
-              // 変えたい人だけ下の詳細を触ればよいようにする。
-              if (restoredSummary.value != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: context.colors.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Theme.of(context).primaryColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '前回の設定',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: context.colors.textSecondary,
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                // シートは画面の8割で頭打ちにしてあるため、キーボードが出ると
+                // その分だけ表示領域が狭くなる。同じ高さをスクロール領域の下へ
+                // 足して、入力中の欄がキーボードに隠れないようにする。
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  4,
+                  20,
+                  20 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 出艇直前に毎回7項目をスクロールして確認するのは現実的でない。
+                    // 前回設定を復元できたときは、まずそのまま開始できる道を出し、
+                    // 変えたい人だけ下の詳細を触ればよいようにする。
+                    if (restoredSummary.value != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: context.colors.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(14),
+                          border:
+                              Border.all(color: Theme.of(context).primaryColor),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        restoredSummary.value!,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '前回の設定',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: context.colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              restoredSummary.value!,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: RoundedButton(
+                                label:
+                                    isStarting.value ? '準備中…' : 'この設定で航行スタート',
+                                icon: isStarting.value
+                                    ? Icons.hourglass_top
+                                    : Icons.rowing,
+                                onPressed: startNavigation,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),
                       Center(
-                        child: RoundedButton(
-                          label: isStarting.value ? '準備中…' : 'この設定で航行スタート',
-                          icon: isStarting.value
-                              ? Icons.hourglass_top
-                              : Icons.rowing,
-                          onPressed: startNavigation,
+                        child: Text(
+                          '変更する場合は、下の項目を編集してください。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.textSecondary,
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 20),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    '変更する場合は、下の項目を編集してください。',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.colors.textSecondary,
+                    _sectionTitle(context, '名前', '監視画面で表示する名前を入力してください'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      maxLength: maxDisplayNameLength,
+                      maxLines: 1,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(maxDisplayNameLength),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: '名前',
+                        hintText: '例: 後藤',
+                        helperText: '航行中、監視端末と他の艇に共有されます。',
+                        errorText: nameError.value,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person),
+                      ),
+                      onChanged: (_) {
+                        if (nameError.value != null) nameError.value = null;
+                      },
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-              _sectionTitle(context, '名前', '監視画面で表示する名前を入力してください'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameController,
-                maxLength: maxDisplayNameLength,
-                maxLines: 1,
-                textInputAction: TextInputAction.next,
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(maxDisplayNameLength),
-                ],
-                decoration: InputDecoration(
-                  labelText: '名前',
-                  hintText: '例: 後藤',
-                  helperText: '航行中、監視端末と他の艇に共有されます。',
-                  errorText: nameError.value,
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.person),
-                ),
-                onChanged: (_) {
-                  if (nameError.value != null) nameError.value = null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _sectionTitle(context, '艇種', '乗る艇の種類を選んでください'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: boatConfigs.allConfigs.map((config) {
-                  final type = config.type;
-                  return _selectChip(
-                    context: context,
-                    label: config.label,
-                    selected: type == boatType,
-                    onPressed: () {
-                      setBoatType(type);
-                      setSeatPosition(
-                          boatConfigs.byBoatType(type).seatPosList.first);
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-              _sectionTitle(context, '端末の位置', '端末を置くシートを選んでください'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children:
-                    boatConfigs.byBoatType(boatType).seatPosList.map((seatPos) {
-                  return _selectChip(
-                    context: context,
-                    label: seatPos.label,
-                    selected: seatPos == seatPosision,
-                    onPressed: () => setSeatPosition(seatPos),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-              _sectionTitle(
-                context,
-                'レート(SPM)',
-                '艇にスマホを固定して使用・電池残量が少ない場合はオフ推奨',
-              ),
-              const SizedBox(height: 8),
-              Material(
-                color: Colors.transparent,
-                child: SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'レート(SPM)を計測する',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  // 艇速変化の波形もここで一緒に計測している。航行中の画面には
-                  // 出さない(2026-08-13に廃止)が、監視端末では見られるので、
-                  // 何が止まるのかを書いておく。
-                  subtitle: const Text('オフにすると監視端末の艇速変化も止まります'),
-                  secondary: Icon(
-                    strokeRateEnabled.value
-                        ? Icons.speed
-                        : Icons.battery_saver_outlined,
-                  ),
-                  value: strokeRateEnabled.value,
-                  onChanged: isStarting.value
-                      ? null
-                      : (value) => strokeRateEnabled.value = value,
-                ),
-              ),
-              const SizedBox(height: 24),
-              _sectionTitle(
-                context,
-                '航路の断面インジケータ',
-                '中央線のどちら側を走っているかを、計器のすぐ下に帯で出す',
-              ),
-              const SizedBox(height: 8),
-              Material(
-                color: Colors.transparent,
-                child: SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    '航路の断面を表示する',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  // 警告ではないことを毎回明示する。レーンを外れても
-                  // 音は鳴らない(岸沿い・橋の下・桟橋寄せはいずれも正常)。
-                  subtitle: const Text('警告ではありません。外れても音は鳴りません'),
-                  secondary: Icon(
-                    laneCrossSectionEnabled.value
-                        ? Icons.straighten
-                        : Icons.straighten_outlined,
-                  ),
-                  value: laneCrossSectionEnabled.value,
-                  onChanged: isStarting.value
-                      ? null
-                      : (value) => laneCrossSectionEnabled.value = value,
-                ),
-              ),
-              const SizedBox(height: 16),
-              // 安全上の注意(アプリの位置づけを毎回リマインドする)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: context.colors.cautionSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.colors.caution),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: context.colors.warning, size: 22),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '本アプリは安全確認の補助です。周囲の目視確認を必ず行ってください。',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: context.colors.textPrimary,
+                    const SizedBox(height: 16),
+                    _sectionTitle(context, '艇種', '乗る艇の種類を選んでください'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: boatConfigs.allConfigs.map((config) {
+                        final type = config.type;
+                        return _selectChip(
+                          context: context,
+                          label: config.label,
+                          selected: type == boatType,
+                          onPressed: () {
+                            setBoatType(type);
+                            setSeatPosition(
+                                boatConfigs.byBoatType(type).seatPosList.first);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionTitle(context, '端末の位置', '端末を置くシートを選んでください'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: boatConfigs
+                          .byBoatType(boatType)
+                          .seatPosList
+                          .map((seatPos) {
+                        return _selectChip(
+                          context: context,
+                          label: seatPos.label,
+                          selected: seatPos == seatPosision,
+                          onPressed: () => setSeatPosition(seatPos),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionTitle(
+                      context,
+                      'レート(SPM)',
+                      '艇にスマホを固定して使用・電池残量が少ない場合はオフ推奨',
+                    ),
+                    const SizedBox(height: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'レート(SPM)を計測する',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
+                        // 艇速変化の波形もここで一緒に計測している。航行中の画面には
+                        // 出さない(2026-08-13に廃止)が、監視端末では見られるので、
+                        // 何が止まるのかを書いておく。
+                        subtitle: const Text('オフにすると監視端末の艇速変化も止まります'),
+                        secondary: Icon(
+                          strokeRateEnabled.value
+                              ? Icons.speed
+                              : Icons.battery_saver_outlined,
+                        ),
+                        value: strokeRateEnabled.value,
+                        onChanged: isStarting.value
+                            ? null
+                            : (value) => strokeRateEnabled.value = value,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionTitle(
+                      context,
+                      '航路の断面インジケータ',
+                      '中央線のどちら側を走っているかを、計器のすぐ下に帯で出す',
+                    ),
+                    const SizedBox(height: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          '航路の断面を表示する',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        // 警告ではないことを毎回明示する。レーンを外れても
+                        // 音は鳴らない(岸沿い・橋の下・桟橋寄せはいずれも正常)。
+                        subtitle: const Text('警告ではありません。外れても音は鳴りません'),
+                        secondary: Icon(
+                          laneCrossSectionEnabled.value
+                              ? Icons.straighten
+                              : Icons.straighten_outlined,
+                        ),
+                        value: laneCrossSectionEnabled.value,
+                        onChanged: isStarting.value
+                            ? null
+                            : (value) => laneCrossSectionEnabled.value = value,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 安全上の注意(アプリの位置づけを毎回リマインドする)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: context.colors.cautionSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: context.colors.caution),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: context.colors.warning, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '本アプリは安全確認の補助です。周囲の目視確認を必ず行ってください。',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: context.colors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (onPressTestAudio != null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.volume_up),
+                          label: const Text('音声を確認する'),
+                          onPressed: onPressTestAudio,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '必要なら、開始前に警告音を実際に確認できます。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Center(
+                      child: RoundedButton(
+                        label: isStarting.value ? '準備中…' : '航行スタート',
+                        icon: isStarting.value
+                            ? Icons.hourglass_top
+                            : Icons.rowing,
+                        onPressed: startNavigation,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              if (onPressTestAudio != null) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.volume_up),
-                    label: const Text('音声を確認する'),
-                    onPressed: onPressTestAudio,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '必要なら、開始前に警告音を実際に確認できます。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              Center(
-                child: RoundedButton(
-                  label: isStarting.value ? '準備中…' : '航行スタート',
-                  icon: isStarting.value ? Icons.hourglass_top : Icons.rowing,
-                  onPressed: startNavigation,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

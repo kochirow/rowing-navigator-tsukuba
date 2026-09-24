@@ -87,7 +87,7 @@ class _Fold extends StatelessWidget {
             Expanded(
               child: Text(title,
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       letterSpacing: 1,
                       fontWeight: FontWeight.w800,
                       color: p.textSub)),
@@ -95,7 +95,7 @@ class _Fold extends StatelessWidget {
             if (trailing != null)
               Text(trailing!,
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: p.textMute,
                       fontFeatures: const [FontFeature.tabularFigures()])),
@@ -125,7 +125,7 @@ class _Breakdown extends StatelessWidget {
     final set = c.selectedSet ?? c.analysis.sets[c.selectedBout!.setIndex];
     final unit = set.intensity.unit;
     final head =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: p.textMute);
+        TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: p.textMute);
     Widget line(List<Widget> cells, {VoidCallback? onTap, bool on = false}) =>
         InkWell(
           onTap: onTap,
@@ -169,7 +169,7 @@ class _Breakdown extends StatelessWidget {
                       ? ''
                       : '${fmtDuration(gap.duration)} ${c.analysis.gapKind(gap).label}\n'
                           '${(c.track.distanceAt(gap.end) - c.track.distanceAt(gap.start)).round()}m',
-                  _cell(p).copyWith(fontSize: 10.5, color: p.textMute)),
+                  _cell(p).copyWith(fontSize: 12, color: p.textMute)),
             ],
             on: identical(c.selectedBout, b),
             onTap: () => c.selectBout(b),
@@ -242,7 +242,7 @@ class _FineAdjustState extends State<_FineAdjust> {
             width: 34,
             child: Text(start ? '開始' : '終了',
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: p.textSub)),
           ),
@@ -265,7 +265,7 @@ class _FineAdjustState extends State<_FineAdjust> {
         ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text('ふだんは時間軸のつまみで選べます。ここでは秒単位で合わせたり、時刻を入力したりできます。',
-          style: TextStyle(fontSize: 11.5, height: 1.5, color: p.textSub)),
+          style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub)),
       const SizedBox(height: 8),
       nudges(true),
       const SizedBox(height: 6),
@@ -405,7 +405,7 @@ class _Laps extends StatelessWidget {
         : full.map((l) => l.stats.paceSecPer500!).reduce((a, b) => a + b) /
             full.length;
     final head =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: p.textMute);
+        TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: p.textMute);
     Widget line(List<Widget> cells) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Row(children: [
@@ -473,7 +473,7 @@ class FusionReportCard extends StatelessWidget {
           Text(
             '艇速の手がかりを並べ、この記録でほかの手がかりと食い違いが大きいものを外しています。'
             'アプリが記録した値も、よく一致していれば使います。',
-            style: TextStyle(fontSize: 11.5, height: 1.5, color: p.textSub),
+            style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
           ),
           const SizedBox(height: 6),
           for (final s in scores)

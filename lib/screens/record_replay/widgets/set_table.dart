@@ -17,8 +17,8 @@ class SetTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = RecordPalette.of(context);
     final sets = controller.analysis.sets;
-    final head = TextStyle(
-        fontSize: 9.5, fontWeight: FontWeight.w700, color: p.textMute);
+    final head =
+        TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: p.textMute);
     final cell = TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
@@ -49,7 +49,7 @@ class SetTable extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('各セット（自動検出）',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
                 color: p.textSub)),
@@ -77,7 +77,7 @@ class SetTable extends StatelessWidget {
                     if (s.intensity == TrainingIntensity.highRate)
                       TextSpan(
                           text: ' ${s.bouts.length}本',
-                          style: TextStyle(fontSize: 10, color: p.textMute)),
+                          style: TextStyle(fontSize: 12, color: p.textMute)),
                   ]),
                   maxLines: 1,
                   style: cell.copyWith(
@@ -139,7 +139,7 @@ class FastestEfforts extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('この日の最速',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
                 color: p.textSub)),
@@ -171,7 +171,7 @@ class FastestEfforts extends StatelessWidget {
                             children: [
                               Text('最速 ${meters.round()}m',
                                   style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w700,
                                       color: p.textSub)),
                               const SizedBox(height: 3),
@@ -191,7 +191,7 @@ class FastestEfforts extends StatelessWidget {
                                       ? '対象なし'
                                       : '${fmtPace(best.duration * 500 / meters)} /500m',
                                   style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: p.textSub)),
                             ]),

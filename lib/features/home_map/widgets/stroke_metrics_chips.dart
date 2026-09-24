@@ -112,7 +112,7 @@ class _Chip extends StatelessWidget {
           data.label,
           style: TextStyle(
             color: base.withValues(alpha: 0.62),
-            fontSize: compact ? 9 : 11,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),

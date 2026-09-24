@@ -63,13 +63,13 @@ class SetCards extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w800,
                             color: p.textSub)),
                   ),
                   Text(s.intensity.label,
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                           color: p.intensity(s.intensity.index))),
                 ]),
@@ -83,7 +83,7 @@ class SetCards extends StatelessWidget {
                     children: [
                       Text('ave.',
                           style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: p.textMute)),
                       const SizedBox(width: 4),
@@ -102,7 +102,7 @@ class SetCards extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 12,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                         color: p.textSub)),

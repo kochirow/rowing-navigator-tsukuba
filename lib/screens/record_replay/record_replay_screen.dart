@@ -7,6 +7,7 @@ import '../../services/gpx_export_service.dart';
 import '../../services/preset_obstacle_service.dart';
 import '../../services/session_store_service.dart';
 import '../../theme/record_palette.dart';
+import '../../types/boat_type.dart';
 import 'bout_direction.dart';
 import 'replay_analysis.dart';
 import 'replay_controller.dart';
@@ -137,7 +138,7 @@ class RecordReplayScreen extends HookWidget {
                   children: [
                     Text(_dateLabel(s.startedAt),
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: p.textSub)),
                     Text('${_boatLabel(s.boatTypeName)} ・ ${s.seatPosLabel}',
@@ -217,15 +218,7 @@ class RecordReplayScreen extends HookWidget {
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 
-  /// 保存されている艇種名（r_4x など）を「4x」「8+」にする。
-  static String _boatLabel(String name) {
-    final s = name.toLowerCase();
-    if (s.contains('8')) return '8+';
-    if (s.contains('4')) return '4x';
-    if (s.contains('2')) return '2x';
-    if (s.contains('1')) return '1x';
-    return name;
-  }
+  static String _boatLabel(String name) => boatTypeDisplayLabel(name);
 }
 
 class _Player extends StatelessWidget {
@@ -273,7 +266,7 @@ class _Player extends StatelessWidget {
                   ),
                   child: Text('×$sp',
                       style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                           color: sp == c.speed ? p.text : p.textSub)),
                 ),

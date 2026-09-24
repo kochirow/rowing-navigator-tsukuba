@@ -207,7 +207,7 @@ class _WarningChip extends StatelessWidget {
                           '×$count',
                           style: TextStyle(
                             color: foreground,
-                            fontSize: 11,
+                            fontSize: 12,
                             height: 1.05,
                             fontWeight: FontWeight.w700,
                           ),
@@ -222,7 +222,7 @@ class _WarningChip extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: foreground,
-                        fontSize: 11,
+                        fontSize: 12,
                         height: 1.1,
                         fontWeight: FontWeight.w700,
                       ),
