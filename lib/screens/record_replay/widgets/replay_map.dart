@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../config/record_replay_config.dart';
+import '../../../services/preset_obstacle_service.dart';
 import '../../../services/record/replay_track.dart';
+import '../../../theme/hazard_palette.dart';
+import '../../../theme/map_layer_spec.dart';
 import '../../../theme/record_palette.dart';
 import '../replay_analysis.dart';
 import '../replay_controller.dart';
@@ -38,6 +41,13 @@ class _ReplayMapState extends State<ReplayMap> {
   bool _satellite = false;
   Brightness? _builtFor;
 
+  /// 航行画面と同じ固定危険区域・航路の中央線（同梱データ）。表示だけの重ね描き。
+  /// 現地で登録する臨時危険区域（Firestore）はここでは読まない。
+  bool _showHazards = false;
+  bool _showLanes = true;
+  List<({String id, String category, List<LatLng> points})> _hazards = const [];
+  List<List<LatLng>> _lanes = const [];
+
   ReplayController get c => widget.controller;
   ReplayAnalysis get a => c.analysis;
 
@@ -46,6 +56,85 @@ class _ReplayMapState extends State<ReplayMap> {
     super.initState();
     _fitSeen = c.mapFitRequest;
     _buildIcons();
+    _loadLayers();
+  }
+
+  Future<void> _loadLayers() async {
+    final service = PresetObstacleService();
+    try {
+      final centerlines = await service.loadChannelCenterlines();
+      if (!mounted) return;
+      setState(() => _lanes = [
+            for (final c in centerlines.values)
+              if (c.vertices.length >= 2) c.vertices,
+          ]);
+    } catch (error) {
+      // 航路が読めなくても記録の表示は続ける（表示専用）。
+      debugPrint('Record replay: centerlines not displayed: $error');
+    }
+    try {
+      final presets = await service.loadPresets();
+      if (!mounted) return;
+      setState(() => _hazards = [
+            for (final o in presets)
+              if (o.isVisibleOnNavigationMap)
+                (
+                  id: o.id,
+                  category: o.kind.name,
+                  points: [
+                    for (final p in o.points) LatLng(p.latitude, p.longitude)
+                  ],
+                ),
+          ]);
+    } catch (error) {
+      debugPrint('Record replay: hazards not displayed: $error');
+    }
+  }
+
+  Set<Polyline> _laneLines() {
+    if (!_showLanes) return const {};
+    final style = channelDividerStyleFor(isSatellite: _satellite);
+    final pattern = [
+      PatternItem.dash(style.dashLengthPixels.toDouble()),
+      PatternItem.gap(style.gapLengthPixels.toDouble()),
+    ];
+    var n = 0;
+    return {
+      for (final pts in _lanes) ...[
+        Polyline(
+          polylineId: PolylineId('lane_casing_${n++}'),
+          points: pts,
+          color: style.casingColor,
+          width: style.casingWidth,
+          patterns: pattern,
+          zIndex: 0,
+        ),
+        Polyline(
+          polylineId: PolylineId('lane_core_${n++}'),
+          points: pts,
+          color: style.coreColor,
+          width: style.coreWidth,
+          patterns: pattern,
+          zIndex: 0,
+        ),
+      ],
+    };
+  }
+
+  Set<Polygon> _hazardPolygons(BuildContext context) {
+    if (!_showHazards) return const {};
+    return {
+      for (final h in _hazards)
+        Polygon(
+          polygonId: PolygonId(h.id),
+          points: h.points,
+          strokeWidth: HazardPalette.strokeWidthOf(h.category),
+          strokeColor: HazardPalette.strokeColorOf(context, h.category),
+          fillColor: HazardPalette.fillColorOf(context, h.category),
+          // 記録画面では航跡が主役なので、危険区域は航跡の下に描く。
+          zIndex: 0,
+        ),
+    };
   }
 
   Future<void> _buildIcons() async {
@@ -291,7 +380,8 @@ class _ReplayMapState extends State<ReplayMap> {
           initialCameraPosition: CameraPosition(target: initial, zoom: 14),
           mapType: _satellite ? MapType.hybrid : MapType.normal,
           style: p.isDark && !_satellite ? _darkMapStyle : null,
-          polylines: {..._base, ..._selected},
+          polylines: {..._laneLines(), ..._base, ..._selected},
+          polygons: _hazardPolygons(context),
           markers: markers,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
@@ -309,13 +399,27 @@ class _ReplayMapState extends State<ReplayMap> {
         Positioned(left: 0, right: 0, top: 0, child: widget.overlay!),
       Positioned(
         left: 12,
-        bottom: 12,
+        bottom: 54,
         child: _Legend(palette: p),
       ),
       Positioned(
         right: 12,
         bottom: 12,
         child: Row(children: [
+          _MapButton(
+            label: '危険区域',
+            palette: p,
+            on: _showHazards,
+            onTap: () => setState(() => _showHazards = !_showHazards),
+          ),
+          const SizedBox(width: 6),
+          _MapButton(
+            label: '航路',
+            palette: p,
+            on: _showLanes,
+            onTap: () => setState(() => _showLanes = !_showLanes),
+          ),
+          const SizedBox(width: 6),
           _MapButton(
             label: '写真',
             palette: p,
