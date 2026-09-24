@@ -23,8 +23,7 @@ void main() {
     ('明色', buildAppTheme()),
     ('暗色', buildAppDarkTheme()),
   ]) {
-    testWidgets('$nameテーマの既定の面では文字が通常文字の基準(4.5:1)以上で読める',
-        (tester) async {
+    testWidgets('$nameテーマの既定の面では文字が通常文字の基準(4.5:1)以上で読める', (tester) async {
       // 暗色テーマのプライマリは明るい水色。白文字を固定していた頃は約2.3:1だった。
       await tester.pumpWidget(MaterialApp(
         theme: theme,
