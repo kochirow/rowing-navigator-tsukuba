@@ -4,8 +4,10 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../models/session_model.dart';
 import '../../services/gpx_export_service.dart';
+import '../../services/preset_obstacle_service.dart';
 import '../../services/session_store_service.dart';
 import '../../theme/record_palette.dart';
+import 'bout_direction.dart';
 import 'replay_analysis.dart';
 import 'replay_controller.dart';
 import 'replay_format.dart';
@@ -54,6 +56,16 @@ class RecordReplayScreen extends HookWidget {
         useMemoized(() => ReplayController(analysis), [analysis]);
     useEffect(() => controller.dispose, [controller]);
     useListenable(controller);
+    useEffect(() {
+      PresetObstacleService().loadChannelCenterlines().then((lines) {
+        controller.setDirections(BoutDirectionResolver(
+            {for (final e in lines.entries) e.key: e.value.vertices}));
+      }).catchError((Object error) {
+        // 向きが出ないだけで、記録の表示は続ける。
+        debugPrint('Record replay: directions unavailable: $error');
+      });
+      return null;
+    }, [controller]);
     final exporter =
         useMemoized(() => exportService ?? GpxExportService(), [exportService]);
     final store = useMemoized(

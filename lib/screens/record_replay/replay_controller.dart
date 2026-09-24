@@ -7,6 +7,7 @@ import '../../services/record/range_analyzer.dart';
 import '../../services/record/record_chart_model.dart';
 import '../../services/record/replay_track.dart';
 import '../../services/record/training_set_detector.dart';
+import 'bout_direction.dart';
 import 'replay_analysis.dart';
 
 /// 記録画面の状態の持ち主（設計書 芯1「時刻は1つ、区間は1つ」）。
@@ -36,6 +37,17 @@ class ReplayController extends ChangeNotifier {
   /// 地図を選択区間へ寄せる要求の番号（増えたら地図が寄せる）。
   int _mapFitRequest = 0;
   bool _disposed = false;
+  BoutDirectionResolver? _directions;
+
+  /// 航路の中央線が読めたら入れる（読めなければ向きは出さない）。
+  void setDirections(BoutDirectionResolver resolver) {
+    _directions = resolver;
+    _changed();
+  }
+
+  /// 区間の向き（上り/下り/沖へ/戻り/往復）。わからなければ null。
+  String? directionOf(ReplayRange range) =>
+      _directions?.directionOf(track, range);
 
   ReplayTrack get track => analysis.track;
   double get duration => track.duration;

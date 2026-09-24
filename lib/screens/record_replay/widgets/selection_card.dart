@@ -28,12 +28,17 @@ class SelectionCard extends StatelessWidget {
       name = '${set.index + 1}セット目';
       tag = set.intensity.label;
       nameTag = p.intensity(set.intensity.index);
+      final dirs = {for (final b in set.bouts) c.directionOf(b.range)}
+        ..remove(null);
       range = '${fmtDuration(sel.start)} – ${fmtDuration(sel.end)}'
-          '${set.intensity == TrainingIntensity.highRate ? ' ・ ${set.bouts.length}本' : ''}';
+          '${set.intensity == TrainingIntensity.highRate ? ' ・ ${set.bouts.length}本' : ''}'
+          '${dirs.isEmpty ? '' : ' ・ ${dirs.length == 1 ? dirs.first : '往復'}'}';
     } else if (bout != null) {
       final parent = c.analysis.sets[bout.setIndex];
       kind = '${parent.index + 1}セット目 ・ ${parent.intensity.label}';
-      name = '${bout.indexInSet + 1}${parent.intensity.unit}目';
+      final dir = c.directionOf(bout.range);
+      name =
+          '${bout.indexInSet + 1}${parent.intensity.unit}目${dir == null ? '' : ' ・ $dir'}';
       range = '${fmtDuration(sel.start)} – ${fmtDuration(sel.end)}';
     } else if (c.isAll) {
       kind = '全体';

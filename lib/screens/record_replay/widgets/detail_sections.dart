@@ -157,7 +157,9 @@ class _Breakdown extends StatelessWidget {
               next == null ? null : ReplayRange(b.range.end, next.range.start);
           return line(
             [
-              Text('${j + 1}$unit目', style: _cell(p)),
+              Text(
+                  '${j + 1}$unit目${c.directionOf(b.range) == null ? '' : ' ${c.directionOf(b.range)}'}',
+                  style: _cell(p)),
               r(fmtDuration(b.range.duration), _cell(p)),
               r('${b.stats.distance.round()}m', _cell(p)),
               r(fmtPace(b.stats.paceSecPer500), _cell(p, strong: true)),
