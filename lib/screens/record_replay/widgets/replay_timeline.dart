@@ -9,7 +9,8 @@ import '../replay_analysis.dart';
 import '../replay_controller.dart';
 import '../replay_format.dart';
 
-/// 時間軸。なぞる=再生位置、タップ=セット（もう一度で本）、つまみ=区間の端。
+/// 時間軸。なぞる=再生位置、タップ=セット（もう一度で本）、つまみ=区間の端、
+/// 長押ししてからなぞる=その幅を区間にする。
 class ReplayTimeline extends StatefulWidget {
   final ReplayController controller;
   const ReplayTimeline({super.key, required this.controller});
@@ -22,6 +23,7 @@ enum _Drag { none, scrub, handleStart, handleEnd }
 
 class _ReplayTimelineState extends State<ReplayTimeline> {
   _Drag _drag = _Drag.none;
+  double? _rangeAnchor;
 
   ReplayController get c => widget.controller;
 
@@ -59,6 +61,25 @@ class _ReplayTimelineState extends State<ReplayTimeline> {
           onTapUp: (d) {
             c.pause();
             c.tapTimeline(_timeAt(d.localPosition.dx, w));
+          },
+          onLongPressStart: (d) {
+            c.pause();
+            _rangeAnchor = _timeAt(d.localPosition.dx, w);
+            c.seek(_rangeAnchor!);
+          },
+          onLongPressMoveUpdate: (d) {
+            final anchor = _rangeAnchor;
+            if (anchor == null) return;
+            final t = _timeAt(d.localPosition.dx, w);
+            if ((t - anchor).abs() < 2) return;
+            c.select(ReplayRange(math.min(anchor, t), math.max(anchor, t)),
+                fitMap: false, cursorAt: t);
+          },
+          onLongPressEnd: (_) {
+            if (_rangeAnchor != null && c.selection.duration >= 2) {
+              c.select(c.selection);
+            }
+            _rangeAnchor = null;
           },
           onHorizontalDragStart: (d) {
             c.pause();
