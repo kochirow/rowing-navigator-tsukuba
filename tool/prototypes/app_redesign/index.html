@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>画面刷新 試作 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<style>
+/* ============================================================
+   デザイントークン(記録画面 RecordPalette を全画面へ広げたもの)
+   - アクセントはティール1色。
+   - 赤・橙・黄は「危険の段階」専用。指標やボタンの飾りには使わない。
+   ============================================================ */
+:root{
+--bg:#07090c;--s1:#10141a;--s2:#171c24;--s3:#232a36;--line:#262e3a;
+--tx:#f3f6f9;--sub:#98a3b1;--mute:#6f7a88;
+--acc:#35d6c8;--acc-ink:#04221f;--acc-soft:rgba(53,214,200,.14);
+--danger:#ff6b6b;--warn:#ffa04d;--caution:#ffcc55;--ok:#66bb6a;
+--danger-soft:rgba(255,107,107,.14);--warn-soft:rgba(255,160,77,.16);
+--m-pace:#35d6c8;--m-spm:#6ea8ff;--m-dps:#a78bfa;
+--glass:rgba(12,15,20,.74);--glass-line:rgba(255,255,255,.10);
+--scrim:rgba(0,0,0,.55);
+--status-ink:#0f1720; /* 地図は常に明るいので、地図の上のステータスバーは暗い文字 */
+}
+[data-theme=light]{
+--bg:#eef1f5;--s1:#ffffff;--s2:#f2f4f7;--s3:#e3e8ee;--line:#dde2e9;
+--tx:#0f1720;--sub:#566271;--mute:#7d8896;
+--acc:#0a8f86;--acc-ink:#ffffff;--acc-soft:rgba(10,143,134,.10);
+--danger:#c62828;--warn:#e65100;--caution:#b88400;--ok:#2e7d32;
+--danger-soft:rgba(198,40,40,.08);--warn-soft:rgba(230,81,0,.09);
+--m-pace:#0a8f86;--m-spm:#2f6fe0;--m-dps:#7c5cf0;
+--glass:rgba(255,255,255,.86);--glass-line:rgba(15,23,32,.10);
+--scrim:rgba(15,23,32,.35);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#1a1f26;color:#e8edf2}
+[data-theme=light] body{background:#cfd6de;color:#0f1720}
+body{font-family:Inter,"Noto Sans JP",-apple-system,"Hiragino Sans",sans-serif;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;color:inherit;cursor:pointer}
+.num{font-family:Inter,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* ---------- 試作の外枠(アプリではない) ---------- */
+.bench{display:flex;gap:28px;justify-content:center;align-items:flex-start;padding:18px 16px 40px;flex-wrap:wrap}
+.toolbar{position:sticky;top:0;z-index:50;background:inherit;padding:12px 16px 10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;border-bottom:1px solid rgba(128,128,128,.25)}
+.toolbar h1{font-size:14px;margin:0 10px 0 0;font-weight:800;white-space:nowrap}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button,.tgl button{height:34px;padding:0 12px;border-radius:17px;border:1px solid rgba(128,128,128,.35);background:transparent;font-size:13px;font-weight:700}
+.tabs button.on,.tgl button.on{background:#35d6c8;color:#04221f;border-color:#35d6c8}
+.tgl{display:flex;gap:4px}
+.scen{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px;width:100%}
+.scen label{font-size:12px;font-weight:700;opacity:.8;align-self:center}
+.scen button{height:30px;padding:0 10px;border-radius:15px;border:1px solid rgba(128,128,128,.35);background:transparent;font-size:12px;font-weight:700}
+.scen button.on{background:rgba(53,214,200,.18);border-color:#35d6c8}
+.notes{max-width:400px;flex:1 1 320px;font-size:14px;line-height:1.7}
+.notes h2{font-size:17px;margin:4px 0 10px}
+.notes ol{padding-left:20px;margin:0}
+.notes li{margin-bottom:10px}
+.notes li b{display:block}
+.notes .why{opacity:.72;font-size:13px}
+.notes .ask{border:1px solid #ffa04d;border-radius:12px;padding:10px 12px;margin-top:14px;font-size:13px}
+.notes .ask b{color:#ffa04d}
+
+/* ---------- 端末 ---------- */
+.phone{width:390px;height:844px;border-radius:46px;background:var(--bg);color:var(--tx);position:relative;overflow:hidden;flex:none;box-shadow:0 0 0 10px #0b0d10,0 30px 60px rgba(0,0,0,.45)}
+@media (max-width:460px){
+  .bench{padding:10px 0 30px}
+  .phone{width:100vw;height:min(844px,100svh);border-radius:0;box-shadow:none}
+  .notes{padding:0 16px}
+  /* スマホで開いたときは操作バーを固定しない。固定すると端末の上部を覆う。 */
+  .toolbar{position:static;padding:10px 12px}
+  .toolbar h1{width:100%;text-align:center;margin:0 0 4px}
+}
+.screen{position:absolute;inset:0;display:none;flex-direction:column}
+.screen.on{display:flex}
+.sb{height:47px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 8px 34px;font:600 16px Inter,sans-serif;position:relative;z-index:30}
+.sb.onmap{color:var(--status-ink)}
+.sb .ic{display:flex;gap:6px;align-items:center}
+.sb .ic i{display:block;background:currentColor;border-radius:2px}
+.toast{position:absolute;left:16px;right:16px;bottom:120px;z-index:90;background:var(--s3);color:var(--tx);border-radius:14px;padding:12px 14px;font-size:14px;font-weight:700;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;border:1px solid var(--line)}
+.toast.show{opacity:1;transform:none}
+
+/* ---------- 地図 ---------- */
+.map{position:absolute;inset:0;z-index:0}
+.map svg{width:100%;height:100%;display:block}
+
+/* ---------- 共通部品 ---------- */
+.glass{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-line)}
+.chip{height:36px;border-radius:18px;padding:0 14px;display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:800;white-space:nowrap}
+.mcb{display:flex;flex-direction:column;align-items:center;gap:4px}
+.mcb button{width:56px;height:56px;border-radius:28px;border:1px solid var(--glass-line);background:var(--s1);display:grid;place-items:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.mcb button svg{width:24px;height:24px}
+.mcb span{font-size:12px;font-weight:800;padding:2px 8px;border-radius:9px;background:var(--glass);color:var(--tx)}
+.btn{height:48px;border-radius:24px;border:1px solid var(--line);background:var(--s2);font-size:15px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 16px}
+.btn.acc{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.btn.ghost{background:transparent}
+.btn.danger-o{background:var(--s1);color:var(--danger);border:1.5px solid color-mix(in srgb,var(--danger) 60%,transparent)}
+.btn:active,.mcb button:active,.row:active,.tile3:active{transform:scale(.97)}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:22px;padding:16px}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--sub)}
+.scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.appbar{height:52px;flex:none;display:flex;align-items:center;gap:6px;padding:0 8px}
+.appbar .back{width:48px;height:48px;border-radius:24px;border:0;background:transparent;display:grid;place-items:center}
+.appbar .back svg{width:24px;height:24px}
+.appbar h2{font-size:19px;margin:0;font-weight:800}
+.largetitle{font-size:30px;font-weight:800;margin:2px 16px 12px;letter-spacing:-.01em}
+
+/* ---------- ① 出艇前 ---------- */
+.phase{position:absolute;top:56px;left:0;right:0;display:flex;justify-content:center;z-index:5}
+.checks{position:absolute;top:102px;left:12px;right:12px;z-index:5;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.checks::-webkit-scrollbar{display:none}
+.ck{height:36px;border-radius:18px;padding:0 12px 0 8px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;white-space:nowrap;flex:none;border:1px solid var(--glass-line);background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.ck .d{width:20px;height:20px;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:900;background:var(--acc-soft);color:var(--acc)}
+.ck.bad{border-color:var(--warn);background:color-mix(in srgb,var(--s1) 88%,var(--warn))}
+.ck.bad .d{background:var(--warn);color:#1a0d00}
+.ck small{font-weight:600;color:var(--sub)}
+.rightcol{position:absolute;right:12px;z-index:6;display:flex;flex-direction:column;gap:12px}
+.dock{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--s1);border-radius:28px 28px 0 0;padding:14px 16px 30px;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.25)}
+.startbtn{width:100%;min-height:72px;border-radius:22px;border:0;background:var(--acc);color:var(--acc-ink);display:flex;align-items:center;gap:14px;padding:12px 18px;text-align:left;box-shadow:0 10px 24px rgba(53,214,200,.25)}
+.startbtn svg{width:30px;height:30px;flex:none}
+.startbtn b{display:block;font-size:22px;font-weight:800;line-height:1.15}
+.startbtn span{display:block;font-size:13px;font-weight:700;opacity:.82;margin-top:3px}
+.dock .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.dock .two .btn{width:100%}
+.dock .hint{font-size:12px;color:var(--sub);text-align:center;margin-top:10px;font-weight:600}
+
+/* メニューシート */
+.sheet-scrim{position:absolute;inset:0;background:var(--scrim);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+.sheet-scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--s1);border-radius:28px 28px 0 0;transform:translateY(105%);transition:transform .25s ease;max-height:82%;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.sheet.show{transform:none}
+.sheet .grab{height:28px;display:grid;place-items:center;flex:none}
+.sheet .grab i{width:40px;height:5px;border-radius:3px;background:var(--s3)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:4px 16px 8px}
+.tile3{border:1px solid var(--line);background:var(--s2);border-radius:18px;height:92px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:800}
+.tile3 svg{width:28px;height:28px;color:var(--acc)}
+.sec{font-size:12px;font-weight:800;color:var(--sub);letter-spacing:.08em;padding:16px 20px 6px}
+.row{display:flex;align-items:center;gap:14px;min-height:60px;padding:8px 20px;border:0;background:transparent;width:100%;text-align:left}
+.row svg.ico{width:24px;height:24px;color:var(--acc);flex:none}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-size:16px;font-weight:800}
+.row .t span{display:block;font-size:13px;color:var(--sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.row .chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(-45deg);flex:none;margin-right:4px}
+
+/* ---------- ② 航行中 ---------- */
+.badges{position:absolute;top:52px;left:12px;right:12px;z-index:6;display:flex;gap:6px;flex-wrap:wrap}
+.bdg{height:30px;border-radius:15px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;background:color-mix(in srgb,var(--s1) 86%,var(--warn));border:1.5px solid var(--warn);color:var(--tx)}
+.bdg i{width:16px;height:16px;border-radius:8px;background:var(--warn);color:#1a0d00;font-style:normal;font-size:11px;font-weight:900;display:grid;place-items:center}
+.inst{position:absolute;left:10px;right:10px;z-index:7;border-radius:24px;padding:10px;background:var(--s1);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.28);transition:top .2s}
+.inst .g{display:grid;grid-template-columns:1.9fr 1fr;gap:8px}
+.inst .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.m{background:var(--s2);border-radius:16px;padding:8px 12px 10px;position:relative;overflow:hidden;min-width:0}
+.m.acc:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:var(--c)}
+.m .v{font-weight:800;line-height:1;white-space:nowrap}
+.m .k{font-size:13px;font-weight:800;color:var(--sub);margin-top:4px;white-space:nowrap}
+.m.pace .v{font-size:76px;letter-spacing:-.03em}
+.m.spm .v{font-size:52px}
+.m.sm .v{font-size:36px}
+.m.sm{display:flex;align-items:baseline;gap:8px}
+.m.sm .k{margin:0}
+.m .v.wait{color:var(--mute);font-weight:600}
+.inst.de .m.pace .v{font-size:44px}
+.inst.de .m.spm{display:none}
+.inst.de .g{grid-template-columns:1fr}
+.inst.de .m.sm .v{font-size:26px}
+.banner{position:absolute;left:10px;right:10px;z-index:9;border-radius:20px;padding:12px 16px;display:none;align-items:center;gap:14px;color:#fff}
+.banner.show{display:flex}
+.banner .who{font-size:34px;font-weight:900;line-height:1}
+.banner .when{font-size:22px;font-weight:800;margin-left:auto;text-align:right;line-height:1.1}
+.banner .when small{display:block;font-size:13px;font-weight:700;opacity:.9}
+.banner.imminent{background:#c62828;border:4px solid #fff;animation:pulse 1s infinite}
+.banner.action{background:#8e1b1b;border:2px solid rgba(255,255,255,.55)}
+[data-theme=light] .banner.action{background:#b71c1c}
+@keyframes pulse{50%{border-color:rgba(255,255,255,.25)}}
+.navbottom{position:absolute;left:0;right:0;bottom:28px;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:0 12px}
+.navbottom .rightcol{position:static;margin-left:auto}
+.endbtn{position:absolute;left:50%;transform:translateX(-50%);bottom:0}
+
+/* ---------- ③ 記録一覧 ---------- */
+.seg{display:flex;background:var(--s2);border-radius:14px;padding:3px;gap:2px}
+.seg button{flex:1;border:0;background:transparent;height:40px;border-radius:11px;font-size:14px;font-weight:800;color:var(--sub)}
+.seg button.on{background:var(--s3);color:var(--tx)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.stat .k{font-size:12px;color:var(--sub);font-weight:800}
+.stat .v{font-size:28px;font-weight:800;margin-top:2px;white-space:nowrap}
+.stat .v small{font-size:14px;color:var(--sub);font-weight:700;margin-left:3px}
+.bars{display:flex;align-items:flex-end;gap:6px;height:74px;margin-top:14px}
+.bars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;border-radius:6px 6px 3px 3px;background:var(--s3);min-height:3px}
+.bars i.on{background:var(--acc)}
+.bars span{font-size:11px;color:var(--mute);font-weight:700}
+.barcap{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);font-weight:700;margin-top:12px}
+.lhead{display:flex;align-items:baseline;gap:8px;margin:22px 16px 8px}
+.lhead b{font-size:18px}
+.lhead span{font-size:13px;color:var(--sub);font-weight:700}
+.month{font-size:13px;font-weight:800;color:var(--sub);margin:16px 16px 8px;display:flex;justify-content:space-between}
+.rec{display:flex;gap:12px;margin:0 12px 10px;padding:12px;border-radius:20px;background:var(--s1);border:1px solid var(--line);cursor:pointer}
+.rec .th{width:68px;height:68px;border-radius:14px;background:var(--s2);flex:none;overflow:hidden}
+.rec .th svg{width:100%;height:100%}
+.rec .b{flex:1;min-width:0}
+.rec .top{display:flex;align-items:center;gap:8px}
+.rec .top b{font-size:15px;font-weight:800;white-space:nowrap}
+.rec .boat{margin-left:auto;font-size:12px;font-weight:800;color:var(--acc);background:var(--acc-soft);border-radius:8px;padding:3px 8px;white-space:nowrap}
+.rec .nums{display:flex;gap:14px;margin-top:6px}
+.rec .nums div{font-size:19px;font-weight:800;white-space:nowrap}
+.rec .nums small{font-size:12px;color:var(--sub);font-weight:700;margin-left:2px}
+.rec .tag{font-size:13px;color:var(--sub);font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec .tag .p{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--m-pace);margin-right:6px}
+.shorts{margin:0 12px 10px;border-radius:18px;border:1px dashed var(--line);overflow:hidden}
+.shorts summary{list-style:none;display:flex;align-items:center;gap:10px;padding:14px;font-size:14px;font-weight:800;color:var(--sub);cursor:pointer;min-height:48px}
+.shorts summary::-webkit-details-marker{display:none}
+.shorts summary:after{content:"";width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);margin-left:auto;margin-right:4px}
+.shorts[open] summary:after{transform:rotate(-135deg)}
+.srow{display:flex;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--line);font-size:14px;font-weight:700}
+.srow span{color:var(--sub)}
+
+/* ---------- ④ 警告の設定 ---------- */
+.intro{font-size:14px;color:var(--sub);line-height:1.6;margin:0 16px 12px;font-weight:600}
+.axiswrap{margin-top:14px;touch-action:none;user-select:none;-webkit-user-select:none}
+.axiswrap svg{width:100%;display:block;overflow:visible}
+.stp{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.stp:first-of-type{border-top:0}
+.stp .l{flex:1;min-width:0}
+.stp .l b{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800}
+.stp .l b i{width:10px;height:10px;border-radius:5px;display:block}
+.stp .l span{display:block;font-size:12px;color:var(--sub);font-weight:600;margin-top:2px}
+.stp .ctl{display:flex;align-items:center;gap:6px}
+.stp .ctl button{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--s2);font-size:22px;font-weight:700;display:grid;place-items:center}
+.stp .ctl button:disabled{opacity:.35;cursor:default}
+.stp .val{min-width:70px;text-align:center;font-size:22px;font-weight:800}
+.stp .val small{font-size:12px;color:var(--sub);font-weight:700;display:block;margin-top:-2px}
+.chg{font-size:11px;font-weight:800;color:var(--acc);background:var(--acc-soft);border-radius:6px;padding:2px 6px}
+.dflt{font-size:11px;font-weight:800;color:var(--mute);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.reset{border:0;background:transparent;color:var(--acc);font-size:13px;font-weight:800;padding:8px 0;min-height:40px}
+.warnline{font-size:13px;color:var(--warn);font-weight:700;margin-top:6px;min-height:0}
+.zone{border-top:1px solid var(--line)}
+.zone:first-of-type{border-top:0}
+.zone summary{list-style:none;display:flex;align-items:center;gap:10px;min-height:60px;cursor:pointer}
+.zone summary::-webkit-details-marker{display:none}
+.zone summary .n{font-size:16px;font-weight:800;width:56px}
+.zone summary .s{flex:1;font-size:14px;color:var(--sub);font-weight:700;white-space:nowrap}
+.zone summary:after{content:"";width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);margin-right:4px}
+.zone[open] summary:after{transform:rotate(-135deg)}
+.zone .why{font-size:13px;color:var(--sub);line-height:1.55;margin:0 0 8px;font-weight:600}
+.xsec svg{width:100%;display:block}
+.savebar{position:absolute;left:0;right:0;bottom:0;z-index:20;background:var(--s1);border-top:1px solid var(--line);padding:12px 16px 30px;transform:translateY(110%);transition:transform .2s;box-shadow:0 -10px 30px rgba(0,0,0,.25)}
+.savebar.show{transform:none}
+.savebar .st{font-size:14px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.savebar .st i{width:8px;height:8px;border-radius:4px;background:var(--acc);display:block}
+.savebar .bt{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.savebar .bt .btn{width:100%}
+.linkrow{display:flex;align-items:center;gap:12px;min-height:56px;width:100%;border:0;background:transparent;text-align:left;padding:0;font-size:15px;font-weight:800}
+.linkrow span{flex:1}
+.linkrow .chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(-45deg);margin-right:4px}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>画面刷新 試作 v1</h1>
+  <div class="tabs" id="tabs">
+    <button data-s="home" class="on">① 出艇前</button>
+    <button data-s="nav">② 航行中</button>
+    <button data-s="list">③ 記録一覧</button>
+    <button data-s="warn">④ 警告の設定</button>
+  </div>
+  <div class="tgl" id="theme">
+    <button data-t="dark" class="on">暗色</button>
+    <button data-t="light">明色</button>
+  </div>
+  <div class="scen" id="scen"></div>
+</div>
+
+<div class="bench">
+<div class="phone" id="phone">
+
+  <!-- ================= ① 出艇前 ================= -->
+  <section class="screen on" id="s-home">
+    <div class="map" id="map-home"></div>
+    <div class="sb onmap"><span class="num">6:02</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="phase"><span class="chip glass">⚓ 出艇前</span></div>
+    <div class="checks" id="checks"></div>
+    <div class="rightcol" style="bottom:262px">
+      <div class="mcb"><button aria-label="現在地" data-toast="現在地へ移動"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg></button><span>現在地</span></div>
+      <div class="mcb"><button aria-label="メニュー" id="openMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
+    </div>
+    <div class="dock">
+      <button class="startbtn" id="startNow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 19l18-14M7 15l-3 6M15 9l3-5"/><circle cx="12" cy="5" r="2" fill="currentColor"/></svg>
+        <div><b>航行スタート</b><span id="startSub">山田 ・ 8+ ・ 7番 で開始</span></div>
+      </button>
+      <div class="two">
+        <button class="btn" data-toast="航行設定シートを開く(名前・艇種・座席を変える)">設定を変えて開始</button>
+        <button class="btn ghost" data-toast="監視を開始(陸上から全艇を見る)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>監視スタート</button>
+      </div>
+    </div>
+
+    <div class="sheet-scrim" id="menuScrim"></div>
+    <div class="sheet" id="menu">
+      <div class="grab"><i></i></div>
+      <div class="scroll">
+        <div class="tiles">
+          <button class="tile3" data-go="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/></svg>練習記録</button>
+          <button class="tile3" data-toast="チーム(招待コードの確認・共有)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c0-4 3-6 7-6s7 2 7 6M16 14c3 0 6 1.5 6 5"/></svg>チーム</button>
+          <button class="tile3" data-toast="使い方(警告の3段階・地図の色・試聴)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V14"/><circle cx="12" cy="17.3" r=".9" fill="currentColor"/></svg>使い方</button>
+        </div>
+        <div class="sec">表示</div>
+        <button class="row" data-toast="表示"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg><div class="t"><b>地図の表示</b><span>地図の種類・中央線・高コントラスト</span></div><i class="chev"></i></button>
+        <div class="sec">出艇の準備</div>
+        <button class="row" data-toast="危険区域を追加"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><path d="M12 6v6M9 9h6"/></svg><div class="t"><b>危険区域を追加</b><span>流木を見つけたら、その場で登録</span></div><i class="chev"></i></button>
+        <button class="row" data-go="warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg><div class="t"><b>警告の設定</b><span>鳴り始めるタイミング・当たり判定</span></div><i class="chev"></i></button>
+        <button class="row" data-toast="既設危険区域の位置の調整"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="8" rx="2"/><path d="M6 8v4M10 8v3M14 8v4M18 8v3"/></svg><div class="t"><b>危険区域の位置の調整</b><span>橋・岸・中州を0.5m単位で合わせる</span></div><i class="chev"></i></button>
+        <div class="sec">記録</div>
+        <button class="row" data-toast="練習一括ログ(監視端末)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/></svg><div class="t"><b>練習一括ログ</b><span>監視端末で記録した全艇の記録</span></div><i class="chev"></i></button>
+        <div class="sec">この端末</div>
+        <button class="row" data-toast="端末とデータ"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4"/></svg><div class="t"><b>端末とデータ</b><span>GPS・安全機能の状態・プライバシー</span></div><i class="chev"></i></button>
+        <div style="height:30px"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ② 航行中 ================= -->
+  <section class="screen" id="s-nav">
+    <div class="map" id="map-nav"></div>
+    <div class="sb onmap"><span class="num">6:14</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="badges" id="badges"></div>
+    <div class="banner" id="banner"><span class="who">他艇</span><span class="when" id="bannerWhen"></span></div>
+    <div class="inst" id="inst">
+      <div class="g">
+        <div class="m pace acc" style="--c:var(--m-pace)"><div class="v num" id="vPace">1:58</div><div class="k" id="kPace">/500m</div></div>
+        <div class="m spm acc" style="--c:var(--m-spm)"><div class="v num" id="vSpm">32</div><div class="k">レート spm</div></div>
+      </div>
+      <div class="g2">
+        <div class="m sm"><div class="v num" id="vTime">12:34</div><div class="k">経過</div></div>
+        <div class="m sm"><div class="v num" id="vDist">2,480</div><div class="k">m</div></div>
+      </div>
+    </div>
+    <div class="navbottom">
+      <button class="btn danger-o endbtn" data-toast="確認ダイアログ「航行を終了しますか?」"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><rect x="8.5" y="8.5" width="7" height="7" rx="1" fill="currentColor" stroke="none"/></svg>航行終了</button>
+      <div class="rightcol">
+        <div class="mcb"><button aria-label="追跡" style="background:var(--acc);color:var(--acc-ink);border-color:var(--acc)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>追跡</span></div>
+        <div class="mcb"><button aria-label="メニュー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ③ 記録一覧 ================= -->
+  <section class="screen" id="s-list">
+    <div class="sb"><span class="num">21:40</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="appbar"><button class="back" data-go="home" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button></div>
+    <div class="scroll" id="listScroll">
+      <div class="largetitle">練習記録</div>
+      <div class="card" style="margin:0 12px">
+        <div class="seg" id="period">
+          <button data-p="week">今週</button><button data-p="month" class="on">今月</button><button data-p="all">全期間</button>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="barcap"><span>週ごとの距離</span><span id="barTotal"></span></div>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="lhead"><b>記録一覧</b><span id="listCount"></span></div>
+      <div id="records"></div>
+      <div style="height:30px"></div>
+    </div>
+  </section>
+
+  <!-- ================= ④ 警告の設定 ================= -->
+  <section class="screen" id="s-warn">
+    <div class="sb"><span class="num">21:42</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="appbar"><button class="back" data-go="home" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>警告の設定</h2></div>
+    <div class="scroll" id="warnScroll">
+      <p class="intro">既定値は桜川の運用に合わせてあります。変えるのは、実際の鳴り方が合わないと感じたときだけで十分です。</p>
+
+      <div class="card" style="margin:0 12px">
+        <div class="eyebrow">音が鳴り始めるタイミング</div>
+        <div style="font-size:14px;color:var(--sub);font-weight:600;margin-top:6px;line-height:1.55">ぶつかるまでの残り秒数で、音の鳴り方が変わります。印をつまんで左右に動かせます。</div>
+        <div class="axiswrap" id="axis"></div>
+        <div style="margin-top:6px">
+          <div class="stp">
+            <div class="l"><b><i style="background:var(--danger)"></i>連続音 <span id="pChg"></span></b><span>止まるまでの時間より長く</span></div>
+            <div class="ctl"><button id="pMinus" aria-label="短く">−</button><div class="val num" id="pVal"></div><button id="pPlus" aria-label="長く">+</button></div>
+          </div>
+          <div class="stp">
+            <div class="l"><b><i style="background:var(--warn)"></i>予告 <span id="aChg"></span></b><span>断続音(3秒ごと)。ここより先は予測しない</span></div>
+            <div class="ctl"><button id="aMinus" aria-label="短く">−</button><div class="val num" id="aVal"></div><button id="aPlus" aria-label="長く">+</button></div>
+          </div>
+        </div>
+        <div class="warnline" id="leadWarn"></div>
+        <button class="reset" id="leadReset" style="display:none">既定(10秒・13秒)に戻す</button>
+      </div>
+
+      <div class="card" style="margin:12px 12px 0">
+        <div class="eyebrow">当たり判定の余裕</div>
+        <div style="font-size:14px;color:var(--sub);font-weight:600;margin:6px 0 4px;line-height:1.55">危険区域の線から、どこまでを「当たる」とみなすか。</div>
+        <div id="zones"></div>
+      </div>
+
+      <div class="card" style="margin:12px 12px 0;padding:4px 16px">
+        <button class="linkrow" data-toast="障害物ごとのオン・オフ"><span>警告する障害物を選ぶ</span><i class="chev"></i></button>
+      </div>
+      <div style="height:170px"></div>
+    </div>
+    <div class="savebar" id="savebar">
+      <div class="st" id="saveState"></div>
+      <div class="bt" id="saveBtns"></div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<div class="notes" id="notes"></div>
+</div>
+
+<script>
+/* ============================================================
+   試作。アプリのコードではない。数値はダミー。
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = '（試作）' + msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+/* ---------------- 地図(簡略化した桜川) ---------------- */
+function riverMap({ rotate = 0, nav = false } = {}) {
+  // 川を斜めに通す。座標は 390x844 の画面座標。
+  const c = 'M-80,690 C60,640 120,520 190,470 S330,330 420,300 S560,210 620,160';
+  const boats = nav
+    ? `<g transform="translate(195,560) rotate(0)">
+         <path d="M0,-34 L9,14 L0,8 L-9,14 Z" fill="#e53935" stroke="#fff" stroke-width="2"/>
+       </g>
+       <path d="M195,526 L195,380" stroke="#e53935" stroke-width="2" stroke-dasharray="1 0" opacity=".55"/>
+       <path d="M183,470 L207,470 L203,380 L187,380 Z" fill="none" stroke="#e53935" stroke-width="2" opacity=".7"/>
+       <g transform="translate(222,250) rotate(180)">
+         <path d="M0,-30 L8,12 L0,7 L-8,12 Z" fill="#455a64" stroke="#fff" stroke-width="2"/>
+       </g>
+       <path d="M222,280 L218,360" stroke="#455a64" stroke-width="2" opacity=".55"/>`
+    : `<circle cx="205" cy="455" r="22" fill="rgba(66,133,244,.18)" stroke="rgba(66,133,244,.4)"/>
+       <circle cx="205" cy="455" r="8" fill="#4285f4" stroke="#fff" stroke-width="3"/>`;
+  const river = nav
+    // 航行中はヘディングアップ。川が縦に流れて見える。
+    ? { d: 'M150,900 C160,760 175,640 180,540 S170,330 190,220 S240,60 250,-40', w: 110 }
+    : { d: c, w: 96 };
+  const bridgeY = nav ? 300 : null;
+  return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
+    <rect width="390" height="844" fill="#eef0ea"/>
+    <g stroke="#ffffff" stroke-width="10" fill="none">
+      <path d="M-20,120 L420,260"/><path d="M40,-20 L110,900"/><path d="M300,-20 L360,900"/>
+    </g>
+    <g stroke="#dfe3dc" stroke-width="1" fill="#e4e7e0">
+      <rect x="20" y="170" width="60" height="40" rx="3"/><rect x="250" y="560" width="70" height="46" rx="3"/>
+      <rect x="290" y="80" width="50" height="60" rx="3"/><rect x="30" y="300" width="44" height="36" rx="3"/>
+    </g>
+    <path d="${river.d}" stroke="#f3b3b3" stroke-width="${river.w + 18}" fill="none" opacity=".45"/>
+    <path d="${river.d}" stroke="#aad3df" stroke-width="${river.w}" fill="none"/>
+    <path d="${river.d}" stroke="#ffffff" stroke-width="2" stroke-dasharray="10 8" fill="none" opacity=".95"/>
+    ${nav ? `<rect x="120" y="${bridgeY - 12}" width="150" height="24" fill="rgba(245,124,0,.35)" stroke="#f57c00" stroke-width="1.5"/>
+             <text x="275" y="${bridgeY + 5}" font-size="13" font-weight="700" fill="#5d4037" font-family="Noto Sans JP">桜川橋</text>
+             <ellipse cx="150" cy="170" rx="16" ry="9" fill="rgba(198,40,40,.55)" stroke="#c62828"/>`
+          : `<rect x="178" y="436" width="36" height="12" fill="rgba(245,124,0,.35)" stroke="#f57c00" stroke-width="1.5" transform="rotate(-38 196 442)"/>
+             <text x="226" y="520" font-size="13" font-weight="700" fill="#5d4037" font-family="Noto Sans JP">桜川</text>`}
+    ${boats}
+  </svg>`;
+}
+$('#map-home').innerHTML = riverMap();
+$('#map-nav').innerHTML = riverMap({ nav: true });
+
+/* ---------------- 画面切替・テーマ ---------------- */
+const state = {
+  screen: 'home',
+  home: { check: 'ok' },
+  nav: { warn: 'none', health: 'ok', fix: 'ok' },
+  list: { period: 'month' },
+};
+function show(id) {
+  state.screen = id;
+  $$('.screen').forEach(s => s.classList.toggle('on', s.id === 's-' + id));
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.s === id));
+  closeMenu();
+  renderScenarios();
+  renderNotes();
+}
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.s); };
+$('#theme').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.documentElement.dataset.theme = b.dataset.t;
+  $$('#theme button').forEach(x => x.classList.toggle('on', x === b));
+  renderAxis();
+  renderZones();
+};
+document.addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go) { show(go.dataset.go); return; }
+  const t = e.target.closest('[data-toast]');
+  if (t) toast(t.dataset.toast);
+});
+
+/* ---------------- シナリオ切替 ---------------- */
+const SCENARIOS = {
+  home: [
+    { key: 'check', label: '出航前チェック', opts: [['ok', 'すべて良好'], ['vol', '音量が小さい'], ['gps', 'GPSが弱い']] },
+  ],
+  nav: [
+    { key: 'warn', label: '警告', opts: [['none', 'なし'], ['action', '予告(断続音)'], ['imminent', '本警告(連続音)']] },
+    { key: 'health', label: '能力', opts: [['ok', '正常'], ['gps', 'GPS弱い'], ['rx', '他艇受信不可']] },
+    { key: 'fix', label: '測位', opts: [['ok', '計測中'], ['wait', '測位待ち']] },
+  ],
+  list: [], warn: [],
+};
+function renderScenarios() {
+  const box = $('#scen');
+  box.innerHTML = '';
+  for (const s of SCENARIOS[state.screen]) {
+    const lab = document.createElement('label'); lab.textContent = s.label; box.append(lab);
+    for (const [v, t] of s.opts) {
+      const b = document.createElement('button');
+      b.textContent = t;
+      b.classList.toggle('on', state[state.screen][s.key] === v);
+      b.onclick = () => { state[state.screen][s.key] = v; renderScenarios(); renderAll(); };
+      box.append(b);
+    }
+  }
+}
+
+/* ---------------- ① 出艇前 ---------------- */
+function renderHome() {
+  const c = state.home.check;
+  const items = [
+    c === 'gps' ? { bad: true, t: 'GPS', s: '±18m 待機中' } : { t: 'GPS', s: '±4m' },
+    c === 'vol' ? { bad: true, t: '音量', s: '20% 小さい' } : { t: '音量', s: '70%' },
+    { t: 'チーム', s: '桜川RC' },
+    { t: '危険区域', s: '検証済' },
+  ];
+  const bad = items.filter(i => i.bad);
+  const detail = items.map(i => `${i.bad ? '!' : '✓'} ${i.t} ${i.s}`).join(' / ');
+  // 良好なときは1つの落ち着いた表示にまとめる。悪い項目だけを横に出す。
+  $('#checks').innerHTML =
+    `<button class="ck" data-toast="${detail}"><span class="d">✓</span>出航前チェック <small>${bad.length ? (items.length - bad.length) + '/' + items.length : 'すべて良好'}</small></button>` +
+    bad.map(i => `<button class="ck bad" data-toast="${i.t === '音量'
+      ? '音量ボタンで上げてください。このままでも開始はできます'
+      : '空が開けた場所で少し待つと精度が上がります。開始はできます'}"><span class="d">!</span>${i.t} <small>${i.s}</small></button>`).join('');
+  $('#checks').style.justifyContent = 'center';
+}
+function openMenu() { $('#menu').classList.add('show'); $('#menuScrim').classList.add('show'); }
+function closeMenu() { $('#menu').classList.remove('show'); $('#menuScrim').classList.remove('show'); }
+$('#openMenu').onclick = openMenu;
+$('#menuScrim').onclick = closeMenu;
+$('#startNow').onclick = () => show('nav');
+
+/* ---------------- ② 航行中 ---------------- */
+function renderNav() {
+  const n = state.nav;
+  const badges = [];
+  if (n.health === 'gps') badges.push('GPS 弱い ±14m');
+  if (n.health === 'rx') badges.push('他艇受信: 利用不可');
+  $('#badges').innerHTML = badges.map(b => `<span class="bdg"><i>!</i>${b}</span>`).join('');
+  const top = 52 + (badges.length ? 38 : 0);
+  const banner = $('#banner');
+  banner.className = 'banner' + (n.warn === 'none' ? '' : ' show ' + n.warn);
+  banner.style.top = top + 'px';
+  $('#bannerWhen').innerHTML = n.warn === 'imminent' ? '右 5秒<small>連続音</small>' : '右 11秒<small>断続音</small>';
+  const inst = $('#inst');
+  inst.classList.toggle('de', n.warn === 'imminent');
+  inst.style.top = (top + (n.warn === 'none' ? 0 : 78)) + 'px';
+  const wait = n.fix === 'wait';
+  $('#vPace').textContent = wait ? '—:—' : '1:58';
+  $('#vPace').classList.toggle('wait', wait);
+  $('#kPace').textContent = wait ? '測位待ち' : '/500m';
+  $('#vSpm').textContent = wait ? '—' : '32';
+  $('#vSpm').classList.toggle('wait', wait);
+  $('#vTime').textContent = wait ? '0:07' : '12:34';
+  $('#vDist').textContent = wait ? '0' : '2,480';
+}
+
+/* ---------------- ③ 記録一覧 ---------------- */
+const RECS = [
+  { m: '2026年9月', d: '9/24(水) 06:05', boat: '8+ ・ 7番', km: 7.27, t: '1:14:20', pace: '2:25', tag: 'UT 4セット ・ 上り下り 2往復', seed: 3 },
+  { m: '2026年9月', d: '9/20(土) 06:10', boat: '4x ・ 整調', km: 8.84, t: '34:00', pace: '1:58', tag: 'ハイレート 5本 ・ 最速500m 1:52', seed: 7 },
+  { m: '2026年9月', d: '9/17(水) 17:30', boat: '1x', km: 6.10, t: '41:12', pace: '2:31', tag: 'UT 2セット', seed: 5 },
+  { m: '2026年8月', d: '8/30(土) 06:00', boat: '8+ ・ 7番', km: 10.4, t: '1:02:45', pace: '2:12', tag: 'UT 3セット ・ 水郷橋→桜川橋 3:41', seed: 9 },
+  { m: '2026年8月', d: '8/23(土) 06:20', boat: '8+ ・ 5番', km: 9.1, t: '58:10', pace: '2:18', tag: 'UT 3セット', seed: 2 },
+];
+const SHORTS = [
+  { m: '2026年9月', d: '9/24(水) 05:58', s: '0:07 ・ 0 m' },
+  { m: '2026年9月', d: '9/20(土) 06:02', s: '0:24 ・ 12 m' },
+  { m: '2026年8月', d: '8/20(水) 13:35', s: '0:08 ・ 0 m' },
+];
+const PERIODS = {
+  week: { km: '7.3', n: 1, t: '1:14', pace: '2:25', on: 7 },
+  month: { km: '22.2', n: 3, t: '2:29', pace: '2:18', on: [5, 6, 7] },
+  all: { km: '41.7', n: 5, t: '4:30', pace: '2:17', on: 'all' },
+};
+const WEEKS = [4.1, 0, 10.4, 9.1, 0, 6.1, 8.8, 7.3]; // 直近8週(右端が今週)
+function thumb(seed) {
+  // 航跡の小さな絵。川沿いの往復を斜めに描く。
+  let x = 10, y = 58, pts = [];
+  for (let i = 0; i < 12; i++) { pts.push([x, y]); x += 4 + (i * seed) % 3; y -= 4 + ((i + seed) % 4); }
+  const back = pts.slice().reverse().map(([a, b]) => [a + 5, b + 3]);
+  const d = [...pts, ...back].map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  return `<svg viewBox="0 0 68 68"><path d="M-5,70 C15,55 35,30 75,0" stroke="rgba(110,168,255,.28)" stroke-width="16" fill="none"/><path d="${d}" stroke="var(--m-pace)" stroke-width="2.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function renderList() {
+  const p = state.list.period;
+  $$('#period button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  const P = PERIODS[p];
+  $('#stats').innerHTML = `
+    <div class="stat"><div class="k">合計距離</div><div class="v num">${P.km}<small>km</small></div></div>
+    <div class="stat"><div class="k">本数</div><div class="v num">${P.n}<small>本</small></div></div>
+    <div class="stat"><div class="k">合計時間</div><div class="v num">${P.t}</div></div>
+    <div class="stat"><div class="k">平均ペース</div><div class="v num">${P.pace}<small>/500m</small></div></div>`;
+  const max = Math.max(...WEEKS);
+  const lab = ['8/3', '8/10', '8/17', '8/24', '8/31', '9/7', '9/14', '今週'];
+  $('#bars').innerHTML = WEEKS.map((w, i) => {
+    const on = P.on === 'all' || P.on === i || (Array.isArray(P.on) && P.on.includes(i));
+    return `<div><i class="${on ? 'on' : ''}" style="height:${Math.max(3, w / max * 52)}px" title="${w}km"></i><span>${lab[i]}</span></div>`;
+  }).join('');
+  $('#barTotal').textContent = '直近8週 ' + WEEKS.reduce((a, b) => a + b, 0).toFixed(1) + ' km';
+  $('#listCount').textContent = `全期間 ・ ${RECS.length}件`;
+  let html = '', month = '';
+  for (const r of RECS) {
+    if (r.m !== month) {
+      month = r.m;
+      const inM = RECS.filter(x => x.m === month);
+      html += `<div class="month"><span>${month}</span><span class="num">${inM.length}本 ・ ${inM.reduce((a, b) => a + b.km, 0).toFixed(1)} km</span></div>`;
+    }
+    html += `<div class="rec" data-toast="記録画面(リプレイ)を開く">
+      <div class="th">${thumb(r.seed)}</div>
+      <div class="b">
+        <div class="top"><b class="num">${r.d}</b><span class="boat">${r.boat}</span></div>
+        <div class="nums"><div class="num">${r.km.toFixed(2)}<small>km</small></div><div class="num">${r.t}</div><div class="num">${r.pace}<small>/500m</small></div></div>
+        <div class="tag"><span class="p"></span>${r.tag}</div>
+      </div></div>`;
+  }
+  html += `<details class="shorts"><summary>短い記録 ${SHORTS.length}件 <span style="font-weight:600">(1分未満・100m未満)</span></summary>
+    ${SHORTS.map(s => `<div class="srow"><b class="num">${s.d}</b><span class="num">${s.s}</span></div>`).join('')}
+    <div class="srow" style="justify-content:center"><button class="btn ghost" style="height:40px" data-toast="選んで削除(確認あり)">整理する</button></div>
+  </details>`;
+  $('#records').innerHTML = html;
+}
+$('#period').onclick = e => { const b = e.target.closest('button'); if (b) { state.list.period = b.dataset.p; renderList(); } };
+
+/* ---------------- ④ 警告の設定 ---------------- */
+const STOP = [['2x', 6.60], ['4x', 6.68], ['1x', 6.95], ['8+', 8.15]];
+const DEF = { p: 10, a: 13 };
+const W = { p: 10, a: 13, saved: { p: 10, a: 13 }, published: { p: 10, a: 13 } };
+const ZONES = [
+  { key: 'shore', n: '岸', sides: ['水上側', '陸側'], def: [5, 15], land: true,
+    why: '岸から数mを走るのは正常な運用なので水上側は5m。陸側は地図の欠けを覆うため15m。' },
+  { key: 'bridge', n: '橋', sides: ['内側', '外側'], def: [5, 5],
+    why: '毎回くぐる場所なので、警告が形だけにならないよう両側5m。' },
+  { key: 'island', n: '中州', sides: ['内側', '外側'], def: [5, 5], why: '中州1・中州2に同じ値を使います。' },
+  { key: 'wood', n: '固定流木', sides: ['周囲'], def: [5], why: '流木の外周から全方向へ広げます。' },
+];
+const Z = Object.fromEntries(ZONES.map(z => [z.key, [...z.def]]));
+const ZS = Object.fromEntries(ZONES.map(z => [z.key, [...z.def]])); // この端末に保存済み
+const ZP = Object.fromEntries(ZONES.map(z => [z.key, [...z.def]])); // チームに公開済み
+const MIN_P = 8.5, MAX_T = 25, MIN_A = 9;
+const X0 = 18, X1 = 340; // 軸の画面座標
+const tx = s => X0 + (s / MAX_T) * (X1 - X0);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function renderAxis() {
+  const red = css('--danger'), org = css('--warn'), sub = css('--sub'), mute = css('--mute'), line = css('--line'), tx0 = css('--tx'), s2 = css('--s2');
+  const p = W.p, a = W.a;
+  const stopTicks = STOP.map(([b, s], i) => {
+    const x = tx(s), big = b === '8+';
+    return `<path d="M${x},90 l${big ? 5 : 4},${big ? 9 : 7} h-${big ? 10 : 8} z" fill="${big ? tx0 : mute}"/>` +
+      '';
+  }).join('');
+  $('#axis').innerHTML = `<svg viewBox="0 0 358 140" id="axsvg">
+    <text x="${X0}" y="14" font-size="13" font-weight="800" fill="${sub}">衝突</text>
+    <text x="${X1}" y="14" font-size="13" font-weight="800" fill="${sub}" text-anchor="end">25秒先</text>
+    <rect x="${X0}" y="36" width="${X1 - X0}" height="30" rx="8" fill="${s2}"/>
+    <rect x="${X0}" y="36" width="${tx(p) - X0}" height="30" rx="8" fill="${red}"/>
+    <rect x="${tx(p)}" y="36" width="${tx(a) - tx(p)}" height="30" fill="${org}"/>
+    <text x="${(X0 + tx(p)) / 2}" y="56" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">連続音</text>
+    <text x="${(tx(p) + tx(a)) / 2}" y="56" text-anchor="middle" font-size="13" font-weight="800" fill="#1a0d00">${tx(a) - tx(p) > 44 ? '断続音' : ''}</text>
+    <text x="${(tx(a) + X1) / 2}" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="${mute}">音なし(予測の外)</text>
+    ${[0, 5, 10, 15, 20, 25].map(s => `<text x="${tx(s)}" y="82" text-anchor="middle" font-size="12" font-weight="700" fill="${mute}">${s}</text>`).join('')}
+    <text x="${X0}" y="118" font-size="13" font-weight="800" fill="${tx0}">▲ 止まるまでの時間</text>
+    <text x="${X0}" y="134" font-size="12" font-weight="700" fill="${mute}">1x・2x・4x 約7秒 ／ 8+ 8.15秒(最長)</text>
+    ${stopTicks}
+    <g class="h" data-h="p" style="cursor:ew-resize"><circle cx="${tx(p)}" cy="51" r="18" fill="transparent"/><rect x="${tx(p) - 7}" y="28" width="14" height="46" rx="7" fill="#fff" stroke="${red}" stroke-width="3"/></g>
+    <g class="h" data-h="a" style="cursor:ew-resize"><circle cx="${tx(a)}" cy="51" r="18" fill="transparent"/><rect x="${tx(a) - 7}" y="28" width="14" height="46" rx="7" fill="#fff" stroke="${org}" stroke-width="3"/></g>
+  </svg>`;
+  $('#pVal').innerHTML = `${p.toFixed(1)}<small>秒前</small>`;
+  $('#aVal').innerHTML = `${a.toFixed(0)}<small>秒前</small>`;
+  $('#pMinus').disabled = p <= MIN_P;
+  $('#pPlus').disabled = p + 0.5 >= a;
+  $('#aMinus').disabled = a - 1 <= p || a <= MIN_A;
+  $('#aPlus').disabled = a >= MAX_T;
+  $('#pChg').innerHTML = p !== DEF.p ? '<span class="chg">変更</span>' : '<span class="dflt">既定</span>';
+  $('#aChg').innerHTML = a !== DEF.a ? '<span class="chg">変更</span>' : '<span class="dflt">既定</span>';
+  $('#leadReset').style.display = (p !== DEF.p || a !== DEF.a) ? 'block' : 'none';
+  $('#leadWarn').textContent = p <= MIN_P
+    ? '8+ が止まるのに要する時間(8.15秒)に余裕を足した 8.5秒より短くはできません。' : '';
+  renderSave();
+}
+function clampLead() {
+  W.p = Math.max(MIN_P, Math.min(W.p, W.a - 0.5));
+  W.a = Math.max(Math.max(MIN_A, Math.ceil(W.p + 0.5)), Math.min(MAX_T, W.a));
+}
+$('#pMinus').onclick = () => { W.p -= 0.5; clampLead(); renderAxis(); };
+$('#pPlus').onclick = () => { W.p += 0.5; clampLead(); renderAxis(); };
+$('#aMinus').onclick = () => { W.a -= 1; clampLead(); renderAxis(); };
+$('#aPlus').onclick = () => { W.a += 1; clampLead(); renderAxis(); };
+$('#leadReset').onclick = () => { W.p = DEF.p; W.a = DEF.a; renderAxis(); };
+(() => {
+  let drag = null;
+  const toSec = ev => {
+    const svg = $('#axsvg'); const r = svg.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width * 358;
+    return (x - X0) / (X1 - X0) * MAX_T;
+  };
+  $('#axis').addEventListener('pointerdown', ev => {
+    const h = ev.target.closest('.h');
+    if (h) { drag = h.dataset.h; ev.preventDefault(); }
+  });
+  window.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    const s = toSec(ev);
+    if (drag === 'p') W.p = Math.round(s * 2) / 2; else W.a = Math.round(s);
+    if (drag === 'p') W.p = Math.max(MIN_P, Math.min(W.p, W.a - 0.5));
+    else W.a = Math.max(Math.max(MIN_A, Math.ceil(W.p + 0.5)), Math.min(MAX_T, W.a));
+    renderAxis();
+  });
+  window.addEventListener('pointerup', () => { drag = null; });
+})();
+
+function xsec(z, vals) {
+  // 断面図。中央の線が基準線、左右に広げる幅を帯で描く。
+  const tx0 = css('--tx'), sub = css('--sub'), mute = css('--mute'), red = css('--danger');
+  const scale = 4.6; // 1m あたりpx
+  const cx = 179;
+  const left = (z.sides.length === 1 ? vals[0] : vals[0]) * scale;
+  const right = (z.sides.length === 1 ? vals[0] : vals[1]) * scale;
+  const water = '#aad3df';
+  const leftFill = z.land ? water : (z.key === 'bridge' ? water : water);
+  const rightFill = z.land ? '#d9d2c3' : water;
+  return `<svg viewBox="0 0 358 92">
+    <rect x="0" y="22" width="${cx}" height="40" fill="${leftFill}" opacity=".55"/>
+    <rect x="${cx}" y="22" width="${358 - cx}" height="40" fill="${rightFill}" opacity="${z.land ? .8 : .55}"/>
+    <rect x="${cx - left}" y="22" width="${left + right}" height="40" fill="${red}" opacity=".22"/>
+    <line x1="${cx}" y1="14" x2="${cx}" y2="70" stroke="${tx0}" stroke-width="2.5"/>
+    <text x="${cx}" y="10" text-anchor="middle" font-size="12" font-weight="800" fill="${sub}">${z.land ? '岸の線' : '区域の線'}</text>
+    <path d="M${cx - left},74 v6 H${cx} v-6" fill="none" stroke="${tx0}" stroke-width="1.5"/>
+    <text x="${cx - left / 2}" y="90" text-anchor="middle" font-size="13" font-weight="800" fill="${tx0}">${vals[0]}m</text>
+    ${z.sides.length > 1 ? `<path d="M${cx},74 v6 H${cx + right} v-6" fill="none" stroke="${tx0}" stroke-width="1.5"/>
+      <text x="${cx + right / 2}" y="90" text-anchor="middle" font-size="13" font-weight="800" fill="${tx0}">${vals[1]}m</text>` : ''}
+    <text x="6" y="46" font-size="13" font-weight="800" fill="${mute}">${z.land ? '川' : z.sides[0]}</text>
+    <text x="352" y="46" text-anchor="end" font-size="13" font-weight="800" fill="${mute}">${z.land ? '陸' : (z.sides[1] || '')}</text>
+  </svg>`;
+}
+const openZones = new Set();
+function renderZones() {
+  $('#zones').innerHTML = ZONES.map(z => {
+    const v = Z[z.key];
+    const changed = v.some((x, i) => x !== z.def[i]);
+    const sum = z.sides.map((s, i) => `${s} ${v[i]}m`).join(' ・ ');
+    return `<details class="zone" data-z="${z.key}" ${openZones.has(z.key) ? 'open' : ''}>
+      <summary><span class="n">${z.n}</span><span class="s num">${sum}</span>${changed ? '<span class="chg">変更</span>' : '<span class="dflt">既定</span>'}</summary>
+      <p class="why">${z.why}</p>
+      <div class="xsec">${xsec(z, v)}</div>
+      ${z.sides.map((s, i) => `<div class="stp"><div class="l"><b>${s}</b><span>既定 ${z.def[i]}m ・ 0〜30m</span></div>
+        <div class="ctl"><button data-zk="${z.key}" data-i="${i}" data-d="-0.5" ${v[i] <= 0 ? 'disabled' : ''} aria-label="狭く">−</button><div class="val num">${v[i].toFixed(1)}<small>m</small></div><button data-zk="${z.key}" data-i="${i}" data-d="0.5" ${v[i] >= 30 ? 'disabled' : ''} aria-label="広く">+</button></div></div>`).join('')}
+      ${changed ? `<button class="reset" data-zr="${z.key}">既定(${z.def.join('m・')}m)に戻す</button>` : ''}
+    </details>`;
+  }).join('');
+  renderSave();
+}
+$('#zones').addEventListener('toggle', e => {
+  const d = e.target.closest('.zone'); if (!d) return;
+  d.open ? openZones.add(d.dataset.z) : openZones.delete(d.dataset.z);
+}, true);
+$('#zones').addEventListener('click', e => {
+  const b = e.target.closest('[data-zk]');
+  if (b) {
+    const z = Z[b.dataset.zk], i = +b.dataset.i;
+    z[i] = Math.max(0, Math.min(30, z[i] + +b.dataset.d));
+    renderZones(); return;
+  }
+  const r = e.target.closest('[data-zr]');
+  if (r) { Z[r.dataset.zr] = [...ZONES.find(z => z.key === r.dataset.zr).def]; renderZones(); }
+});
+
+function diffCount() {
+  let n = 0;
+  if (W.p !== W.saved.p) n++;
+  if (W.a !== W.saved.a) n++;
+  for (const z of ZONES) Z[z.key].forEach((v, i) => { if (v !== ZS[z.key][i]) n++; });
+  return n;
+}
+function unpublished() {
+  return W.saved.p !== W.published.p || W.saved.a !== W.published.a ||
+    ZONES.some(z => ZS[z.key].some((v, i) => v !== ZP[z.key][i]));
+}
+function renderSave() {
+  const n = diffCount();
+  const bar = $('#savebar');
+  if (n > 0) {
+    bar.classList.add('show');
+    $('#saveState').innerHTML = `<i></i>保存していない変更 ${n}件`;
+    $('#saveBtns').innerHTML = `<button class="btn" id="undo">元に戻す</button><button class="btn acc" id="save">この端末に保存</button>`;
+    $('#undo').onclick = () => {
+      W.p = W.saved.p; W.a = W.saved.a;
+      for (const z of ZONES) Z[z.key] = [...ZS[z.key]];
+      renderAxis(); renderZones();
+    };
+    $('#save').onclick = () => {
+      W.saved = { p: W.p, a: W.a };
+      for (const z of ZONES) ZS[z.key] = [...Z[z.key]];
+      toast('この端末に保存しました。航行中の警告にすぐ反映されます');
+      renderSave();
+    };
+  } else if (unpublished()) {
+    bar.classList.add('show');
+    $('#saveState').innerHTML = `<i style="background:var(--sub)"></i>この端末に保存済み ・ チームには未公開`;
+    $('#saveBtns').innerHTML = `<span></span><button class="btn acc" id="pub">チームに公開…</button>`;
+    $('#pub').onclick = () => {
+      W.published = { ...W.saved };
+      for (const z of ZONES) ZP[z.key] = [...ZS[z.key]];
+      toast('確認ダイアログのあと、同じチームの端末へ反映');
+      renderZones(); renderAxis();
+    };
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+/* ---------------- 説明 ---------------- */
+const NOTES = {
+  home: {
+    h: '① 出艇前(ホーム)',
+    li: [
+      ['下を「操作の台」にまとめる', '大きなボタン2つと右の丸ボタンが同じ高さで競り合い、ボタンが地図の文字と重なっていた。台に載せると押す場所が決まり、地図の文字とも重ならない。'],
+      ['1タップで前回の設定のまま出艇', '毎回シートを開いて「この設定で航行スタート」を押していた。名前・艇種・座席をボタンに書くので、別の人の設定のままでも気づける。変えたいときだけ「設定を変えて開始」。'],
+      ['出航前チェックを見せる(止めない)', 'GPS・音量・チーム・危険区域の状態が「端末とデータ」の奥にしかなかった。悪い項目は黄色で出すが、開始はブロックしない(原則1)。'],
+      ['メニューはタイル3つ+一覧', 'よく使う「練習記録」が9項目の7番目に埋もれていた。上にタイル、下に今の一覧。並びは状況で変えない(既存の約束)。説明は1行で切る。'],
+    ],
+    ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
+  },
+  nav: {
+    h: '② 航行中',
+    li: [
+      ['状態バッジに中身を書く', '「⚠GPS」だけでは何が起きているか分からなかった。「GPS 弱い ±14m」「他艇受信: 利用不可」のように、状態まで書く。'],
+      ['測位前は控えめな「—:—」', '巨大な横棒の「--:--」が画面でいちばん目立っていた。薄い色にして「測位待ち」と書く。'],
+      ['指標の色を記録画面とそろえる', 'ペース=ティール、レート=青。漕いでいるときに見た色が、振り返りのグラフと同じ色になる。'],
+      ['レートの色を橙→青へ(記録画面も)', '橙は「予告(断続音)」の色。同じ画面に橙の指標があると、警告と見分けにくい。赤・橙・黄は危険の段階だけに使う。'],
+      ['「航行終了」は不透明の面+赤い文字と枠', 'P0で修正済み。赤い面は警告バナーだけのものにする。'],
+    ],
+    ask: '記録画面のレート(SR)の色を、いまの橙から青に変えてよいか。',
+  },
+  list: {
+    h: '③ 記録一覧',
+    li: [
+      ['週ごとの距離を棒で出す', '「今月」を押しても数字が4つ出るだけで、量の流れが見えなかった。選んだ期間の棒をティールにする。'],
+      ['月ごとの見出しと、航跡の小さな絵', '同じ見た目のカードが続き、どの日か探しにくかった。見出しに本数と距離、カードに航跡・セットの要約を載せる。'],
+      ['短い記録はまとめて畳む(消さない)', '0.0km・数秒の記録が一覧の上を埋めていた。1分未満・100m未満は下にまとめ、開けば見られる。整理(削除)は確認つき。'],
+      ['一覧は全期間のまま', '期間の切替は上の集計と棒だけに効く(今の設計を維持)。見出しに「全期間・N件」と書いて誤読を防ぐ(P0で追加済み)。'],
+    ],
+  },
+  warn: {
+    h: '④ 警告の設定',
+    li: [
+      ['残り秒数の図で関係を見せる', '長い文章とスライダー2本では、連続音・断続音・停止時間の関係が読み取れなかった。1本の軸に並べ、印をつまんで動かす。'],
+      ['艇種ごとの止まるまでの時間を軸に出す', '8+ の8.15秒がいちばん長い。連続音をそれより短くできない理由が、図を見れば分かる。'],
+      ['−/+ で0.5秒ずつ', 'スライダーでは狙った値に止めにくかった。大きな−/+ボタンで確実に合わせる。'],
+      ['当たり判定は断面図で', '「水上側5m・陸側15m」を、岸の線の左右に広がる帯で描く。既定から変えた項目には「変更」の印。'],
+      ['保存バーを下に固定', '右上の「保存」の文字だけでは、未保存かどうか分からなかった。変更があるときだけ下にバーが出て、件数・元に戻す・保存が並ぶ。保存後は「チームには未公開」を明示。'],
+    ],
+  },
+};
+function renderNotes() {
+  const n = NOTES[state.screen];
+  $('#notes').innerHTML = `<h2>${n.h}</h2><ol>${n.li.map(([b, w]) => `<li><b>${b}</b><span class="why">${w}</span></li>`).join('')}</ol>` +
+    (n.ask ? `<div class="ask"><b>決めてほしいこと</b><br>${n.ask}</div>` : '');
+}
+
+function renderAll() { renderHome(); renderNav(); renderList(); renderAxis(); renderZones(); }
+renderAll();
+show('home');
+</script>
+</body>
+</html>
