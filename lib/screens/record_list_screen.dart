@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter_hooks/flutter_hooks.dart';
 /* spellchecker: disable */
@@ -11,10 +12,12 @@ import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_state_views.dart';
 import 'record_replay/record_replay_screen.dart';
+import 'record_replay/replay_analysis.dart';
+import 'record_replay/replay_format.dart';
 
 // # 練習記録機能
 // ナビゲーション終了時に自動保存されたセッションを一覧・詳細表示する。
-// - 一覧: 日時・距離・時間・平均ペース
+// - 一覧: 日時・距離・時間・平均 /500m・セットの要約
 // - 詳細: record_replay/record_replay_screen.dart（地図・時間軸・セット・グラフ・共有・削除）
 // GPXファイルはStravaにそのまま手動アップロードできる。
 
@@ -219,7 +222,7 @@ class _PeriodSummaryCard extends StatelessWidget {
                           SizedBox(width: dimens.space2),
                           Expanded(
                             child: _SummaryStat(
-                              label: '平均ペース',
+                              label: '平均 /500m',
                               value:
                                   '${formatPace(aggregate.avgPaceSecPer500)} /500m',
                             ),
@@ -378,11 +381,12 @@ class _SessionListCard extends StatelessWidget {
                     value: formatDuration(summary.durationSec),
                   ),
                   _ListStat(
-                    label: '平均ペース',
+                    label: '平均 /500m',
                     value: '${formatPace(summary.avgPaceSecPer500)} /500m',
                   ),
                 ],
               ),
+              _SetSummaryLine(session: session),
             ],
           ),
         ),
@@ -424,4 +428,57 @@ class _ListStat extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 一覧のカードに出すセットの要約（例「UT 33:14 ・ ハイレート 5本」）。
+///
+/// 解析は重いので、カードが画面に出たときに別 isolate で1回だけ行い、結果を覚えておく。
+class _SetSummaryLine extends StatefulWidget {
+  final Session session;
+  const _SetSummaryLine({required this.session});
+
+  static final _cache = <String, Future<String>>{};
+
+  @override
+  State<_SetSummaryLine> createState() => _SetSummaryLineState();
+}
+
+class _SetSummaryLineState extends State<_SetSummaryLine> {
+  late final Future<String> _summary = _SetSummaryLine._cache.putIfAbsent(
+      widget.session.id, () => compute(_summarizeSets, widget.session));
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _summary,
+      builder: (context, snap) {
+        final text = snap.data;
+        if (text == null || text.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.only(top: context.dimens.space2),
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _summarizeSets(Session session) {
+  if (session.points.length < 2) return '';
+  final a = ReplayAnalysis.compute(session);
+  return a.sets.map((s) {
+    final head = s.intensity.label;
+    return s.bouts.length > 1 && s.intensity.unit == '本'
+        ? '$head ${s.bouts.length}本'
+        : '$head ${fmtDuration(s.rowingSec)}';
+  }).join(' ・ ');
 }
