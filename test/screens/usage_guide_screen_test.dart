@@ -24,4 +24,31 @@ void main() {
     );
     expect(find.textContaining('幅[m]'), findsNothing);
   });
+
+  testWidgets('警告の段階の秒数は、実際に効いている設定値で説明する', (tester) async {
+    // 以前は「約7秒」「約10秒」と直書きで、既定の10秒・13秒と食い違っていた。
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: const UsageGuideScreen(),
+      ),
+    );
+    expect(find.textContaining('あと10秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと10〜13秒で届きます'), findsOneWidget);
+    expect(find.text('断続音（3秒ごと）'), findsOneWidget);
+    expect(find.textContaining('約7秒'), findsNothing);
+
+    // 設定画面やチーム共有で変えた値は、そのまま説明に出る。
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: const UsageGuideScreen(
+          primaryWarningLeadSeconds: 8.5,
+          advanceWarningLeadSeconds: 15,
+        ),
+      ),
+    );
+    expect(find.textContaining('あと8.5秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと8.5〜15秒で届きます'), findsOneWidget);
+  });
 }

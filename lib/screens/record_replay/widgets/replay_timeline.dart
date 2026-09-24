@@ -252,7 +252,7 @@ class _TimelinePainter extends CustomPainter {
         text: TextSpan(
             text: label,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: p.textMute)),
+                fontSize: 11, fontWeight: FontWeight.w700, color: p.textMute)),
         textDirection: TextDirection.ltr,
       )..layout();
       final left = (tx - tp.width / 2).clamp(0.0, w - tp.width);

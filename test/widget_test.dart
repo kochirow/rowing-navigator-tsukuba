@@ -553,6 +553,58 @@ void main() {
     expect(find.text('航行スタート'), findsOneWidget);
   });
 
+  testWidgets('航行設定シートを下までスクロールしても「閉じる」は見えたまま押せる', (tester) async {
+    // 閉じるボタンをスクロール領域の中に置くと、下の項目を見た時点で
+    // 画面外へ消える。出口はスクロールの外に固定しておく。
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+                  ),
+                  builder: (_) =>
+                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
+                ),
+                child: const Text('開く'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開く'));
+    await tester.pumpAndSettle();
+
+    final closeTop = tester.getTopLeft(find.byTooltip('閉じる')).dy;
+    await tester.drag(
+      find.descendant(
+        of: find.byType(NavSettingModal),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      const Offset(0, -2000),
+    );
+    await tester.pumpAndSettle();
+
+    // 本体はスクロールしたが、閉じるボタンは同じ位置に残っている。
+    expect(tester.getTopLeft(find.byTooltip('閉じる')).dy, closeTop);
+    await tester.tap(find.byTooltip('閉じる'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavSettingModal), findsNothing);
+  });
+
   testWidgets('航行開始前に音声確認ボタンを表示し、押せる', (tester) async {
     useNavigationSettingsViewport(tester);
     var tapped = false;

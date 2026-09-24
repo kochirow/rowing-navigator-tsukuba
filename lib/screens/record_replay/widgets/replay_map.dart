@@ -446,7 +446,7 @@ class _Legend extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = palette;
     final style =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: p.textSub);
+        TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: p.textSub);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(

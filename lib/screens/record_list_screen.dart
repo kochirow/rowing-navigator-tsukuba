@@ -10,6 +10,7 @@ import '../models/session_model.dart';
 import '../services/session_aggregator.dart';
 import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
+import '../types/boat_type.dart';
 import '../widgets/app_state_views.dart';
 import 'record_replay/record_replay_screen.dart';
 import 'record_replay/replay_analysis.dart';
@@ -108,11 +109,28 @@ class RecordListScreen extends HookConsumerWidget {
                       onChanged: (value) => period.value = value,
                     ),
                     SizedBox(height: context.dimens.space4),
-                    Text(
-                      '記録一覧',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+                    // 一覧は期間の切替に関係なく全件。上の集計と範囲が違うことを
+                    // 見出しの横に書いておく。
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          '記録一覧',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                        SizedBox(width: context.dimens.space2),
+                        Text(
+                          '全期間・${sessions.value.length}件',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.colors.textSecondary,
                           ),
+                        ),
+                      ],
                     ),
                     SizedBox(height: context.dimens.space2),
                     for (final session in sessions.value)
@@ -186,7 +204,9 @@ class _PeriodSummaryCard extends StatelessWidget {
               ? AppEmptyView(
                   icon: Icons.calendar_month_outlined,
                   title: _emptyTitle,
-                  message: '期間を切り替えると、ほかの記録を確認できます',
+                  // 下の一覧は期間によらず全件を出している(集計だけが期間で変わる)。
+                  // 「切り替えると見られる」と書くと、一覧まで絞られていると誤読される。
+                  message: 'これまでの記録は下の一覧から開けます',
                 )
               : Padding(
                   padding: EdgeInsets.all(dimens.space4),
@@ -328,7 +348,7 @@ class _SessionListCard extends StatelessWidget {
                       borderRadius: dimens.borderSm,
                     ),
                     child: Text(
-                      session.boatTypeName,
+                      boatTypeDisplayLabel(session.boatTypeName),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,

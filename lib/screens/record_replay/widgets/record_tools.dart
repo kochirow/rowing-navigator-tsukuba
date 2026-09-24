@@ -160,7 +160,7 @@ class RecordTools extends HookWidget {
     }
 
     final eyebrow = TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         letterSpacing: 1,
         fontWeight: FontWeight.w800,
         color: p.textSub);

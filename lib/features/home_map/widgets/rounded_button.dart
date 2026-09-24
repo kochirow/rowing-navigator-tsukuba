@@ -13,7 +13,11 @@ class RoundedButton extends StatelessWidget {
   final IconData? icon;
   final Color? color;
 
-  /// 文字とアイコンの色。既定は白(濃い面色の上に置く前提)。
+  /// 文字とアイコンの色。
+  ///
+  /// 既定は、[color] を省いたとき(面がテーマのプライマリ色)は
+  /// `colorScheme.onPrimary`、[color] を渡したときは白。暗色テーマの
+  /// プライマリは明るい色なので、白文字を固定すると約2.3:1で読めなかった。
   ///
   /// 淡い面色を [color] に渡すときは必ず一緒に指定する。地図の上に置く
   /// ボタンなので、面と文字のどちらかが背景と同化すると読めなくなる。
@@ -44,13 +48,19 @@ class RoundedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = foregroundColor ?? Colors.white;
+    final scheme = Theme.of(context).colorScheme;
+    final surface = color ?? scheme.primary;
+    final foreground =
+        foregroundColor ?? (color == null ? scheme.onPrimary : Colors.white);
+    // 暗い影は明るい文字を地図から浮かせるためのもの。暗い文字に付けると
+    // 文字がにじむので、明るい文字のときだけ付ける。
+    final useHalo = foreground.computeLuminance() > 0.5;
     final border = borderColor;
     final shape = border == null
         ? const StadiumBorder()
         : StadiumBorder(side: BorderSide(color: border, width: 1.5));
     return Material(
-        color: color ?? Theme.of(context).primaryColor,
+        color: surface,
         elevation: 6.0,
         shape: shape,
         child: InkWell(
@@ -73,7 +83,7 @@ class RoundedButton extends StatelessWidget {
                     icon,
                     color: foreground,
                     size: compact ? 22 : 26,
-                    shadows: border == null ? _labelHalo : null,
+                    shadows: border == null && useHalo ? _labelHalo : null,
                   ),
                   SizedBox(width: compact ? 8 : 10),
                 ],
@@ -84,7 +94,7 @@ class RoundedButton extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: foreground,
                     // 淡い面のときに白いハローを敷くと文字が滲む。
-                    shadows: border == null ? _labelHalo : null,
+                    shadows: border == null && useHalo ? _labelHalo : null,
                   ),
                 ),
               ],

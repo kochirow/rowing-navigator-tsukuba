@@ -77,7 +77,50 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今月の記録はありません'), findsOneWidget);
+    // 一覧は絞られていないので、「切り替えると見られる」とは書かない。
+    expect(find.text('これまでの記録は下の一覧から開けます'), findsOneWidget);
     expect(find.text('記録一覧'), findsOneWidget);
+    expect(find.text('全期間・1件'), findsOneWidget);
+  });
+
+  testWidgets('艇種は内部名ではなく「8+」で出し、一覧が全期間であることを示す', (tester) async {
+    final eight = Session(
+      id: 'eight',
+      startedAt: DateTime(2026, 7, 5),
+      endedAt: DateTime(2026, 7, 5, 0, 10),
+      boatTypeName: 'r_8p',
+      seatPosLabel: '7',
+      points: const [],
+      summary: SessionSummary(
+        totalDistanceMeters: 1000,
+        durationSec: 600,
+        maxSpeed: 3,
+        avgSpeed: 2.5,
+        splits: const [],
+        pieces: const [],
+        alertCounts: const {},
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: RecordListScreen(
+            sessionsLoader: () async => [
+              eight,
+              session('june', DateTime(2026, 6, 30)),
+            ],
+            clock: () => DateTime(2026, 7, 22),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('r_8p'), findsNothing);
+    expect(find.text('8+'), findsOneWidget);
+    // 集計は今月(1本)だが、一覧は期間によらず全件。
+    expect(find.text('1 本'), findsOneWidget);
+    expect(find.text('全期間・2件'), findsOneWidget);
   });
 
   /// ハイレート×5本（40秒・5m/s・SR34）をSR20のパドル（80秒・2.3m/s）でつなぐ練習。

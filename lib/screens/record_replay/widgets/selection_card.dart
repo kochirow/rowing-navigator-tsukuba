@@ -72,7 +72,7 @@ class SelectionCard extends StatelessWidget {
                   children: [
                     Text(kind,
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             letterSpacing: 1,
                             fontWeight: FontWeight.w800,
                             color: p.textSub)),
@@ -180,7 +180,7 @@ class _Overview extends StatelessWidget {
         color: c,
         fontFeatures: const [FontFeature.tabularFigures()]);
     TextStyle eyebrow() => TextStyle(
-        fontSize: 11,
+        fontSize: 12,
         letterSpacing: 1,
         fontWeight: FontWeight.w800,
         color: p.textSub);
@@ -251,7 +251,7 @@ class _Overview extends StatelessWidget {
           '漕いでいた時間 = 各セットの本・区間の合計（練習の強度で漕いだ時間）。'
           '練習時間 = 艇が動いていた時間の合計（パドル・アップを含む）。'
           '記録の長さ ${fmtDuration(o.recordSec)}。',
-          style: TextStyle(fontSize: 11.5, height: 1.5, color: p.textSub),
+          style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
         ),
       ]),
     );
@@ -292,7 +292,7 @@ class _Tile extends StatelessWidget {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: p.textSub)),
             FittedBox(

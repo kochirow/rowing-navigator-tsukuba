@@ -30,7 +30,7 @@ class MetricChartCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('推移',
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
                 color: p.textSub)),
@@ -242,7 +242,7 @@ class _MetricChartState extends State<MetricChart> {
                   onTap: () => c.setZoom(ChartZoom.none),
                   child: Text('元に戻す',
                       style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                           color: p.accent)),
                 ),
@@ -250,7 +250,7 @@ class _MetricChartState extends State<MetricChart> {
           ]),
           textAlign: TextAlign.center,
           style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: p.textMute),
+              fontSize: 12, fontWeight: FontWeight.w700, color: p.textMute),
         ),
       ]);
     });
@@ -343,9 +343,9 @@ class _ChartPainter extends CustomPainter {
       ChartMetric.dps => p.metricDps,
     };
     final sub =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: p.textMute);
+        TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: p.textMute);
     final bold =
-        TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: p.text);
+        TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: p.text);
 
     // 各区画の点と、縦軸の範囲を決める値
     final pts = <List<(double, double?)>>[];
@@ -571,9 +571,7 @@ class _ChartPainter extends CustomPainter {
             label,
             Offset(bx + bw / 2, 8.5),
             const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: Colors.white),
+                fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
             align: TextAlign.center);
       }
     }

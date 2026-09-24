@@ -1,6 +1,8 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../config/alert_presentation_config.dart';
+import '../config/risk_evaluator_config.dart' as risk_config;
 import '../config/warning_audio_config.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
@@ -10,8 +12,23 @@ import '../theme/hazard_palette.dart';
 /// チーム参加後にいきなり地図が出るため、赤い区域が何を意味するのか、
 /// 連続音と断続音がどう違うのかを学ぶ場所がどこにも無かった。ここは
 /// 表示の意味を説明するだけで、設定は何も変えない。
+///
+/// 警告の段階の秒数は、呼び出し側から「いま効いている値」を受け取る。
+/// 本警告・予告の時間は設定画面とチーム共有で変わるため、文言へ秒数を
+/// 直書きすると、実際の鳴り方と違う説明になる(過去に「約7秒」「約10秒」と
+/// 書かれたまま、実際は10秒・13秒になっていた)。
 class UsageGuideScreen extends StatefulWidget {
-  const UsageGuideScreen({super.key});
+  const UsageGuideScreen({
+    super.key,
+    this.primaryWarningLeadSeconds = risk_config.primaryWarningLeadSeconds,
+    this.advanceWarningLeadSeconds = risk_config.advanceWarningLeadSeconds,
+  });
+
+  /// 連続音へ上がる残り時間(秒)。
+  final double primaryWarningLeadSeconds;
+
+  /// 断続音で予告を始める残り時間(秒)。予測地平と同じ値。
+  final double advanceWarningLeadSeconds;
 
   @override
   State<UsageGuideScreen> createState() => _UsageGuideScreenState();
@@ -46,6 +63,17 @@ class _UsageGuideScreenState extends State<UsageGuideScreen> {
     }
   }
 
+  static final double _intermittentIntervalSeconds =
+      const AlertPresentationConfig()
+              .intermittentRepeatInterval
+              .inMilliseconds /
+          1000;
+
+  /// 10.0 → "10"、8.5 → "8.5"。設定は0.5秒刻みなので小数1桁で足りる。
+  static String _seconds(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -66,14 +94,18 @@ class _UsageGuideScreenState extends State<UsageGuideScreen> {
                   color: colors.danger,
                   border: 3,
                   title: '連続音',
-                  body: '約7秒以内に届きます。太い枠が明滅します。すぐ確認してください。',
+                  body:
+                      'あと${_seconds(widget.primaryWarningLeadSeconds)}秒以内に届きます。'
+                      '太い枠が明滅します。すぐ確認してください。',
                 ),
                 SizedBox(height: dimens.space2),
                 _UrgencyRow(
                   color: colors.danger,
                   border: 2,
-                  title: '断続音（3秒ごと）',
-                  body: '約10秒以内に届きます。濃い色で表示します。',
+                  title: '断続音（${_seconds(_intermittentIntervalSeconds)}秒ごと）',
+                  body: 'あと${_seconds(widget.primaryWarningLeadSeconds)}〜'
+                      '${_seconds(widget.advanceWarningLeadSeconds)}秒で届きます。'
+                      '濃い色で表示します。',
                 ),
                 SizedBox(height: dimens.space2),
                 _UrgencyRow(
