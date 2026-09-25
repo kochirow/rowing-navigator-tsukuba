@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v1</title>
+<title>画面刷新 試作 v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -143,39 +143,62 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .row .t span{display:block;font-size:13px;color:var(--sub);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .row .chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(-45deg);flex:none;margin-right:4px}
 
-/* ---------- ② 航行中 ---------- */
-.badges{position:absolute;top:52px;left:12px;right:12px;z-index:6;display:flex;gap:6px;flex-wrap:wrap}
-.bdg{height:30px;border-radius:15px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;background:color-mix(in srgb,var(--s1) 86%,var(--warn));border:1.5px solid var(--warn);color:var(--tx)}
-.bdg i{width:16px;height:16px;border-radius:8px;background:var(--warn);color:#1a0d00;font-style:normal;font-size:11px;font-weight:900;display:grid;place-items:center}
-.inst{position:absolute;left:10px;right:10px;z-index:7;border-radius:24px;padding:10px;background:var(--s1);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.28);transition:top .2s}
-.inst .g{display:grid;grid-template-columns:1.9fr 1fr;gap:8px}
-.inst .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-.m{background:var(--s2);border-radius:16px;padding:8px 12px 10px;position:relative;overflow:hidden;min-width:0}
+/* ---------- ② 航行中 ----------
+   航行中はアプリのテーマ設定によらず「夜の配色」に固定する。
+   画面を常時点灯するので、OLEDでは黒い画素ほど電池を使わない。
+   計器の数字だけは白で最大のコントラストにする。 */
+#s-nav{
+--bg:#000;--s1:#000;--s2:#0c1116;--s3:#1a2129;--line:#1f2831;
+--tx:#ffffff;--sub:#9aa6b3;--mute:#6b7682;
+--acc:#35d6c8;--acc-ink:#04221f;
+--danger:#ff5252;--warn:#ffa04d;
+--m-pace:#35d6c8;--m-spm:#6ea8ff;
+--glass:rgba(0,0,0,.72);--glass-line:rgba(255,255,255,.14);
+background:#000;color:#fff}
+#s-nav .sb{color:#fff}
+.badges{position:absolute;top:50px;right:12px;z-index:6;display:flex;gap:6px}
+.bdg{height:34px;min-width:34px;border-radius:17px;padding:0 10px 0 7px;display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:800;background:#000;border:2px solid var(--warn);color:var(--warn)}
+.bdg svg{width:20px;height:20px}
+.inst{position:absolute;left:8px;right:8px;top:50px;z-index:7;border-radius:22px;padding:8px;background:#000;border:1px solid var(--line)}
+.inst .g{display:grid;grid-template-columns:1.75fr 1fr;gap:6px}
+.inst .g2{display:grid;grid-template-columns:1.75fr 1fr;gap:6px;margin-top:6px}
+.m{background:var(--s2);border-radius:16px;padding:6px 12px 8px;position:relative;overflow:hidden;min-width:0}
 .m.acc:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:var(--c)}
-.m .v{font-weight:800;line-height:1;white-space:nowrap}
-.m .k{font-size:13px;font-weight:800;color:var(--sub);margin-top:4px;white-space:nowrap}
-.m.pace .v{font-size:76px;letter-spacing:-.03em}
-.m.spm .v{font-size:52px}
-.m.sm .v{font-size:36px}
-.m.sm{display:flex;align-items:baseline;gap:8px}
-.m.sm .k{margin:0}
+.m .v{font-weight:800;line-height:1;white-space:nowrap;color:#fff}
+.m .k{font-size:13px;font-weight:800;color:var(--sub);margin-top:3px;white-space:nowrap}
+.m.pace .v{font-size:74px;letter-spacing:-.03em}
+.m.spm .v{font-size:56px}
 .m .v.wait{color:var(--mute);font-weight:600}
-.inst.de .m.pace .v{font-size:44px}
-.inst.de .m.spm{display:none}
-.inst.de .g{grid-template-columns:1fr}
-.inst.de .m.sm .v{font-size:26px}
-.banner{position:absolute;left:10px;right:10px;z-index:9;border-radius:20px;padding:12px 16px;display:none;align-items:center;gap:14px;color:#fff}
-.banner.show{display:flex}
-.banner .who{font-size:34px;font-weight:900;line-height:1}
-.banner .when{font-size:22px;font-weight:800;margin-left:auto;text-align:right;line-height:1.1}
-.banner .when small{display:block;font-size:13px;font-weight:700;opacity:.9}
-.banner.imminent{background:#c62828;border:4px solid #fff;animation:pulse 1s infinite}
-.banner.action{background:#8e1b1b;border:2px solid rgba(255,255,255,.55)}
-[data-theme=light] .banner.action{background:#b71c1c}
-@keyframes pulse{50%{border-color:rgba(255,255,255,.25)}}
+/* 時間: 漕いでいる時間を大きく、経過(練習)時間を小さく同じ枠に。 */
+.m.time{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.m.time .main .v{font-size:44px}
+.m.time .main .k{margin-top:2px}
+.m.time .sub2{text-align:right;padding-bottom:1px}
+.m.time .sub2 .v{font-size:24px;color:#c9d2dc}
+.m.time .sub2 .k{font-size:12px}
+.m.dist .v{font-size:36px}
+.m.dist{display:flex;flex-direction:column;justify-content:flex-end}
+/* 警告は小さく。読ませず、色・点滅・位置・数字で伝える。 */
+.warnchip{position:absolute;z-index:9;top:300px;display:none;align-items:center;gap:8px;height:64px;padding:0 14px;border-radius:32px;background:#000;border:3px solid var(--danger);color:#fff}
+.warnchip.show{display:flex}
+.warnchip.right{right:10px}
+.warnchip.left{left:10px;flex-direction:row-reverse}
+.warnchip svg.pic{width:34px;height:34px}
+.warnchip svg.dir{width:22px;height:22px}
+.warnchip b{font-size:32px;font-weight:900;line-height:1;font-family:Inter,sans-serif}
+.warnchip.imminent{background:var(--danger);border-color:#fff;color:#fff;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{background:#7a0f0f}}
+.edge{position:absolute;inset:0;z-index:8;pointer-events:none;display:none}
+.edge.show{display:block}
+.edge.right{background:linear-gradient(270deg,rgba(255,40,40,.55),rgba(255,40,40,0) 22%)}
+.edge.left{background:linear-gradient(90deg,rgba(255,40,40,.55),rgba(255,40,40,0) 22%)}
+.edge.pulse{animation:edgep 1s infinite}
+@keyframes edgep{50%{opacity:.25}}
 .navbottom{position:absolute;left:0;right:0;bottom:28px;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:0 12px}
 .navbottom .rightcol{position:static;margin-left:auto}
 .endbtn{position:absolute;left:50%;transform:translateX(-50%);bottom:0}
+#s-nav .mcb button{background:#000;border-color:var(--line)}
+#s-nav .mcb span{background:rgba(0,0,0,.8)}
 
 /* ---------- ③ 記録一覧 ---------- */
 .seg{display:flex;background:var(--s2);border-radius:14px;padding:3px;gap:2px}
@@ -214,6 +237,60 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .shorts[open] summary:after{transform:rotate(-135deg)}
 .srow{display:flex;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--line);font-size:14px;font-weight:700}
 .srow span{color:var(--sub)}
+
+/* ---------- ⑤ 記録画面(リプレイ)の視線の順番 ----------
+   上から「答え(数字) → どこを見るか(区間) → いつ・どこで(地図・時間軸) → 詳しく」。
+   1つの帯に焦点は1つ。ペースの色は地図だけに使う。 */
+.rtop{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px}
+.rtop .t{flex:1;min-width:0}
+.rtop .t b{display:block;font-size:17px;font-weight:800}
+.rtop .t span{display:block;font-size:13px;color:var(--sub);font-weight:700;margin-top:1px}
+.icb{width:48px;height:48px;border-radius:24px;border:0;background:transparent;display:grid;place-items:center;color:var(--tx)}
+.icb svg{width:22px;height:22px}
+.hero{padding:6px 16px 4px;position:relative}
+.crumbs{font-size:13px;font-weight:800;color:var(--sub);display:flex;gap:6px;align-items:center;min-height:20px}
+.crumbs a{color:var(--acc);cursor:pointer}
+.heroN{display:flex;align-items:flex-end;gap:16px;margin-top:4px}
+.heroN .p b{display:block;font-size:60px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.heroN .p span{font-size:14px;color:var(--sub);font-weight:700}
+.heroN .s{padding-bottom:4px}
+.heroN .s b{display:block;font-size:28px;font-weight:800;line-height:1}
+.heroN .s span{display:block;font-size:12px;color:var(--sub);font-weight:700;margin-top:3px}
+.heroN .s + .s{margin-left:-2px}
+.meta{font-size:14px;color:var(--sub);font-weight:700;margin-top:8px}
+.meta b{color:var(--tx)}
+.sets{display:flex;gap:8px;overflow-x:auto;padding:14px 16px 12px;scrollbar-width:none}
+.sets::-webkit-scrollbar{display:none}
+.setc{flex:none;height:48px;border-radius:24px;border:1px solid var(--line);background:var(--s1);padding:0 14px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--sub)}
+.setc b{color:var(--tx);font-family:Inter,sans-serif}
+.setc i{font-style:normal;font-size:11px;font-weight:800;color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);border-radius:6px;padding:1px 5px}
+.setc.on{background:var(--acc-soft);border-color:var(--acc);color:var(--tx)}
+.stick{position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:6px}
+.rmap{position:relative;height:230px;margin:0 12px;border-radius:20px;overflow:hidden;border:1px solid var(--line)}
+.rmap svg{width:100%;height:100%;display:block}
+.rmap .tools{position:absolute;right:8px;top:8px;display:flex;gap:6px}
+.rmap .tools button{width:40px;height:40px;border-radius:20px;border:1px solid var(--glass-line);background:var(--glass);display:grid;place-items:center;color:var(--tx)}
+.rmap .tools svg{width:20px;height:20px}
+.rmap .lg{position:absolute;left:8px;top:8px;font-size:12px;font-weight:700;color:var(--sub);display:flex;align-items:center;gap:6px;background:var(--glass);border-radius:10px;padding:4px 8px}
+.rmap .lg i{display:block;width:44px;height:5px;border-radius:3px;background:linear-gradient(90deg,#4f7cff,#35d6c8,#b6f25a,#ffd84d,#ff6b4a)}
+.nowpill{position:absolute;left:8px;bottom:8px;display:none;gap:10px;align-items:baseline;background:var(--glass);border:1px solid var(--glass-line);border-radius:14px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--sub)}
+.nowpill.show{display:flex}
+.nowpill b{font-size:17px;color:var(--tx);font-family:Inter,sans-serif}
+.play2{display:flex;align-items:center;gap:10px;padding:10px 12px 0}
+.play2 .pb{width:44px;height:44px;border-radius:22px;border:0;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;flex:none}
+.play2 .pb svg{width:16px;height:16px}
+.play2 .tl{flex:1;min-width:0}
+.play2 .tl svg{width:100%;height:46px;display:block}
+.play2 .sp{height:36px;min-width:52px;border-radius:18px;border:1px solid var(--line);background:var(--s2);font:800 13px Inter,sans-serif;flex:none}
+.rsec{margin:16px 12px 0}
+.rsec h3{font-size:13px;font-weight:800;color:var(--sub);letter-spacing:.06em;margin:0 4px 8px}
+.chips{display:flex;gap:6px;margin-bottom:10px}
+.chips button{height:36px;border-radius:18px;border:1px solid var(--line);background:transparent;padding:0 14px;font-size:13px;font-weight:800;color:var(--sub)}
+.chips button.on{background:var(--s3);color:var(--tx);border-color:var(--s3)}
+.rrow{display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:0 4px;border-top:1px solid var(--line);font-size:15px;font-weight:800}
+.rrow span{color:var(--sub);font-weight:700;font-size:14px}
+.gaze{position:absolute;z-index:4;width:30px;height:30px;border-radius:15px;background:#ff6b4a;color:#fff;font:900 16px Inter,sans-serif;display:none;place-items:center;box-shadow:0 0 0 3px rgba(255,107,74,.35)}
+.showgaze .gaze{display:grid}
 
 /* ---------- ④ 警告の設定 ---------- */
 .intro{font-size:14px;color:var(--sub);line-height:1.6;margin:0 16px 12px;font-weight:600}
@@ -258,12 +335,13 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v1</h1>
+  <h1>画面刷新 試作 v2</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
     <button data-s="list">③ 記録一覧</button>
     <button data-s="warn">④ 警告の設定</button>
+    <button data-s="rec">⑤ 記録画面</button>
   </div>
   <div class="tgl" id="theme">
     <button data-t="dark" class="on">暗色</button>
@@ -323,19 +401,23 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   <!-- ================= ② 航行中 ================= -->
   <section class="screen" id="s-nav">
     <div class="map" id="map-nav"></div>
-    <div class="sb onmap"><span class="num">6:14</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
-    <div class="badges" id="badges"></div>
-    <div class="banner" id="banner"><span class="who">他艇</span><span class="when" id="bannerWhen"></span></div>
+    <div class="sb"><span class="num">6:14</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="edge" id="edge"></div>
     <div class="inst" id="inst">
       <div class="g">
         <div class="m pace acc" style="--c:var(--m-pace)"><div class="v num" id="vPace">1:58</div><div class="k" id="kPace">/500m</div></div>
-        <div class="m spm acc" style="--c:var(--m-spm)"><div class="v num" id="vSpm">32</div><div class="k">レート spm</div></div>
+        <div class="m spm acc" style="--c:var(--m-spm)"><div class="v num" id="vSpm">32</div><div class="k">spm</div></div>
       </div>
       <div class="g2">
-        <div class="m sm"><div class="v num" id="vTime">12:34</div><div class="k">経過</div></div>
-        <div class="m sm"><div class="v num" id="vDist">2,480</div><div class="k">m</div></div>
+        <div class="m time">
+          <div class="main"><div class="v num" id="vRow">28:40</div><div class="k">漕ぎ</div></div>
+          <div class="sub2"><div class="v num" id="vTime">41:12</div><div class="k">全体</div></div>
+        </div>
+        <div class="m dist"><div class="v num" id="vDist">6,480</div><div class="k">m</div></div>
       </div>
     </div>
+    <div class="badges" id="badges"></div>
+    <div class="warnchip" id="warnchip"></div>
     <div class="navbottom">
       <button class="btn danger-o endbtn" data-toast="確認ダイアログ「航行を終了しますか?」"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><rect x="8.5" y="8.5" width="7" height="7" rx="1" fill="currentColor" stroke="none"/></svg>航行終了</button>
       <div class="rightcol">
@@ -362,6 +444,55 @@ button{font-family:inherit;color:inherit;cursor:pointer}
       <div class="lhead"><b>記録一覧</b><span id="listCount"></span></div>
       <div id="records"></div>
       <div style="height:30px"></div>
+    </div>
+  </section>
+
+  <!-- ================= ⑤ 記録画面 ================= -->
+  <section class="screen" id="s-rec">
+    <div class="sb"><span class="num">21:45</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="rtop">
+      <button class="icb" data-go="list" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="t"><b>8月6日(木) 07:06</b><span>8+ ・ 7番</span></div>
+      <button class="icb" aria-label="共有" data-toast="共有(GPX・CSV・画像)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6h14v-6"/></svg></button>
+    </div>
+    <div class="scroll" id="recScroll" style="position:relative">
+      <div class="hero">
+        <span class="gaze" style="right:16px;top:4px">1</span>
+        <div class="crumbs" id="crumbs"></div>
+        <div class="heroN" id="heroN"></div>
+        <div class="meta" id="meta"></div>
+      </div>
+      <div style="position:relative">
+        <span class="gaze" style="right:16px;top:-6px">2</span>
+        <div class="sets" id="sets"></div>
+      </div>
+      <div class="stick">
+        <span class="gaze" style="right:24px;top:10px;z-index:9">3</span>
+        <div class="rmap" id="rmap"></div>
+        <div class="play2">
+          <button class="pb" id="recPlay" aria-label="再生"></button>
+          <div class="tl" id="rtl"></div>
+          <button class="sp" id="recSpeed">×30</button>
+        </div>
+      </div>
+      <div class="rsec" style="position:relative">
+        <span class="gaze" style="right:4px;top:-4px">4</span>
+        <h3 id="chartTitle">推移</h3>
+        <div class="card" style="padding:12px">
+          <div class="chips" id="rchips"></div>
+          <svg viewBox="0 0 340 150" style="width:100%;display:block" id="rchart"></svg>
+        </div>
+      </div>
+      <div class="rsec">
+        <h3>くわしく</h3>
+        <div class="card" style="padding:4px 12px">
+          <div class="rrow" style="border-top:0">250mごとの表<span>›</span></div>
+          <div class="rrow">この日の最速 500m・1000m<span>1:52 ›</span></div>
+          <div class="rrow">除外した時間(停止・回頭)<span>18:40 ›</span></div>
+          <div class="rrow">警告の振り返り<span>3件 ›</span></div>
+        </div>
+      </div>
+      <div style="height:40px"></div>
     </div>
   </section>
 
@@ -469,8 +600,39 @@ function riverMap({ rotate = 0, nav = false } = {}) {
     ${boats}
   </svg>`;
 }
+/* ---------------- 航行中の地図(夜の配色) ----------------
+   Google Maps のスタイルJSONで実現できる範囲に限る:
+   陸=ほぼ黒、道路・建物・文字・POIは非表示、水面だけ青を残す。
+   進行方向は画面の下(地図は進行方位+180度で回す。rowingMapBearing)。
+   自艇は画面上端から45%(navigationSelfBoatScreenRatio)。 */
+function homePlate(len, color, outline, tipDown) {
+  // image2icon.dart と同じ「ホームベース型」: 先端1/3で尖り、船尾はわずかに絞る。
+  const w = len * 0.34, hw = w / 2, sh = len * 0.34, st = hw * 0.78, tip = Math.min(w * 0.16, len * 0.06);
+  const d = `M${-tip},${-len / 2 + tip * 1.2} Q0,${-len / 2} ${tip},${-len / 2 + tip * 1.2} L${hw},${-len / 2 + sh} L${st},${len / 2} L${-st},${len / 2} L${-hw},${-len / 2 + sh} Z`;
+  return `<path d="${d}" fill="${color}" stroke="${outline}" stroke-width="1.5" stroke-linejoin="round" transform="rotate(${tipDown ? 180 : 0})"/>`;
+}
+function navMap(warn) {
+  const cx = 200, selfY = 380, selfX = cx - 26;
+  const otherY = warn === 'imminent' ? 520 : warn === 'action' ? 600 : 700;
+  const otherX = cx + 28;
+  return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
+    <rect width="390" height="844" fill="#07090b"/>
+    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880 L${cx + 86},880 C${cx + 74},560 ${cx + 92},250 ${cx + 80},-20 Z" fill="#1c4d62"/>
+    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880" stroke="rgba(255,82,82,.55)" stroke-width="2" fill="none"/>
+    <path d="M${cx + 80},-20 C${cx + 92},250 ${cx + 74},560 ${cx + 86},880" stroke="rgba(255,82,82,.55)" stroke-width="2" fill="none"/>
+    <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="#ffffff" stroke-width="2" stroke-dasharray="10 9" fill="none" opacity=".85"/>
+    <rect x="${cx - 100}" y="552" width="200" height="22" fill="rgba(255,160,77,.28)" stroke="#ffa04d" stroke-width="2"/>
+    <rect x="${cx - 12}" y="556" width="10" height="14" fill="rgba(255,82,82,.7)"/>
+    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="rgba(255,82,82,.6)" stroke="#ff5252" stroke-width="1.5"/>
+    <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="#ff5252" stroke-width="2"/>
+    <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="#ffcc55" stroke-width="2" stroke-dasharray="4 4"/>
+    <path d="M${otherX},${otherY - 26} L${otherX},${otherY - 110}" stroke="#cfd8dc" stroke-width="2" opacity=".7"/>
+    <g transform="translate(${otherX},${otherY})">${homePlate(46, '#cfd8dc', '#000', false)}</g>
+    <g transform="translate(${selfX},${selfY})">${homePlate(52, '#f44336', '#fff', true)}</g>
+  </svg>`;
+}
 $('#map-home').innerHTML = riverMap();
-$('#map-nav').innerHTML = riverMap({ nav: true });
+
 
 /* ---------------- 画面切替・テーマ ---------------- */
 const state = {
@@ -478,6 +640,7 @@ const state = {
   home: { check: 'ok' },
   nav: { warn: 'none', health: 'ok', fix: 'ok' },
   list: { period: 'month' },
+  rec: { sel: 'all', gaze: 'off', metric: 'pace', cursor: 0, speed: 30 },
 };
 function show(id) {
   state.screen = id;
@@ -494,6 +657,7 @@ $('#theme').onclick = e => {
   $$('#theme button').forEach(x => x.classList.toggle('on', x === b));
   renderAxis();
   renderZones();
+  renderRec();
 };
 document.addEventListener('click', e => {
   const go = e.target.closest('[data-go]');
@@ -513,6 +677,10 @@ const SCENARIOS = {
     { key: 'fix', label: '測位', opts: [['ok', '計測中'], ['wait', '測位待ち']] },
   ],
   list: [], warn: [],
+  rec: [
+    { key: 'gaze', label: '視線の順番', opts: [['off', '隠す'], ['on', '表示']] },
+    { key: 'sel', label: '区間', opts: [['all', '全体'], ['0', '1セット目'], ['2', '3セット目']] },
+  ],
 };
 function renderScenarios() {
   const box = $('#scen');
@@ -555,28 +723,44 @@ $('#menuScrim').onclick = closeMenu;
 $('#startNow').onclick = () => show('nav');
 
 /* ---------------- ② 航行中 ---------------- */
+const PIC = {
+  // 対象の絵。文字で「他艇」と書かず、形で分かるようにする。
+  boat: '<svg class="pic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1.6 2.6 2.4 5.4 2.4 8.6V21H9.6V10.6C9.6 7.4 10.4 4.6 12 2z"/></svg>',
+  bridge: '<svg class="pic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M2 9h20M4 9v11M20 9v11M4 15c3-4 13-4 16 0"/></svg>',
+};
 function renderNav() {
   const n = state.nav;
+  $('#map-nav').innerHTML = navMap(n.warn);
+  // 能力低下は絵+短い語。読ませる文章にしない。
+  const gps = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+  const rx = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/><path d="M3 3l18 18"/></svg>';
   const badges = [];
-  if (n.health === 'gps') badges.push('GPS 弱い ±14m');
-  if (n.health === 'rx') badges.push('他艇受信: 利用不可');
-  $('#badges').innerHTML = badges.map(b => `<span class="bdg"><i>!</i>${b}</span>`).join('');
-  const top = 52 + (badges.length ? 38 : 0);
-  const banner = $('#banner');
-  banner.className = 'banner' + (n.warn === 'none' ? '' : ' show ' + n.warn);
-  banner.style.top = top + 'px';
-  $('#bannerWhen').innerHTML = n.warn === 'imminent' ? '右 5秒<small>連続音</small>' : '右 11秒<small>断続音</small>';
-  const inst = $('#inst');
-  inst.classList.toggle('de', n.warn === 'imminent');
-  inst.style.top = (top + (n.warn === 'none' ? 0 : 78)) + 'px';
+  if (n.health === 'gps') badges.push(`<span class="bdg" title="GPS 弱い ±14m">${gps}±14m</span>`);
+  if (n.health === 'rx') badges.push(`<span class="bdg" title="他艇受信: 利用不可">${rx}</span>`);
+  $('#badges').innerHTML = badges.join('');
+  $('#badges').style.top = '300px';
+  // 警告: 脅威のいる側の端に小さく。本警告は塗り+点滅+画面端の赤い光。
+  const side = 'right';
+  const chip = $('#warnchip');
+  if (n.warn === 'none') {
+    chip.className = 'warnchip';
+  } else {
+    const secs = n.warn === 'imminent' ? 5 : 11;
+    chip.className = `warnchip show ${side} ${n.warn}`;
+    chip.innerHTML = `${PIC.boat}<b>${secs}</b><svg class="dir" viewBox="0 0 24 24" fill="currentColor"><path d="${side === 'right' ? 'M8 4l10 8-10 8z' : 'M16 4L6 12l10 8z'}"/></svg>`;
+    chip.style.top = (n.warn === 'imminent' ? 430 : 470) + 'px';
+  }
+  const edge = $('#edge');
+  edge.className = 'edge' + (n.warn === 'imminent' ? ` show ${side} pulse` : '');
   const wait = n.fix === 'wait';
   $('#vPace').textContent = wait ? '—:—' : '1:58';
   $('#vPace').classList.toggle('wait', wait);
   $('#kPace').textContent = wait ? '測位待ち' : '/500m';
   $('#vSpm').textContent = wait ? '—' : '32';
   $('#vSpm').classList.toggle('wait', wait);
-  $('#vTime').textContent = wait ? '0:07' : '12:34';
-  $('#vDist').textContent = wait ? '0' : '2,480';
+  $('#vRow').textContent = wait ? '0:00' : '28:40';
+  $('#vTime').textContent = wait ? '0:07' : '41:12';
+  $('#vDist').textContent = wait ? '0' : '6,480';
 }
 
 /* ---------------- ③ 記録一覧 ---------------- */
@@ -630,7 +814,7 @@ function renderList() {
       const inM = RECS.filter(x => x.m === month);
       html += `<div class="month"><span>${month}</span><span class="num">${inM.length}本 ・ ${inM.reduce((a, b) => a + b.km, 0).toFixed(1)} km</span></div>`;
     }
-    html += `<div class="rec" data-toast="記録画面(リプレイ)を開く">
+    html += `<div class="rec" data-go="rec">
       <div class="th">${thumb(r.seed)}</div>
       <div class="b">
         <div class="top"><b class="num">${r.d}</b><span class="boat">${r.boat}</span></div>
@@ -645,6 +829,148 @@ function renderList() {
   $('#records').innerHTML = html;
 }
 $('#period').onclick = e => { const b = e.target.closest('button'); if (b) { state.list.period = b.dataset.p; renderList(); } };
+
+/* ---------------- ⑤ 記録画面 ---------------- */
+const SETS = [
+  { n: '1セット目', k: 'UT', a: 4, b: 9.1, pace: '2:25', spm: 20, dps: 10.3, km: '1.05', t: '5:05' },
+  { n: '2セット目', k: 'UT', a: 13, b: 23.3, pace: '2:26', spm: 20, dps: 10.2, km: '2.11', t: '10:16' },
+  { n: '3セット目', k: 'UT', a: 30, b: 39.9, pace: '2:24', spm: 21, dps: 9.9, km: '2.05', t: '9:52' },
+  { n: '4セット目', k: 'UT', a: 55, b: 60, pace: '2:22', spm: 21, dps: 10.0, km: '1.06', t: '5:01' },
+];
+const TOTAL_MIN = 74.3;
+const RAMP = ['#4f7cff', '#35d6c8', '#b6f25a', '#ffd84d', '#ff6b4a'];
+let recTimer = null;
+function recSel() { return state.rec.sel === 'all' ? null : SETS[+state.rec.sel]; }
+function renderRec() {
+  const r = state.rec, s = recSel();
+  $('#s-rec').classList.toggle('showgaze', r.gaze === 'on');
+  // ① 答え: 選んだ区間の3点セット(ペース・レート・1漕距離)。区間を選ぶと、ここが書き換わる。
+  $('#crumbs').innerHTML = s
+    ? `<a data-rsel="all">全体</a> › <span style="color:var(--tx)">${s.n}</span> <span style="color:var(--acc)">${s.k}</span>`
+    : 'この日の練習';
+  const v = s || { pace: '2:55', spm: 20, dps: 8.6 };
+  $('#heroN').innerHTML = `
+    <div class="p"><b class="num">${v.pace}</b><span>/500m 平均</span></div>
+    <div class="s"><b class="num">${v.spm}</b><span>spm</span></div>
+    <div class="s"><b class="num">${v.dps}</b><span>m/漕</span></div>`;
+  $('#meta').innerHTML = s
+    ? `<b class="num">${s.km} km</b> ・ <b class="num">${s.t}</b> ・ ${Math.floor(s.a)}分〜${Math.floor(s.b)}分`
+    : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ 漕ぎ <b class="num">30:14</b> ・ 4セット`;
+  // ② どこを見るか
+  $('#sets').innerHTML = `<button class="setc ${!s ? 'on' : ''}" data-rsel="all">全体</button>` +
+    SETS.map((x, i) => `<button class="setc ${state.rec.sel == i ? 'on' : ''}" data-rsel="${i}">${i + 1} <i>${x.k}</i> <b>${x.pace}</b></button>`).join('');
+  // ③ 地図と時間軸
+  $('#rmap').innerHTML = recMap(s) + `
+    <div class="lg"><span>遅い</span><i></i><span>速い</span></div>
+    <div class="tools"><button data-toast="表示: 危険区域・航路・写真">${ICON_LAYERS}</button><button data-toast="全体が入るように戻す">${ICON_FIT}</button></div>
+    <div class="nowpill ${r.cursor > 0 ? 'show' : ''}"><b>${fmtMin(r.cursor)}</b>${curVals(r.cursor)}</div>`;
+  $('#rtl').innerHTML = recTimeline(s, r.cursor);
+  $('#recPlay').innerHTML = recTimer
+    ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>';
+  $('#recSpeed').textContent = '×' + r.speed;
+  // ④ くわしく
+  $('#chartTitle').textContent = s ? `${s.n}の推移` : 'この日の推移';
+  const M = [['pace', 'ペース'], ['spm', 'レート'], ['dps', '1漕距離']];
+  $('#rchips').innerHTML = M.map(([k, t]) => `<button class="${r.metric === k ? 'on' : ''}" data-rm="${k}">${t}</button>`).join('');
+  $('#rchart').innerHTML = recChart(r.metric, s);
+}
+const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg>';
+const ICON_FIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+function fmtMin(m) { const s = Math.round(m * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+function curVals(m) {
+  const inSet = SETS.find(x => m >= x.a && m <= x.b);
+  return inSet ? `<span>${inSet.pace}/500m ・ ${inSet.spm}spm</span>` : '<span>休憩・移動</span>';
+}
+function trackPts() {
+  // 湖の沖へ出て、同じ航路を2往復する形(スクショの形に似せる)。
+  const A = [60, 170], B = [350, 55], pts = [];
+  for (let k = 0; k < 4; k++) {
+    const set = SETS[k];
+    for (let i = 0; i <= 30; i++) {
+      const u = k % 2 ? 1 - i / 30 : i / 30;
+      const off = (k % 2 ? 7 : -7) + Math.sin(i * .7 + k) * 1.5;
+      const x = A[0] + (B[0] - A[0]) * u + off * .37, y = A[1] + (B[1] - A[1]) * u + off;
+      const tMin = set.a + (set.b - set.a) * (i / 30);
+      pts.push({ x, y, k, tMin, c: RAMP[Math.min(4, Math.max(0, Math.round(2 + Math.sin(i * .5 + k * 2) * 1.6)))] });
+    }
+  }
+  return pts;
+}
+const TRACK = trackPts();
+function recMap(s) {
+  const land = 'var(--s1)', water = document.documentElement.dataset.theme === 'light' ? '#cfe6ee' : '#10263a';
+  let segs = '';
+  for (let i = 1; i < TRACK.length; i++) {
+    const p = TRACK[i - 1], q = TRACK[i];
+    if (p.k !== q.k) continue;
+    const dim = s && SETS[p.k] !== s;
+    segs += `<line x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${q.y.toFixed(1)}" stroke="${dim ? 'var(--mute)' : q.c}" stroke-opacity="${dim ? .55 : 1}" stroke-width="${dim ? 3 : 5}" stroke-linecap="round"/>`;
+  }
+  const cur = TRACK.reduce((best, p) => Math.abs(p.tMin - state.rec.cursor) < Math.abs(best.tMin - state.rec.cursor) ? p : best, TRACK[0]);
+  return `<svg viewBox="0 0 366 230" preserveAspectRatio="xMidYMid slice">
+    <rect width="366" height="230" fill="${land}"/>
+    <path d="M0,120 C80,90 200,20 366,-10 L366,230 L0,230 Z" fill="${water}"/>
+    <path d="M20,250 C40,210 30,190 60,172" stroke="var(--s3)" stroke-width="3" fill="none" stroke-dasharray="2 5"/>
+    <path d="M30,190 L366,40" stroke="var(--sub)" stroke-width="1.5" stroke-dasharray="6 6" opacity=".6"/>
+    ${segs}
+    <circle cx="60" cy="172" r="6" fill="#fff" stroke="var(--bg)" stroke-width="2"/>
+    ${state.rec.cursor > 0 ? `<circle cx="${cur.x}" cy="${cur.y}" r="8" fill="#ff6b4a" stroke="#fff" stroke-width="2.5"/>` : ''}
+  </svg>`;
+}
+function recTimeline(s, cursor) {
+  const W = 260, x = m => (m / TOTAL_MIN) * W;
+  let bars = '';
+  // 休憩・移動は細い灰色。漕いだセットは太い灰色、選んだ区間だけティール。ペースの色は使わない。
+  bars += `<rect x="0" y="17" width="${W}" height="4" rx="2" fill="var(--s3)"/>`;
+  SETS.forEach(t => {
+    const on = !s || s === t;
+    bars += `<rect x="${x(t.a)}" y="8" width="${x(t.b) - x(t.a)}" height="22" rx="5" fill="${s === t ? 'var(--acc)' : 'var(--mute)'}" opacity="${on ? 1 : .45}" data-rsel="${SETS.indexOf(t)}" style="cursor:pointer"/>`;
+  });
+  const ticks = [0, 20, 40, 60].map(m => `<text x="${x(m)}" y="45" font-size="12" font-weight="700" fill="var(--mute)" text-anchor="${m ? 'middle' : 'start'}">${m}分</text>`).join('');
+  const cur = cursor > 0 ? `<rect x="${x(cursor) - 1.5}" y="2" width="3" height="34" rx="1.5" fill="#ff6b4a"/>` : '';
+  return `<svg viewBox="0 0 ${W} 48">${bars}${ticks}${cur}</svg>`;
+}
+function recChart(metric, s) {
+  const color = { pace: 'var(--m-pace)', spm: 'var(--m-spm)', dps: 'var(--m-dps)' }[metric];
+  const lo = s ? s.a : 0, hi = s ? s.b : TOTAL_MIN;
+  let d = '', first = true;
+  for (let i = 0; i <= 120; i++) {
+    const m = lo + (hi - lo) * i / 120;
+    const inSet = SETS.some(t => m >= t.a && m <= t.b);
+    if (!inSet) { first = true; continue; }
+    const y = 70 + Math.sin(i * .35) * 16 + Math.sin(i * 1.3) * 6 + (metric === 'spm' ? -10 : 0);
+    d += (first ? 'M' : 'L') + (30 + 305 * i / 120).toFixed(1) + ',' + y.toFixed(1);
+    first = false;
+  }
+  return `<line x1="30" y1="20" x2="335" y2="20" stroke="var(--line)"/><line x1="30" y1="70" x2="335" y2="70" stroke="var(--line)"/><line x1="30" y1="120" x2="335" y2="120" stroke="var(--line)"/>
+    <text x="0" y="24" font-size="12" font-weight="700" fill="var(--mute)">${metric === 'pace' ? '2:10' : metric === 'spm' ? '24' : '11m'}</text>
+    <text x="0" y="124" font-size="12" font-weight="700" fill="var(--mute)">${metric === 'pace' ? '2:40' : metric === 'spm' ? '16' : '8m'}</text>
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>
+    <text x="30" y="145" font-size="12" font-weight="700" fill="var(--mute)">${fmtMin(lo)}</text>
+    <text x="335" y="145" font-size="12" font-weight="700" fill="var(--mute)" text-anchor="end">${fmtMin(hi)}</text>`;
+}
+$('#s-rec').addEventListener('click', e => {
+  const sel = e.target.closest('[data-rsel]');
+  if (sel) { state.rec.sel = sel.dataset.rsel; if (state.rec.sel !== 'all') state.rec.cursor = SETS[+state.rec.sel].a; renderScenarios(); renderRec(); return; }
+  const m = e.target.closest('[data-rm]');
+  if (m) { state.rec.metric = m.dataset.rm; renderRec(); }
+});
+$('#recPlay').onclick = () => {
+  if (recTimer) { clearInterval(recTimer); recTimer = null; renderRec(); return; }
+  recTimer = setInterval(() => {
+    state.rec.cursor += state.rec.speed / 60 / 5;
+    const s = recSel(), end = s ? s.b : TOTAL_MIN;
+    if (state.rec.cursor >= end) { state.rec.cursor = end; clearInterval(recTimer); recTimer = null; }
+    renderRec();
+  }, 200);
+  renderRec();
+};
+$('#recSpeed').onclick = () => {
+  const S = [10, 30, 60, 100, 200];
+  state.rec.speed = S[(S.indexOf(state.rec.speed) + 1) % S.length];
+  renderRec();
+};
 
 /* ---------------- ④ 警告の設定 ---------------- */
 const STOP = [['2x', 6.60], ['4x', 6.68], ['1x', 6.95], ['8+', 8.15]];
@@ -847,15 +1173,29 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中',
+    h: '② 航行中(v2)',
     li: [
-      ['状態バッジに中身を書く', '「⚠GPS」だけでは何が起きているか分からなかった。「GPS 弱い ±14m」「他艇受信: 利用不可」のように、状態まで書く。'],
-      ['測位前は控えめな「—:—」', '巨大な横棒の「--:--」が画面でいちばん目立っていた。薄い色にして「測位待ち」と書く。'],
-      ['指標の色を記録画面とそろえる', 'ペース=ティール、レート=青。漕いでいるときに見た色が、振り返りのグラフと同じ色になる。'],
-      ['レートの色を橙→青へ(記録画面も)', '橙は「予告(断続音)」の色。同じ画面に橙の指標があると、警告と見分けにくい。赤・橙・黄は危険の段階だけに使う。'],
-      ['「航行終了」は不透明の面+赤い文字と枠', 'P0で修正済み。赤い面は警告バナーだけのものにする。'],
+      ['航行中だけ「夜の配色」に固定', '画面を常時点灯する。OLED(iPhone X以降の多く)は黒い画素ほど電池を使わず、明るさ100%で表示の電力が39〜47%減る(Purdue大 2021)。屋外は自動調光で明るさが上がるので効く。液晶のiPhone(SE・XR・11)では効かない。'],
+      ['計器の数字だけは白', '背景は純黒、数字は白で最大のコントラスト。ラベルは灰色の短い1語。'],
+      ['地図も暗く、水面と危険区域だけ残す', 'Google Maps のスタイルJSONで、陸を黒、道路・建物・文字・店を非表示、水面だけ青。できる範囲の変更で、描画する要素が減るぶん見やすくもなる。他艇は暗い地図で沈まないよう明るい灰色に変える。'],
+      ['時間は「漕ぎ」を大きく、「全体」を小さく同じ枠に', '漕いでいる時間(停止・休憩を除く)を主に、練習の経過時間を右下に。枠を増やさないので、ペース・レート・距離を圧迫しない。'],
+      ['警告は小さく、読ませない', '警告は音で聞かせるもの。画面は脅威のいる側の端に、対象の絵・残り秒数・向きの矢印だけ。本警告は赤く点滅し、画面の端が赤く光る(視野の端でも気づける)。予告は赤い枠だけ。「連続音」「断続音」の文字は出さない。'],
+      ['能力低下は絵+数字', '「GPS 弱い」と書かず、GPSの絵と ±14m。受信不可は電波の絵に斜線。'],
+      ['艇の印は今のものをそのまま', 'ホームベース型(先端1/3で尖る・幅は長さの0.34以上・36〜56pt)。地図は進行方位+180度で回すので、先端は画面の下を向く。自艇は上から45%の位置。'],
     ],
-    ask: '記録画面のレート(SR)の色を、いまの橙から青に変えてよいか。',
+    ask: '本警告の「画面の端が赤く光る」は、端末を艇に固定した状態で邪魔にならないか。',
+  },
+  rec: {
+    h: '⑤ 記録画面(視線の順番)',
+    li: [
+      ['答えを一番上に', '「この日どうだったか」(ペース・レート・1漕距離)が地図・再生・セットの下にあり、最後に目に入っていた。報道の「逆ピラミッド」と同じく、結論から先に置く。'],
+      ['上から 数字 → 区間 → 地図・時間軸 → くわしく', '「視線の順番:表示」で番号が出る。1つの帯に焦点は1つ。区間を選ぶと、すぐ上の数字が書き換わる(原因と結果が隣り合う)。'],
+      ['ペースの色は地図だけ', '地図と時間軸の両方が虹色で、目が2か所に引っ張られていた。時間軸は灰色にし、選んだ区間だけティール。'],
+      ['操作は1つずつに畳む', '倍速5つ→「×30」1つ(押すと切り替わる)。地図のボタン4つ→「表示」と「全体」の2つ。'],
+      ['「--」の4枠をやめる', '再生していないと中身が「--」の枠が4つ並んでいた。再生位置の値は、動かしたときだけ地図の左下に出す。'],
+      ['地図と時間軸は下へスクロールしても上に残す', '数字が画面外へ出ても、どこ・いつを見ているかは残る(現行の設計を維持)。'],
+    ],
+    ask: '時間軸からペースの色を外してよいか(地図には残す)。',
   },
   list: {
     h: '③ 記録一覧',
@@ -883,7 +1223,7 @@ function renderNotes() {
     (n.ask ? `<div class="ask"><b>決めてほしいこと</b><br>${n.ask}</div>` : '');
 }
 
-function renderAll() { renderHome(); renderNav(); renderList(); renderAxis(); renderZones(); }
+function renderAll() { renderHome(); renderNav(); renderList(); renderAxis(); renderZones(); renderRec(); }
 renderAll();
 show('home');
 </script>
