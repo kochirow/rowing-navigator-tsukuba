@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v3</title>
+<title>画面刷新 試作 v4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -333,7 +333,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v3</h1>
+  <h1>画面刷新 試作 v4</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -611,6 +611,15 @@ function along(angle, dist) {
   const rad = angle * Math.PI / 180;
   return { x: SELF.x + Math.sin(rad) * dist, y: SELF.y - Math.cos(rad) * dist };
 }
+// チップの中心を置ける範囲(チップの半分だけ内側)。上は計器カードの下、下は画面の下端。
+const EDGE = { left: 62, right: 390 - 62, top: 336, bottom: 844 - 48 };
+function edgePoint(angle) {
+  const rad = angle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
+  const tx = dx > 0 ? (EDGE.right - SELF.x) / dx : dx < 0 ? (EDGE.left - SELF.x) / dx : Infinity;
+  const ty = dy > 0 ? (EDGE.bottom - SELF.y) / dy : dy < 0 ? (EDGE.top - SELF.y) / dy : Infinity;
+  const t = Math.min(tx, ty);
+  return { x: SELF.x + dx * t, y: SELF.y + dy * t };
+}
 function navMap(warn, dir) {
   const cx = 200, selfY = SELF.y, selfX = SELF.x;
   const ang = DIRS[dir][1] ?? 150;
@@ -750,9 +759,9 @@ function renderNav() {
     edge.className = 'edge';
   } else {
     const secs = n.warn === 'imminent' ? 5 : 11;
-    const pos = ang == null ? { x: 300, y: 336 } : along(ang, 100);
-    pos.x = Math.max(70, Math.min(320, pos.x));
-    pos.y = Math.max(328, Math.min(760, pos.y));
+    // 自艇から脅威の方向へ伸ばした線が、画面の端(計器カードの下〜画面の下端)に
+    // ぶつかる所に置く。端に寄るほど向きが一目で分かり、地図の中央も空く。
+    const pos = ang == null ? { x: 300, y: 336 } : edgePoint(ang);
     chip.className = `warnchip show ${n.warn}`;
     chip.style.left = pos.x + 'px';
     chip.style.top = pos.y + 'px';
@@ -1198,11 +1207,11 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v3)',
+    h: '② 航行中(v4)',
     li: [
       ['計器の大きさ = 重要度の順', 'ペース(76) > レート(70) > 距離(46) > 時間(36)。2段目は文字数に応じた幅で、距離を時間より一回り大きく。「長い練習」(12,480m・1:28:40)でもはみ出さない。'],
       ['時間は漕いでいる時間だけ、「chrono」を小さく添える', 'NK SpeedCoach の表記に合わせた。経過時間(全体)は出さない。'],
-      ['警告の向きを「画面の中の位置」で出す', '地図は進行方向が画面の下なので、画面の位置がそのまま漕手の体から見た向きになる(右後ろ=画面の右下)。文字の「右」「後方」は使わない(艇の右と漕手の右が逆になるため。現行バナーが向きを出していない理由と同じ)。矢印も脅威の方へ向ける。本警告はその向きの画面の端だけ赤く光る。'],
+      ['警告は画面の端に、脅威の向きの位置で出す', '自艇から脅威の方向へ伸ばした線が画面の端に当たる所に置く(v4)。地図は進行方向が画面の下なので、画面の位置がそのまま漕手の体から見た向きになる(右後ろ=画面の右下)。文字の「右」「後方」は使わない(艇の右と漕手の右が逆になるため。現行バナーが向きを出していない理由と同じ)。矢印も脅威の方へ向ける。本警告はその向きの画面の端だけ赤く光る。'],
       ['向きが分からないときは出さない', '回頭中など方位が信頼できないとき(不変条件10)は、定位置に矢印なしで置き、画面の縁全体を光らせる。'],
       ['操作は左下にまとめる', 'すれ違う艇は漕手の右後ろ(画面の右下)から来ることが多い。真後ろ(画面の下の中央)は進行方向の見通し。どちらも空ける。'],
       ['航行終了は小さく左下に', '押すのは余裕のあるときなので、大きさより邪魔にならないことを優先。確認ダイアログはそのまま。'],
