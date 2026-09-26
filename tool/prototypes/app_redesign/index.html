@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v13</title>
+<title>画面刷新 試作 v14</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -192,8 +192,8 @@ background:#000;color:#fff}
 .drum .dots i{position:absolute;left:6px;width:4px;height:4px;border-radius:2px;background:#3a4450}
 .drum .dots i.on{background:#fff}
 .m.drumwrap{padding:0}
-.resetb{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);width:34px;height:34px;border-radius:17px;border:1px solid var(--line);background:#000;color:#9aa6b3;display:grid;place-items:center;z-index:2}
-.resetb svg{width:18px;height:18px}
+.resetb{position:absolute;right:14px;bottom:-15px;height:30px;padding:0 12px 0 9px;border-radius:15px;border:1px solid #2a333d;background:#000;color:#9aa6b3;display:flex;align-items:center;gap:5px;z-index:2;font:800 12px Inter,sans-serif;letter-spacing:.08em}
+.resetb svg{width:15px;height:15px}
 /* ---- ワークアウト表示(v13) ----
    ワークアウト中は下半分をワークアウト用に替え、少し大きくする。 */
 .wo{display:none;margin-top:6px}
@@ -212,6 +212,26 @@ background:#000;color:#fff}
 .wo .tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:#9aa6b3}
 .wo .tag b{color:#000;background:#fff;border-radius:6px;padding:1px 6px;font-size:12px}
 .wo .v.paused{color:#6b7682}
+/* ワーク中だけティールを控えめに使う(航行中の画面でほかにティールは使っていない)。 */
+.wo.work .wobig{box-shadow:inset 0 0 0 1.5px rgba(53,214,200,.55);background:#0b1a1c}
+.wo.work .tag b{background:#35d6c8;color:#04221f}
+.wo.work .bar i.now{background:#35d6c8}
+/* レストは満タンから減っていく帯。0 になったら次のワーク。 */
+.drain{height:8px;border-radius:4px;background:#25303b;margin-top:6px;overflow:hidden}
+.drain i{display:block;height:100%;background:#fff;border-radius:4px;transition:width .2s linear}
+.wrow{display:flex;gap:8px;overflow-x:auto;padding:0 12px 4px;scrollbar-width:none;scroll-snap-type:x proximity}
+.wrow::-webkit-scrollbar{display:none}
+.wmenu{flex:none;scroll-snap-align:start;min-width:132px;border-radius:16px;border:1px solid var(--line);background:var(--s1);padding:9px 12px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.wmenu .t{font-size:12px;font-weight:800;color:var(--sub);white-space:nowrap}
+.wmenu b{font-size:17px;font-weight:800;white-space:nowrap}
+.wmenu span:last-child{font-size:12px;font-weight:700;color:var(--sub)}
+.wmenu.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--acc-soft)}
+.setbox{margin-top:12px;border-top:1px solid var(--line)}
+.setbox summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:52px;cursor:pointer;font-size:14px;font-weight:800;color:var(--sub)}
+.setbox summary::-webkit-details-marker{display:none}
+.setbox summary .cur{margin-left:auto;font-weight:700}
+.setbox summary:after{content:"";width:7px;height:7px;border-right:2px solid var(--sub);border-bottom:2px solid var(--sub);transform:rotate(45deg);margin-right:4px}
+.setbox[open] summary:after{transform:rotate(-135deg)}
 .wpre{flex:none;height:44px;border-radius:22px;border:1px solid var(--line);background:var(--s1);padding:0 16px;font-size:14px;font-weight:800;color:var(--tx)}
 .wpre.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--acc-soft)}
 /* 警告は小さく、読ませない。脅威のいる向きを「画面の中の位置」で表す。
@@ -376,7 +396,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v13</h1>
+  <h1>画面刷新 試作 v14</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -454,12 +474,25 @@ background:#000;color:#fff}
         <div class="m drumwrap" style="flex:1 1 0"><div class="drum" id="drumR" data-base="36"></div></div>
       </div>
       <div class="wo" id="wo"></div>
-      <button class="resetb" id="resetb" aria-label="下の計器を0にする(記録は全体を残す)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg></button>
+      <button class="resetb" id="resetb" aria-label="下の計器を0にする(記録は全体を残す)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg>RESET</button>
     </div>
     <div class="badges" id="badges"></div>
     <div class="warnchip" id="warnchip"></div>
+    <div class="sheet-scrim" id="woQuickScrim"></div>
+    <div class="sheet" id="woQuick" style="max-height:62%">
+      <div class="grab"><i></i></div>
+      <div class="scroll" style="padding-bottom:26px">
+        <div id="woQuickNow"></div>
+        <div class="eyebrow" style="margin:6px 16px 8px">登録したメニュー</div>
+        <div class="wrow" id="woQuickFav"></div>
+        <div class="eyebrow" style="margin:14px 16px 8px">過去のメニュー</div>
+        <div class="wrow" id="woQuickHist"></div>
+        <button class="linkrow" style="padding:0 16px;margin-top:10px" data-go="wo"><span>新しく作る・細かく変える</span><i class="chev"></i></button>
+      </div>
+    </div>
     <div class="navleft">
       <div class="mcb" id="followBtn"></div>
+      <div class="mcb"><button aria-label="ワークアウト" id="woBtn" style="color:#c9d3dc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6M19 6l-1.5 1.5"/></svg></button><span>ワークアウト</span></div>
       <div class="mcb"><button aria-label="メニュー" style="color:#c9d3dc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
       <button class="endmini" data-toast="確認ダイアログ「航行を終了しますか?」"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><rect x="8.5" y="8.5" width="7" height="7" rx="1" fill="currentColor" stroke="none"/></svg>終了</button>
     </div>
@@ -547,14 +580,16 @@ background:#000;color:#fff}
     <div class="sb"><span class="num">6:05</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
     <div class="appbar"><button class="back" data-go="home" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>ワークアウト</h2></div>
     <div class="scroll">
-      <p class="intro">航行設定シートの「ワークアウト」、または航行中のメニュー(止まっているとき)から開く。</p>
-      <div class="eyebrow" style="margin:0 16px 8px">よく使う</div>
-      <div id="woPresets" style="display:flex;gap:8px;overflow-x:auto;padding:0 12px 4px;scrollbar-width:none"></div>
+      <p class="intro">練習の前にここで作って「登録」しておくと、航行中はワークアウトのボタンから呼び出すだけ。</p>
+      <div class="eyebrow" style="margin:0 16px 8px">登録したメニュー</div>
+      <div class="wrow" id="woFav"></div>
+      <div class="eyebrow" style="margin:14px 16px 8px">過去のメニュー</div>
+      <div class="wrow" id="woHist"></div>
       <div class="card" style="margin:10px 12px 0" id="woEdit"></div>
       <div class="card" style="margin:12px 12px 0;padding:4px 16px" id="woOpt"></div>
       <div style="height:150px"></div>
     </div>
-    <div class="savebar show"><div class="st" id="woSum" style="display:block"></div><div class="bt" style="grid-template-columns:1fr 1.4fr"><button class="btn" data-toast="ワークアウトなしで航行">使わない</button><button class="btn acc" data-go="nav">このワークアウトで航行</button></div></div>
+    <div class="savebar show"><div class="st" id="woSum" style="display:block"></div><div class="bt" style="grid-template-columns:1fr 1.4fr"><button class="btn" id="woRegister">★ 登録</button><button class="btn acc" data-go="nav">このメニューで始める</button></div></div>
   </section>
 
   <!-- ================= ④ 警告の設定 ================= -->
@@ -839,6 +874,20 @@ function renderHome() {
 function openMenu() { $('#menu').classList.add('show'); $('#menuScrim').classList.add('show'); }
 function closeMenu() { $('#menu').classList.remove('show'); $('#menuScrim').classList.remove('show'); }
 $('#openMenu').onclick = openMenu;
+function openWoQuick() {
+  const on = state.nav.wo !== 'off';
+  $('#woQuickNow').innerHTML = on
+    ? `<div style="display:flex;align-items:center;gap:10px;padding:4px 16px 10px"><div style="flex:1"><div class="eyebrow">実行中</div><b style="font-size:18px">${woShort(WOS)}</b></div><button class="btn danger-o" style="height:44px" id="woStop">終える</button></div>`
+    : '';
+  $('#woQuickFav').innerHTML = WO_FAV.map((m, i) => menuCard(m, `data-wfav="${i}"`, '★ ' + m.name)).join('');
+  $('#woQuickHist').innerHTML = WO_HIST.map((m, i) => menuCard(m, `data-whist="${i}"`, m.date)).join('');
+  $('#woQuick').classList.add('show'); $('#woQuickScrim').classList.add('show');
+  const st = $('#woStop');
+  if (st) st.onclick = () => { closeWoQuick(); state.nav.wo = 'off'; renderScenarios(); renderNav(); toast('ワークアウトを終えました(記録には残ります)'); };
+}
+function closeWoQuick() { $('#woQuick').classList.remove('show'); $('#woQuickScrim').classList.remove('show'); }
+$('#woBtn').onclick = openWoQuick;
+$('#woQuickScrim').onclick = closeWoQuick;
 $('#resetb').onclick = () => {
   const n = state.nav, long = n.fix === 'long';
   const T = long ? { dist: 12480, chrono: 5320, count: 1780 } : { dist: 6480, chrono: 1720, count: 912 };
@@ -953,7 +1002,7 @@ function renderNav() {
   $('#vSpm').classList.toggle('wait', wait);
   const wo = n.wo !== 'off';
   $('#g2').style.display = wo ? 'none' : 'flex';
-  $('#resetb').style.display = wo ? 'none' : 'grid';
+  $('#resetb').style.display = wo ? 'none' : 'flex';
   if (!wo) {
     const vals = drumValues(T);
     renderDrum('drumL', vals);
@@ -966,24 +1015,48 @@ function renderNav() {
    Concept2 PM5 のワークアウトに倣う: ワークとレストをそれぞれ 距離・時間・本数 で決め、回数とセットを掛ける。
    レストは「未定」(次を漕ぎ出したら始まる)も選べる。水上は回頭があるので既定にしやすい。 */
 const WO_UNITS = { dist: ['距離', 'm'], time: ['時間', ''], strokes: ['本数', 'count'] };
+let woSetOpen = false;
 const REST_UNITS = { time: ['時間', ''], strokes: ['本数', 'count'], dist: ['距離', 'm'], open: ['未定', ''] };
-const WO_PRESETS = [
-  { name: '500m × 8', work: { u: 'dist', v: 500 }, reps: 8, rest: { u: 'time', v: 120 }, sets: 1, setRest: 300 },
-  { name: '30:00 × 2', work: { u: 'time', v: 1800 }, reps: 2, rest: { u: 'time', v: 300 }, sets: 1, setRest: 300 },
-  { name: '30本 × 6 × 2セット', work: { u: 'strokes', v: 30 }, reps: 6, rest: { u: 'strokes', v: 3 }, sets: 2, setRest: 300 },
+// 登録したメニュー(端末に保存。練習前に細かく作っておき、練習中は呼び出すだけ)。
+const WO_FAV = [
+  { name: 'UT 30分×2', work: { u: 'time', v: 1800 }, reps: 2, rest: { u: 'open', v: 0 }, sets: 1, setRest: 300 },
+  { name: '500m×8', work: { u: 'dist', v: 500 }, reps: 8, rest: { u: 'time', v: 120 }, sets: 1, setRest: 300 },
 ];
-const WOS = { ...structuredClone(WO_PRESETS[0]), slowExclude: true, slowPace: 180, autoStart: true };
+// 過去のメニュー(使ったものが自動で新しい順に残る。横へスクロールで遡る)。
+const WO_HIST = [
+  { date: '9/24', work: { u: 'strokes', v: 30 }, reps: 6, rest: { u: 'strokes', v: 3 }, sets: 2, setRest: 300 },
+  { date: '9/20', work: { u: 'dist', v: 500 }, reps: 8, rest: { u: 'time', v: 120 }, sets: 1, setRest: 300 },
+  { date: '9/17', work: { u: 'time', v: 1800 }, reps: 2, rest: { u: 'open', v: 0 }, sets: 1, setRest: 300 },
+  { date: '9/13', work: { u: 'dist', v: 1000 }, reps: 4, rest: { u: 'time', v: 240 }, sets: 1, setRest: 300 },
+  { date: '9/10', work: { u: 'time', v: 60 }, reps: 10, rest: { u: 'time', v: 60 }, sets: 2, setRest: 360 },
+  { date: '9/06', work: { u: 'dist', v: 250 }, reps: 12, rest: { u: 'strokes', v: 20 }, sets: 1, setRest: 300 },
+];
+const WOS = { ...structuredClone(WO_FAV[1]), slowExclude: true, slowPace: 180, autoStart: true };
+delete WOS.name;
+function planOf(m) { return { work: m.work, reps: m.reps, rest: m.rest, sets: m.sets, setRest: m.setRest }; }
+function samePlan(a, b) { return JSON.stringify(planOf(a)) === JSON.stringify(planOf(b)); }
+function woShort(w) {
+  const base = `${woVal(w.work.u, w.work.v)}×${w.reps}`;
+  return w.sets > 1 ? `${base}×${w.sets}セット` : base;
+}
+function menuCard(m, attr, top) {
+  const r = m.rest.u === 'open' ? 'レスト未定' : `r ${woVal(m.rest.u, m.rest.v)}`;
+  return `<button class="wmenu ${samePlan(m, WOS) ? 'on' : ''}" ${attr}><span class="t">${top}</span><b>${woShort(m)}</b><span>${r}</span></button>`;
+}
 function woVal(u, v) { return u === 'time' ? fmtChrono(v) : u === 'strokes' ? `${v}本` : u === 'open' ? '未定' : `${v.toLocaleString('en-US')}m`; }
 function woName(w) {
   const base = `${woVal(w.work.u, w.work.v)} × ${w.reps}`;
   const r = w.rest.u === 'open' ? 'レスト未定' : `r${woVal(w.rest.u, w.rest.v)}`;
   return w.sets > 1 ? `${base} ・ ${r} ・ ${w.sets}セット(間 ${fmtChrono(w.setRest)})` : `${base} ・ ${r}`;
 }
+let woRep = 3, restLeft = 72, restTimer = null;
+function restTotal() { const w = WOS; return w.rest.u === 'time' ? w.rest.v : w.rest.u === 'strokes' ? w.rest.v : w.rest.u === 'dist' ? w.rest.v : 0; }
 function renderWorkout(n) {
   const box = $('#wo');
+  if (n.wo !== 'rest' && restTimer) { clearInterval(restTimer); restTimer = null; }
   if (n.wo === 'off') { box.className = 'wo'; box.innerHTML = ''; return; }
-  box.className = 'wo show';
-  const w = WOS, rep = 3, total = w.reps * w.sets;
+  const w = WOS, rep = woRep, total = w.reps * w.sets;
+  box.className = 'wo show ' + (n.wo === 'rest' ? 'rest' : 'work');
   const bar = [];
   for (let s2 = 0; s2 < w.sets; s2++) {
     if (s2) bar.push('<i class="set"></i>');
@@ -997,11 +1070,29 @@ function renderWorkout(n) {
   let big, tag;
   if (n.wo === 'rest') {
     const open = w.rest.u === 'open';
-    tag = `<span class="tag"><b style="background:transparent;color:#fff;border:1.5px solid #fff">REST</b>${open ? '漕ぎ出すと次へ' : ''}</span>`;
-    big = `<div class="v num">${open ? '0:48' : w.rest.u === 'time' ? '1:12' : w.rest.u === 'strokes' ? '2' : '140'}</div><div class="k">${REST_UNITS[w.rest.u][1]}</div>`;
+    tag = `<span class="tag"><b style="background:transparent;color:#fff;border:1.5px solid #fff">REST</b></span>`;
+    if (open) {
+      big = `<div class="v num">0:48</div><div class="k">漕ぎ出すと次へ</div>`;
+    } else {
+      // 満タンから減っていく。数字も減る。0 で次のワークへ。
+      const tot = restTotal();
+      const val = w.rest.u === 'time' ? fmtChrono(Math.ceil(restLeft)) : String(Math.ceil(restLeft));
+      big = `<div class="v num">${val}</div><div class="drain"><i style="width:${(restLeft / tot * 100).toFixed(1)}%"></i></div><div class="k">${REST_UNITS[w.rest.u][1]}</div>`;
+      if (!restTimer && w.rest.u === 'time') {
+        restTimer = setInterval(() => {
+          restLeft -= 1.2;
+          if (restLeft <= 0) {
+            clearInterval(restTimer); restTimer = null;
+            restLeft = restTotal();
+            woRep = Math.min(total, woRep + 1);
+            state.nav.wo = 'work'; renderScenarios();
+          }
+          renderWorkout(state.nav);
+        }, 100);
+      }
+    }
   } else {
     const slow = n.wo === 'slow';
-    // 遅い間は数字を灰色にし、一時停止の記号だけ出す(読ませる文は出さない)。
     tag = `<span class="tag"><b>WORK</b>${slow ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="#9aa6b3" aria-label="遅いので数えていない"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>' : ''}</span>`;
     big = `<div class="v num ${slow ? 'paused' : ''}">${remain}</div><div class="k">${unit}</div>`;
   }
@@ -1019,21 +1110,24 @@ function segRow(id, units, cur) {
 }
 function renderWoSetup() {
   const w = WOS;
-  const presetOn = p => JSON.stringify([p.work, p.reps, p.rest, p.sets]) === JSON.stringify([w.work, w.reps, w.rest, w.sets]);
-  $('#woPresets').innerHTML = WO_PRESETS.map((p, i) => `<button class="wpre ${presetOn(p) ? 'on' : ''}" data-wpreset="${i}">${p.name}</button>`).join('');
+  $('#woFav').innerHTML = WO_FAV.map((m, i) => menuCard(m, `data-wfav="${i}"`, '★ ' + m.name)).join('') ||
+    '<span class="intro" style="margin:0">まだありません。下で作って「登録」すると、ここから呼び出せます。</span>';
+  $('#woHist').innerHTML = WO_HIST.map((m, i) => menuCard(m, `data-whist="${i}"`, m.date)).join('');
   const workSteps = { dist: [100, 'm'], time: [60, ''], strokes: [5, '本'] };
   $('#woEdit').innerHTML = `
     <div class="eyebrow">ワーク</div>
     ${segRow('work', WO_UNITS, w.work.u)}
     ${stepper('workv', '1本の長さ', w.work.u === 'dist' ? '100m刻み' : w.work.u === 'time' ? '1分刻み' : '5本刻み', woVal(w.work.u, w.work.v))}
-    ${stepper('reps', '回数', '1〜30', `× ${w.reps}`)}
-    <div class="eyebrow" style="margin-top:12px">レスト</div>
+    ${stepper('reps', '本数(回数)', '1〜30', `× ${w.reps}`)}
+    <div class="eyebrow" style="margin-top:12px">本間レスト <span style="font-weight:700;letter-spacing:0;color:var(--mute)">(1本ごとの休み)</span></div>
     ${segRow('rest', REST_UNITS, w.rest.u)}
     ${w.rest.u === 'open' ? '<p class="intro" style="margin:6px 0">次のワークを漕ぎ出したら、自動で始まります。回頭・待ち合わせの長さが毎回違うときに。</p>'
       : stepper('restv', 'レストの長さ', w.rest.u === 'time' ? '15秒刻み' : w.rest.u === 'strokes' ? '1本刻み' : '50m刻み', woVal(w.rest.u, w.rest.v))}
-    <div class="eyebrow" style="margin-top:12px">セット</div>
-    ${stepper('sets', 'セット数', '同じ組を繰り返す', `× ${w.sets}`)}
-    ${w.sets > 1 ? stepper('setrest', 'セット間のレスト', '1分刻み', fmtChrono(w.setRest)) : ''}`;
+    <details class="setbox" ${w.sets > 1 || woSetOpen ? 'open' : ''}>
+      <summary><span>セットを繰り返す</span><span class="cur">${w.sets > 1 ? `${w.sets}セット ・ セット間 ${fmtChrono(w.setRest)}` : 'なし'}</span></summary>
+      ${stepper('sets', 'セット数', '上の組を何回繰り返すか', `× ${w.sets}`)}
+      ${w.sets > 1 ? stepper('setrest', 'セット間レスト', 'セットとセットの間の休み・1分刻み', fmtChrono(w.setRest)) : '<p class="intro" style="margin:4px 0 8px">2セット以上にすると、セット間レストを決められます。</p>'}
+    </details>`;
   $('#woOpt').innerHTML = `
     <label class="linkrow" style="min-height:56px"><span>遅いときはワークに数えない<br><small style="font-weight:600;color:var(--sub)">回頭・止まっている間を、ワークの距離・時間・本数に入れない</small></span>
       <input type="checkbox" id="woSlow" ${w.slowExclude ? 'checked' : ''} style="width:24px;height:24px;accent-color:var(--acc)"></label>
@@ -1047,8 +1141,20 @@ function renderWoSetup() {
   $('#woAuto').onchange = e => { w.autoStart = e.target.checked; renderWoSetup(); };
 }
 document.addEventListener('click', e => {
-  const p = e.target.closest('[data-wpreset]');
-  if (p) { Object.assign(WOS, structuredClone(WO_PRESETS[+p.dataset.wpreset])); renderWoSetup(); renderNav(); return; }
+  const f = e.target.closest('[data-wfav],[data-whist]');
+  if (f) {
+    const m = f.dataset.wfav != null ? WO_FAV[+f.dataset.wfav] : WO_HIST[+f.dataset.whist];
+    Object.assign(WOS, structuredClone(planOf(m)));
+    renderWoSetup(); renderNav();
+    if (f.closest('#woQuick')) { closeWoQuick(); woRep = 1; state.nav.wo = 'work'; renderScenarios(); renderNav(); toast(`${woShort(m)} を開始(漕ぎ出したらワーク)`); }
+    return;
+  }
+  if (e.target.closest('#woRegister')) {
+    if (!WO_FAV.some(m => samePlan(m, WOS))) WO_FAV.push({ name: woShort(WOS), ...structuredClone(planOf(WOS)) });
+    renderWoSetup(); toast('このメニューを登録しました。航行中のワークアウトのボタンから呼び出せます'); return;
+  }
+  const sb = e.target.closest('.setbox summary');
+  if (sb) { woSetOpen = !sb.parentElement.open; }
   const sg = e.target.closest('[data-wseg]');
   if (sg) {
     const w = WOS, v = sg.dataset.v;
@@ -1162,7 +1268,7 @@ function renderRec() {
     <div class="s"><b class="num">${v.dps}</b><span>DPS m</span></div>`;
   $('#meta').innerHTML = s
     ? `<b class="num">${s.km} km</b> ・ <b class="num">${s.t}</b> ・ ${Math.floor(s.a)}分〜${Math.floor(s.b)}分`
-    : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ chrono <b class="num">30:14</b> ・ 4セット`;
+    : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ ワーク時間 <b class="num">30:14</b> ・ 4セット`;
   $('#rmap').innerHTML = recMap(s);
   // 直前の位置から新しい位置へ滑らかに寄せる。
   const mv = $('#mapview');
@@ -1506,13 +1612,16 @@ const NOTES = {
     ],
   },
   nav: {
-    h: '② 航行中(v13)',
+    h: '② 航行中(v14)',
     li: [
       ['自艇=白・他艇=常に赤系・予測線=白(利用者の決定)', '他艇の位置は、離れていても常に把握しておきたい(万一の事故のとき素早く動ける)。だから他艇はいつも一番目立つ赤系にする。自艇は白で、自他の色は被らない。'],
       ['警告の相手は「点滅」で区別', '他艇が全部赤なので、警告の相手は色を変えずに白い太縁+点滅で示す。画面の端の赤い帯・光と同じリズムで点滅し、光った方角と地図上の艇が結びつく。'],
       ['障害物の警告も方角の縁が赤く点滅(v11)', '規則は1つ:「衝突の音が鳴っているときだけ、その方角の縁が赤く点滅」。橋・橋脚・流木・中洲・杭は他艇と同じく光る(地図上の障害物も点滅)。カーブ・逆走(案内)と、岸の近接・表示だけの候補(音なし)は光らせない。停止中に固定障害物の音を止めているときも光らない。音と連動させるので新しい判定は足さない。'],
       ['下半分はドラム式(v13)', '左右の枠をそれぞれ縦にスクロールすると 距離(m)・chrono・DPS・count が順に出る(NK SpeedCoach の表記。count=リセットからの本数)。左の点で何番目かが分かる。'],
-      ['下半分のリセット(v13)', 'カードの下辺中央の小さなボタン。距離・chrono・count の表示を0にする(DPSは今の値なのでそのまま)。練習全体の記録は変わらず、記録画面では全体を見られる。押し間違いに備え、実装では通知に「元に戻す」を付ける。'],
+      ['ワーク中は控えめにティール(v14)', 'WORK の札・枠の縁・進み具合の今の本だけティール。航行中の画面でほかにティールを使っていないので「今ワーク中」だけを意味する。レストは白。'],
+      ['レストは満タンから減る(v14)', '数字と帯が減っていき、0になったら自動で次のワークへ(試作でも動く)。レスト未定のときは経過を出す。'],
+      ['ワークアウトのボタン(v14)', '左下の列の追従とメニューの間。押すと小さなシートで登録したメニュー・過去のメニューから選んですぐ始められる。実行中は「終える」。細かい設定は練習前に。'],
+      ['下半分のリセット(v13→v14)', 'カードの右下の端に「RESET」。距離・chrono・count の表示を0にする(DPSは今の値なのでそのまま)。練習全体の記録は変わらず、記録画面では全体を見られる。押し間違いに備え、実装では通知に「元に戻す」を付ける。'],
       ['ワークアウト中は下半分をワークアウト用に(v13)', '大きく「今の区間の残り」、右に何本目か(3/8 rep)、下に進み具合の帯。レスト中は残りのレスト(REST)と次(next)。「遅いときは数えない」がオンなら、遅い間は数字を灰色にして一時停止の記号だけ出す。上半分(/500m・spm)はそのまま。'],
       ['長い練習でも計器が見切れない(v12)', '単位(m・chrono)を数字の下へ。それでも入らないときは距離と時間を同じ比率で縮め、距離>時間の大小は保つ。'],
       ['GPSの状態は画面の上端に「GPS」の文字入りで(v12)', '計器カードの上辺に重ねる。受信不可は「受信」。警告の縁の帯(下・左右)と場所が被らない。'],
@@ -1522,13 +1631,15 @@ const NOTES = {
     ],
   },
   wo: {
-    h: '⑥ ワークアウトの設定(v13)',
+    h: '⑥ ワークアウトの設定(v14)',
     li: [
-      ['Concept2 のワークアウトに倣う', 'ワークとレストをそれぞれ 距離・時間・本数 で決め、回数とセットを掛ける。例: 500m×8 r2:00、30:00×2 r5:00、30本×6 r3本×2セット。'],
+      ['Concept2 のワークアウトに倣う', 'ワークとレストをそれぞれ 距離・時間・本数 で決め、本数(回数)とセットを掛ける。例: 500m×8 r2:00、30:00×2 r5:00、30本×6 r3本×2セット。'],
+      ['登録したメニュー・過去のメニュー(v14)', '既定の「よく使う」は置かない(メニューは変わっていくもの)。使ったメニューは自動で「過去のメニュー」に新しい順に残り、横へスクロールで遡れる。練習前に作って「★ 登録」すると、航行中はボタンから呼び出すだけ。'],
+      ['本間レストとセット間レスト(v14)', '1本ごとの休みは「本間レスト」、セットとセットの間は「セット間レスト」。セットは使う機会が少ないので「セットを繰り返す」に畳み、2セット以上のときだけセット間レストを出す。'],
       ['レスト「未定」', '次のワークを漕ぎ出したら始まる(Concept2 の undefined rest)。水上は回頭・待ち合わせで休みの長さが毎回違うので使いやすい。'],
       ['遅いときはワークに数えない', 'オンにすると、目安(既定 3:00/500m)より遅い間はワークの距離・時間・本数を進めない。回頭や止まっている時間をワークに入れないため。'],
       ['漕ぎ出したらワークを始める', 'スタートの合図を押さなくてよい(漕ぎながら画面は触れない)。'],
-      ['開く場所', '航行設定シートの「ワークアウト」の行と、航行中のメニュー(止まっているとき)。漕いでいる最中は設定しない。'],
+      ['開く場所', '航行設定シートの「ワークアウト」の行と、航行中のワークアウトのボタン(呼び出し用のシートから「新しく作る・細かく変える」)。'],
       ['合図の音は警告より必ず下', '区間の始まり・終わりを短い音で知らせる案はあるが、警告の音と重ねない(読み上げは同時に2本鳴らさない方針)。警告が鳴っている間は鳴らさない。実装時に決める。'],
     ],
   },
