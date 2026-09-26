@@ -31,7 +31,7 @@ import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/reverse_guidance_audio_notice.dart';
 import '../features/home_map/widgets/rounded_button.dart';
-import '../features/home_map/widgets/edge_alert_overlay.dart';
+import '../features/home_map/widgets/nav_widgets.dart';
 import '../features/home_map/widgets/stroke_trace_sheet.dart';
 import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
@@ -1566,6 +1566,17 @@ class HomeMapScreen extends HookConsumerWidget {
                                           ],
                                         ),
                                       ),
+                                    // 能力低下は計器カードの上に絵+短い語で(大きな
+                                    // 警告バナーを外したので、ここで必ず見せる)。
+                                    if (navigator.mode.value ==
+                                        NavMode.navigator)
+                                      NavCapabilityBadges(
+                                        warnings:
+                                            navigator.activeWarnings.value,
+                                        gpsQuality: navigator.gpsQuality.value,
+                                        gpsAccuracyMeters:
+                                            navigator.myBoat.value?.accuracy,
+                                      ),
                                     // 縦向きは上部40%以内、横向きは左上の小型カードにする。
                                     // 警告バナーはカードに含めず、独立した細い表示を保つ。
                                     if (navigator.mode.value ==
@@ -1700,10 +1711,16 @@ class HomeMapScreen extends HookConsumerWidget {
                                   // 左側にあった地図種別の切替タイルは
                                   // 「表示」パネルへ移した。地図の上に常時
                                   // 置くボタンを減らすほど水面が広く見える。
+                                  // 航行中は左下へ寄せる。すれ違う艇は漕手の
+                                  // 右後ろ(画面の右下)から来ることが多く、
+                                  // 下中央は進行方向の見通し(2026-09-26)。
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    mainAxisAlignment: navigator.mode.value ==
+                                            NavMode.navigator
+                                        ? MainAxisAlignment.start
+                                        : MainAxisAlignment.end,
                                     children: [
-                                      // ################ 右側 ################
+                                      // ################ 操作の列 ################
                                       Column(
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
@@ -1756,7 +1773,13 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   top: 12),
                                               child: MapControlButton(
                                                 icon: Icons.navigation,
-                                                label: '追跡',
+                                                // 押したときに起きることを名前にする:
+                                                // 追従中は押すと止まる/止めているときは
+                                                // 押すと自艇へ戻って追従する。
+                                                label: tracking.mode.value ==
+                                                        TrackingMode.track
+                                                    ? '追従中'
+                                                    : '現在位置',
                                                 angle: 45,
                                                 active: tracking.mode.value ==
                                                     TrackingMode.track,
@@ -1837,6 +1860,18 @@ class HomeMapScreen extends HookConsumerWidget {
                                               onPressed: openMapMenu,
                                             ),
                                           ),
+                                          if (!navigator
+                                                  .isTransitioning.value &&
+                                              navigator.mode.value ==
+                                                  NavMode.navigator)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  top: 12),
+                                              child: EndNavigationButton(
+                                                onStop:
+                                                    navigator.stopNavigation,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ],
@@ -2155,83 +2190,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                             compact: true,
                                             onPressed: navigator.stopWatching,
                                           ),
-                                        if (!navigator.isTransitioning.value &&
-                                            navigator.mode.value ==
-                                                NavMode.navigator)
-                                          RoundedButton(
-                                              label: "航行終了",
-                                              icon: Icons.stop_circle_outlined,
-                                              // 航行中は地図の視認性を優先する。
-                                              // 押し間違いは確認ダイアログで
-                                              // 受け止めるので、面積を大きく
-                                              // 取る必要がない。
-                                              //
-                                              // ただし面は不透明にする。半透明の赤では
-                                              // 下の地図の文字(店名など)が「航行終了」に
-                                              // 透けて重なり読めなかった。赤で塗りつぶさず
-                                              // 文字と枠だけを赤にするのは、赤い面を
-                                              // 危険の表示に取っておくため。
-                                              color: context
-                                                  .colors.mapControlSurface,
-                                              foregroundColor:
-                                                  context.colors.danger,
-                                              borderColor: context.colors.danger
-                                                  .withValues(alpha: 0.6),
-                                              compact: true,
-                                              onPressed: () async {
-                                                // 誤タップで位置共有・警告が止まるのを防ぐため必ず確認する
-                                                final confirmed =
-                                                    await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (dialogContext) =>
-                                                      AlertDialog(
-                                                    title: const Text(
-                                                        '航行を終了しますか?'),
-                                                    content: const Text(
-                                                        '位置共有と衝突警告が停止し、練習記録が保存されます。'),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                                    dialogContext)
-                                                                .pop(false),
-                                                        child:
-                                                            const Text('キャンセル'),
-                                                      ),
-                                                      FilledButton(
-                                                        style: FilledButton
-                                                            .styleFrom(
-                                                          backgroundColor:
-                                                              const Color(
-                                                                  0xFFC62828),
-                                                        ),
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                                    dialogContext)
-                                                                .pop(true),
-                                                        child:
-                                                            const Text('終了する'),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                                if (confirmed != true) return;
-                                                try {
-                                                  // 地図描画の状態に関係なく、資源解放を
-                                                  // 最優先で実行する。
-                                                  await navigator
-                                                      .stopNavigation();
-                                                  debugPrint(
-                                                      "Navigation stopped.");
-                                                } catch (error) {
-                                                  if (!context.mounted) return;
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(SnackBar(
-                                                    content: Text(
-                                                        '航行終了処理でエラーが発生しました。資源解放は継続しました: $error'),
-                                                  ));
-                                                }
-                                              }),
                                       ]),
                                 ),
                               ),
