@@ -4139,11 +4139,11 @@ UseNavigator useNavigator() {
       // 位置情報フォアグラウンドサービスを開始できないため、開始後に要求しない。
       await permissionService.requireBackgroundLocationPermission();
       ensureStartIsCurrent();
-      // 新しいfixを優先するが、タイムアウト時は画面表示で取得済みの位置を
-      // 足掛かりにしてGPS streamを開始する。精度不良は開始を塞がず、
-      // 航行中のGPS品質警告として扱う。
-      final initialPos =
-          await geoService.getNavigationBootstrapPosition(config_.accuracy);
+      // 手元にある位置(画面で取得済み・OSのlast-known)を足掛かりにする。
+      // 無ければ null のまま開始し、位置streamの最初の測位を待つ。
+      // 初回位置が無い・座標が不正・精度が悪い、のどれも航行開始を止める
+      // 理由にしない(原則1・不変条件5)。GPSは「利用不可」として表示される。
+      final bootstrapPos = await geoService.getNavigationBootstrapPosition();
       ensureStartIsCurrent();
       gpsFilter.value.reset();
       positionEstimator.reset();
@@ -4166,16 +4166,21 @@ UseNavigator useNavigator() {
       distanceIntegrator.reset();
       preRawPos.value = null;
       preHeading.value = 0;
-      if (!gpsFilter.value.hasValidCoordinates(initialPos)) {
-        throw StateError('現在地の座標が不正です。位置情報設定を確認してください。');
-      }
-      final initialGpsUsable = gpsFilter.value.accepts(
-        initialPos,
-        receivedAt: DateTime.now(),
-        receivedElapsed: safetyClock.value.elapsed,
-      );
-      final initialGpsDegraded =
-          initialGpsUsable && gpsFilter.value.isLowAccuracy(initialPos);
+      // 座標が不正な初回位置は捨て、「初回位置なし」と同じに扱う。
+      final initialPos = bootstrapPos != null &&
+              gpsFilter.value.hasValidCoordinates(bootstrapPos)
+          ? bootstrapPos
+          : null;
+      final initialAccuracy = initialPos?.accuracy;
+      final initialGpsUsable = initialPos != null &&
+          gpsFilter.value.accepts(
+            initialPos,
+            receivedAt: DateTime.now(),
+            receivedElapsed: safetyClock.value.elapsed,
+          );
+      final initialGpsDegraded = initialPos != null &&
+          initialGpsUsable &&
+          gpsFilter.value.isLowAccuracy(initialPos);
       config.value = config_;
       // 開始前に生成済みのrevisionは「適用済み」としてlistenerへ知らせる。
       // 初回cacheイベントを航行中の未確認更新と誤認して再生成しない。
@@ -4366,8 +4371,8 @@ UseNavigator useNavigator() {
           'diagnosticEventSchemaVersion': diagnosticEventSchemaVersion,
           'audioSessionPolicy': 'mixWithOthers',
           'positionSharingInitialState': 'pending_setup',
-          if (initialPos.accuracy.isFinite)
-            'initialGpsAccuracyMeters': initialPos.accuracy,
+          if (initialAccuracy != null && initialAccuracy.isFinite)
+            'initialGpsAccuracyMeters': initialAccuracy,
         },
       ));
       recordGpsQualityIfChanged(
@@ -4375,8 +4380,8 @@ UseNavigator useNavigator() {
         sessionStartedAt.value!,
       );
       recordGpsEnvironmentSnapshot('navigation_started', generation, details: {
-        if (initialPos.accuracy.isFinite)
-          'initialGpsAccuracyMeters': initialPos.accuracy,
+        if (initialAccuracy != null && initialAccuracy.isFinite)
+          'initialGpsAccuracyMeters': initialAccuracy,
       });
       recordOrientationIfChanged();
       gpsFilter.value.rebaseLastAcceptedElapsed(Duration.zero);
@@ -4408,21 +4413,24 @@ UseNavigator useNavigator() {
       ensureStartIsCurrent();
       debugPrint(
           "CONFIG - BoatType: ${config.value!.boatType.name}, SeatPos: ${config.value!.seatPos.label}");
-      if (initialGpsUsable) {
+      if (initialPos != null && initialGpsUsable) {
         safetyEvaluationLiveness.value.recordSafetyInput(
           safetyClock.value.elapsed,
         );
         await processPosition(initialPos, generation);
       } else {
-        // 座標不正・時刻切れなど、カルマン推定へ安全に渡せないfixだけを
-        // 保留する。accuracyが大きいだけのfixは上で処理を継続する。
+        // 初回位置が無い・座標不正・時刻切れなど、カルマン推定へ安全に
+        // 渡せないfixだけを保留する。accuracyが大きいだけのfixは上で
+        // 処理を継続する。どの場合も航行は続け、位置streamを待つ。
         appendDiagnosticEvent(SessionDiagnosticEvent(
           t: DateTime.now(),
           type: 'gps_bootstrap_unusable',
           details: {
-            if (initialPos.accuracy.isFinite)
-              'accuracyMeters': initialPos.accuracy,
-            'timestamp': initialPos.timestamp.toUtc().toIso8601String(),
+            'initialFixAvailable': initialPos != null,
+            if (initialAccuracy != null && initialAccuracy.isFinite)
+              'accuracyMeters': initialAccuracy,
+            if (initialPos != null)
+              'timestamp': initialPos.timestamp.toUtc().toIso8601String(),
           },
         ));
         applySafetyAssessment(

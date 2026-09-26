@@ -7,6 +7,12 @@ import 'package:rowing_navigator/config/practice_log_config.dart';
 // 位置情報サービス
 // =============================================
 class GeoService {
+  GeoService({Future<Position?> Function()? lastKnownPosition})
+      : _lastKnownPosition =
+            lastKnownPosition ?? Geolocator.getLastKnownPosition;
+
+  /// OSの最後の位置を取る関数。テストでは差し替える。
+  final Future<Position?> Function() _lastKnownPosition;
   Position? _lastObservedPosition;
 
   LocationSettings _locationSettings(
@@ -69,18 +75,21 @@ class GeoService {
     return position;
   }
 
-  /// 航行開始用の位置を取得する。
+  /// 航行開始用の位置を取得する。**例外を投げず、無ければ null を返す。**
   ///
-  /// 同じ画面で既に取得した位置かOSのlast-known fixを足掛かりにして、
-  /// 「航行スタート」を新しい高精度fix待ちで塞がない。古さ・精度は
+  /// 同じ画面で既に取得した位置かOSのlast-known fixを足掛かりにする。
+  /// 新しいfixは待たない(直後に始まる位置streamが届ける)。初回位置が
+  /// 無いことを理由に航行開始を止めない(原則1・不変条件5)。古さ・精度は
   /// 呼び出し側のGPS品質監視で「利用不可」として扱い、新しいstream測位を待つ。
-  Future<Position> getNavigationBootstrapPosition(
-    LocationAccuracy accuracy,
-  ) async {
-    final cached =
-        _lastObservedPosition ?? await Geolocator.getLastKnownPosition();
-    if (cached != null) return cached;
-    return getCurrentPosition(accuracy);
+  Future<Position?> getNavigationBootstrapPosition() async {
+    final observed = _lastObservedPosition;
+    if (observed != null) return observed;
+    try {
+      return await _lastKnownPosition();
+    } catch (error) {
+      debugPrint('航行開始用のlast-known位置を取得できません(開始は続けます): $error');
+      return null;
+    }
   }
 
   Stream<Position> getPositionStream(LocationAccuracy accuracy) {
