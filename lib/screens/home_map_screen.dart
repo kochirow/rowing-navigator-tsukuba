@@ -54,6 +54,7 @@ import '../theme/map_layer_spec.dart';
 import '../utils/tactile_feedback.dart';
 import '../hooks/use_navigator.dart';
 import '../hooks/use_lap_metrics.dart';
+import '../hooks/use_workout.dart';
 import '../hooks/use_nav_map.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
@@ -246,6 +247,14 @@ class HomeMapScreen extends HookConsumerWidget {
       totalDistanceMeters: navigator.totalDistance.value,
       motion: navigator.strokeMotion.value,
       sessionStartedAt: navigator.sessionStartedAt.value,
+    );
+    // ワークアウト(表示専用)。航行が終われば止まる。
+    final workout = useWorkout(
+      myBoat: navigator.myBoat.value,
+      fixProcessedAt: navigator.postProcessTime.value,
+      totalDistanceMeters: navigator.totalDistance.value,
+      motion: navigator.strokeMotion.value,
+      navigating: navigator.mode.value == NavMode.navigator,
     );
     final useNightMap = navigator.mode.value == NavMode.navigator &&
         navMap.mapType.value == MapType.normal &&
@@ -1618,6 +1627,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 lap.setRightIndex,
                                             onLowerReset: lap.reset,
                                             onLowerUndo: lap.undoReset,
+                                            workoutPlan: workout.plan,
+                                            workoutStatus: workout.status,
                                           ),
                                         ),
                                       ),
@@ -1848,6 +1859,25 @@ class HomeMapScreen extends HookConsumerWidget {
                                                     ));
                                                   }
                                                 },
+                                              ),
+                                            ),
+                                          // 航行中のワークアウト: 登録・過去のメニューからすぐ始める
+                                          if (navigator.mode.value ==
+                                              NavMode.navigator)
+                                            Container(
+                                              margin: const EdgeInsets.only(
+                                                  top: 12),
+                                              child: MapControlButton(
+                                                icon: Icons.timer_outlined,
+                                                label: 'ワークアウト',
+                                                active: workout.plan != null,
+                                                onPressed: () =>
+                                                    showWorkoutQuickSheet(
+                                                  context,
+                                                  running: workout.plan,
+                                                  onStart: workout.start,
+                                                  onStop: workout.stop,
+                                                ),
                                               ),
                                             ),
                                           // その他の操作はメニューへ集約(過密・オーバーフロー回避)
