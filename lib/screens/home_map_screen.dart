@@ -327,6 +327,11 @@ class HomeMapScreen extends HookConsumerWidget {
 
     focusP14y(double lat, double lng, double heading,
         {bool force = false, double? overrideZoomLevel}) async {
+      // 地図がまだ作られていなければ何もしない。地図は航行の前提ではない
+      // (航行開始・GPS・警告・位置共有は地図を待たない。原則1)。地図が
+      // 準備できれば、艇印の描画(`navMap.isReady` を依存に持つ useEffect)
+      // から自艇の追従が始まる。
+      if (!navMap.isReady.value) return;
       // Focus programatically
       tracking.setProgFlag(true); // プログラムによる操作フラグを立てる
       try {
@@ -2017,20 +2022,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                     onPressStartNav: (displayName,
                                                         strokeRateEnabled,
                                                         showLaneCrossSection) async {
-                                                      if (!navMap
-                                                          .isReady.value) {
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                                '地図を準備中です。数秒後に同じ画面から再試行してください。'),
-                                                            duration: Duration(
-                                                                seconds: 4),
-                                                          ),
-                                                        );
-                                                        return;
-                                                      }
                                                       try {
                                                         final user =
                                                             auth.currentUser;
