@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v6</title>
+<title>画面刷新 試作 v7</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -151,7 +151,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 --bg:#000;--s1:#000;--s2:#0c1116;--s3:#1a2129;--line:#1f2831;
 --tx:#ffffff;--sub:#9aa6b3;--mute:#6b7682;
 --acc:#35d6c8;--acc-ink:#04221f;
---danger:#ff5252;--warn:#ffa04d;
+--danger:#ff5252;--warn:#ffb547;
 --m-pace:#35d6c8;--m-spm:#6ea8ff;
 --glass:rgba(0,0,0,.72);--glass-line:rgba(255,255,255,.14);
 background:#000;color:#fff}
@@ -237,59 +237,64 @@ background:#000;color:#fff}
 .srow{display:flex;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--line);font-size:14px;font-weight:700}
 .srow span{color:var(--sub)}
 
-/* ---------- ⑤ 記録画面(リプレイ)の視線の順番 ----------
-   上から「答え(数字) → どこを見るか(区間) → いつ・どこで(地図・時間軸) → 詳しく」。
-   1つの帯に焦点は1つ。ペースの色は地図だけに使う。 */
-.rtop{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px}
-.rtop .t{flex:1;min-width:0}
-.rtop .t b{display:block;font-size:17px;font-weight:800}
-.rtop .t span{display:block;font-size:13px;color:var(--sub);font-weight:700;margin-top:1px}
-.icb{width:48px;height:48px;border-radius:24px;border:0;background:transparent;display:grid;place-items:center;color:var(--tx)}
-.icb svg{width:22px;height:22px}
-.hero{padding:6px 16px 4px;position:relative}
-.crumbs{font-size:13px;font-weight:800;color:var(--sub);display:flex;gap:6px;align-items:center;min-height:20px}
-.crumbs a{color:var(--acc);cursor:pointer}
-.heroN{display:flex;align-items:flex-end;gap:16px;margin-top:4px}
-.heroN .p b{display:block;font-size:60px;font-weight:800;line-height:1;letter-spacing:-.02em}
-.heroN .p span{font-size:14px;color:var(--sub);font-weight:700}
-.heroN .s{padding-bottom:4px}
-.heroN .s b{display:block;font-size:28px;font-weight:800;line-height:1}
-.heroN .s span{display:block;font-size:12px;color:var(--sub);font-weight:700;margin-top:3px}
-.heroN .s + .s{margin-left:-2px}
-.meta{font-size:14px;color:var(--sub);font-weight:700;margin-top:8px}
-.meta b{color:var(--tx)}
-.sets{display:flex;gap:8px;overflow-x:auto;padding:14px 16px 12px;scrollbar-width:none}
-.sets::-webkit-scrollbar{display:none}
-.setc{flex:none;height:48px;border-radius:24px;border:1px solid var(--line);background:var(--s1);padding:0 14px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:var(--sub)}
-.setc b{color:var(--tx);font-family:Inter,sans-serif}
-.setc i{font-style:normal;font-size:11px;font-weight:800;color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);border-radius:6px;padding:1px 5px}
-.setc.on{background:var(--acc-soft);border-color:var(--acc);color:var(--tx)}
-.stick{position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:6px}
-.rmap{position:relative;height:230px;margin:0 12px;border-radius:20px;overflow:hidden;border:1px solid var(--line)}
-.rmap svg{width:100%;height:100%;display:block}
-.rmap .tools{position:absolute;right:8px;top:8px;display:flex;gap:6px}
-.rmap .tools button{width:40px;height:40px;border-radius:20px;border:1px solid var(--glass-line);background:var(--glass);display:grid;place-items:center;color:var(--tx)}
-.rmap .tools svg{width:20px;height:20px}
-.rmap .lg{position:absolute;left:8px;top:8px;font-size:12px;font-weight:700;color:var(--sub);display:flex;align-items:center;gap:6px;background:var(--glass);border-radius:10px;padding:4px 8px}
-.rmap .lg i{display:block;width:44px;height:5px;border-radius:3px;background:linear-gradient(90deg,#4f7cff,#35d6c8,#b6f25a,#ffd84d,#ff6b4a)}
-.nowpill{position:absolute;left:8px;bottom:8px;display:none;gap:10px;align-items:baseline;background:var(--glass);border:1px solid var(--glass-line);border-radius:14px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--sub)}
-.nowpill.show{display:flex}
-.nowpill b{font-size:17px;color:var(--tx);font-family:Inter,sans-serif}
-.play2{display:flex;align-items:center;gap:10px;padding:10px 12px 0}
-.play2 .pb{width:44px;height:44px;border-radius:22px;border:0;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;flex:none}
-.play2 .pb svg{width:16px;height:16px}
-.play2 .tl{flex:1;min-width:0}
-.play2 .tl svg{width:100%;height:46px;display:block}
-.play2 .sp{height:36px;min-width:52px;border-radius:18px;border:1px solid var(--line);background:var(--s2);font:800 13px Inter,sans-serif;flex:none}
-.rsec{margin:16px 12px 0}
-.rsec h3{font-size:13px;font-weight:800;color:var(--sub);letter-spacing:.06em;margin:0 4px 8px}
-.chips{display:flex;gap:6px;margin-bottom:10px}
-.chips button{height:36px;border-radius:18px;border:1px solid var(--line);background:transparent;padding:0 14px;font-size:13px;font-weight:800;color:var(--sub)}
-.chips button.on{background:var(--s3);color:var(--tx);border-color:var(--s3)}
+/* ---------- ⑤ 記録画面(v7: 旧版の迫力 × 視線の順番) ----------
+   旧版のよさ: 画面の端まで使った地図、虹色の航跡、太い数字(Strava の活動ページの型)。
+   v6 のよさ: 答え(数字)が先、1つの帯に焦点1つ、操作は畳む。
+   融合: 地図を全面に敷き、その「下端に答えを重ねる」。地図を見た目の入口にし、
+   目が地図を下へなでると、そのまま数字に着く。地図と時間軸はスクロールしても上に残す。 */
+#s-rec{--scrimT:linear-gradient(180deg,rgba(7,9,12,.88),rgba(7,9,12,0));--scrimB:linear-gradient(0deg,rgba(7,9,12,.96) 18%,rgba(7,9,12,.6) 62%,rgba(7,9,12,0));--ontx:#fff;--onsub:#b7c1cd}
+[data-theme=light] #s-rec{--scrimT:linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,0));--scrimB:linear-gradient(0deg,rgba(238,241,245,.98) 18%,rgba(238,241,245,.7) 62%,rgba(238,241,245,0));--ontx:#0f1720;--onsub:#4a5664}
+.rstick{position:sticky;top:0;z-index:5;background:var(--bg)}
+.rhero{position:relative;height:400px;overflow:hidden}
+.rhero svg.map{position:absolute;inset:0;width:100%;height:100%}
+.rhero .scT{position:absolute;left:0;right:0;top:0;height:150px;background:var(--scrimT);pointer-events:none}
+.rhero .scB{position:absolute;left:0;right:0;bottom:0;height:190px;background:var(--scrimB);pointer-events:none}
+.rhead{position:absolute;left:0;right:0;top:47px;display:flex;align-items:flex-start;gap:6px;padding:4px 8px}
+.rhead .t{flex:1;min-width:0;padding-top:4px;color:var(--ontx)}
+.rhead .t span{display:block;font-size:13px;font-weight:700;color:var(--onsub)}
+.rhead .t b{display:block;font-size:26px;font-weight:800;line-height:1.15;margin-top:1px}
+.gbtn{width:44px;height:44px;border-radius:22px;border:1px solid var(--glass-line);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:grid;place-items:center;color:var(--tx);flex:none}
+.gbtn svg{width:20px;height:20px}
+.rtools2{position:absolute;right:8px;top:104px;display:flex;flex-direction:column;gap:6px}
+.rtools2 .gbtn{width:40px;height:40px}
+.rstats{position:absolute;left:0;right:0;bottom:0;padding:0 16px 12px;color:var(--ontx)}
+.rstats .crumb3{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--onsub)}
+.rstats .crumb3 a{color:var(--acc);cursor:pointer}
+.rstats .lg2{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700}
+.rstats .lg2 i{display:block;width:40px;height:5px;border-radius:3px;background:linear-gradient(90deg,#4f7cff,#35d6c8,#b6f25a,#ffd84d,#ff6b4a)}
+.rstats .nums{display:flex;align-items:flex-end;gap:18px;margin-top:2px}
+.rstats .nums .p b{display:block;font-size:64px;font-weight:800;line-height:1;letter-spacing:-.03em}
+.rstats .nums .p span,.rstats .nums .s span{font-size:13px;font-weight:700;color:var(--onsub)}
+.rstats .nums .s{padding-bottom:4px}
+.rstats .nums .s b{display:block;font-size:30px;font-weight:800;line-height:1}
+.rstats .meta2{font-size:14px;font-weight:700;color:var(--onsub);margin-top:6px}
+.rstats .meta2 b{color:var(--ontx)}
+.nowpill2{position:absolute;left:12px;top:128px;display:none;gap:8px;align-items:baseline;background:var(--glass);border:1px solid var(--glass-line);border-radius:14px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--sub);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.nowpill2.show{display:flex}
+.nowpill2 b{font-size:17px;color:var(--tx);font-family:Inter,sans-serif}
+.rplay{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;border-bottom:1px solid var(--line)}
+.rplay .pb{width:44px;height:44px;border-radius:22px;border:0;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;flex:none;box-shadow:0 6px 18px rgba(53,214,200,.25)}
+.rplay .pb svg{width:16px;height:16px}
+.rplay .tl{flex:1;min-width:0}
+.rplay .tl svg{width:100%;height:44px;display:block;overflow:visible}
+.rplay .sp{height:36px;min-width:52px;border-radius:18px;border:1px solid var(--line);background:var(--s2);font:800 13px Inter,sans-serif;flex:none}
+.scards{display:flex;gap:8px;overflow-x:auto;padding:14px 12px 4px;scrollbar-width:none}
+.scards::-webkit-scrollbar{display:none}
+.sc{flex:none;width:126px;border-radius:18px;background:var(--s1);border:1px solid var(--line);padding:10px 12px 11px;text-align:left}
+.sc .n{display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:var(--sub)}
+.sc .n i{font-style:normal;color:var(--acc)}
+.sc .pp{font-size:24px;font-weight:800;margin-top:4px;font-family:Inter,sans-serif}
+.sc .pp small{font-size:11px;color:var(--mute);font-weight:700;margin-right:3px}
+.sc .mm{font-size:12px;color:var(--sub);font-weight:700;margin-top:2px;white-space:nowrap}
+.sc .bar{height:4px;border-radius:2px;margin-top:8px;background:var(--pc)}
+.sc.all{width:76px;display:grid;place-items:center;font-size:15px;font-weight:800}
+.sc.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--s2)}
+.rsec2{margin:18px 12px 0}
+.rsec2 h3{font-size:13px;font-weight:800;color:var(--sub);letter-spacing:.06em;margin:0 4px 8px}
+.gz{position:absolute;z-index:6;width:30px;height:30px;border-radius:15px;background:#ff6b4a;color:#fff;font:900 16px Inter,sans-serif;display:none;place-items:center;box-shadow:0 0 0 3px rgba(255,107,74,.35)}
+.showgaze .gz{display:grid}
 .rrow{display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:0 4px;border-top:1px solid var(--line);font-size:15px;font-weight:800}
 .rrow span{color:var(--sub);font-weight:700;font-size:14px}
-.gaze{position:absolute;z-index:4;width:30px;height:30px;border-radius:15px;background:#ff6b4a;color:#fff;font:900 16px Inter,sans-serif;display:none;place-items:center;box-shadow:0 0 0 3px rgba(255,107,74,.35)}
-.showgaze .gaze{display:grid}
 
 /* ---------- ④ 警告の設定 ---------- */
 .intro{font-size:14px;color:var(--sub);line-height:1.6;margin:0 16px 12px;font-weight:600}
@@ -334,7 +339,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v6</h1>
+  <h1>画面刷新 試作 v7</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -443,41 +448,49 @@ background:#000;color:#fff}
 
   <!-- ================= ⑤ 記録画面 ================= -->
   <section class="screen" id="s-rec">
-    <div class="sb"><span class="num">21:45</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
-    <div class="rtop">
-      <button class="icb" data-go="list" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <div class="t"><b>8月6日(木) 07:06</b><span>8+ ・ 7番</span></div>
-      <button class="icb" aria-label="共有" data-toast="共有(GPX・CSV・画像)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6h14v-6"/></svg></button>
-    </div>
     <div class="scroll" id="recScroll" style="position:relative">
-      <div class="hero">
-        <span class="gaze" style="right:16px;top:4px">1</span>
-        <div class="crumbs" id="crumbs"></div>
-        <div class="heroN" id="heroN"></div>
-        <div class="meta" id="meta"></div>
-      </div>
-      <div style="position:relative">
-        <span class="gaze" style="right:16px;top:-6px">2</span>
-        <div class="sets" id="sets"></div>
-      </div>
-      <div class="stick">
-        <span class="gaze" style="right:24px;top:10px;z-index:9">3</span>
-        <div class="rmap" id="rmap"></div>
-        <div class="play2">
+      <div class="rstick">
+        <div class="rhero">
+          <div id="rmap"></div>
+          <div class="scT"></div><div class="scB"></div>
+          <div class="sb" style="position:absolute;left:0;right:0;top:0;color:var(--ontx)"><span class="num">21:45</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+          <div class="rhead">
+            <button class="gbtn" data-go="list" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <div class="t"><span>2026年8月6日(木) 07:06</span><b>8+ ・ 7番</b></div>
+            <button class="gbtn" aria-label="共有" data-toast="共有(GPX・CSV・画像)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6h14v-6"/></svg></button>
+          </div>
+          <div class="rtools2">
+            <button class="gbtn" data-toast="表示: 危険区域・航路・写真" aria-label="表示"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg></button>
+            <button class="gbtn" data-toast="全体が入るように戻す" aria-label="全体"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+          </div>
+          <div class="nowpill2" id="nowpill"></div>
+          <div class="rstats">
+            <span class="gz" style="right:16px;top:-6px">1</span>
+            <div class="crumb3" id="crumbs"></div>
+            <div class="nums" id="heroN"></div>
+            <div class="meta2" id="meta"></div>
+          </div>
+        </div>
+        <div class="rplay" style="position:relative">
+          <span class="gz" style="right:70px;top:-8px">2</span>
           <button class="pb" id="recPlay" aria-label="再生"></button>
           <div class="tl" id="rtl"></div>
           <button class="sp" id="recSpeed">×30</button>
         </div>
       </div>
-      <div class="rsec" style="position:relative">
-        <span class="gaze" style="right:4px;top:-4px">4</span>
+      <div style="position:relative">
+        <span class="gz" style="right:16px;top:4px">3</span>
+        <div class="scards" id="sets"></div>
+      </div>
+      <div class="rsec2" style="position:relative">
+        <span class="gz" style="right:4px;top:-4px">4</span>
         <h3 id="chartTitle">推移</h3>
         <div class="card" style="padding:12px">
-          <div class="chips" id="rchips"></div>
+          <div class="seg" id="rchips" style="margin:0 0 8px"></div>
           <svg viewBox="0 0 340 150" style="width:100%;display:block" id="rchart"></svg>
         </div>
       </div>
-      <div class="rsec">
+      <div class="rsec2">
         <h3>くわしく</h3>
         <div class="card" style="padding:4px 12px">
           <div class="rrow" style="border-top:0">250mごとの表<span>›</span></div>
@@ -622,7 +635,21 @@ function edgePoint(angle) {
   const t = Math.min(tx, ty);
   return { x: SELF.x + dx * t, y: SELF.y + dy * t };
 }
+/* 航行中の配色(v7)。航空の表示基準(FAA AC 25-11B)と TCAS の考え方に倣う:
+   - 赤・黄(琥珀)は「警告・注意」専用。ほかの物に使うと警告が効かなくなる。
+   - 数字・自機は白、他機は白/シアン。色は6色以内。
+   - 自艇は画面の定位置(横中央・上から45%)にいるので、色で探す必要がない。
+   'current' は比較用の現行寄り(自艇=赤、他艇=灰、予測=赤/黄)。 */
+const NAV_PAL = {
+  proposal: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
+    self: '#ffffff', selfEdge: '#000000', other: '#5ed3f3', otherEdge: '#001018', otherLabel: '#8fd8ee',
+    stop: 'rgba(255,255,255,.7)', warnLine: 'rgba(255,255,255,.4)', hazard: '#ffb547' },
+  current: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
+    self: '#f44336', selfEdge: '#ffffff', other: '#c9d3dc', otherEdge: '#000000', otherLabel: '#9aa6b3',
+    stop: 'rgba(255,82,82,.55)', warnLine: 'rgba(255,204,85,.5)', hazard: '#ffb547' },
+};
 function navMap(warn, dir, glow) {
+  const P = NAV_PAL[state.nav.pal];
   // 右側通行で自艇は中央線の左を走るので、中央線は自艇の右に見える。
   const selfY = SELF.y, selfX = SELF.x, cx = SELF.x + 26;
   const ang = DIRS[dir][1] ?? 150;
@@ -630,26 +657,27 @@ function navMap(warn, dir, glow) {
   // 試作の見た目のため、他艇は川の中に収める(向きはおおよそ保つ)。
   const otherX = Math.max(cx - 66, Math.min(cx + 66, o.x)), otherY = Math.max(320, Math.min(800, o.y));
   const otherRot = ang + 180; // 先端を自艇へ向ける
+  const hz = P.hazard;
   return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
-    <rect width="390" height="844" fill="#07090b"/>
-    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880 L${cx + 86},880 C${cx + 74},560 ${cx + 92},250 ${cx + 80},-20 Z" fill="#1c4d62"/>
-    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
-    <path d="M${cx + 80},-20 C${cx + 92},250 ${cx + 74},560 ${cx + 86},880" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
+    <rect width="390" height="844" fill="${P.land}"/>
+    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880 L${cx + 86},880 C${cx + 74},560 ${cx + 92},250 ${cx + 80},-20 Z" fill="${P.water}"/>
+    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880" stroke="${P.bank}" stroke-width="1.5" fill="none"/>
+    <path d="M${cx + 80},-20 C${cx + 92},250 ${cx + 74},560 ${cx + 86},880" stroke="${P.bank}" stroke-width="1.5" fill="none"/>
     ${glow ? `<defs><radialGradient id="glowG" gradientUnits="userSpaceOnUse" cx="${glow.x}" cy="${glow.y}" r="130">
       <stop offset="0" stop-color="#ff2828" stop-opacity=".9"/><stop offset=".45" stop-color="#ff2828" stop-opacity=".35"/><stop offset="1" stop-color="#ff2828" stop-opacity="0"/></radialGradient></defs>
       <rect class="glowpulse" width="390" height="844" fill="url(#glowG)"/>` : ''}
-    <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="10 9" fill="none" opacity=".45"/>
-    <rect x="${cx - 100}" y="552" width="200" height="22" fill="rgba(255,160,77,.14)" stroke="rgba(255,160,77,.7)" stroke-width="1.5"/>
-    <rect x="${cx - 12}" y="556" width="10" height="14" fill="rgba(255,160,77,.5)"/>
-    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="rgba(255,160,77,.22)" stroke="rgba(255,160,77,.7)" stroke-width="1.5"/>
-    <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="rgba(255,82,82,.5)" stroke-width="1.5"/>
-    <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="rgba(255,204,85,.45)" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="${P.center}" stroke-width="1.5" stroke-dasharray="10 9" fill="none"/>
+    <rect x="${cx - 100}" y="552" width="200" height="22" fill="${hz}" fill-opacity=".13" stroke="${hz}" stroke-opacity=".75" stroke-width="1.5"/>
+    <rect x="${cx - 12}" y="556" width="10" height="14" fill="${hz}" fill-opacity=".6"/>
+    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="${hz}" fill-opacity=".22" stroke="${hz}" stroke-opacity=".75" stroke-width="1.5"/>
+    <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="${P.stop}" stroke-width="1.5"/>
+    <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="${P.warnLine}" stroke-width="1.5" stroke-dasharray="4 4"/>
     <g transform="translate(${otherX},${otherY}) rotate(${otherRot})">
-      <path d="M0,-26 L0,-90" stroke="rgba(201,211,220,.45)" stroke-width="1.5"/>
-      ${homePlate(46, '#c9d3dc', '#000', false).replace('stroke-width="1.5"', 'stroke-width="2"')}
+      <path d="M0,-26 L0,-90" stroke="${P.other}" stroke-opacity=".5" stroke-width="1.5"/>
+      ${homePlate(46, P.other, P.otherEdge, false).replace('stroke-width="1.5"', 'stroke-width="2"')}
     </g>
-    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="#9aa6b3" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
-    <g transform="translate(${selfX},${selfY})">${homePlate(52, '#f44336', '#fff', true)}</g>
+    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="${P.otherLabel}" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
+    <g transform="translate(${selfX},${selfY})">${homePlate(52, P.self, P.selfEdge, true).replace('stroke-width="1.5"', 'stroke-width="2"')}</g>
   </svg>`;
 }
 $('#map-home').innerHTML = riverMap();
@@ -659,7 +687,7 @@ $('#map-home').innerHTML = riverMap();
 const state = {
   screen: 'home',
   home: { check: 'ok' },
-  nav: { warn: 'imminent', health: 'ok', fix: 'ok', dir: 'rr' },
+  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal' },
   list: { period: 'month' },
   rec: { sel: 'all', gaze: 'off', metric: 'pace', cursor: 0, speed: 30 },
 };
@@ -693,6 +721,7 @@ const SCENARIOS = {
     { key: 'check', label: '出航前チェック', opts: [['ok', 'すべて良好'], ['vol', '音量が小さい'], ['gps', 'GPSが弱い']] },
   ],
   nav: [
+    { key: 'pal', label: '配色', opts: [['proposal', '提案(自艇=白・他艇=シアン)'], ['current', '現行寄り(自艇=赤)']] },
     { key: 'warn', label: '警告', opts: [['none', 'なし'], ['action', '予告'], ['imminent', '本警告']] },
     { key: 'health', label: '能力', opts: [['ok', '正常'], ['gps', 'GPS弱い'], ['rx', '他艇受信不可']] },
     { key: 'dir', label: '向き(漕手から)', opts: [['rr', '右後ろ'], ['r', '右'], ['b', '真後ろ'], ['lr', '左後ろ'], ['l', '左'], ['unk', '不明']] },
@@ -878,10 +907,10 @@ function recSel() { return state.rec.sel === 'all' ? null : SETS[+state.rec.sel]
 function renderRec() {
   const r = state.rec, s = recSel();
   $('#s-rec').classList.toggle('showgaze', r.gaze === 'on');
-  // ① 答え: 選んだ区間の3点セット(ペース・レート・1漕距離)。区間を選ぶと、ここが書き換わる。
-  $('#crumbs').innerHTML = s
-    ? `<a data-rsel="all">全体</a> › <span style="color:var(--tx)">${s.n}</span> <span style="color:var(--acc)">${s.k}</span>`
-    : 'この日の練習';
+  // ① 答え: 地図の下端に重ねる。区間を選ぶと、ここが書き換わる。
+  $('#crumbs').innerHTML = (s
+    ? `<a data-rsel="all">全体</a> › <span style="color:var(--ontx)">${s.n}</span> <span style="color:var(--acc)">${s.k}</span>`
+    : '<span>この日の練習</span>') + '<span class="lg2">遅い<i></i>速い</span>';
   const v = s || { pace: '2:55', spm: 20, dps: 8.6 };
   $('#heroN').innerHTML = `
     <div class="p"><b class="num">${v.pace}</b><span>/500m 平均</span></div>
@@ -890,19 +919,22 @@ function renderRec() {
   $('#meta').innerHTML = s
     ? `<b class="num">${s.km} km</b> ・ <b class="num">${s.t}</b> ・ ${Math.floor(s.a)}分〜${Math.floor(s.b)}分`
     : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ 漕ぎ <b class="num">30:14</b> ・ 4セット`;
-  // ② どこを見るか
-  $('#sets').innerHTML = `<button class="setc ${!s ? 'on' : ''}" data-rsel="all">全体</button>` +
-    SETS.map((x, i) => `<button class="setc ${state.rec.sel == i ? 'on' : ''}" data-rsel="${i}">${i + 1} <i>${x.k}</i> <b>${x.pace}</b></button>`).join('');
-  // ③ 地図と時間軸
-  $('#rmap').innerHTML = recMap(s) + `
-    <div class="lg"><span>遅い</span><i></i><span>速い</span></div>
-    <div class="tools"><button data-toast="表示: 危険区域・航路・写真">${ICON_LAYERS}</button><button data-toast="全体が入るように戻す">${ICON_FIT}</button></div>
-    <div class="nowpill ${r.cursor > 0 ? 'show' : ''}"><b>${fmtMin(r.cursor)}</b>${curVals(r.cursor)}</div>`;
+  $('#rmap').innerHTML = recMap(s);
+  const np = $('#nowpill');
+  np.className = 'nowpill2' + (r.cursor > 0 ? ' show' : '');
+  np.innerHTML = `<b>${fmtMin(r.cursor)}</b>${curVals(r.cursor)}`;
+  // ② いつ(時間軸)。ペースの色は細い帯に抑え、選んだ区間はティールの括弧で囲む。
   $('#rtl').innerHTML = recTimeline(s, r.cursor);
   $('#recPlay').innerHTML = recTimer
     ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>';
   $('#recSpeed').textContent = '×' + r.speed;
+  // ③ どこを見るか: 旧版のセットカード(平均ペース+ペース色の帯)を小さく
+  $('#sets').innerHTML = `<button class="sc all ${!s ? 'on' : ''}" data-rsel="all">全体</button>` +
+    SETS.map((x, i) => `<button class="sc ${state.rec.sel == i ? 'on' : ''}" data-rsel="${i}" style="--pc:${RAMP[[2, 2, 3, 3][i]]}">
+      <div class="n"><span>${i + 1}セット目</span><i>${x.k}</i></div>
+      <div class="pp"><small>ave.</small>${x.pace}</div>
+      <div class="mm">${x.t} ・ ${x.km}km</div><div class="mm">SR${x.spm}</div><div class="bar"></div></button>`).join('');
   // ④ くわしく
   $('#chartTitle').textContent = s ? `${s.n}の推移` : 'この日の推移';
   const M = [['pace', 'ペース'], ['spm', 'レート'], ['dps', '1漕距離']];
@@ -917,14 +949,15 @@ function curVals(m) {
   return inSet ? `<span>${inSet.pace}/500m ・ ${inSet.spm}spm</span>` : '<span>休憩・移動</span>';
 }
 function trackPts() {
-  // 湖の沖へ出て、同じ航路を2往復する形(スクショの形に似せる)。
-  const A = [60, 170], B = [350, 55], pts = [];
+  // 湖の沖へ出て、同じ航路を2往復する形(旧版のスクショの形に似せる)。
+  // 見出し(上)と数字(下)の間の帯に収める。
+  const A = [52, 200], B = [352, 120], pts = [];
   for (let k = 0; k < 4; k++) {
     const set = SETS[k];
     for (let i = 0; i <= 30; i++) {
       const u = k % 2 ? 1 - i / 30 : i / 30;
-      const off = (k % 2 ? 7 : -7) + Math.sin(i * .7 + k) * 1.5;
-      const x = A[0] + (B[0] - A[0]) * u + off * .37, y = A[1] + (B[1] - A[1]) * u + off;
+      const off = (k % 2 ? 9 : -9) + Math.sin(i * .7 + k) * 1.8;
+      const x = A[0] + (B[0] - A[0]) * u + off * .45, y = A[1] + (B[1] - A[1]) * u + off;
       const tMin = set.a + (set.b - set.a) * (i / 30);
       pts.push({ x, y, k, tMin, c: RAMP[Math.min(4, Math.max(0, Math.round(2 + Math.sin(i * .5 + k * 2) * 1.6)))] });
     }
@@ -933,37 +966,49 @@ function trackPts() {
 }
 const TRACK = trackPts();
 function recMap(s) {
-  const land = 'var(--s1)', water = document.documentElement.dataset.theme === 'light' ? '#cfe6ee' : '#10263a';
-  let segs = '';
+  const light = document.documentElement.dataset.theme === 'light';
+  const land = light ? '#e9edf1' : '#0b0f14', water = light ? '#bfdfeb' : '#132536', road = light ? '#ffffff' : '#161d26';
+  let segs = '', casing = '';
   for (let i = 1; i < TRACK.length; i++) {
     const p = TRACK[i - 1], q = TRACK[i];
     if (p.k !== q.k) continue;
     const dim = s && SETS[p.k] !== s;
-    segs += `<line x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${q.y.toFixed(1)}" stroke="${dim ? 'var(--mute)' : q.c}" stroke-opacity="${dim ? .55 : 1}" stroke-width="${dim ? 3 : 5}" stroke-linecap="round"/>`;
+    const l = `x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${q.y.toFixed(1)}"`;
+    casing += `<line ${l} stroke="${light ? '#fff' : '#05070a'}" stroke-width="${dim ? 5 : 9}" stroke-linecap="round"/>`;
+    segs += `<line ${l} stroke="${dim ? (light ? '#9aa6b3' : '#4a5563') : q.c}" stroke-width="${dim ? 3 : 6}" stroke-linecap="round"/>`;
   }
   const cur = TRACK.reduce((best, p) => Math.abs(p.tMin - state.rec.cursor) < Math.abs(best.tMin - state.rec.cursor) ? p : best, TRACK[0]);
-  return `<svg viewBox="0 0 366 230" preserveAspectRatio="xMidYMid slice">
-    <rect width="366" height="230" fill="${land}"/>
-    <path d="M0,120 C80,90 200,20 366,-10 L366,230 L0,230 Z" fill="${water}"/>
-    <path d="M20,250 C40,210 30,190 60,172" stroke="var(--s3)" stroke-width="3" fill="none" stroke-dasharray="2 5"/>
-    <path d="M30,190 L366,40" stroke="var(--sub)" stroke-width="1.5" stroke-dasharray="6 6" opacity=".6"/>
-    ${segs}
-    <circle cx="60" cy="172" r="6" fill="#fff" stroke="var(--bg)" stroke-width="2"/>
-    ${state.rec.cursor > 0 ? `<circle cx="${cur.x}" cy="${cur.y}" r="8" fill="#ff6b4a" stroke="#fff" stroke-width="2.5"/>` : ''}
+  const grid = [...Array(9)].map((_, i) => `<path d="M${-40 + i * 60},400 L${40 + i * 60},230" stroke="${road}" stroke-width="3"/>`).join('');
+  return `<svg class="map" viewBox="0 0 390 400" preserveAspectRatio="xMidYMid slice">
+    <rect width="390" height="400" fill="${land}"/>
+    ${grid}
+    <path d="M-10,190 C90,160 220,100 400,70 L400,-10 L140,-10 C100,40 40,80 -10,100 Z" fill="${water}"/>
+    <path d="M-10,250 C60,235 120,222 170,210 C240,192 320,168 400,150 L400,70 C220,100 90,160 -10,190 Z" fill="${water}"/>
+    <path d="M20,212 L400,108" stroke="${light ? 'rgba(15,23,32,.5)' : 'rgba(255,255,255,.55)'}" stroke-width="2" stroke-dasharray="7 6"/>
+    <path d="M24,262 C34,240 40,222 52,200" stroke="${light ? '#9aa6b3' : '#4a5563'}" stroke-width="4" fill="none" stroke-linecap="round"/>
+    ${casing}${segs}
+    <circle cx="52" cy="200" r="7" fill="#fff" stroke="${light ? '#0f1720' : '#05070a'}" stroke-width="2.5"/>
+    ${state.rec.cursor > 0 ? `<circle cx="${cur.x}" cy="${cur.y}" r="9" fill="#ff6b4a" stroke="#fff" stroke-width="3"/>` : ''}
   </svg>`;
 }
 function recTimeline(s, cursor) {
   const W = 260, x = m => (m / TOTAL_MIN) * W;
-  let bars = '';
-  // 休憩・移動は細い灰色。漕いだセットは太い灰色、選んだ区間だけティール。ペースの色は使わない。
-  bars += `<rect x="0" y="17" width="${W}" height="4" rx="2" fill="var(--s3)"/>`;
-  SETS.forEach(t => {
-    const on = !s || s === t;
-    bars += `<rect x="${x(t.a)}" y="8" width="${x(t.b) - x(t.a)}" height="22" rx="5" fill="${s === t ? 'var(--acc)' : 'var(--mute)'}" opacity="${on ? 1 : .45}" data-rsel="${SETS.indexOf(t)}" style="cursor:pointer"/>`;
+  let bars = `<rect x="0" y="15" width="${W}" height="3" rx="1.5" fill="var(--s3)"/>`;
+  // 漕いだ区間はペースの色の細い帯(旧版の味を残す)。地図より細く低彩度にして焦点を奪わない。
+  SETS.forEach((t, i) => {
+    const n = 8;
+    for (let k = 0; k < n; k++) {
+      const a = t.a + (t.b - t.a) * k / n, b = t.a + (t.b - t.a) * (k + 1) / n;
+      const c = RAMP[Math.min(4, Math.max(0, Math.round(2 + Math.sin(k * .9 + i * 2) * 1.4)))];
+      bars += `<rect x="${x(a)}" y="9" width="${x(b) - x(a) + .4}" height="15" fill="${c}" opacity="${!s || s === t ? .95 : .3}" data-rsel="${i}" style="cursor:pointer"/>`;
+    }
   });
-  const ticks = [0, 20, 40, 60].map(m => `<text x="${x(m)}" y="45" font-size="12" font-weight="700" fill="var(--mute)" text-anchor="${m ? 'middle' : 'start'}">${m}分</text>`).join('');
-  const cur = cursor > 0 ? `<rect x="${x(cursor) - 1.5}" y="2" width="3" height="34" rx="1.5" fill="#ff6b4a"/>` : '';
-  return `<svg viewBox="0 0 ${W} 48">${bars}${ticks}${cur}</svg>`;
+  // 選んだ区間: 旧版と同じティールの括弧
+  const br = s ? `<rect x="${x(s.a) - 3}" y="4" width="${x(s.b) - x(s.a) + 6}" height="25" rx="6" fill="none" stroke="var(--acc)" stroke-width="2.5"/>
+    <rect x="${x(s.a) - 5}" y="7" width="4" height="19" rx="2" fill="var(--acc)"/><rect x="${x(s.b) + 1}" y="7" width="4" height="19" rx="2" fill="var(--acc)"/>` : '';
+  const ticks = [0, 20, 40, 60].map(m => `<text x="${x(m)}" y="43" font-size="12" font-weight="700" fill="var(--mute)" text-anchor="${m ? 'middle' : 'start'}">${m}分</text>`).join('');
+  const cur = cursor > 0 ? `<rect x="${x(cursor) - 1.5}" y="0" width="3" height="32" rx="1.5" fill="#ff6b4a"/>` : '';
+  return `<svg viewBox="0 0 ${W} 46">${bars}${br}${ticks}${cur}</svg>`;
 }
 function recChart(metric, s) {
   const color = { pace: 'var(--m-pace)', spm: 'var(--m-spm)', dps: 'var(--m-dps)' }[metric];
@@ -1207,29 +1252,30 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v6)',
+    h: '② 航行中(v7) 配色の考え方',
     li: [
-      ['色の役割を1つずつに絞る', '赤=自艇と警告の点滅だけ。白=計器の数字。灰色=他艇・操作・ラベル。橙=固定の危険区域(橋・橋脚・流木)。水面の青と黒い陸。それ以外の色は使わない。'],
-      ['他艇は灰色1色、赤を一切使わない', '自艇(赤)と同じ色を他艇に乗せない。警告の相手でも縁を赤くしない(どの艇かは画面の端の光る向きと地図で分かる)。光輪もやめて、暗い地図の上で明るい灰色の形だけにする。'],
-      ['地図の線は細く薄く', '岸の線・中央線・予測の線を細く半透明に。予測の赤(停止距離)と黄(警告距離)の区別は残す(既存の要件)。'],
-      ['計器と操作から色を抜く', 'ペース・レートの上の色の帯をやめ、白と灰色だけに。追跡は白い縁で「オン」を示し、終了とメニューは灰色。'],
-      ['警告は画面の端の赤い点滅だけ(v5のまま)', '予告も本警告も同じ見た目。向きが分からないときは縁全体。'],
-      ['自艇の位置・計器の大きさ・左下の操作はそのまま', '自艇は横中央・上から45%。ペース76・レート70・距離46・chrono 36。'],
+      ['赤と琥珀は警告・注意だけ(航空の表示基準)', 'FAA AC 25-11B は赤=警告・琥珀=注意を厳格に予約し、ほかに使うと警告に慣れて効かなくなるとする。色は6色以内。ここでは 白・シアン・琥珀・赤 と水面の紺・陸の黒だけ。'],
+      ['自艇=白、他艇=シアン(TCAS と同じ)', '航空機の衝突防止表示は、自機=白、他機=白/シアン、注意=琥珀、回避指示=赤。警告を赤い光にした今、自艇まで赤だと「赤=危ない」が2つの意味を持つ。自艇は画面の定位置(横中央・上から45%)にいるので、色で探す必要もない。'],
+      ['他艇のシアンは暗い水面で一番浮く', '紺の水面との明るさの差が大きく(色相が近くても明度で分かれる)、白の自艇とも赤・琥珀とも混ざらない。色覚の型によらず白とシアンは見分けやすい。'],
+      ['自艇の予測線も白に', '停止距離=白の実線、警告距離=白の破線(色でなく線の種類で区別)。既存の「赤・黄で塗り分け」の要件を変える提案なので、採用するなら要件の更新が要る。'],
+      ['固定の危険区域・能力低下は琥珀', '橋・橋脚・流木、GPS弱いなど「注意」はすべて琥珀の細い線と淡い塗りに揃える。'],
+      ['赤は警告の画面の端の点滅だけ', '予告も本警告も同じ。画面の上で赤が出たら必ず「後ろを確認」。'],
+      ['比較できるように「配色: 現行寄り」を残した', '自艇=赤・他艇=灰色・予測=赤/黄。'],
     ],
-    ask: '流木・橋脚を橙にまとめたが(赤を自艇と警告に空けるため)、流木だけは赤の方が危険が伝わると感じるか。',
+    ask: '自艇を赤から白に変えてよいか(提案)。慣れた色なので、変えるなら部員への周知が要る。',
   },
   rec: {
-    h: '⑤ 記録画面(視線の順番)',
+    h: '⑤ 記録画面(v7) 旧版の迫力 × 視線の順番',
     li: [
-      ['答えを一番上に', '「この日どうだったか」(ペース・レート・1漕距離)が地図・再生・セットの下にあり、最後に目に入っていた。報道の「逆ピラミッド」と同じく、結論から先に置く。'],
-      ['上から 数字 → 区間 → 地図・時間軸 → くわしく', '「視線の順番:表示」で番号が出る。1つの帯に焦点は1つ。区間を選ぶと、すぐ上の数字が書き換わる(原因と結果が隣り合う)。'],
-      ['ペースの色は地図だけ', '地図と時間軸の両方が虹色で、目が2か所に引っ張られていた。時間軸は灰色にし、選んだ区間だけティール。'],
-      ['操作は1つずつに畳む', '倍速5つ→「×30」1つ(押すと切り替わる)。地図のボタン4つ→「表示」と「全体」の2つ。'],
-      ['「--」の4枠をやめる', '再生していないと中身が「--」の枠が4つ並んでいた。再生位置の値は、動かしたときだけ地図の左下に出す。'],
-      ['地図と時間軸は下へスクロールしても上に残す', '数字が画面外へ出ても、どこ・いつを見ているかは残る(現行の設計を維持)。'],
+      ['地図を画面の端まで敷く(旧版)', '地図・虹色の航跡・太い数字は Strava の活動ページの型で、見て楽しい入口になる。その下端に答え(ペース・レート・1漕距離)を重ねた。目が地図を下へなでると、そのまま数字に着く。'],
+      ['地図と時間軸は上に残す', 'Strava も「要約はページのどこを見ても残る」。下のカード・グラフを読んでいる間も、どこ・いつと答えが見える。'],
+      ['時間軸はペースの色を細い帯で(旧版の味)', '地図より細く、選んでいない区間は薄く。選んだ区間は旧版と同じティールの括弧で囲む。'],
+      ['セットは旧版のカード(平均ペース+色の帯)を小さく', '選ぶと上の数字・地図・括弧が一緒に変わる。'],
+      ['操作は畳んだまま(v6)', '倍速は「×30」1つ、地図のボタンは「表示」「全体」、「--」の4枠はなし。再生位置の値は動かしたときだけ地図に出す。'],
+      ['番号は「視線の順番: 表示」で', '①答え(地図の下端) → ②いつ → ③どこを見るか → ④くわしく。'],
     ],
-    ask: '時間軸からペースの色を外してよいか(地図には残す)。',
   },
+
   list: {
     h: '③ 記録一覧',
     li: [
