@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../models/session_model.dart';
 import '../services/session_aggregator.dart';
+import '../services/session_list_grouping.dart';
 import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
 import '../types/boat_type.dart';
@@ -108,6 +109,12 @@ class RecordListScreen extends HookConsumerWidget {
                       aggregate: aggregate,
                       onChanged: (value) => period.value = value,
                     ),
+                    SizedBox(height: context.dimens.space3),
+                    _WeeklyBars(
+                      sessions: sessions.value,
+                      period: period.value,
+                      now: clock?.call() ?? DateTime.now(),
+                    ),
                     SizedBox(height: context.dimens.space4),
                     // 一覧は期間の切替に関係なく全件。上の集計と範囲が違うことを
                     // 見出しの横に書いておく。
@@ -133,19 +140,19 @@ class RecordListScreen extends HookConsumerWidget {
                       ],
                     ),
                     SizedBox(height: context.dimens.space2),
-                    for (final session in sessions.value)
-                      _SessionListCard(
-                        session: session,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  RecordReplayScreen(session: session),
-                            ),
-                          ).then((_) => loadSessions());
-                        },
-                      ),
+                    ..._groupedSessionList(
+                      context,
+                      sessions.value,
+                      onOpen: (session) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                RecordReplayScreen(session: session),
+                          ),
+                        ).then((_) => loadSessions());
+                      },
+                    ),
                   ],
                 ),
     );
@@ -322,91 +329,101 @@ class _SessionListCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: EdgeInsets.all(dimens.space3),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.rowing, size: 20, color: colors.primary),
-                  SizedBox(width: dimens.space2),
-                  Expanded(
-                    child: Text(
-                      formatDateTime(session.startedAt),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: dimens.space2,
-                      vertical: dimens.space1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.primary.withValues(alpha: 0.1),
-                      borderRadius: dimens.borderSm,
-                    ),
-                    child: Text(
-                      boatTypeDisplayLabel(session.boatTypeName),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (!session.isComplete) ...[
-                SizedBox(height: dimens.space2),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: dimens.space2,
-                    vertical: dimens.space1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.cautionSurface,
-                    borderRadius: dimens.borderSm,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.restore, size: 16, color: colors.warning),
-                      SizedBox(width: dimens.space1),
-                      Flexible(
-                        child: Text(
-                          '異常終了から復旧（最終保存時点まで）',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: colors.warning,
+              // 航跡の小さな絵。同じ見た目のカードが続いても、どの日か見分けやすい。
+              _TrackThumb(points: session.points, color: colors.primary),
+              SizedBox(width: dimens.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            formatDateTime(session.startedAt),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
+                        ),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: dimens.space2,
+                            vertical: dimens.space1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: 0.1),
+                            borderRadius: dimens.borderSm,
+                          ),
+                          child: Text(
+                            boatTypeDisplayLabel(session.boatTypeName),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!session.isComplete) ...[
+                      SizedBox(height: dimens.space2),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: dimens.space2,
+                          vertical: dimens.space1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.cautionSurface,
+                          borderRadius: dimens.borderSm,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.restore,
+                                size: 16, color: colors.warning),
+                            SizedBox(width: dimens.space1),
+                            Flexible(
+                              child: Text(
+                                '異常終了から復旧（最終保存時点まで）',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                    SizedBox(height: dimens.space2),
+                    Row(
+                      children: [
+                        _ListStat(
+                          label: '距離',
+                          value:
+                              '${(summary.totalDistanceMeters / 1000).toStringAsFixed(1)} km',
+                        ),
+                        _ListStat(
+                          label: '時間',
+                          value: formatDuration(summary.durationSec),
+                        ),
+                        _ListStat(
+                          label: '平均 /500m',
+                          value:
+                              '${formatPace(summary.avgPaceSecPer500)} /500m',
+                        ),
+                      ],
+                    ),
+                    _SetSummaryLine(session: session),
+                  ],
                 ),
-              ],
-              SizedBox(height: dimens.space2),
-              Row(
-                children: [
-                  _ListStat(
-                    label: '距離',
-                    value:
-                        '${(summary.totalDistanceMeters / 1000).toStringAsFixed(1)} km',
-                  ),
-                  _ListStat(
-                    label: '時間',
-                    value: formatDuration(summary.durationSec),
-                  ),
-                  _ListStat(
-                    label: '平均 /500m',
-                    value: '${formatPace(summary.avgPaceSecPer500)} /500m',
-                  ),
-                ],
               ),
-              _SetSummaryLine(session: session),
             ],
           ),
         ),
@@ -501,4 +518,230 @@ String _summarizeSets(Session session) {
         ? '$head ${s.bouts.length}本'
         : '$head ${fmtDuration(s.rowingSec)}';
   }).join(' ・ ');
+}
+
+/// 月ごとの見出しで区切り、短い記録(1分未満・100m未満)は下にまとめて畳む(消さない)。
+List<Widget> _groupedSessionList(
+  BuildContext context,
+  List<Session> sessions, {
+  required void Function(Session) onOpen,
+}) {
+  final colors = context.colors;
+  final normal = [
+    for (final s in sessions)
+      if (!isShortSession(s)) s
+  ];
+  final short = [
+    for (final s in sessions)
+      if (isShortSession(s)) s
+  ];
+  final widgets = <Widget>[];
+  String? month;
+  for (final s in normal) {
+    final d = s.startedAt.toLocal();
+    final key = '${d.year}年${d.month}月';
+    if (key != month) {
+      month = key;
+      final inMonth = normal.where((x) {
+        final t = x.startedAt.toLocal();
+        return t.year == d.year && t.month == d.month;
+      });
+      final km =
+          inMonth.fold<double>(0, (a, x) => a + x.summary.totalDistanceMeters) /
+              1000;
+      widgets.add(Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+        child: Row(children: [
+          Text(key,
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: colors.textSecondary)),
+          const Spacer(),
+          Text('${inMonth.length}本 ・ ${km.toStringAsFixed(1)} km',
+              style: TextStyle(fontSize: 13, color: colors.textSecondary)),
+        ]),
+      ));
+    }
+    widgets.add(_SessionListCard(session: s, onTap: () => onOpen(s)));
+  }
+  if (short.isNotEmpty) {
+    widgets.add(Card(
+      margin: const EdgeInsets.only(top: 4),
+      child: ExpansionTile(
+        title: Text('短い記録 ${short.length}件'),
+        subtitle: const Text('1分未満・100m未満'),
+        children: [
+          for (final s in short)
+            ListTile(
+              title: Text(formatDateTime(s.startedAt)),
+              trailing: Text(
+                '${formatDuration(s.summary.durationSec)} ・ '
+                '${s.summary.totalDistanceMeters.round()} m',
+              ),
+              onTap: () => onOpen(s),
+            ),
+        ],
+      ),
+    ));
+  }
+  return widgets;
+}
+
+/// 直近8週の距離の棒。選んでいる期間の週だけアクセントの色にする。
+class _WeeklyBars extends StatelessWidget {
+  const _WeeklyBars({
+    required this.sessions,
+    required this.period,
+    required this.now,
+  });
+
+  final List<Session> sessions;
+  final SessionAggregationPeriod period;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final totals = weeklyDistances(sessions, now: now);
+    final starts = weekStarts(now);
+    final max = totals.fold<double>(0, (a, b) => b > a ? b : a);
+    bool inPeriod(DateTime monday) => switch (period) {
+          SessionAggregationPeriod.all => true,
+          SessionAggregationPeriod.thisWeek => monday == starts.last,
+          SessionAggregationPeriod.thisMonth =>
+            monday.add(const Duration(days: 6)).month == now.month ||
+                monday.month == now.month,
+        };
+    return Semantics(
+      label: '直近8週の距離',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Text('週ごとの距離',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: colors.textSecondary)),
+            const Spacer(),
+            Text(
+              '直近8週 ${(totals.fold<double>(0, (a, b) => a + b) / 1000).toStringAsFixed(1)} km',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < totals.length; i++)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 棒の高さの枠を固定し、下に日付を置く(文字を大きくする設定でも溢れない)。
+                        SizedBox(
+                          height: 44,
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              height: max <= 0
+                                  ? 3
+                                  : (totals[i] / max * 44).clamp(3.0, 44.0),
+                              decoration: BoxDecoration(
+                                color: inPeriod(starts[i])
+                                    ? colors.primary
+                                    : colors.textDisabled,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          i == totals.length - 1
+                              ? '今週'
+                              : '${starts[i].month}/${starts[i].day}',
+                          style: TextStyle(
+                              fontSize: 11, color: colors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 航跡の小さな絵(表示専用)。点が多いときは間引く。
+class _TrackThumb extends StatelessWidget {
+  const _TrackThumb({required this.points, required this.color});
+
+  final List<TrackPoint> points;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: points.length < 2
+            ? Icon(Icons.rowing, color: color)
+            : CustomPaint(painter: _ThumbPainter(points, color)),
+      );
+}
+
+class _ThumbPainter extends CustomPainter {
+  _ThumbPainter(this.points, this.color);
+
+  final List<TrackPoint> points;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final step = (points.length / 200).ceil().clamp(1, 1 << 20);
+    final pts = [for (var i = 0; i < points.length; i += step) points[i]];
+    var minLat = pts.first.lat, maxLat = minLat;
+    var minLng = pts.first.lng, maxLng = minLng;
+    for (final p in pts) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
+    }
+    // 経度は緯度で縮めて、形がつぶれないようにする。
+    final kx = 0.82; // cos(35°)付近(桜川・霞ヶ浦)
+    final w = (maxLng - minLng) * kx, h = maxLat - minLat;
+    final span = w > h ? w : h;
+    if (span <= 0) return;
+    const pad = 8.0;
+    final scale = (size.width - pad * 2) / span;
+    final ox = (size.width - w * scale) / 2, oy = (size.height - h * scale) / 2;
+    final path = Path();
+    for (var i = 0; i < pts.length; i++) {
+      final x = ox + (pts[i].lng - minLng) * kx * scale;
+      final y = oy + (maxLat - pts[i].lat) * scale;
+      i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThumbPainter old) => old.points != points;
 }
