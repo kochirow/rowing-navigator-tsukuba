@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../models/workout_plan.dart';
+import '../../../services/workout_engine.dart';
 import 'nav_lower_drums.dart';
 import 'nav_status_card.dart';
 
@@ -26,6 +28,10 @@ class NavigationStatusPanel extends StatefulWidget {
   /// 直前の RESET を取り消す。RESET のあとの通知に「元に戻す」として出す。
   final VoidCallback? onLowerUndo;
 
+  /// ワークアウト中は下半分をワークアウトの表示に置き換える。
+  final WorkoutPlan? workoutPlan;
+  final WorkoutStatus? workoutStatus;
+
   final DateTime Function()? clock;
 
   const NavigationStatusPanel({
@@ -44,6 +50,8 @@ class NavigationStatusPanel extends StatefulWidget {
     this.onLowerRightChanged,
     this.onLowerReset,
     this.onLowerUndo,
+    this.workoutPlan,
+    this.workoutStatus,
     this.clock,
   });
 
@@ -111,6 +119,8 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       onLowerLeftChanged: widget.onLowerLeftChanged,
       onLowerRightChanged: widget.onLowerRightChanged,
       onLowerReset: widget.onLowerReset == null ? null : _reset,
+      workoutPlan: widget.workoutPlan,
+      workoutStatus: widget.workoutStatus,
     );
   }
 }

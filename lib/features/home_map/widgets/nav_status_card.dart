@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../theme/nav_palette.dart';
+import '../../../models/workout_plan.dart';
+import '../../../services/workout_engine.dart';
 import 'nav_lower_drums.dart';
+import 'workout_panel.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
@@ -62,6 +65,10 @@ class NavStatusCard extends StatelessWidget {
   /// 下半分の RESET。null なら出さない。
   final VoidCallback? onLowerReset;
 
+  /// ワークアウト中は、下半分をワークアウトの表示に置き換える。
+  final WorkoutPlan? workoutPlan;
+  final WorkoutStatus? workoutStatus;
+
   const NavStatusCard({
     super.key,
     required this.paceSeconds,
@@ -77,6 +84,8 @@ class NavStatusCard extends StatelessWidget {
     this.onLowerLeftChanged,
     this.onLowerRightChanged,
     this.onLowerReset,
+    this.workoutPlan,
+    this.workoutStatus,
   });
 
   // 数字が変わっても幅が揺れない等幅数字
@@ -579,18 +588,21 @@ class NavStatusCard extends StatelessWidget {
             // 距離(m)・chrono・DPS・count が順に出る。既定は 左=距離・右=chrono。
             // 値はリセットからのもので、記録は練習全体のまま残る。
             const SizedBox(height: _plateGap),
-            NavLowerDrums(
-              values: lowerValues ??
-                  NavLowerValues(
-                    distanceMeters: distanceMeters,
-                    chronoSeconds: elapsedTimeSeconds,
-                  ),
-              leftIndex: lowerLeftIndex,
-              rightIndex: lowerRightIndex,
-              onLeftChanged: onLowerLeftChanged,
-              onRightChanged: onLowerRightChanged,
-              onReset: onLowerReset,
-            ),
+            if (workoutPlan != null && workoutStatus != null)
+              WorkoutPanel(plan: workoutPlan!, status: workoutStatus!)
+            else
+              NavLowerDrums(
+                values: lowerValues ??
+                    NavLowerValues(
+                      distanceMeters: distanceMeters,
+                      chronoSeconds: elapsedTimeSeconds,
+                    ),
+                leftIndex: lowerLeftIndex,
+                rightIndex: lowerRightIndex,
+                onLeftChanged: onLowerLeftChanged,
+                onRightChanged: onLowerRightChanged,
+                onReset: onLowerReset,
+              ),
           ],
         ),
       ),
