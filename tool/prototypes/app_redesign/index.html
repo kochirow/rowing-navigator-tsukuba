@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v9</title>
+<title>画面刷新 試作 v10</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -339,7 +339,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v9</h1>
+  <h1>画面刷新 試作 v10</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -641,9 +641,11 @@ function edgePoint(angle) {
    - 自艇は画面の定位置(横中央・上から45%)にいるので、色で探す必要がない。
    'current' は比較用の現行寄り(自艇=赤、他艇=灰、予測=赤/黄)。 */
 const NAV_PAL = {
+  // 決定(2026-09-26 利用者): 自艇=白、他艇=常に赤系、予測線=白。
+  // 他艇の位置は離れていても常に把握しておきたい(万一の事故のとき素早く動ける)ため、常に目立つ赤系にする。
   proposal: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
-    self: '#ffffff', selfEdge: '#000000', other: '#5ed3f3', otherEdge: '#001018', otherLabel: '#8fd8ee',
-    threat: '#ff4d4d', threatEdge: '#ffffff', threatLabel: '#ff8a8a',
+    self: '#ffffff', selfEdge: '#000000', other: '#ff5a5a', otherEdge: '#2a0000', otherLabel: '#ff9a9a',
+    threat: '#ff5a5a', threatEdge: '#ffffff', threatLabel: '#ffb3b3',
     stop: 'rgba(255,255,255,.7)', warnLine: 'rgba(255,255,255,.4)', hazard: '#ffb547' },
   current: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
     self: '#f44336', selfEdge: '#ffffff', other: '#c9d3dc', otherEdge: '#000000', otherLabel: '#9aa6b3',
@@ -680,7 +682,7 @@ function navMap(warn, dir, glow) {
     <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="${P.warnLine}" stroke-width="1.5" stroke-dasharray="4 4"/>
     <g transform="translate(${otherX},${otherY}) rotate(${otherRot})">
       <path d="M0,-26 L0,-90" stroke="${oc}" stroke-opacity=".6" stroke-width="1.5"/>
-      ${homePlate(46, oc, oe, false).replace('stroke-width="1.5"', 'stroke-width="2"')}
+      <g class="${isThreat && state.nav.pal === 'proposal' ? 'glowpulse' : ''}">${homePlate(46, oc, oe, false).replace('stroke-width="1.5"', `stroke-width="${isThreat && state.nav.pal === 'proposal' ? 3 : 2}"`)}</g>
     </g>
     <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="${ol}" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
     <g transform="translate(${selfX},${selfY})">${homePlate(52, P.self, P.selfEdge, true).replace('stroke-width="1.5"', 'stroke-width="2"')}</g>
@@ -727,7 +729,7 @@ const SCENARIOS = {
     { key: 'check', label: '出航前チェック', opts: [['ok', 'すべて良好'], ['vol', '音量が小さい'], ['gps', 'GPSが弱い']] },
   ],
   nav: [
-    { key: 'pal', label: '配色', opts: [['proposal', '提案(自艇=白・他艇=シアン)'], ['current', '現行寄り(自艇=赤)']] },
+    { key: 'pal', label: '配色', opts: [['proposal', '決定(自艇=白・他艇=赤)'], ['current', '旧(自艇=赤・他艇=灰)']] },
     { key: 'warn', label: '警告', opts: [['none', 'なし'], ['action', '予告'], ['imminent', '本警告']] },
     { key: 'health', label: '能力', opts: [['ok', '正常'], ['gps', 'GPS弱い'], ['rx', '他艇受信不可']] },
     { key: 'dir', label: '向き(漕手から)', opts: [['rr', '右後ろ'], ['r', '右'], ['b', '真後ろ'], ['lr', '左後ろ'], ['l', '左'], ['unk', '不明']] },
@@ -1289,21 +1291,14 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v9) 配色の考え方',
+    h: '② 航行中(v10) 配色(決定)',
     li: [
-      ['赤と琥珀は警告・注意だけ(航空の表示基準)', 'FAA AC 25-11B は赤=警告・琥珀=注意を厳格に予約し、ほかに使うと警告に慣れて効かなくなるとする。色は6色以内。ここでは 白・シアン・琥珀・赤 と水面の紺・陸の黒だけ。'],
-      ['警告の相手になった他艇だけ赤(v8)', '他艇との衝突がいちばん大事なので、危ない艇は赤で目立たせる。ただし全艇を常に赤にはしない: 2〜12艇がいつも赤いと赤が「すぐ見る」の意味を失い、どの艇が危ないかも区別できない。TCAS も他機は普段シアン/白で、脅威になった機だけ琥珀・赤に変わる。画面の端の赤い点滅と同じ色なので、光った向きと地図上の艇が結びつく。自艇は白なので自他の色は被らない。'],
-      ['「追跡」→ 押したときに起きることを名前に(v8)', '追従中は「追従中」(白い縁)、止めているときは「現在位置」(押すと自艇へ戻って追従を再開)。「現在位置」だけにすると、追従中に押したとき追従が止まるのが名前と合わない。'],
-      ['水面を紺にしている理由', '暗いので電池に効く(OLED)。背景を暗く抑えると白・シアン・琥珀・赤の記号が浮く(水面との比: 白13.6・シアン7.8・琥珀7.7・赤4.3)。青みを残すのは「ここが水」と一目で分かるため(陸の黒との差は小さいので岸の線が補う)。'],
-      ['自艇=白、他艇=シアン(TCAS と同じ)', '航空機の衝突防止表示は、自機=白、他機=白/シアン、注意=琥珀、回避指示=赤。警告を赤い光にした今、自艇まで赤だと「赤=危ない」が2つの意味を持つ。自艇は画面の定位置(横中央・上から45%)にいるので、色で探す必要もない。'],
-      ['他艇のシアンは暗い水面で一番浮く', '紺の水面との明るさの差が大きく(色相が近くても明度で分かれる)、白の自艇とも赤・琥珀とも混ざらない。色覚の型によらず白とシアンは見分けやすい。'],
-      ['自艇の予測線も白に', '停止距離=白の実線、警告距離=白の破線(色でなく線の種類で区別)。既存の「赤・黄で塗り分け」の要件を変える提案なので、採用するなら要件の更新が要る。'],
-      ['固定の危険区域・能力低下は琥珀', '橋・橋脚・流木、GPS弱いなど「注意」はすべて琥珀の細い線と淡い塗りに揃える。'],
-      ['赤は警告の画面の端の点滅だけ', '予告も本警告も同じ。画面の上で赤が出たら必ず「後ろを確認」。'],
-      ['方角の画面の縁に赤い帯(v9)', '「不明」のときの縁全体の帯が分かりやすかったので、方角が分かるときもその辺に長さ280pxの赤い帯を出す。光(艇より下の層)と帯(画面の縁)が同じリズムで点滅する。帯は縁だけなので他艇に重ならない。'],
-      ['比較できるように「配色: 現行寄り」を残した', '自艇=赤・他艇=灰色・予測=赤/黄。'],
+      ['自艇=白・他艇=常に赤系・予測線=白(利用者の決定)', '他艇の位置は、離れていても常に把握しておきたい(万一の事故のとき素早く動ける)。だから他艇はいつも一番目立つ赤系にする。自艇は白で、自他の色は被らない。'],
+      ['警告の相手は「点滅」で区別', '他艇が全部赤なので、警告の相手は色を変えずに白い太縁+点滅で示す。画面の端の赤い帯・光と同じリズムで点滅し、光った方角と地図上の艇が結びつく。'],
+      ['自艇の予測線は白', '停止距離=白の実線、警告距離=白の破線(線の種類で区別)。'],
+      ['赤の意味は「他艇と警告」', '赤=衝突に関わるもの(他艇・警告の光と帯)、琥珀=固定の危険区域と能力低下、白=自艇と計器、紺と黒=水面と陸。色はこれだけ。'],
+      ['追従ボタン・水面の紺・縁の帯はv9のまま', '追従中/現在位置、水面 #123142、方角の縁に赤い帯。'],
     ],
-    ask: '自艇を赤から白に変えてよいか(提案)。慣れた色なので、変えるなら部員への周知が要る。',
   },
   rec: {
     h: '⑤ 記録画面(v7) 旧版の迫力 × 視線の順番',
