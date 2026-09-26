@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../../theme/nav_palette.dart';
+import 'nav_lower_drums.dart';
 
 /// 航行中に画面上部へ常時表示する計器カード。
 ///
@@ -48,6 +50,18 @@ class NavStatusCard extends StatelessWidget {
   final bool spmMeasurementEnabled; // ユーザーがSPM計測をONにしているか
   final bool compact; // 横向き用。左上へ寄せ、幅だけを絞る
   final bool portraitCompact; // 縦向き用。横幅9割を中央寄せで使う
+
+  /// 小型表示の下半分(ドラム)に出す値。null なら [distanceMeters] と
+  /// [elapsedTimeSeconds] から作る(単体で使うとき用)。
+  final NavLowerValues? lowerValues;
+  final int lowerLeftIndex;
+  final int lowerRightIndex;
+  final ValueChanged<int>? onLowerLeftChanged;
+  final ValueChanged<int>? onLowerRightChanged;
+
+  /// 下半分の RESET。null なら出さない。
+  final VoidCallback? onLowerReset;
+
   const NavStatusCard({
     super.key,
     required this.paceSeconds,
@@ -57,6 +71,12 @@ class NavStatusCard extends StatelessWidget {
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
+    this.lowerValues,
+    this.lowerLeftIndex = 0,
+    this.lowerRightIndex = 1,
+    this.onLowerLeftChanged,
+    this.onLowerRightChanged,
+    this.onLowerReset,
   });
 
   // 数字が変わっても幅が揺れない等幅数字
@@ -233,8 +253,9 @@ class NavStatusCard extends StatelessWidget {
 
   /// 主計器の寸法は**幅から逆算する**。基準となる文字サイズは持たない。
   ///
-  /// レートがペースの約75%になるのは [_paceWidthShare] の結果であって、
-  /// 比を直接置いているのではない。レートは2桁固定で幅が出ないため、
+  /// レートがペースの約9割になるのは [_paceWidthShare] の結果であって、
+  /// 比を直接置いているのではない。(2026-09-26 利用者の求めで 0.7→0.65 に
+  /// してレートを大きくした。ペース > レートの順は保つ。)レートは2桁固定で幅が出ないため、
   /// 同じ比でも小さく見える。かといって近づけすぎると「主計器が2つある」
   /// ように見えて、視線がどちらへ行くか決まらない。
 
@@ -252,10 +273,11 @@ class NavStatusCard extends StatelessWidget {
 
   /// 主計器の行を、ペースとレートで分ける比。
   ///
-  /// ペース4桁を7割へ、レート2桁を3割へ収めるとレートはペースの約75%に
-  /// なり、従来の「レートはペースの約77%」をほぼそのまま引き継げる。
+  /// ペース4桁を6.5割へ、レート2桁を3.5割へ収めるとレートはペースの約9割
+  /// になる。以前は7:3(約75%)だったが、レートをもう少し大きく読みたい
+  /// という利用者の求めで広げた(2026-09-26)。
   /// **比を先に決めるので、どちらかの表示が変わっても他方は動かない。**
-  static const double _paceWidthShare = 0.7;
+  static const double _paceWidthShare = 0.65;
 
   /// 面の中の単位(`/500m` `spm`)。**数字の下に置く。**
   ///
@@ -329,22 +351,8 @@ class NavStatusCard extends StatelessWidget {
   /// 実寸で1.5px程度になる値を置く。
   static const double _plateBorderWidth = 2;
 
-  /// 副計器(経過時間・距離)の面の高さ。
-  ///
-  /// **主計器の半分強にする。** 同じ高さにすると計器が4つ横並びに見えて、
-  /// ペースとレートがどれか分からなくなる。艇速グラフ(84px)を外して
-  /// 空いた高さのうち、ここへ回すのは面1枚ぶんだけで、残りは地図へ返す。
-  static const double _secondaryPlateHeight = 52;
-
-  /// 副計器の数値・単位・アイコンの寸法。**実寸**(拡大しない)。
-  ///
-  /// 主計器と違って [FittedBox] で行いっぱいへ引き伸ばさない。桁数が
-  /// 変わるたびに(`9:59` → `10:00`、`999 m` → `1.00 km`)大きさが跳ねると、
-  /// 目が毎回そこへ引かれて主計器から離れる。**桁で揺れないことが、
-  /// 数pxの大きさより効く。**
-  static const double _secondaryValueFontSize = 30;
-  static const double _secondaryUnitFontSize = 14;
-  static const double _secondaryIconSize = 20;
+  // 下半分(旧 副計器)の寸法は nav_lower_drums.dart が持つ。
+  // 「桁数で大きさを揺らさない」原則もそちらへ引き継いだ。
 
   /// 主計器のうち、レートだけに与える色。
   ///
@@ -358,7 +366,7 @@ class NavStatusCard extends StatelessWidget {
   static const Color _rateAccent = Color(0xFF8FD0EA);
 
   /// レートの字面。ペースの白に対して、明度をできるだけ落とさずに色相で分ける。
-  static const Color _rateValueColor = Color(0xFFD6F2FF);
+  static const Color _rateValueColor = NavPalette.value;
 
   /// 計器の面。**ペースもレートも同じ暗い面を使う。**
   ///
@@ -370,13 +378,13 @@ class NavStatusCard extends StatelessWidget {
   /// 面を暗いほうへ揃えると約12:1まで戻る。**色は面ではなく縁と字が持つ。**
   /// 屋外の定石(明るい対象を暗い下地へ)にも、これが正しい向きである。
   /// 面を染め直したくなったら、まず対比を計算すること。
-  static const Color _plateColor = Color(0x8C001E33);
+  static const Color _plateColor = NavPalette.cell;
 
   /// レート側の面の縁。ここだけが背景と別の色系統を持つ。
   ///
   /// **枠の色分けは縁が担う。** 面を染めると字の対比を失うが、縁なら
   /// 字に触れずに「別の計器だ」と言える。
-  static const Color _ratePlateBorderColor = Color(0xE68FD0EA);
+  static const Color _ratePlateBorderColor = NavPalette.line;
 
   /// 横向きカードの最大幅。縦向き(画面幅の9割)と同程度の文字寸法になる幅。
   static const double _landscapeMaxWidth = 360;
@@ -469,12 +477,11 @@ class NavStatusCard extends StatelessWidget {
           // (建物・砂地・白い橋)の上で数字が沈む。実機では日光下で読めない
           // 場面があったため、面をほぼ不透明まで濃くする。地図はカードの
           // 外側に十分残っており、ここを透かして得るものはない。
-          color: colors.mapPanelScrim.withValues(alpha: 0.86),
+          // 航行中は夜の配色に固定する(NavPalette)。純黒の面に白い数字。
+          // OLED で電池を抑え、直射日光でも数字の対比を最大にする。
+          color: NavPalette.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.24),
-            width: 1,
-          ),
+          border: Border.all(color: NavPalette.line, width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.25),
@@ -534,7 +541,7 @@ class NavStatusCard extends StatelessWidget {
                   children: [
                     Expanded(
                       flex: spmMeasurementEnabled
-                          ? (_paceWidthShare * 10).round()
+                          ? (_paceWidthShare * 100).round()
                           : 1,
                       child: _MetricPlate(
                         plateColor: _plateColor,
@@ -544,13 +551,13 @@ class NavStatusCard extends StatelessWidget {
                         valueFontSize: paceFontSize,
                         height: plateHeight,
                         unit: '/500m',
-                        unitColor: onDark.withValues(alpha: 0.82),
+                        unitColor: NavPalette.label,
                       ),
                     ),
                     if (spmMeasurementEnabled) ...[
                       const SizedBox(width: _plateGap),
                       Expanded(
-                        flex: ((1 - _paceWidthShare) * 10).round(),
+                        flex: ((1 - _paceWidthShare) * 100).round(),
                         child: _MetricPlate(
                           plateColor: _plateColor,
                           borderColor: _ratePlateBorderColor,
@@ -560,7 +567,7 @@ class NavStatusCard extends StatelessWidget {
                           valueFontSize: spmFontSize,
                           height: plateHeight,
                           unit: 'spm',
-                          unitColor: _rateValueColor.withValues(alpha: 0.9),
+                          unitColor: NavPalette.label,
                         ),
                       ),
                     ],
@@ -568,29 +575,21 @@ class NavStatusCard extends StatelessWidget {
                 );
               },
             ),
-            // 副計器(経過時間・距離)。**主計器と同じ「面」に載せる。**
-            //
-            // 艇速グラフを外して空いた高さをここへ回した。以前は14pxの
-            // 文字を1行に並べただけで、面も持たず、グラフを出すと左端の
-            // 58px幅の列へ畳まれていた。ピースの経過時間は漕ぎながら
-            // いちばん見る値の1つなので、面のある計器に戻す。
+            // 下半分はドラム式(2026-09-26 利用者)。左右それぞれ縦に回すと
+            // 距離(m)・chrono・DPS・count が順に出る。既定は 左=距離・右=chrono。
+            // 値はリセットからのもので、記録は練習全体のまま残る。
             const SizedBox(height: _plateGap),
-            Row(
-              children: [
-                Expanded(
-                  child: _SecondaryPlate(
-                    icon: Icons.timer_outlined,
-                    value: _formatTime(elapsedTimeSeconds),
+            NavLowerDrums(
+              values: lowerValues ??
+                  NavLowerValues(
+                    distanceMeters: distanceMeters,
+                    chronoSeconds: elapsedTimeSeconds,
                   ),
-                ),
-                const SizedBox(width: _plateGap),
-                Expanded(
-                  child: _SecondaryPlate(
-                    icon: Icons.straighten,
-                    value: _formatDistance(distanceMeters),
-                  ),
-                ),
-              ],
+              leftIndex: lowerLeftIndex,
+              rightIndex: lowerRightIndex,
+              onLeftChanged: onLowerLeftChanged,
+              onRightChanged: onLowerRightChanged,
+              onReset: onLowerReset,
             ),
           ],
         ),
@@ -651,15 +650,18 @@ class _MetricPlate extends StatelessWidget {
               ),
       ),
       // 単位は数字の下。横に並べると単位の幅ぶん数字が小さくなる。
+      // 単位は右下にそろえる(2026-09-26 利用者)。数字は左に寄せて幅を使う。
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 桁数の型より長い表示(`--:--`)だけをここで縮める。
           // 値そのものは型どおりなので縮まない。
           Flexible(
             child: FittedBox(
               fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
               child: Text(
                 value,
                 key: valueKey,
@@ -677,6 +679,7 @@ class _MetricPlate extends StatelessWidget {
           Text(
             unit,
             maxLines: 1,
+            textAlign: TextAlign.right,
             style: TextStyle(
               color: unitColor,
               fontSize: NavStatusCard._plateUnitFontSize,
@@ -719,90 +722,6 @@ class _InlineMetric extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 副計器(経過時間・距離)1つぶんの面。
-///
-/// **主計器と同じ形で、一段小さい。** 面・角丸・等幅数字は [_MetricPlate]
-/// と揃え、高さと文字だけを落とす。同じ形なら「同じ種類のもの(計器)が
-/// 4つある」と読め、大きさの差だけが主従を伝える。
-///
-/// アイコンは種類の印として残す。`0:14` と `120 m` は形でも見分けが
-/// つくが、日光下でちらりと見るときは時計と物差しの形のほうが速い。
-///
-/// 面を持つので、文字の縁取り([NavStatusCard._smallOutlineShadows])は
-/// 掛けない。下地が濃紺1種類に確定していれば縁は字画を食うだけになる、
-/// という主計器と同じ理由。
-class _SecondaryPlate extends StatelessWidget {
-  final IconData icon;
-  final String value;
-
-  const _SecondaryPlate({required this.icon, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final onDark = context.colors.onDark;
-    // 「12.35 km」の単位側だけを小さくする。数字が主で単位は従。
-    final spaceIndex = value.indexOf(' ');
-    final number = spaceIndex < 0 ? value : value.substring(0, spaceIndex);
-    final unit = spaceIndex < 0 ? null : value.substring(spaceIndex + 1);
-    return Container(
-      height: NavStatusCard._secondaryPlateHeight,
-      padding: const EdgeInsets.symmetric(
-        horizontal: NavStatusCard._platePaddingHorizontal,
-      ),
-      decoration: BoxDecoration(
-        color: NavStatusCard._plateColor,
-        borderRadius: BorderRadius.circular(NavStatusCard._plateRadius),
-      ),
-      // 桁が増えても面から溢れないよう、中身だけを縮める。
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        // アイコンはベースライン揃えの行の外へ出す。文字ではないので
-        // ベースラインを持たず、中へ入れると縦位置が決められない。
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: NavStatusCard._secondaryIconSize,
-              color: onDark.withValues(alpha: 0.75),
-            ),
-            const SizedBox(width: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  number,
-                  style: TextStyle(
-                    color: onDark,
-                    fontSize: NavStatusCard._secondaryValueFontSize,
-                    height: 1,
-                    fontWeight: FontWeight.bold,
-                    fontFeatures: NavStatusCard._tabularFigures,
-                  ),
-                ),
-                if (unit != null) ...[
-                  const SizedBox(width: 3),
-                  Text(
-                    unit,
-                    style: TextStyle(
-                      color: onDark.withValues(alpha: 0.8),
-                      fontSize: NavStatusCard._secondaryUnitFontSize,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
