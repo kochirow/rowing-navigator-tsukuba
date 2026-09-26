@@ -19,9 +19,10 @@ const hotspotBudgets = <HotspotBudget>[
   ),
   HotspotBudget(
     path: 'lib/screens/home_map_screen.dart',
-    // 2026-09-26: 予測の図形を prediction_shapes.dart へ切り出し 2266→2223行。
-    // 停止上限を 2300→2270 へ下げる(余白を使い直して元へ戻さない)。
-    lines: MetricBudget(recommended: 2175, hard: 2270),
+    // 2026-09-26: 予測の図形・航行終了の確認・能力低下バッジを別ファイルへ
+    // 切り出し 2266→2203行。停止上限を 2300→2255 へ下げる(余白を使い直して
+    // 元へ戻さない)。
+    lines: MetricBudget(recommended: 2175, hard: 2255),
     imports: MetricBudget(recommended: 71, hard: 75),
     useRefs: MetricBudget(recommended: 6, hard: 8),
     useStates: MetricBudget(recommended: 19, hard: 21),
