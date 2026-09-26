@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v11</title>
+<title>画面刷新 試作 v12</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -156,8 +156,8 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 --glass:rgba(0,0,0,.72);--glass-line:rgba(255,255,255,.14);
 background:#000;color:#fff}
 #s-nav .sb{color:#fff}
-.badges{position:absolute;left:12px;z-index:6;display:flex;gap:6px}
-.bdg{height:34px;min-width:34px;border-radius:17px;padding:0 10px 0 7px;display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:800;background:#000;border:2px solid var(--warn);color:var(--warn)}
+.badges{position:absolute;left:18px;top:36px;z-index:8;display:flex;gap:6px}
+.bdg{height:30px;min-width:34px;border-radius:15px;padding:0 10px 0 7px;display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:800;background:#000;border:2px solid var(--warn);color:var(--warn)}
 .bdg svg{width:20px;height:20px}
 .inst{position:absolute;left:8px;right:8px;top:50px;z-index:7;border-radius:22px;padding:8px;background:#000;border:1px solid var(--line)}
 .inst .g{display:grid;grid-template-columns:1.75fr 1fr;gap:6px}
@@ -166,16 +166,20 @@ background:#000;color:#fff}
 .m.acc:before{content:"";position:absolute;left:12px;right:12px;top:0;height:3px;border-radius:0 0 3px 3px;background:var(--c)}
 .m .v{font-weight:800;line-height:1;white-space:nowrap;color:#fff}
 .m .k{font-size:13px;font-weight:800;color:var(--sub);margin-top:3px;white-space:nowrap}
+/* 単位は各枠の右下にそろえる(利用者)。 */
+#s-nav .m .k{text-align:right}
 /* 重要度: ペース > レート > 距離 > 時間。文字の大きさもこの順。 */
 .m.pace .v{font-size:76px;letter-spacing:-.03em}
 .m.spm .v{font-size:70px;letter-spacing:-.02em}
 .m .v.wait{color:var(--mute);font-weight:600}
-/* 2段目は文字数に応じた幅。距離を時間より一回り大きく。 */
-.m.dist{flex:1.25 1 auto;display:flex;align-items:baseline;gap:6px}
+/* 2段目は文字数に応じた幅。距離を時間より一回り大きく。
+   単位(m・chrono)は数字の下に置いて横幅を空ける。長い練習(12,480m・1:28:40)で
+   それでも入らないときは、距離と時間を同じ比率で縮めて必ず1行に収める(Flutter の FittedBox と同じ)。 */
+.m.dist{flex:1.25 1 0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
 .m.dist .v{font-size:46px;letter-spacing:-.02em}
-.m.time{flex:1 1 auto;display:flex;align-items:baseline;gap:6px}
+.m.time{flex:1 1 0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
 .m.time .v{font-size:36px;letter-spacing:-.02em}
-.m.dist .k,.m.time .k{margin:0}
+.m.dist .k,.m.time .k{margin-top:2px}
 .m.time .k{font-size:12px;font-weight:700;letter-spacing:.02em}
 /* 警告は小さく、読ませない。脅威のいる向きを「画面の中の位置」で表す。
    地図は進行方向が画面の下なので、画面の位置 = 漕手の体から見た向き。 */
@@ -339,7 +343,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v11</h1>
+  <h1>画面刷新 試作 v12</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -787,6 +791,19 @@ $('#menuScrim').onclick = closeMenu;
 $('#startNow').onclick = () => show('nav');
 
 /* ---------------- ② 航行中 ---------------- */
+// 2段目の数字が枠に入らないとき、距離と時間を同じ比率で縮める(大小関係は保つ)。
+function fitRow2() {
+  const d = $('#vDist'), t = $('#vRow');
+  d.style.fontSize = ''; t.style.fontSize = '';
+  const over = el => el.scrollWidth / el.parentElement.clientWidth;
+  const pad = 24; // .m の左右の余白
+  const need = Math.max(d.scrollWidth / (d.parentElement.clientWidth - pad), t.scrollWidth / (t.parentElement.clientWidth - pad));
+  if (need > 1) {
+    const f = 1 / need;
+    d.style.fontSize = (46 * f).toFixed(1) + 'px';
+    t.style.fontSize = (36 * f).toFixed(1) + 'px';
+  }
+}
 const PIC = {
   // 対象の絵。文字で「他艇」と書かず、形で分かるようにする。
   boat: '<svg class="pic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1.6 2.6 2.4 5.4 2.4 8.6V21H9.6V10.6C9.6 7.4 10.4 4.6 12 2z"/></svg>',
@@ -798,10 +815,9 @@ function renderNav() {
   const gps = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
   const rx = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/><path d="M3 3l18 18"/></svg>';
   const badges = [];
-  if (n.health === 'gps') badges.push(`<span class="bdg" title="GPS 弱い ±14m">${gps}±14m</span>`);
-  if (n.health === 'rx') badges.push(`<span class="bdg" title="他艇受信: 利用不可">${rx}</span>`);
+  if (n.health === 'gps') badges.push(`<span class="bdg" title="GPS 弱い ±14m">${gps}GPS ±14m</span>`);
+  if (n.health === 'rx') badges.push(`<span class="bdg" title="他艇受信: 利用不可">${rx}受信</span>`);
   $('#badges').innerHTML = badges.join('');
-  $('#badges').style.top = '302px';
   // 警告: 脅威のいる向きに、自艇から少し離して小さく置く。
   // 方位が信頼できないとき(回頭中など。不変条件10)は向きを出さず、定位置に矢印なしで置く。
   // 警告は「脅威の向きの画面の端が赤く点滅する」だけ。秒数・対象の絵は出さない。
@@ -857,6 +873,7 @@ function renderNav() {
   $('#vSpm').classList.toggle('wait', wait);
   $('#vDist').textContent = V.d;
   $('#vRow').textContent = V.t;
+  fitRow2();
 }
 
 /* ---------------- ③ 記録一覧 ---------------- */
@@ -1296,11 +1313,13 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v11) 配色(決定)',
+    h: '② 航行中(v12) 配色(決定)',
     li: [
       ['自艇=白・他艇=常に赤系・予測線=白(利用者の決定)', '他艇の位置は、離れていても常に把握しておきたい(万一の事故のとき素早く動ける)。だから他艇はいつも一番目立つ赤系にする。自艇は白で、自他の色は被らない。'],
       ['警告の相手は「点滅」で区別', '他艇が全部赤なので、警告の相手は色を変えずに白い太縁+点滅で示す。画面の端の赤い帯・光と同じリズムで点滅し、光った方角と地図上の艇が結びつく。'],
       ['障害物の警告も方角の縁が赤く点滅(v11)', '規則は1つ:「衝突の音が鳴っているときだけ、その方角の縁が赤く点滅」。橋・橋脚・流木・中洲・杭は他艇と同じく光る(地図上の障害物も点滅)。カーブ・逆走(案内)と、岸の近接・表示だけの候補(音なし)は光らせない。停止中に固定障害物の音を止めているときも光らない。音と連動させるので新しい判定は足さない。'],
+      ['長い練習でも計器が見切れない(v12)', '単位(m・chrono)を数字の下へ。それでも入らないときは距離と時間を同じ比率で縮め、距離>時間の大小は保つ。'],
+      ['GPSの状態は画面の上端に「GPS」の文字入りで(v12)', '計器カードの上辺に重ねる。受信不可は「受信」。警告の縁の帯(下・左右)と場所が被らない。'],
       ['自艇の予測線は白', '停止距離=白の実線、警告距離=白の破線(線の種類で区別)。'],
       ['赤の意味は「他艇と警告」', '赤=衝突に関わるもの(他艇・警告の光と帯)、琥珀=固定の危険区域と能力低下、白=自艇と計器、紺と黒=水面と陸。色はこれだけ。'],
       ['追従ボタン・水面の紺・縁の帯はv9のまま', '追従中/現在位置、水面 #123142、方角の縁に赤い帯。'],
