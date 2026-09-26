@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v12</title>
+<title>画面刷新 試作 v13</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -181,6 +181,39 @@ background:#000;color:#fff}
 .m.time .v{font-size:36px;letter-spacing:-.02em}
 .m.dist .k,.m.time .k{margin-top:2px}
 .m.time .k{font-size:12px;font-weight:700;letter-spacing:.02em}
+
+/* ---- 下半分: ドラム式の計器(v13) ----
+   左右の枠をそれぞれ縦にスクロールすると、距離・chrono・DPS・count が順に出る。
+   左の枠は右より一回り大きい(距離を置く既定)。 */
+.drum{position:relative;height:74px;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;padding:0}
+.drum::-webkit-scrollbar{display:none}
+.drum .di{height:74px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:flex-end;padding:4px 12px 8px 18px;overflow:hidden}
+.drum .dots{position:sticky;top:0;float:left;height:0;width:0}
+.drum .dots i{position:absolute;left:6px;width:4px;height:4px;border-radius:2px;background:#3a4450}
+.drum .dots i.on{background:#fff}
+.m.drumwrap{padding:0}
+.resetb{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);width:34px;height:34px;border-radius:17px;border:1px solid var(--line);background:#000;color:#9aa6b3;display:grid;place-items:center;z-index:2}
+.resetb svg{width:18px;height:18px}
+/* ---- ワークアウト表示(v13) ----
+   ワークアウト中は下半分をワークアウト用に替え、少し大きくする。 */
+.wo{display:none;margin-top:6px}
+.wo.show{display:block}
+.wo .worow{display:flex;gap:6px}
+.wo .m{padding:6px 12px 8px}
+.wo .wobig{flex:1.7 1 0;min-height:104px;display:flex;flex-direction:column;justify-content:flex-end}
+.wo .wobig .v{font-size:66px;letter-spacing:-.03em}
+.wo .worep{flex:1 1 0;display:flex;flex-direction:column;justify-content:flex-end}
+.wo .worep .v{font-size:44px}
+.wo .bar{display:flex;gap:4px;margin-top:6px;padding:0 2px}
+.wo .bar i{flex:1;height:6px;border-radius:3px;background:#25303b}
+.wo .bar i.done{background:#8b96a3}
+.wo .bar i.now{background:#fff}
+.wo .bar i.set{flex:none;width:10px;background:transparent}
+.wo .tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:#9aa6b3}
+.wo .tag b{color:#000;background:#fff;border-radius:6px;padding:1px 6px;font-size:12px}
+.wo .v.paused{color:#6b7682}
+.wpre{flex:none;height:44px;border-radius:22px;border:1px solid var(--line);background:var(--s1);padding:0 16px;font-size:14px;font-weight:800;color:var(--tx)}
+.wpre.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--acc-soft)}
 /* 警告は小さく、読ませない。脅威のいる向きを「画面の中の位置」で表す。
    地図は進行方向が画面の下なので、画面の位置 = 漕手の体から見た向き。 */
 .warnchip{position:absolute;z-index:9;display:none;align-items:center;gap:6px;height:60px;padding:0 12px;border-radius:30px;background:#000;border:3px solid var(--danger);color:#fff;transform:translate(-50%,-50%)}
@@ -343,13 +376,14 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v12</h1>
+  <h1>画面刷新 試作 v13</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
     <button data-s="list">③ 記録一覧</button>
     <button data-s="warn">④ 警告の設定</button>
     <button data-s="rec">⑤ 記録画面</button>
+    <button data-s="wo">⑥ ワークアウト</button>
   </div>
   <div class="tgl" id="theme">
     <button data-t="dark" class="on">暗色</button>
@@ -374,10 +408,9 @@ background:#000;color:#fff}
     <div class="dock">
       <button class="startbtn" id="startNow">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 19l18-14M7 15l-3 6M15 9l3-5"/><circle cx="12" cy="5" r="2" fill="currentColor"/></svg>
-        <div><b>航行スタート</b><span id="startSub">山田 ・ 8+ ・ 7番 で開始</span></div>
+        <div><b>航行スタート</b><span id="startSub">前回: 山田 ・ 8+ ・ 7番</span></div>
       </button>
-      <div class="two">
-        <button class="btn" data-toast="航行設定シートを開く(名前・艇種・座席を変える)">設定を変えて開始</button>
+      <div class="two" style="grid-template-columns:1fr">
         <button class="btn ghost" data-toast="監視を開始(陸上から全艇を見る)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>監視スタート</button>
       </div>
     </div>
@@ -416,10 +449,12 @@ background:#000;color:#fff}
         <div class="m pace"><div class="v num" id="vPace">1:58</div><div class="k" id="kPace">/500m</div></div>
         <div class="m spm"><div class="v num" id="vSpm">32</div><div class="k">spm</div></div>
       </div>
-      <div class="g2">
-        <div class="m dist"><div class="v num" id="vDist">6,480</div><div class="k">m</div></div>
-        <div class="m time"><div class="v num" id="vRow">28:40</div><div class="k">chrono</div></div>
+      <div class="g2" id="g2">
+        <div class="m drumwrap" style="flex:1.25 1 0"><div class="drum" id="drumL" data-base="46"></div></div>
+        <div class="m drumwrap" style="flex:1 1 0"><div class="drum" id="drumR" data-base="36"></div></div>
       </div>
+      <div class="wo" id="wo"></div>
+      <button class="resetb" id="resetb" aria-label="下の計器を0にする(記録は全体を残す)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg></button>
     </div>
     <div class="badges" id="badges"></div>
     <div class="warnchip" id="warnchip"></div>
@@ -505,6 +540,21 @@ background:#000;color:#fff}
       </div>
       <div style="height:40px"></div>
     </div>
+  </section>
+
+  <!-- ================= ⑥ ワークアウトの設定 ================= -->
+  <section class="screen" id="s-wo">
+    <div class="sb"><span class="num">6:05</span><span class="ic"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px;border-radius:6px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+    <div class="appbar"><button class="back" data-go="home" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>ワークアウト</h2></div>
+    <div class="scroll">
+      <p class="intro">航行設定シートの「ワークアウト」、または航行中のメニュー(止まっているとき)から開く。</p>
+      <div class="eyebrow" style="margin:0 16px 8px">よく使う</div>
+      <div id="woPresets" style="display:flex;gap:8px;overflow-x:auto;padding:0 12px 4px;scrollbar-width:none"></div>
+      <div class="card" style="margin:10px 12px 0" id="woEdit"></div>
+      <div class="card" style="margin:12px 12px 0;padding:4px 16px" id="woOpt"></div>
+      <div style="height:150px"></div>
+    </div>
+    <div class="savebar show"><div class="st" id="woSum" style="display:block"></div><div class="bt" style="grid-template-columns:1fr 1.4fr"><button class="btn" data-toast="ワークアウトなしで航行">使わない</button><button class="btn acc" data-go="nav">このワークアウトで航行</button></div></div>
   </section>
 
   <!-- ================= ④ 警告の設定 ================= -->
@@ -702,7 +752,8 @@ $('#map-home').innerHTML = riverMap();
 const state = {
   screen: 'home',
   home: { check: 'ok' },
-  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal', follow: 'on', target: 'boat' },
+  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal', follow: 'on', target: 'boat', wo: 'off' },
+  wo: {},
   list: { period: 'month' },
   rec: { sel: 'all', gaze: 'off', metric: 'pace', cursor: 0, speed: 30 },
 };
@@ -743,8 +794,9 @@ const SCENARIOS = {
     { key: 'dir', label: '向き(漕手から)', opts: [['rr', '右後ろ'], ['r', '右'], ['b', '真後ろ'], ['lr', '左後ろ'], ['l', '左'], ['unk', '不明']] },
     { key: 'fix', label: '計器', opts: [['ok', '計測中'], ['long', '長い練習'], ['wait', '測位待ち']] },
     { key: 'follow', label: '追従', opts: [['on', '追従中'], ['off', '止めている']] },
+    { key: 'wo', label: 'ワークアウト', opts: [['off', 'なし'], ['work', 'ワーク中'], ['slow', 'ワーク(遅くて数えない)'], ['rest', 'レスト中']] },
   ],
-  list: [], warn: [],
+  list: [], warn: [], wo: [],
   rec: [
     { key: 'gaze', label: '視線の順番', opts: [['off', '隠す'], ['on', '表示']] },
     { key: 'sel', label: '区間', opts: [['all', '全体'], ['0', '1セット目'], ['2', '3セット目']] },
@@ -787,22 +839,49 @@ function renderHome() {
 function openMenu() { $('#menu').classList.add('show'); $('#menuScrim').classList.add('show'); }
 function closeMenu() { $('#menu').classList.remove('show'); $('#menuScrim').classList.remove('show'); }
 $('#openMenu').onclick = openMenu;
+$('#resetb').onclick = () => {
+  const n = state.nav, long = n.fix === 'long';
+  const T = long ? { dist: 12480, chrono: 5320, count: 1780 } : { dist: 6480, chrono: 1720, count: 912 };
+  lastOffset = { ...lapOffset };
+  lapOffset = { dist: T.dist, chrono: T.chrono, count: T.count };
+  renderNav();
+  toast('下の計器を0にしました。記録は練習全体を残します');
+};
 $('#menuScrim').onclick = closeMenu;
-$('#startNow').onclick = () => show('nav');
+$('#startNow').onclick = () => { toast('航行設定シートを開く(名前・艇種・座席に前回の設定が入っている)'); setTimeout(() => show('nav'), 900); };
 
 /* ---------------- ② 航行中 ---------------- */
 // 2段目の数字が枠に入らないとき、距離と時間を同じ比率で縮める(大小関係は保つ)。
-function fitRow2() {
-  const d = $('#vDist'), t = $('#vRow');
-  d.style.fontSize = ''; t.style.fontSize = '';
-  const over = el => el.scrollWidth / el.parentElement.clientWidth;
-  const pad = 24; // .m の左右の余白
-  const need = Math.max(d.scrollWidth / (d.parentElement.clientWidth - pad), t.scrollWidth / (t.parentElement.clientWidth - pad));
-  if (need > 1) {
-    const f = 1 / need;
-    d.style.fontSize = (46 * f).toFixed(1) + 'px';
-    t.style.fontSize = (36 * f).toFixed(1) + 'px';
-  }
+// 下半分の計器(ドラム)。値は「最後にリセットしてから」の分。練習全体は記録に別に残る。
+const DRUM_ITEMS = [['dist', 'm'], ['chrono', 'chrono'], ['dps', 'DPS'], ['count', 'count']];
+const drumPos = { drumL: 0, drumR: 1 };
+let lapOffset = { dist: 0, chrono: 0, count: 0 }, lastOffset = null;
+function fmtChrono(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s2 = sec % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s2).padStart(2, '0')}` : `${m}:${String(s2).padStart(2, '0')}`;
+}
+function drumValues(T) {
+  return {
+    dist: Math.max(0, T.dist - lapOffset.dist).toLocaleString('en-US'),
+    chrono: fmtChrono(Math.max(0, T.chrono - lapOffset.chrono)),
+    dps: T.dps ? T.dps.toFixed(1) : '—',
+    count: String(Math.max(0, T.count - lapOffset.count)),
+  };
+}
+function renderDrum(id, vals) {
+  const el = $('#' + id), base = +el.dataset.base;
+  el.innerHTML = `<div class="dots">${DRUM_ITEMS.map((_, i) => `<i style="top:${22 + i * 8}px" class="${i === drumPos[id] ? 'on' : ''}"></i>`).join('')}</div>` +
+    DRUM_ITEMS.map(([k, u]) => `<div class="di"><div class="v num" style="font-size:${base}px">${vals[k]}</div><div class="k">${u}</div></div>`).join('');
+  el.scrollTop = drumPos[id] * 74;
+  // 枠に入らない値は縮める(FittedBox と同じ)。
+  el.querySelectorAll('.di .v').forEach(v => {
+    const room = v.parentElement.clientWidth - 30;
+    if (v.scrollWidth > room) v.style.fontSize = (base * room / v.scrollWidth).toFixed(1) + 'px';
+  });
+  el.onscroll = () => {
+    const i = Math.round(el.scrollTop / 74);
+    if (i !== drumPos[id]) { drumPos[id] = i; el.querySelectorAll('.dots i').forEach((d, j) => d.classList.toggle('on', j === i)); }
+  };
 }
 const PIC = {
   // 対象の絵。文字で「他艇」と書かず、形で分かるようにする。
@@ -863,18 +942,133 @@ function renderNav() {
   const fOn = n.follow === 'on';
   $('#followBtn').innerHTML = `<button aria-label="${fOn ? '追従中。押すと追従を止める' : '現在位置へ戻る'}" style="${fOn ? 'border:2px solid #fff;color:#fff' : 'color:#c9d3dc'}"><svg viewBox="0 0 24 24" fill="${fOn ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>${fOn ? '追従中' : '現在位置'}</span>`;
   const wait = n.fix === 'wait', long = n.fix === 'long';
-  const V = wait ? { p: '—:—', s: '—', d: '0', t: '0:00' }
-    : long ? { p: '2:05', s: '34', d: '12,480', t: '1:28:40' }
-    : { p: '1:58', s: '32', d: '6,480', t: '28:40' };
+  const V = wait ? { p: '—:—', s: '—' } : long ? { p: '2:05', s: '34' } : { p: '1:58', s: '32' };
+  const T = wait ? { dist: 0, chrono: 0, dps: 0, count: 0 }
+    : long ? { dist: 12480, chrono: 5320, dps: 10.4, count: 1780 }
+    : { dist: 6480, chrono: 1720, dps: 10.2, count: 912 };
   $('#vPace').textContent = V.p;
   $('#vPace').classList.toggle('wait', wait);
   $('#kPace').textContent = wait ? '測位待ち' : '/500m';
   $('#vSpm').textContent = V.s;
   $('#vSpm').classList.toggle('wait', wait);
-  $('#vDist').textContent = V.d;
-  $('#vRow').textContent = V.t;
-  fitRow2();
+  const wo = n.wo !== 'off';
+  $('#g2').style.display = wo ? 'none' : 'flex';
+  $('#resetb').style.display = wo ? 'none' : 'grid';
+  if (!wo) {
+    const vals = drumValues(T);
+    renderDrum('drumL', vals);
+    renderDrum('drumR', vals);
+  }
+  renderWorkout(n);
 }
+
+/* ---------------- ワークアウト(v13) ----------------
+   Concept2 PM5 のワークアウトに倣う: ワークとレストをそれぞれ 距離・時間・本数 で決め、回数とセットを掛ける。
+   レストは「未定」(次を漕ぎ出したら始まる)も選べる。水上は回頭があるので既定にしやすい。 */
+const WO_UNITS = { dist: ['距離', 'm'], time: ['時間', ''], strokes: ['本数', 'count'] };
+const REST_UNITS = { time: ['時間', ''], strokes: ['本数', 'count'], dist: ['距離', 'm'], open: ['未定', ''] };
+const WO_PRESETS = [
+  { name: '500m × 8', work: { u: 'dist', v: 500 }, reps: 8, rest: { u: 'time', v: 120 }, sets: 1, setRest: 300 },
+  { name: '30:00 × 2', work: { u: 'time', v: 1800 }, reps: 2, rest: { u: 'time', v: 300 }, sets: 1, setRest: 300 },
+  { name: '30本 × 6 × 2セット', work: { u: 'strokes', v: 30 }, reps: 6, rest: { u: 'strokes', v: 3 }, sets: 2, setRest: 300 },
+];
+const WOS = { ...structuredClone(WO_PRESETS[0]), slowExclude: true, slowPace: 180, autoStart: true };
+function woVal(u, v) { return u === 'time' ? fmtChrono(v) : u === 'strokes' ? `${v}本` : u === 'open' ? '未定' : `${v.toLocaleString('en-US')}m`; }
+function woName(w) {
+  const base = `${woVal(w.work.u, w.work.v)} × ${w.reps}`;
+  const r = w.rest.u === 'open' ? 'レスト未定' : `r${woVal(w.rest.u, w.rest.v)}`;
+  return w.sets > 1 ? `${base} ・ ${r} ・ ${w.sets}セット(間 ${fmtChrono(w.setRest)})` : `${base} ・ ${r}`;
+}
+function renderWorkout(n) {
+  const box = $('#wo');
+  if (n.wo === 'off') { box.className = 'wo'; box.innerHTML = ''; return; }
+  box.className = 'wo show';
+  const w = WOS, rep = 3, total = w.reps * w.sets;
+  const bar = [];
+  for (let s2 = 0; s2 < w.sets; s2++) {
+    if (s2) bar.push('<i class="set"></i>');
+    for (let r = 0; r < w.reps; r++) {
+      const idx = s2 * w.reps + r + 1;
+      bar.push(`<i class="${idx < rep ? 'done' : idx === rep ? 'now' : ''}"></i>`);
+    }
+  }
+  const unit = WO_UNITS[w.work.u][1];
+  const remain = w.work.u === 'dist' ? '320' : w.work.u === 'time' ? '11:42' : '18';
+  let big, tag;
+  if (n.wo === 'rest') {
+    const open = w.rest.u === 'open';
+    tag = `<span class="tag"><b style="background:transparent;color:#fff;border:1.5px solid #fff">REST</b>${open ? '漕ぎ出すと次へ' : ''}</span>`;
+    big = `<div class="v num">${open ? '0:48' : w.rest.u === 'time' ? '1:12' : w.rest.u === 'strokes' ? '2' : '140'}</div><div class="k">${REST_UNITS[w.rest.u][1]}</div>`;
+  } else {
+    const slow = n.wo === 'slow';
+    // 遅い間は数字を灰色にし、一時停止の記号だけ出す(読ませる文は出さない)。
+    tag = `<span class="tag"><b>WORK</b>${slow ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="#9aa6b3" aria-label="遅いので数えていない"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>' : ''}</span>`;
+    big = `<div class="v num ${slow ? 'paused' : ''}">${remain}</div><div class="k">${unit}</div>`;
+  }
+  const next = n.wo === 'rest' ? `<div class="v num">${rep + 1}/${total}</div><div class="k">next</div>` : `<div class="v num">${rep}/${total}</div><div class="k">rep</div>`;
+  box.innerHTML = `<div class="worow"><div class="m wobig">${tag}${big}</div><div class="m worep">${next}</div></div><div class="bar">${bar.join('')}</div>`;
+}
+
+/* ---------------- ⑥ ワークアウトの設定 ---------------- */
+function stepper(id, label, sub, val) {
+  return `<div class="stp"><div class="l"><b>${label}</b><span>${sub}</span></div>
+    <div class="ctl"><button data-wstep="${id}" data-d="-1" aria-label="減らす">−</button><div class="val num">${val}</div><button data-wstep="${id}" data-d="1" aria-label="増やす">+</button></div></div>`;
+}
+function segRow(id, units, cur) {
+  return `<div class="seg" style="margin:6px 0 2px">${Object.entries(units).map(([k, [t]]) => `<button class="${k === cur ? 'on' : ''}" data-wseg="${id}" data-v="${k}">${t}</button>`).join('')}</div>`;
+}
+function renderWoSetup() {
+  const w = WOS;
+  const presetOn = p => JSON.stringify([p.work, p.reps, p.rest, p.sets]) === JSON.stringify([w.work, w.reps, w.rest, w.sets]);
+  $('#woPresets').innerHTML = WO_PRESETS.map((p, i) => `<button class="wpre ${presetOn(p) ? 'on' : ''}" data-wpreset="${i}">${p.name}</button>`).join('');
+  const workSteps = { dist: [100, 'm'], time: [60, ''], strokes: [5, '本'] };
+  $('#woEdit').innerHTML = `
+    <div class="eyebrow">ワーク</div>
+    ${segRow('work', WO_UNITS, w.work.u)}
+    ${stepper('workv', '1本の長さ', w.work.u === 'dist' ? '100m刻み' : w.work.u === 'time' ? '1分刻み' : '5本刻み', woVal(w.work.u, w.work.v))}
+    ${stepper('reps', '回数', '1〜30', `× ${w.reps}`)}
+    <div class="eyebrow" style="margin-top:12px">レスト</div>
+    ${segRow('rest', REST_UNITS, w.rest.u)}
+    ${w.rest.u === 'open' ? '<p class="intro" style="margin:6px 0">次のワークを漕ぎ出したら、自動で始まります。回頭・待ち合わせの長さが毎回違うときに。</p>'
+      : stepper('restv', 'レストの長さ', w.rest.u === 'time' ? '15秒刻み' : w.rest.u === 'strokes' ? '1本刻み' : '50m刻み', woVal(w.rest.u, w.rest.v))}
+    <div class="eyebrow" style="margin-top:12px">セット</div>
+    ${stepper('sets', 'セット数', '同じ組を繰り返す', `× ${w.sets}`)}
+    ${w.sets > 1 ? stepper('setrest', 'セット間のレスト', '1分刻み', fmtChrono(w.setRest)) : ''}`;
+  $('#woOpt').innerHTML = `
+    <label class="linkrow" style="min-height:56px"><span>遅いときはワークに数えない<br><small style="font-weight:600;color:var(--sub)">回頭・止まっている間を、ワークの距離・時間・本数に入れない</small></span>
+      <input type="checkbox" id="woSlow" ${w.slowExclude ? 'checked' : ''} style="width:24px;height:24px;accent-color:var(--acc)"></label>
+    ${w.slowExclude ? stepper('slowpace', '目安', 'これより遅いペースのとき', `${fmtChrono(w.slowPace)} /500m`) : ''}
+    <label class="linkrow" style="min-height:56px;border-top:1px solid var(--line)"><span>漕ぎ出したらワークを始める<br><small style="font-weight:600;color:var(--sub)">スタートの合図を押さなくてよい</small></span>
+      <input type="checkbox" id="woAuto" ${w.autoStart ? 'checked' : ''} style="width:24px;height:24px;accent-color:var(--acc)"></label>`;
+  const workTotal = w.work.u === 'dist' ? `ワーク合計 ${(w.work.v * w.reps * w.sets).toLocaleString('en-US')}m`
+    : w.work.u === 'time' ? `ワーク合計 ${fmtChrono(w.work.v * w.reps * w.sets)}` : `ワーク合計 ${w.work.v * w.reps * w.sets}本`;
+  $('#woSum').innerHTML = `<b style="font-size:20px">${woName(w)}</b><div style="color:var(--sub);font-weight:700;margin-top:4px">${workTotal}</div>`;
+  $('#woSlow').onchange = e => { w.slowExclude = e.target.checked; renderWoSetup(); };
+  $('#woAuto').onchange = e => { w.autoStart = e.target.checked; renderWoSetup(); };
+}
+document.addEventListener('click', e => {
+  const p = e.target.closest('[data-wpreset]');
+  if (p) { Object.assign(WOS, structuredClone(WO_PRESETS[+p.dataset.wpreset])); renderWoSetup(); renderNav(); return; }
+  const sg = e.target.closest('[data-wseg]');
+  if (sg) {
+    const w = WOS, v = sg.dataset.v;
+    if (sg.dataset.wseg === 'work') w.work = { u: v, v: v === 'dist' ? 500 : v === 'time' ? 300 : 30 };
+    else w.rest = { u: v, v: v === 'time' ? 120 : v === 'strokes' ? 3 : v === 'dist' ? 200 : 0 };
+    renderWoSetup(); renderNav(); return;
+  }
+  const st = e.target.closest('[data-wstep]');
+  if (st) {
+    const w = WOS, d = +st.dataset.d, k = st.dataset.wstep;
+    const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+    if (k === 'workv') w.work.v = clamp(w.work.v + d * (w.work.u === 'dist' ? 100 : w.work.u === 'time' ? 60 : 5), w.work.u === 'time' ? 60 : 5, w.work.u === 'dist' ? 20000 : w.work.u === 'time' ? 7200 : 500);
+    if (k === 'reps') w.reps = clamp(w.reps + d, 1, 30);
+    if (k === 'restv') w.rest.v = clamp(w.rest.v + d * (w.rest.u === 'time' ? 15 : w.rest.u === 'strokes' ? 1 : 50), w.rest.u === 'time' ? 15 : 1, 3600);
+    if (k === 'sets') w.sets = clamp(w.sets + d, 1, 10);
+    if (k === 'setrest') w.setRest = clamp(w.setRest + d * 60, 60, 1800);
+    if (k === 'slowpace') w.slowPace = clamp(w.slowPace + d * 5, 120, 300);
+    renderWoSetup(); renderNav();
+  }
+});
 
 /* ---------------- ③ 記録一覧 ---------------- */
 const RECS = [
@@ -960,15 +1154,15 @@ function renderRec() {
   // ① 答え: 地図の下端に重ねる。区間を選ぶと、ここが書き換わる。
   $('#crumbs').innerHTML = (s
     ? `<a data-rsel="all">全体</a> › <span style="color:var(--ontx)">${s.n}</span> <span style="color:var(--acc)">${s.k}</span>`
-    : '<span>この日の練習</span>') + '<span class="lg2">遅い<i></i>速い</span>';
+    : '<span>この日の練習</span>');
   const v = s || { pace: '2:55', spm: 20, dps: 8.6 };
   $('#heroN').innerHTML = `
-    <div class="p"><b class="num">${v.pace}</b><span>/500m 平均</span></div>
-    <div class="s"><b class="num">${v.spm}</b><span>spm</span></div>
-    <div class="s"><b class="num">${v.dps}</b><span>m/漕</span></div>`;
+    <div class="p"><b class="num">${v.pace}</b><span>ave. /500m</span></div>
+    <div class="s"><b class="num">${v.spm}</b><span>SR</span></div>
+    <div class="s"><b class="num">${v.dps}</b><span>DPS m</span></div>`;
   $('#meta').innerHTML = s
     ? `<b class="num">${s.km} km</b> ・ <b class="num">${s.t}</b> ・ ${Math.floor(s.a)}分〜${Math.floor(s.b)}分`
-    : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ 漕ぎ <b class="num">30:14</b> ・ 4セット`;
+    : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ chrono <b class="num">30:14</b> ・ 4セット`;
   $('#rmap').innerHTML = recMap(s);
   // 直前の位置から新しい位置へ滑らかに寄せる。
   const mv = $('#mapview');
@@ -990,7 +1184,7 @@ function renderRec() {
       <div class="mm">${x.t} ・ ${x.km}km</div><div class="mm">SR${x.spm}</div><div class="bar"></div></button>`).join('');
   // ④ くわしく
   $('#chartTitle').textContent = s ? `${s.n}の推移` : 'この日の推移';
-  const M = [['pace', 'ペース'], ['spm', 'レート'], ['dps', '1漕距離']];
+  const M = [['pace', 'ペース'], ['spm', 'SR'], ['dps', 'DPS']];
   $('#rchips').innerHTML = M.map(([k, t]) => `<button class="${r.metric === k ? 'on' : ''}" data-rm="${k}">${t}</button>`).join('');
   $('#rchart').innerHTML = recChart(r.metric, s);
 }
@@ -1306,18 +1500,20 @@ const NOTES = {
     h: '① 出艇前(ホーム)',
     li: [
       ['下を「操作の台」にまとめる', '大きなボタン2つと右の丸ボタンが同じ高さで競り合い、ボタンが地図の文字と重なっていた。台に載せると押す場所が決まり、地図の文字とも重ならない。'],
-      ['1タップで前回の設定のまま出艇', '毎回シートを開いて「この設定で航行スタート」を押していた。名前・艇種・座席をボタンに書くので、別の人の設定のままでも気づける。変えたいときだけ「設定を変えて開始」。'],
+      ['航行スタートは必ずシートを開く(決定)', '毎回違う艇に乗ることが多いので、艇種・座席を必ず確かめる。シートには前回の設定が入っていて、そのままなら1回押すだけ。ボタンにも前回の設定を小さく出す。'],
       ['出航前チェックを見せる(止めない)', 'GPS・音量・チーム・危険区域の状態が「端末とデータ」の奥にしかなかった。悪い項目は黄色で出すが、開始はブロックしない(原則1)。'],
       ['メニューはタイル3つ+一覧', 'よく使う「練習記録」が9項目の7番目に埋もれていた。上にタイル、下に今の一覧。並びは状況で変えない(既存の約束)。説明は1行で切る。'],
     ],
-    ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v12) 配色(決定)',
+    h: '② 航行中(v13)',
     li: [
       ['自艇=白・他艇=常に赤系・予測線=白(利用者の決定)', '他艇の位置は、離れていても常に把握しておきたい(万一の事故のとき素早く動ける)。だから他艇はいつも一番目立つ赤系にする。自艇は白で、自他の色は被らない。'],
       ['警告の相手は「点滅」で区別', '他艇が全部赤なので、警告の相手は色を変えずに白い太縁+点滅で示す。画面の端の赤い帯・光と同じリズムで点滅し、光った方角と地図上の艇が結びつく。'],
       ['障害物の警告も方角の縁が赤く点滅(v11)', '規則は1つ:「衝突の音が鳴っているときだけ、その方角の縁が赤く点滅」。橋・橋脚・流木・中洲・杭は他艇と同じく光る(地図上の障害物も点滅)。カーブ・逆走(案内)と、岸の近接・表示だけの候補(音なし)は光らせない。停止中に固定障害物の音を止めているときも光らない。音と連動させるので新しい判定は足さない。'],
+      ['下半分はドラム式(v13)', '左右の枠をそれぞれ縦にスクロールすると 距離(m)・chrono・DPS・count が順に出る(NK SpeedCoach の表記。count=リセットからの本数)。左の点で何番目かが分かる。'],
+      ['下半分のリセット(v13)', 'カードの下辺中央の小さなボタン。距離・chrono・count の表示を0にする(DPSは今の値なのでそのまま)。練習全体の記録は変わらず、記録画面では全体を見られる。押し間違いに備え、実装では通知に「元に戻す」を付ける。'],
+      ['ワークアウト中は下半分をワークアウト用に(v13)', '大きく「今の区間の残り」、右に何本目か(3/8 rep)、下に進み具合の帯。レスト中は残りのレスト(REST)と次(next)。「遅いときは数えない」がオンなら、遅い間は数字を灰色にして一時停止の記号だけ出す。上半分(/500m・spm)はそのまま。'],
       ['長い練習でも計器が見切れない(v12)', '単位(m・chrono)を数字の下へ。それでも入らないときは距離と時間を同じ比率で縮め、距離>時間の大小は保つ。'],
       ['GPSの状態は画面の上端に「GPS」の文字入りで(v12)', '計器カードの上辺に重ねる。受信不可は「受信」。警告の縁の帯(下・左右)と場所が被らない。'],
       ['自艇の予測線は白', '停止距離=白の実線、警告距離=白の破線(線の種類で区別)。'],
@@ -1325,10 +1521,21 @@ const NOTES = {
       ['追従ボタン・水面の紺・縁の帯はv9のまま', '追従中/現在位置、水面 #123142、方角の縁に赤い帯。'],
     ],
   },
+  wo: {
+    h: '⑥ ワークアウトの設定(v13)',
+    li: [
+      ['Concept2 のワークアウトに倣う', 'ワークとレストをそれぞれ 距離・時間・本数 で決め、回数とセットを掛ける。例: 500m×8 r2:00、30:00×2 r5:00、30本×6 r3本×2セット。'],
+      ['レスト「未定」', '次のワークを漕ぎ出したら始まる(Concept2 の undefined rest)。水上は回頭・待ち合わせで休みの長さが毎回違うので使いやすい。'],
+      ['遅いときはワークに数えない', 'オンにすると、目安(既定 3:00/500m)より遅い間はワークの距離・時間・本数を進めない。回頭や止まっている時間をワークに入れないため。'],
+      ['漕ぎ出したらワークを始める', 'スタートの合図を押さなくてよい(漕ぎながら画面は触れない)。'],
+      ['開く場所', '航行設定シートの「ワークアウト」の行と、航行中のメニュー(止まっているとき)。漕いでいる最中は設定しない。'],
+      ['合図の音は警告より必ず下', '区間の始まり・終わりを短い音で知らせる案はあるが、警告の音と重ねない(読み上げは同時に2本鳴らさない方針)。警告が鳴っている間は鳴らさない。実装時に決める。'],
+    ],
+  },
   rec: {
     h: '⑤ 記録画面(v7) 旧版の迫力 × 視線の順番',
     li: [
-      ['地図を画面の端まで敷く(旧版)', '地図・虹色の航跡・太い数字は Strava の活動ページの型で、見て楽しい入口になる。その下端に答え(ペース・レート・1漕距離)を重ねた。目が地図を下へなでると、そのまま数字に着く。'],
+      ['地図を画面の端まで敷く(旧版)', '地図・虹色の航跡・太い数字は Strava の活動ページの型で、見て楽しい入口になる。その下端に答え(/500m・SR・DPS)を重ねた。目が地図を下へなでると、そのまま数字に着く。'],
       ['区間を選ぶと地図がその区間へ寄る(アプリの機能のまま)', 'セット・全体を選ぶと、その航跡が収まるよう地図が寄る(replay_map.dart の _fit)。つまみで端を細かく合わせている間は、地図が跳ねないよう寄せない。試作でも再現した。'],
       ['地図と時間軸は上に残す', 'Strava も「要約はページのどこを見ても残る」。下のカード・グラフを読んでいる間も、どこ・いつと答えが見える。'],
       ['時間軸はペースの色を細い帯で(旧版の味)', '地図より細く、選んでいない区間は薄く。選んだ区間は旧版と同じティールの括弧で囲む。'],
@@ -1364,7 +1571,7 @@ function renderNotes() {
     (n.ask ? `<div class="ask"><b>決めてほしいこと</b><br>${n.ask}</div>` : '');
 }
 
-function renderAll() { renderHome(); renderNav(); renderList(); renderAxis(); renderZones(); renderRec(); }
+function renderAll() { renderHome(); renderNav(); renderList(); renderAxis(); renderZones(); renderRec(); renderWoSetup(); }
 renderAll();
 show('home');
 </script>
