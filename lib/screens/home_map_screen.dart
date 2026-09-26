@@ -31,7 +31,7 @@ import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/reverse_guidance_audio_notice.dart';
 import '../features/home_map/widgets/rounded_button.dart';
-import '../features/home_map/widgets/safety_banner.dart';
+import '../features/home_map/widgets/edge_alert_overlay.dart';
 import '../features/home_map/widgets/stroke_trace_sheet.dart';
 import '../hooks/use_coach_watch.dart';
 import '../hooks/use_practice_log_recording.dart';
@@ -1433,6 +1433,18 @@ class HomeMapScreen extends HookConsumerWidget {
                             ),
                       );
                     }),
+                    // 警告: 衝突の音が鳴っている間、その方角の画面の縁を赤く点滅させる。
+                    // 大きな警告バナーは出さない(警告は音で聞かせる。2026-09-26)。
+                    if (navigator.mode.value == NavMode.navigator)
+                      Positioned.fill(
+                        child: EdgeAlertOverlay(
+                          alert: edgeAlertFor(
+                            directive: navigator.audioDirective.value,
+                            warnings: navigator.activeWarnings.value,
+                            ashore: navigator.isAshore.value,
+                          ),
+                        ),
+                      ),
                     // ################ マップ上のオーバーレイ ################
                     SafeArea(
                       child:
@@ -1531,14 +1543,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                         !navigator
                                             .reverseGuidanceAudioEnabled.value)
                                       const ReverseGuidanceAudioNotice(),
-                                    // 安全レベルに応じた警告バナー(音声警告と併用)。
-                                    // 警告は最優先のため高さ制限の外に置き、常に全体表示する。
-                                    if (navigator.mode.value ==
-                                        NavMode.navigator)
-                                      SafetyBanner(
-                                        warnings:
-                                            navigator.activeWarnings.value,
-                                      ),
                                     if (navigator.audioError.value != null)
                                       Container(
                                         width: double.infinity,

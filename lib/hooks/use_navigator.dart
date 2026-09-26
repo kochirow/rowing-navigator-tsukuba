@@ -5186,6 +5186,7 @@ UseNavigator useNavigator() {
     activeWarningCount: activeWarningCount,
     safetyRunMode: safetyRunMode,
     primaryWarningLeadTimeSeconds: primaryWarningLeadTimeSeconds,
+    audioDirective: audioDirective,
     warningTimeSeconds: warningTimeSeconds,
     myBoat: myBoat,
     otherBoats: otherBoats,
@@ -5251,6 +5252,9 @@ class UseNavigator {
   /// 連続音へ上げる残り時間(本警告)。いま効いている値で、チーム共有の値も反映済み。
   /// 使い方画面の説明文を実際の設定と一致させるために公開する(読むだけ)。
   final ValueNotifier<double> primaryWarningLeadTimeSeconds;
+
+  /// 鳴っている警告音の指示(読むだけ)。画面の縁の点滅を音と連動させるために公開する。
+  final ValueNotifier<AudioDirective?> audioDirective;
   final ValueNotifier<double> warningTimeSeconds;
   final ValueNotifier<Boat?> myBoat;
   final ValueNotifier<List<Boat>> otherBoats;
@@ -5333,6 +5337,7 @@ class UseNavigator {
     required this.activeWarningCount,
     required this.safetyRunMode,
     required this.primaryWarningLeadTimeSeconds,
+    required this.audioDirective,
     required this.warningTimeSeconds,
     required this.myBoat,
     required this.otherBoats,
