@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v8</title>
+<title>画面刷新 試作 v9</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -339,7 +339,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v8</h1>
+  <h1>画面刷新 試作 v9</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -809,6 +809,7 @@ function renderNav() {
   let glow = null;
   edge.className = 'edge';
   edge.removeAttribute('style');
+  edge.innerHTML = '';
   if (n.warn !== 'none') {
     if (ang == null) {
       edge.className = 'edge show pulse';
@@ -817,6 +818,20 @@ function renderNav() {
       const rad = ang * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
       const t = Math.min(dx ? ((dx > 0 ? 390 : 0) - SELF.x) / dx : 1e9, dy ? ((dy > 0 ? 844 : 0) - SELF.y) / dy : 1e9);
       glow = { x: SELF.x + dx * t, y: SELF.y + dy * t };
+      // 方角が分かるときも、その方角の画面の縁に赤い帯を出す(「不明」の縁全体の帯と同じ見た目)。
+      // 帯は光が当たった辺に沿って長さ280px。両端は薄くして、どこが中心かを分かるようにする。
+      const L = 280, W = 10;
+      let st;
+      if (Math.abs(glow.x) < 1 || Math.abs(glow.x - 390) < 1) {
+        const top = Math.max(0, Math.min(844 - L, glow.y - L / 2));
+        st = `${glow.x < 1 ? 'left:0' : 'right:0'};top:${top}px;width:${W}px;height:${L}px;background:linear-gradient(180deg,rgba(255,40,40,0),rgba(255,40,40,.95) 30%,rgba(255,40,40,.95) 70%,rgba(255,40,40,0))`;
+      } else {
+        const left = Math.max(0, Math.min(390 - L, glow.x - L / 2));
+        st = `${glow.y < 1 ? 'top:0' : 'bottom:0'};left:${left}px;height:${W}px;width:${L}px;background:linear-gradient(90deg,rgba(255,40,40,0),rgba(255,40,40,.95) 30%,rgba(255,40,40,.95) 70%,rgba(255,40,40,0))`;
+      }
+      edge.className = 'edge show pulse';
+      edge.setAttribute('style', 'background:none');
+      edge.innerHTML = `<i style="position:absolute;${st}"></i>`;
     }
   }
   $('#map-nav').innerHTML = navMap(n.warn, n.dir, glow);
@@ -1274,7 +1289,7 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v8) 配色の考え方',
+    h: '② 航行中(v9) 配色の考え方',
     li: [
       ['赤と琥珀は警告・注意だけ(航空の表示基準)', 'FAA AC 25-11B は赤=警告・琥珀=注意を厳格に予約し、ほかに使うと警告に慣れて効かなくなるとする。色は6色以内。ここでは 白・シアン・琥珀・赤 と水面の紺・陸の黒だけ。'],
       ['警告の相手になった他艇だけ赤(v8)', '他艇との衝突がいちばん大事なので、危ない艇は赤で目立たせる。ただし全艇を常に赤にはしない: 2〜12艇がいつも赤いと赤が「すぐ見る」の意味を失い、どの艇が危ないかも区別できない。TCAS も他機は普段シアン/白で、脅威になった機だけ琥珀・赤に変わる。画面の端の赤い点滅と同じ色なので、光った向きと地図上の艇が結びつく。自艇は白なので自他の色は被らない。'],
@@ -1285,6 +1300,7 @@ const NOTES = {
       ['自艇の予測線も白に', '停止距離=白の実線、警告距離=白の破線(色でなく線の種類で区別)。既存の「赤・黄で塗り分け」の要件を変える提案なので、採用するなら要件の更新が要る。'],
       ['固定の危険区域・能力低下は琥珀', '橋・橋脚・流木、GPS弱いなど「注意」はすべて琥珀の細い線と淡い塗りに揃える。'],
       ['赤は警告の画面の端の点滅だけ', '予告も本警告も同じ。画面の上で赤が出たら必ず「後ろを確認」。'],
+      ['方角の画面の縁に赤い帯(v9)', '「不明」のときの縁全体の帯が分かりやすかったので、方角が分かるときもその辺に長さ280pxの赤い帯を出す。光(艇より下の層)と帯(画面の縁)が同じリズムで点滅する。帯は縁だけなので他艇に重ならない。'],
       ['比較できるように「配色: 現行寄り」を残した', '自艇=赤・他艇=灰色・予測=赤/黄。'],
     ],
     ask: '自艇を赤から白に変えてよいか(提案)。慣れた色なので、変えるなら部員への周知が要る。',
