@@ -117,3 +117,26 @@ const highContrastMapStyle = '''
   {"featureType":"water","elementType":"geometry","stylers":[{"saturation":-100},{"lightness":35}]}
 ]
 ''';
+
+/// 航行中の「夜の配色」の地図スタイル(通常地図のときだけ当てる)。
+///
+/// 画面を常時点灯するので、陸をほぼ黒にして OLED の電力を抑える。
+/// 読み取りたいのは水面とアプリ側で描く物(岸・危険区域・艇・中央線)だけ
+/// なので、文字・店・交通は消す。道路と建物はごく暗く残す。橋の道路は
+/// 川を横切る目印になり、位置の見当を失わないため。
+/// 水面は紺(`#123142`)。白い自艇・赤い他艇・琥珀の危険区域がどれも
+/// 4:1 以上の差で浮く(白13.6・琥珀7.7・赤4.3)。
+///
+/// 高コントラスト・航空写真を選んだときは、その選択を優先する(原則2)。
+const navigationNightMapStyle = '''
+[
+  {"elementType":"geometry","stylers":[{"color":"#05070a"}]},
+  {"elementType":"labels","stylers":[{"visibility":"off"}]},
+  {"featureType":"administrative","stylers":[{"visibility":"off"}]},
+  {"featureType":"poi","stylers":[{"visibility":"off"}]},
+  {"featureType":"transit","stylers":[{"visibility":"off"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#10161d"}]},
+  {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"color":"#0a0e13"}]},
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#123142"}]}
+]
+''';
