@@ -114,6 +114,12 @@ class LaneCrossSectionStrip extends StatelessWidget {
 /// 帯が表すのは**中央線からの距離だけ**で、岸は描かない
 /// ([laneCrossSectionHalfWidthMeters] の説明を参照)。
 class _CrossSectionPainter extends CustomPainter {
+  /// 自艇の点の縁。自艇の色が明るければ黒、暗ければ白。
+  static final Color _myBoatOutline =
+      BoatPalette.myBoat.computeLuminance() > 0.5
+          ? Colors.black87
+          : Colors.white;
+
   final ChannelCrossSection crossSection;
   final Color expectedSideColor;
 
@@ -189,7 +195,7 @@ class _CrossSectionPainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color = Colors.white
+          ..color = _myBoatOutline
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3
           ..strokeJoin = StrokeJoin.round,
@@ -198,12 +204,13 @@ class _CrossSectionPainter extends CustomPainter {
       return;
     }
 
-    // 自艇は地図と同じ赤。ここだけで色を作らない(BoatPalette 参照)。
+    // 自艇は地図と同じ色。ここだけで色を作らない(BoatPalette 参照)。
+    // 縁は自艇の色が明るければ黒、暗ければ白(地図の艇印と同じ規則)。
     final clampedX = dotX.clamp(6.0, size.width - 6);
     canvas.drawCircle(
       Offset(clampedX, dotY),
       6,
-      Paint()..color = Colors.white,
+      Paint()..color = _myBoatOutline,
     );
     canvas.drawCircle(
       Offset(clampedX, dotY),

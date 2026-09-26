@@ -116,7 +116,7 @@ UseNavMap useNavMap() {
       devicePixelRatio: dpr,
     );
     // 監視モードは艇ごとに色を指定する。指定がなければ航行モードの
-    // 自艇=赤 / 他艇=濃い青みグレー。
+    // 自艇=白 / 他艇=赤系(BoatPalette)。
     final color = spec.color ??
         (spec.type == MarkerType.myBoat
             ? BoatPalette.myBoat
