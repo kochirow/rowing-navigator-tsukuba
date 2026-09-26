@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 import 'package:rowing_navigator/models/danger_zone_settings.dart';
@@ -8,6 +10,21 @@ import 'package:rowing_navigator/services/fixed_obstacle_warning_settings_servic
 import 'package:rowing_navigator/services/risk_evaluator_settings_service.dart';
 import 'package:rowing_navigator/services/safety_defaults_migration_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 保存が必ず失敗する設定サービス(保存領域の故障を模す)。
+class _ThrowingRiskSettings extends RiskEvaluatorSettingsService {
+  @override
+  Future<void> saveWarningLeadTimes(WarningLeadTimes values) async {
+    throw Exception('保存領域の故障');
+  }
+}
+
+/// 保存が永遠に終わらない設定サービス(保存領域の応答停止を模す)。
+class _HangingRiskSettings extends RiskEvaluatorSettingsService {
+  @override
+  Future<void> saveWarningLeadTimes(WarningLeadTimes values) =>
+      Completer<void>().future;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -55,5 +72,30 @@ void main() {
           .advanceWarningLeadSeconds,
       15,
     );
+  });
+
+  test('起動時の移行が失敗しても例外を出さず、次の起動でやり直す', () async {
+    SharedPreferences.setMockInitialValues({'safety_defaults_generation': 1});
+    final service =
+        SafetyDefaultsMigrationService(riskSettings: _ThrowingRiskSettings());
+
+    await service.migrateOnStartup();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('safety_defaults_generation'), 1,
+        reason: '世代を書かないので、次の起動で最初からやり直す');
+  });
+
+  test('起動時の移行が応答しなくても、上限の時間で起動を続ける', () async {
+    SharedPreferences.setMockInitialValues({'safety_defaults_generation': 1});
+    final service =
+        SafetyDefaultsMigrationService(riskSettings: _HangingRiskSettings());
+
+    await service.migrateOnStartup(
+      timeout: const Duration(milliseconds: 50),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('safety_defaults_generation'), 1);
   });
 }

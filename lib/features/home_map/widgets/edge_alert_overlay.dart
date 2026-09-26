@@ -196,21 +196,23 @@ class _EdgePainter extends CustomPainter {
     final vertical = p.dx <= 0.5 || p.dx >= size.width - 0.5;
     final Rect rect;
     if (vertical) {
-      final top =
-          (p.dy - _bandLength / 2).clamp(0.0, size.height - _bandLength);
+      // 帯は辺の長さを超えない。分割画面などで辺が280より短いと、clampの
+      // 上限が負になって例外になるため。
+      final length = math.min(_bandLength, size.height);
+      final top = (p.dy - length / 2).clamp(0.0, size.height - length);
       rect = Rect.fromLTWH(
         p.dx <= 0.5 ? 0 : size.width - _band,
         top,
         _band,
-        _bandLength,
+        length,
       );
     } else {
-      final left =
-          (p.dx - _bandLength / 2).clamp(0.0, size.width - _bandLength);
+      final length = math.min(_bandLength, size.width);
+      final left = (p.dx - length / 2).clamp(0.0, size.width - length);
       rect = Rect.fromLTWH(
         left,
         p.dy <= 0.5 ? 0 : size.height - _band,
-        _bandLength,
+        length,
         _band,
       );
     }

@@ -13,7 +13,8 @@ import 'package:rowing_navigator/services/safety_defaults_migration_service.dart
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SafetyDefaultsMigrationService().migrateIfNeeded();
+  // 移行の失敗・応答停止でアプリが開かなくならないようにする(原則1)。
+  await SafetyDefaultsMigrationService().migrateOnStartup();
   runApp(const ProviderScope(child: App()));
 }
 

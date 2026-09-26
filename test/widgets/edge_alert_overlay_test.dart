@@ -59,4 +59,31 @@ void main() {
       isNull,
     );
   });
+
+  testWidgets('帯の長さより狭い画面でも、描画で例外を出さない', (tester) async {
+    // 右の縁(縦の辺・高さ200)と下の縁(横の辺・幅200)の両方を描かせる。
+    for (final angle in [90.0, 180.0]) {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox(
+              width: 200,
+              height: 200,
+              child: EdgeAlertOverlay(
+                alert: EdgeAlert(
+                  warning: warning('other_boat', 0),
+                  screenAngleDegrees: angle,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull, reason: '画面角 $angle°');
+    }
+    // 点滅のアニメーションを止めて終える。
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
