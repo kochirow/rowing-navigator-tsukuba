@@ -51,6 +51,8 @@ import '../models/mooring_area.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
+import '../theme/boat_palette.dart';
+import '../theme/nav_palette.dart';
 import '../theme/map_layer_spec.dart';
 import '../utils/tactile_feedback.dart';
 import '../hooks/use_navigator.dart';
@@ -235,6 +237,13 @@ class HomeMapScreen extends HookConsumerWidget {
     final laneCrossSectionService = useMemoized(ChannelCrossSectionService.new);
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
+    // 航行中の「夜の配色」。航行中かつ通常地図のときだけ暗い地図にし、
+    // 予測線・危険区域もそれに合わせた色にする(NavPalette・HazardPalette)。
+    // 高コントラスト・航空写真を選んだときはその選択を優先する(原則2)。
+    // 見た目だけで、安全判定・警告には関係しない。
+    final useNightMap = navigator.mode.value == NavMode.navigator &&
+        navMap.mapType.value == MapType.normal &&
+        !highContrastMap.value;
     final showDeveloperSafetyShapeOverlay = useState(false);
     // 航路の断面インジケータは補助表示。既定は非表示で、航行開始時の設定か
     // 「表示」パネルで出す。中央線からの位置は地図でも読めるので、
@@ -1172,13 +1181,25 @@ class HomeMapScreen extends HookConsumerWidget {
           );
         }
 
+        // 夜の配色では、自艇の予測を白、他艇の予測を他艇の色(赤系)の
+        // 細線にする。停止距離=実線・届く範囲=破線で区別する(色では分けない)。
+        // 明るい地図では従来どおり(黒・橙・赤)。
+        final isMine = myBoat != null && boat.boatId == myBoat.boatId;
+        final nightLine = isMine
+            ? NavPalette.selfPrediction
+            : BoatPalette.otherBoat.withValues(alpha: 0.6);
+
         // ① 船体領域。塗るのはここだけで、いま艇が在る場所を示す。
         newShipDomains.add(Polygon(
           polygonId: PolygonId('ship_body_${boat.boatId}'),
           points: domainsAt(0).shipBodyDomain.points,
           strokeWidth: 2,
-          strokeColor: Colors.black.withValues(alpha: 0.45),
-          fillColor: Colors.black.withValues(alpha: 0.08),
+          strokeColor: useNightMap
+              ? nightLine.withValues(alpha: 0.5)
+              : Colors.black.withValues(alpha: 0.45),
+          fillColor: useNightMap
+              ? Colors.transparent
+              : Colors.black.withValues(alpha: 0.08),
           zIndex: predictionShapeZIndex,
         ));
 
@@ -1188,7 +1209,18 @@ class HomeMapScreen extends HookConsumerWidget {
           for (final distance in sampleDistances)
             domainsAt(distance).exclusiveDomain.points,
         ]);
-        if (sweptPoints.length >= 3) {
+        if (sweptPoints.length >= 3 && useNightMap) {
+          // 夜の配色: 破線にするためポリラインの閉じた輪で描く
+          // (ポリゴンの輪郭は破線にできない)。
+          newStoppingDistanceLines.add(Polyline(
+            polylineId: PolylineId('sweep_outline_${boat.boatId}'),
+            points: [...sweptPoints, sweptPoints.first],
+            width: 2,
+            color: nightLine.withValues(alpha: isMine ? 0.55 : 0.45),
+            patterns: [PatternItem.dash(12), PatternItem.gap(10)],
+            zIndex: predictionShapeZIndex,
+          ));
+        } else if (sweptPoints.length >= 3) {
           newShipDomains.add(Polygon(
             polygonId: PolygonId('sweep_outline_${boat.boatId}'),
             points: sweptPoints,
@@ -1208,7 +1240,9 @@ class HomeMapScreen extends HookConsumerWidget {
               polylineId: PolylineId('stop_line_${boat.boatId}'),
               points: [...stopPoints, stopPoints.first],
               width: 2,
-              color: const Color(0xFFD32F2F),
+              color: useNightMap
+                  ? nightLine.withValues(alpha: isMine ? 0.85 : 0.6)
+                  : const Color(0xFFD32F2F),
               zIndex: predictionShapeZIndex,
             ));
           }
@@ -1226,6 +1260,7 @@ class HomeMapScreen extends HookConsumerWidget {
       tracking.mode.value,
       navMap.isReady.value,
       navigator.warningTimeSeconds.value,
+      useNightMap,
     ]);
 
     // ##########################
@@ -1279,19 +1314,30 @@ class HomeMapScreen extends HookConsumerWidget {
           points: points,
           // 塗りが薄い区域ほど輪郭線で形を伝える。色だけに頼らない。
           strokeWidth: HazardPalette.strokeWidthOf(category),
-          strokeColor: HazardPalette.strokeColorOf(context, category),
-          fillColor: HazardPalette.fillColorOf(
-            context,
-            category,
-            isTemporary: obstacle.isTemporary,
-          ),
+          strokeColor: useNightMap
+              ? HazardPalette.nightStrokeColorOf(category)
+              : HazardPalette.strokeColorOf(context, category),
+          fillColor: useNightMap
+              ? HazardPalette.nightFillColorOf(
+                  category,
+                  isTemporary: obstacle.isTemporary,
+                )
+              : HazardPalette.fillColorOf(
+                  context,
+                  category,
+                  isTemporary: obstacle.isTemporary,
+                ),
           // 実在する危険は、航路の帯と監視の航跡より必ず上に出す。
           zIndex: hazardPolygonZIndex,
         ));
       }
       obstacles.value = newObstacles;
       return null;
-    }, [navigator.obstacles.value, navigator.warningTimeSeconds.value]);
+    }, [
+      navigator.obstacles.value,
+      navigator.warningTimeSeconds.value,
+      useNightMap,
+    ]);
 
     // ##########################
     // Polygonsの統合
@@ -1367,8 +1413,9 @@ class HomeMapScreen extends HookConsumerWidget {
     // 文字が乗って読めなくなる。地図は通常・高コントラストなら明るく、
     // 航空写真なら暗い。地図を出していない読込・エラー表示はテーマに従う。
     final showsMap = !loading.value && initError.value == null;
+    // 航行中の夜の地図は暗いので明るい文字。
     final statusBarStyle = showsMap
-        ? (navMap.mapType.value == MapType.normal
+        ? (navMap.mapType.value == MapType.normal && !useNightMap
             ? SystemUiOverlayStyle.dark
             : SystemUiOverlayStyle.light)
         : (Theme.of(context).brightness == Brightness.dark
@@ -1417,10 +1464,12 @@ class HomeMapScreen extends HookConsumerWidget {
                         mapType: navMap.mapType.value,
                         // 航空写真ではスタイルが無視されるため、通常地図のときだけ
                         // 適用する。適用に失敗しても通常表示のまま航行は続く。
-                        style: highContrastMap.value &&
-                                navMap.mapType.value == MapType.normal
-                            ? highContrastMapStyle
-                            : null,
+                        style: useNightMap
+                            ? navigationNightMapStyle
+                            : highContrastMap.value &&
+                                    navMap.mapType.value == MapType.normal
+                                ? highContrastMapStyle
+                                : null,
                         onMapCreated: (GoogleMapController controller) async {
                           navMap.setController(controller);
                         },

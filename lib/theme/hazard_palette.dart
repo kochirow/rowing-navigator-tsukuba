@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'nav_palette.dart';
 
 /// 危険区域の種類ごとの色を一元管理する。
 ///
@@ -69,4 +70,39 @@ class HazardPalette {
       colorOf(context, category).withValues(
         alpha: fillOpacityOf(category, isTemporary: isTemporary),
       );
+
+  // ---------------------------------------------------------------
+  // 航行中の「夜の配色」(暗い地図)用。
+  //
+  // 暗い地図では、赤は「衝突に関わるもの(他艇・警告の点滅)」に空ける。
+  // 固定の危険区域(橋・橋脚・中州・流木・杭)は琥珀の細線+淡い塗りに揃える。
+  // 岸は常にそこにある背景なので、白の細線+ごく淡い塗りで川の形だけ示す。
+  // 見た目だけの差で、警告対象・しきい値は変えない。
+  // ---------------------------------------------------------------
+
+  /// 夜の配色の基準色。
+  static Color nightColorOf(String category) => switch (category) {
+        'shore' => const Color(0xFFFFFFFF),
+        _ => NavPalette.caution,
+      };
+
+  /// 夜の配色の輪郭線。
+  static Color nightStrokeColorOf(String category) =>
+      nightColorOf(category).withValues(
+        alpha: category == 'shore' ? 0.18 : 0.8,
+      );
+
+  /// 夜の配色の塗り。岸はごく淡く、ほかは明るい地図より控えめにする
+  /// (暗い背景では同じ不透明度でも強く見える)。
+  static Color nightFillColorOf(String category, {bool isTemporary = false}) {
+    final base = switch (category) {
+      'shore' => 0.04,
+      'bridge' || 'curve' || 'reverse' => 0.12,
+      'bridgePier' || 'pile' => 0.45,
+      _ => 0.22,
+    };
+    return nightColorOf(category).withValues(
+      alpha: isTemporary ? (base + 0.10).clamp(0.0, 1.0) : base,
+    );
+  }
 }
