@@ -743,7 +743,15 @@ class HomeMapScreen extends HookConsumerWidget {
         context: context,
         backgroundColor: Colors.transparent,
         isScrollControlled: true,
-        builder: (_) => MapMenuSheet(actions: actions),
+        builder: (_) => MapMenuSheet(
+          actions: actions,
+          // よく使う行き先を先頭にタイルで(一覧からは消さない)。
+          tiles: [
+            for (final a in actions)
+              if (a.enabled && const {'練習記録', 'チーム', '使い方'}.contains(a.title))
+                a,
+          ],
+        ),
       );
     }
 
@@ -1955,6 +1963,11 @@ class HomeMapScreen extends HookConsumerWidget {
                                               ],
                                             ),
                                           ),
+                                        if (!navigator.isTransitioning.value &&
+                                            navigator.mode.value ==
+                                                NavMode.observer &&
+                                            !navigator.isWatching.value)
+                                          const PreviousNavSettingsLabel(),
                                         if (!navigator.isTransitioning.value &&
                                             navigator.mode.value ==
                                                 NavMode.observer)
