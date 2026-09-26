@@ -14,7 +14,7 @@ import 'replay_controller.dart';
 import 'replay_format.dart';
 import 'widgets/detail_sections.dart';
 import 'widgets/metric_chart.dart';
-import 'widgets/now_readout.dart';
+import 'widgets/answer_overlay.dart';
 import 'widgets/record_tools.dart';
 import 'widgets/replay_map.dart';
 import 'widgets/replay_timeline.dart';
@@ -73,8 +73,9 @@ class RecordReplayScreen extends HookWidget {
         () => sessionStore ?? SessionStoreService(), [sessionStore]);
     final scroll = useScrollController();
     final media = MediaQuery.of(context);
+    // 地図は画面の端まで敷き、下端に答えの数字を重ねる(旧版の迫力×視線の順番)。
     final mapHeight =
-        (media.size.height * 0.34).clamp(200.0, 330.0) + media.padding.top;
+        (media.size.height * 0.44).clamp(280.0, 420.0) + media.padding.top;
 
     void scrollToTop() => scroll.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
@@ -169,11 +170,15 @@ class RecordReplayScreen extends HookWidget {
         SizedBox(
           height: mapHeight,
           child: mapBuilderForTest?.call(header) ??
-              ReplayMap(controller: controller, overlay: header),
+              ReplayMap(
+                controller: controller,
+                overlay: header,
+                bottomOverlay: AnswerOverlay(controller: controller),
+              ),
         ),
         _Player(controller: controller, palette: p),
+        // 再生位置の値は、動かしたときだけ地図の下端(答えの上)に出す。
         ReplayTimeline(controller: controller),
-        NowReadout(controller: controller),
         Expanded(
           child: ListView(
             key: const Key('record-replay-scroll'),
@@ -247,31 +252,29 @@ class _Player extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-              color: p.surfaceHigh, borderRadius: BorderRadius.circular(12)),
-          child: Row(children: [
-            for (final sp in ReplayController.playbackSpeeds)
-              GestureDetector(
-                onTap: () => c.setSpeed(sp),
-                child: Container(
-                  height: 32,
-                  constraints: const BoxConstraints(minWidth: 36),
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: sp == c.speed ? p.surfaceHigher : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text('×$sp',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: sp == c.speed ? p.text : p.textSub)),
-                ),
-              ),
-          ]),
+        // 倍速は1つのボタンで順に切り替える(操作は畳む)。
+        Material(
+          color: p.surfaceHigh,
+          shape: const StadiumBorder(),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () {
+              const speeds = ReplayController.playbackSpeeds;
+              final i = speeds.indexOf(c.speed);
+              c.setSpeed(speeds[(i + 1) % speeds.length]);
+            },
+            child: Container(
+              height: 40,
+              constraints: const BoxConstraints(minWidth: 56),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('×${c.speed}',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: p.text)),
+            ),
+          ),
         ),
         const Spacer(),
         if (c.isTimelineZoomed)

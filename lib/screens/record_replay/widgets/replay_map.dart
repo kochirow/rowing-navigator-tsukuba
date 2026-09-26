@@ -23,7 +23,15 @@ class ReplayMap extends StatefulWidget {
   /// 地図の上に重ねる見出し（日時・艇種）。
   final Widget? overlay;
 
-  const ReplayMap({super.key, required this.controller, this.overlay});
+  /// 地図の下端に重ねる物(答えの数字)。視線は 見出し→地図→数字 と上から下へ流れる。
+  final Widget? bottomOverlay;
+
+  const ReplayMap({
+    super.key,
+    required this.controller,
+    this.overlay,
+    this.bottomOverlay,
+  });
 
   @override
   State<ReplayMap> createState() => _ReplayMapState();
@@ -397,40 +405,42 @@ class _ReplayMapState extends State<ReplayMap> {
       ),
       if (widget.overlay != null)
         Positioned(left: 0, right: 0, top: 0, child: widget.overlay!),
+      if (widget.bottomOverlay != null)
+        Positioned(left: 0, right: 0, bottom: 0, child: widget.bottomOverlay!),
+      // 地図の操作は「表示」(危険区域・航路・写真の切替)と「全体」の2つに畳む。
+      // 色の凡例(遅い-速い)は見れば分かるので出さない(2026-09-26 利用者)。
       Positioned(
-        left: 12,
-        bottom: 54,
-        child: _Legend(palette: p),
-      ),
-      Positioned(
-        right: 12,
-        bottom: 12,
-        child: Row(children: [
-          _MapButton(
-            label: '危険区域',
-            palette: p,
-            on: _showHazards,
-            onTap: () => setState(() => _showHazards = !_showHazards),
+        right: 10,
+        top: MediaQuery.paddingOf(context).top + 52,
+        child: Column(children: [
+          PopupMenuButton<String>(
+            tooltip: '表示',
+            color: p.surfaceHigh,
+            onSelected: (v) => setState(() {
+              if (v == 'hazards') _showHazards = !_showHazards;
+              if (v == 'lanes') _showLanes = !_showLanes;
+              if (v == 'photo') _satellite = !_satellite;
+            }),
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem(
+                  value: 'hazards',
+                  checked: _showHazards,
+                  child: const Text('危険区域')),
+              CheckedPopupMenuItem(
+                  value: 'lanes', checked: _showLanes, child: const Text('航路')),
+              CheckedPopupMenuItem(
+                  value: 'photo', checked: _satellite, child: const Text('写真')),
+            ],
+            child: _GlassIcon(icon: Icons.layers_outlined, palette: p),
           ),
-          const SizedBox(width: 6),
-          _MapButton(
-            label: '航路',
-            palette: p,
-            on: _showLanes,
-            onTap: () => setState(() => _showLanes = !_showLanes),
-          ),
-          const SizedBox(width: 6),
-          _MapButton(
-            label: '写真',
-            palette: p,
-            on: _satellite,
-            onTap: () => setState(() => _satellite = !_satellite),
-          ),
-          const SizedBox(width: 6),
-          _MapButton(
-            label: '全体',
-            palette: p,
+          const SizedBox(height: 6),
+          GestureDetector(
             onTap: () => _fit(ReplayRange(0, tr.duration)),
+            child: Semantics(
+              button: true,
+              label: '全体',
+              child: _GlassIcon(icon: Icons.fit_screen, palette: p),
+            ),
           ),
         ]),
       ),
@@ -438,78 +448,22 @@ class _ReplayMapState extends State<ReplayMap> {
   }
 }
 
-class _Legend extends StatelessWidget {
+class _GlassIcon extends StatelessWidget {
+  final IconData icon;
   final RecordPalette palette;
-  const _Legend({required this.palette});
+  const _GlassIcon({required this.icon, required this.palette});
 
   @override
-  Widget build(BuildContext context) {
-    final p = palette;
-    final style =
-        TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: p.textSub);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: p.surface.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: p.line),
-      ),
-      child: Row(children: [
-        Text('遅い', style: style),
-        const SizedBox(width: 7),
-        Container(
-          width: 70,
-          height: 6,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            gradient: LinearGradient(colors: [
-              for (var k = 0; k <= 4; k++) RecordPalette.paceRamp(k / 4),
-            ]),
-          ),
+  Widget build(BuildContext context) => Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: palette.surface.withValues(alpha: 0.82),
+          shape: BoxShape.circle,
+          border: Border.all(color: palette.line),
         ),
-        const SizedBox(width: 7),
-        Text('速い', style: style),
-      ]),
-    );
-  }
-}
-
-class _MapButton extends StatelessWidget {
-  final String label;
-  final RecordPalette palette;
-  final bool on;
-  final VoidCallback onTap;
-  const _MapButton(
-      {required this.label,
-      required this.palette,
-      required this.onTap,
-      this.on = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = palette;
-    return Material(
-      color: on ? p.accent : p.surface.withValues(alpha: 0.82),
-      shape: StadiumBorder(side: BorderSide(color: on ? p.accent : p.line)),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 36, minWidth: 48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Center(
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: on ? p.onAccent : p.text)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+        child: Icon(icon, size: 20, color: palette.text),
+      );
 }
 
 /// 暗いテーマ用の地図スタイル（道路・地名を控えめにし、航跡を主役にする）。

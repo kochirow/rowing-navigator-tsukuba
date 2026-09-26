@@ -113,7 +113,7 @@ void main() {
     expect(detector.gapKind(tr, gap), GapKind.stop);
   });
 
-  test('全体サマリ: 漕いでいた時間=本・区間の合計、練習時間=動いていた時間', () {
+  test('全体サマリ: ワーク時間=本・区間の合計、練習時間=動いていた時間', () {
     final tr = build(const [
       Leg(60, 0, null),
       Leg(300, 4.0, 20),
