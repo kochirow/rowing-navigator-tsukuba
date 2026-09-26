@@ -3,9 +3,16 @@ import 'package:rowing_navigator/theme/boat_palette.dart';
 
 void main() {
   group('BoatPalette', () {
-    test('自艇の赤は識別色パレットに入っていない', () {
-      // 赤は「自艇」と「危険」に予約する。他艇へ配ると意味が薄れる。
+    test('自艇の色は識別色パレットに入っていない', () {
+      // 監視中の識別色に自艇と同じ色が混ざると、自他を取り違える。
       expect(BoatPalette.trackPalette, isNot(contains(BoatPalette.myBoat)));
+    });
+
+    test('航行中の自艇と他艇は明るさで分かれる(白と赤系)', () {
+      // 自艇=白(黒縁)、他艇=赤系(白縁)。色を被せない(2026-09-26 利用者決定)。
+      expect(BoatPalette.myBoat.computeLuminance(), greaterThan(0.5));
+      expect(BoatPalette.otherBoat.computeLuminance(), lessThan(0.5));
+      expect(BoatPalette.otherBoat.r, greaterThan(BoatPalette.otherBoat.g));
     });
 
     test('識別色は重複しない', () {

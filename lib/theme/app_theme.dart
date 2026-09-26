@@ -63,10 +63,12 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.onDark,
   });
 
+  // アクセントはティール1色(2026-09-26 利用者決定)。明色は白文字で 4.5:1 を
+  // 超えるよう、試作の #0A8F86 より一段濃い #00796B にしている(約5.3:1)。
   static const light = AppColors(
-    primary: Color(0xFF095372),
-    primaryLight: Color(0xFF4D9CBF),
-    primaryDark: Color(0xFF002E4D),
+    primary: Color(0xFF00796B),
+    primaryLight: Color(0xFF4DB6AC),
+    primaryDark: Color(0xFF004D40),
     onPrimary: Colors.white,
     danger: Color(0xFFC62828),
     warning: Color(0xFFE65100),
@@ -77,7 +79,8 @@ class AppColors extends ThemeExtension<AppColors> {
     card: Colors.white,
     cautionSurface: Color(0xFFFFF8E1),
     mapControlSurface: Colors.white,
-    panelScrim: Color(0xE0002E4D), // primaryDark 約0.88
+    // 地図の上の計器の下地。アクセントの色味を入れず、ほぼ黒の中立色にする。
+    panelScrim: Color(0xE00B1318), // 約0.88
     chipScrim: Color(0x99000000), // 黒 約0.6
     labelScrim: Color(0x8C000000), // 黒 約0.55
     textPrimary: Color(0xDE000000), // black87
@@ -94,11 +97,11 @@ class AppColors extends ThemeExtension<AppColors> {
   /// セマンティック色は明色版より明度を上げてある。暗い背景では
   /// `#C62828` のような濃い赤は沈んで「危険」に見えない。
   static const dark = AppColors(
-    primary: Color(0xFF5CB4D8),
-    primaryLight: Color(0xFF8FD0EA),
-    primaryDark: Color(0xFF17384A),
+    primary: Color(0xFF35D6C8),
+    primaryLight: Color(0xFF7FE5DC),
+    primaryDark: Color(0xFF0F3B38),
     // 明るいアクセント面の上は濃色文字にする。
-    onPrimary: Color(0xFF00202C),
+    onPrimary: Color(0xFF04221F),
     danger: Color(0xFFFF6B6B),
     warning: Color(0xFFFFA04D),
     caution: Color(0xFFFFCC55),
