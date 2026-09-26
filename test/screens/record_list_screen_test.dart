@@ -217,7 +217,7 @@ void main() {
     await pumpReplay(tester, intervalSession(DateTime(2026, 8, 6, 6)));
 
     expect(find.text('この日の練習'), findsOneWidget);
-    expect(find.text('漕いでいた時間'), findsOneWidget);
+    expect(find.text('ワーク時間'), findsOneWidget);
     expect(find.text('練習時間'), findsOneWidget);
     expect(find.text('1セット目'), findsOneWidget);
     expect(find.textContaining('スプリット'), findsNothing,
@@ -227,7 +227,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('本の平均です'), findsOneWidget);
-    expect(find.text('漕いでいた時間'), findsNothing, reason: '内訳のサマリは全体のときだけ');
+    expect(find.text('ワーク時間'), findsNothing, reason: '内訳のサマリは全体のときだけ');
     await tester.scrollUntilVisible(find.text('内訳（各本・区間）'), 200,
         scrollable:
             find.descendant(of: list, matching: find.byType(Scrollable)).first);

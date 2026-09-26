@@ -191,7 +191,7 @@ class _Overview extends StatelessWidget {
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('漕いでいた時間', style: eyebrow()),
+              Text('ワーク時間', style: eyebrow()),
               Text(fmtDuration(o.rowingSec), style: big(p.text)),
             ]),
           ),
@@ -248,7 +248,7 @@ class _Overview extends StatelessWidget {
             ]),
           ),
         Text(
-          '漕いでいた時間 = 各セットの本・区間の合計（練習の強度で漕いだ時間）。'
+          'ワーク時間 = 各セットの本・区間の合計（練習の強度で漕いだ時間）。'
           '練習時間 = 艇が動いていた時間の合計（パドル・アップを含む）。'
           '記録の長さ ${fmtDuration(o.recordSec)}。',
           style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
