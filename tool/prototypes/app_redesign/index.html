@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v10</title>
+<title>画面刷新 試作 v11</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -339,7 +339,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v10</h1>
+  <h1>画面刷新 試作 v11</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -664,7 +664,10 @@ function navMap(warn, dir, glow) {
   const otherRot = ang + 180; // 先端を自艇へ向ける
   const hz = P.hazard;
   // 警告の相手になった艇だけ赤。画面の端の赤い点滅と同じ色で、光った向きと地図上の艇が結びつく。
-  const isThreat = warn !== 'none';
+  const tgt = state.nav.target;
+  const isThreat = warn !== 'none' && tgt === 'boat';
+  const hzBlink = t => warn !== 'none' && tgt === t ? ' class="glowpulse"' : '';
+  const hzW = t => warn !== 'none' && tgt === t ? 3 : 1.5;
   const oc = isThreat ? P.threat : P.other, oe = isThreat ? P.threatEdge : P.otherEdge, ol = isThreat ? P.threatLabel : P.otherLabel;
   return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
     <rect width="390" height="844" fill="${P.land}"/>
@@ -675,9 +678,9 @@ function navMap(warn, dir, glow) {
       <stop offset="0" stop-color="#ff2828" stop-opacity=".9"/><stop offset=".45" stop-color="#ff2828" stop-opacity=".35"/><stop offset="1" stop-color="#ff2828" stop-opacity="0"/></radialGradient></defs>
       <rect class="glowpulse" width="390" height="844" fill="url(#glowG)"/>` : ''}
     <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="${P.center}" stroke-width="1.5" stroke-dasharray="10 9" fill="none"/>
-    <rect x="${cx - 100}" y="552" width="200" height="22" fill="${hz}" fill-opacity=".13" stroke="${hz}" stroke-opacity=".75" stroke-width="1.5"/>
-    <rect x="${cx - 12}" y="556" width="10" height="14" fill="${hz}" fill-opacity=".6"/>
-    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="${hz}" fill-opacity=".22" stroke="${hz}" stroke-opacity=".75" stroke-width="1.5"/>
+    <g${hzBlink('bridge')}><rect x="${cx - 100}" y="552" width="200" height="22" fill="${hz}" fill-opacity=".13" stroke="${hz}" stroke-opacity=".85" stroke-width="${hzW('bridge')}"/>
+    <rect x="${cx - 12}" y="556" width="10" height="14" fill="${hz}" fill-opacity=".6"/></g>
+    <ellipse${hzBlink('wood')} cx="${cx + 62}" cy="760" rx="16" ry="8" fill="${hz}" fill-opacity=".22" stroke="${hz}" stroke-opacity=".85" stroke-width="${hzW('wood')}"/>
     <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="${P.stop}" stroke-width="1.5"/>
     <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="${P.warnLine}" stroke-width="1.5" stroke-dasharray="4 4"/>
     <g transform="translate(${otherX},${otherY}) rotate(${otherRot})">
@@ -695,7 +698,7 @@ $('#map-home').innerHTML = riverMap();
 const state = {
   screen: 'home',
   home: { check: 'ok' },
-  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal', follow: 'on' },
+  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal', follow: 'on', target: 'boat' },
   list: { period: 'month' },
   rec: { sel: 'all', gaze: 'off', metric: 'pace', cursor: 0, speed: 30 },
 };
@@ -731,6 +734,7 @@ const SCENARIOS = {
   nav: [
     { key: 'pal', label: '配色', opts: [['proposal', '決定(自艇=白・他艇=赤)'], ['current', '旧(自艇=赤・他艇=灰)']] },
     { key: 'warn', label: '警告', opts: [['none', 'なし'], ['action', '予告'], ['imminent', '本警告']] },
+    { key: 'target', label: '警告の相手', opts: [['boat', '他艇'], ['bridge', '橋(真後ろ)'], ['wood', '流木(右後ろ)']] },
     { key: 'health', label: '能力', opts: [['ok', '正常'], ['gps', 'GPS弱い'], ['rx', '他艇受信不可']] },
     { key: 'dir', label: '向き(漕手から)', opts: [['rr', '右後ろ'], ['r', '右'], ['b', '真後ろ'], ['lr', '左後ろ'], ['l', '左'], ['unk', '不明']] },
     { key: 'fix', label: '計器', opts: [['ok', '計測中'], ['long', '長い練習'], ['wait', '測位待ち']] },
@@ -807,7 +811,8 @@ function renderNav() {
   // 向きが分からないとき(不変条件10)は画面の縁全体を点滅させる(ここだけ上の層)。
   const edge = $('#edge');
   $('#warnchip').className = 'warnchip';
-  const ang = DIRS[n.dir][1];
+  // 障害物が相手のときは、その障害物の方角(試作では固定: 橋=真後ろ、流木=右後ろ)。
+  const ang = n.target === 'bridge' ? 180 : n.target === 'wood' ? 165 : DIRS[n.dir][1];
   let glow = null;
   edge.className = 'edge';
   edge.removeAttribute('style');
@@ -1291,10 +1296,11 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v10) 配色(決定)',
+    h: '② 航行中(v11) 配色(決定)',
     li: [
       ['自艇=白・他艇=常に赤系・予測線=白(利用者の決定)', '他艇の位置は、離れていても常に把握しておきたい(万一の事故のとき素早く動ける)。だから他艇はいつも一番目立つ赤系にする。自艇は白で、自他の色は被らない。'],
       ['警告の相手は「点滅」で区別', '他艇が全部赤なので、警告の相手は色を変えずに白い太縁+点滅で示す。画面の端の赤い帯・光と同じリズムで点滅し、光った方角と地図上の艇が結びつく。'],
+      ['障害物の警告も方角の縁が赤く点滅(v11)', '規則は1つ:「衝突の音が鳴っているときだけ、その方角の縁が赤く点滅」。橋・橋脚・流木・中洲・杭は他艇と同じく光る(地図上の障害物も点滅)。カーブ・逆走(案内)と、岸の近接・表示だけの候補(音なし)は光らせない。停止中に固定障害物の音を止めているときも光らない。音と連動させるので新しい判定は足さない。'],
       ['自艇の予測線は白', '停止距離=白の実線、警告距離=白の破線(線の種類で区別)。'],
       ['赤の意味は「他艇と警告」', '赤=衝突に関わるもの(他艇・警告の光と帯)、琥珀=固定の危険区域と能力低下、白=自艇と計器、紺と黒=水面と陸。色はこれだけ。'],
       ['追従ボタン・水面の紺・縁の帯はv9のまま', '追従中/現在位置、水面 #123142、方角の縁に赤い帯。'],
