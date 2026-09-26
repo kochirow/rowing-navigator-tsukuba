@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/features/home_map/widgets/nav_lower_drums.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_status_card.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 
@@ -129,27 +130,32 @@ void main() {
     expect(find.text('9:59'), findsOneWidget);
   });
 
-  testWidgets('縦向き小型の副計器は面を持ち、行いっぱいに置く', (tester) async {
+  testWidgets('縦向き小型の下半分は面を持ち、行いっぱいに置く', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
     final card = tester.getRect(
         find.byKey(const ValueKey('nav-status-card-portrait-compact')));
-    final elapsed = tester.getRect(find.text('1:00'));
-    final distance = tester.getRect(find.text('1.00'));
+    final left = tester.getRect(find.byKey(const ValueKey('nav-lower-left')));
+    final right = tester.getRect(find.byKey(const ValueKey('nav-lower-right')));
 
-    // 経過時間が左、距離が右。上下に積むと高さだけ取って読まれない。
-    expect(elapsed.left, lessThan(distance.left));
-    expect(elapsed.center.dy, closeTo(distance.center.dy, 2));
+    // 下半分はドラム式(2026-09-26)。既定は 左=距離(m)・右=chrono。
+    expect(find.text('1,000'), findsOneWidget);
+    expect(find.text('1:00'), findsOneWidget);
+    // 左右に並べる。上下に積むと高さだけ取って読まれない。
+    expect(left.left, lessThan(right.left));
+    expect(left.center.dy, closeTo(right.center.dy, 2));
+    // 左(距離)は右(chrono)より一回り大きい枠。
+    expect(left.width, greaterThan(right.width));
     // 2つで行の左右へ広がる(グラフの左に58pxで畳まれていた頃に戻さない)。
-    expect(distance.right - elapsed.left, greaterThan(card.width * 0.6));
+    expect(right.right - left.left, greaterThan(card.width * 0.8));
     // 主計器の下にある。
-    expect(elapsed.top, greaterThan(tester.getRect(find.text('2:00')).bottom));
+    expect(left.top, greaterThan(tester.getRect(find.text('2:00')).bottom));
   });
 
   testWidgets('主計器はフィールドごとの面で分け、字には縁取りを掛けない', (tester) async {
     await pumpCard(tester, portraitCompact: true);
 
-    // 面はペース・レート・経過時間・距離で4枚。色が読めなくても
+    // 面はペース・レート・下半分の左右で4枚。色が読めなくても
     // 「計器が並んでいる」ことが形で分かる。
     // カード自身の面は descendant に含まれない。
     final plates = tester
@@ -159,7 +165,10 @@ void main() {
     ))
         .where((container) {
       final decoration = container.decoration;
-      return decoration is BoxDecoration && decoration.color != null;
+      // ドラムの位置の印(小さな丸い点)は計器の面ではない。
+      return decoration is BoxDecoration &&
+          decoration.color != null &&
+          decoration.shape == BoxShape.rectangle;
     }).toList();
     expect(plates.length, 4, reason: '計器の面が4枚でない');
     // レート側だけが縁を持つ。**面の色と縁が背景と別の系統になる**ことが
@@ -174,7 +183,7 @@ void main() {
 
     // 下地が濃紺1種類に確定したので、字の縁取りはコストだけが残る。
     // (字画の内側を食って数字を鈍らせる)。掛けないことを固定する。
-    for (final text in ['2:00', '24', '1:00', '1.00']) {
+    for (final text in ['2:00', '24', '1:00', '1,000']) {
       final style = tester.widget<Text>(find.text(text)).style!;
       expect(
         style.shadows ?? const [],
@@ -218,5 +227,55 @@ void main() {
       expect(find.text('分析'), findsNothing);
       expect(find.textContaining('艇速変化'), findsNothing);
     }
+  });
+
+  testWidgets('長い練習でも下半分がはみ出さず、単位と RESET を出す', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    var resets = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: NavStatusCard(
+            paceSeconds: 125,
+            distanceMeters: 12480,
+            elapsedTimeSeconds: 5320,
+            spm: 34,
+            spmMeasurementEnabled: true,
+            portraitCompact: true,
+            lowerValues: const NavLowerValues(
+              distanceMeters: 12480,
+              chronoSeconds: 5320,
+              dpsMeters: 10.4,
+              strokeCount: 1780,
+            ),
+            onLowerReset: () => resets++,
+          ),
+        ),
+      ),
+    );
+    // はみ出すと RenderFlex overflow の例外になる。
+    expect(tester.takeException(), isNull);
+    expect(find.text('12,480'), findsOneWidget);
+    expect(find.text('1:28:40'), findsOneWidget);
+    expect(find.text('m'), findsOneWidget);
+    expect(find.text('chrono'), findsOneWidget);
+
+    await tester.tap(find.text('RESET'));
+    expect(resets, 1);
+  });
+
+  test('距離は桁区切りの m、chrono は m:ss / h:mm:ss', () {
+    expect(formatNavDistance(0), '0');
+    expect(formatNavDistance(999), '999');
+    expect(formatNavDistance(12480), '12,480');
+    expect(formatNavChrono(59), '0:59');
+    expect(formatNavChrono(1720), '28:40');
+    expect(formatNavChrono(5320), '1:28:40');
   });
 }

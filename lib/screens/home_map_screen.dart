@@ -53,6 +53,7 @@ import '../theme/hazard_palette.dart';
 import '../theme/map_layer_spec.dart';
 import '../utils/tactile_feedback.dart';
 import '../hooks/use_navigator.dart';
+import '../hooks/use_lap_metrics.dart';
 import '../hooks/use_nav_map.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
@@ -238,6 +239,14 @@ class HomeMapScreen extends HookConsumerWidget {
     // 予測線・危険区域もそれに合わせた色にする(NavPalette・HazardPalette)。
     // 高コントラスト・航空写真を選んだときはその選択を優先する(原則2)。
     // 見た目だけで、安全判定・警告には関係しない。
+    // 計器の下半分(ドラム)。表示専用で、記録は練習全体のまま残る。
+    final lap = useLapMetrics(
+      myBoat: navigator.myBoat.value,
+      fixProcessedAt: navigator.postProcessTime.value,
+      totalDistanceMeters: navigator.totalDistance.value,
+      motion: navigator.strokeMotion.value,
+      sessionStartedAt: navigator.sessionStartedAt.value,
+    );
     final useNightMap = navigator.mode.value == NavMode.navigator &&
         navMap.mapType.value == MapType.normal &&
         !highContrastMap.value;
@@ -1585,6 +1594,15 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 false,
                                             compact: isLandscape,
                                             portraitCompact: !isLandscape,
+                                            lowerValues: lap.values,
+                                            lowerLeftIndex: lap.leftIndex,
+                                            lowerRightIndex: lap.rightIndex,
+                                            onLowerLeftChanged:
+                                                lap.setLeftIndex,
+                                            onLowerRightChanged:
+                                                lap.setRightIndex,
+                                            onLowerReset: lap.reset,
+                                            onLowerUndo: lap.undoReset,
                                           ),
                                         ),
                                       ),

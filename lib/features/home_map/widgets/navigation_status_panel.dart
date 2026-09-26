@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'nav_lower_drums.dart';
 import 'nav_status_card.dart';
 
 /// 時刻による1秒更新を地図画面全体から切り離すためのパネル。
@@ -14,6 +15,17 @@ class NavigationStatusPanel extends StatefulWidget {
   final bool portraitCompact;
   final DateTime? sessionStartedAt;
 
+  /// 下半分(ドラム)。null なら距離と経過時間から作る。
+  final NavLowerValues? lowerValues;
+  final int lowerLeftIndex;
+  final int lowerRightIndex;
+  final ValueChanged<int>? onLowerLeftChanged;
+  final ValueChanged<int>? onLowerRightChanged;
+  final VoidCallback? onLowerReset;
+
+  /// 直前の RESET を取り消す。RESET のあとの通知に「元に戻す」として出す。
+  final VoidCallback? onLowerUndo;
+
   final DateTime Function()? clock;
 
   const NavigationStatusPanel({
@@ -25,6 +37,13 @@ class NavigationStatusPanel extends StatefulWidget {
     this.spmMeasurementEnabled = false,
     this.compact = false,
     this.portraitCompact = false,
+    this.lowerValues,
+    this.lowerLeftIndex = 0,
+    this.lowerRightIndex = 1,
+    this.onLowerLeftChanged,
+    this.onLowerRightChanged,
+    this.onLowerReset,
+    this.onLowerUndo,
     this.clock,
   });
 
@@ -65,6 +84,17 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
 
   DateTime _readNow() => widget.clock?.call() ?? DateTime.now();
 
+  /// RESET。押し間違いに備えて、通知に「元に戻す」を付ける。
+  void _reset() {
+    widget.onLowerReset?.call();
+    final undo = widget.onLowerUndo;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+      content: const Text('下の計器を0にしました(記録は練習全体を残します)'),
+      action:
+          undo == null ? null : SnackBarAction(label: '元に戻す', onPressed: undo),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return NavStatusCard(
@@ -75,6 +105,12 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       spmMeasurementEnabled: widget.spmMeasurementEnabled,
       compact: widget.compact,
       portraitCompact: widget.portraitCompact,
+      lowerValues: widget.lowerValues,
+      lowerLeftIndex: widget.lowerLeftIndex,
+      lowerRightIndex: widget.lowerRightIndex,
+      onLowerLeftChanged: widget.onLowerLeftChanged,
+      onLowerRightChanged: widget.onLowerRightChanged,
+      onLowerReset: widget.onLowerReset == null ? null : _reset,
     );
   }
 }
