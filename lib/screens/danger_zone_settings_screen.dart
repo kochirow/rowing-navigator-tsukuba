@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'warning_settings_widgets.dart';
+
 import '../config/risk_evaluator_config.dart';
 import '../models/danger_zone_settings.dart';
 import '../services/danger_zone_settings_service.dart';
@@ -29,6 +31,9 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   final _mapDisplaySettings = MapDisplaySettingsService();
   DangerZoneSettings? _settings;
   WarningLeadTimes? _warningLeadTimes;
+  // 読み込んだ時点(=保存済み)の値。未保存の変更の件数を数えるために持つ。
+  DangerZoneSettings? _savedSettings;
+  WarningLeadTimes? _savedLeadTimes;
   bool _saving = false;
   bool _publishing = false;
   int _sharedRevision = 0;
@@ -55,6 +60,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       setState(() {
         _settings = settings;
         _warningLeadTimes = warningLeadTimes;
+        _savedSettings = settings;
+        _savedLeadTimes = warningLeadTimes;
         _showDeveloperSafetyShapeOverlay = showDeveloperSafetyShapeOverlay;
       });
     }
@@ -71,6 +78,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
             primaryWarningLeadSeconds: shared.primaryWarningLeadSeconds,
             advanceWarningLeadSeconds: shared.advanceWarningLeadSeconds,
           );
+          _savedSettings = _settings;
+          _savedLeadTimes = _warningLeadTimes;
         }
       });
     } catch (_) {
@@ -83,6 +92,35 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
         });
       }
     }
+  }
+
+  /// 保存していない変更の件数(表示用)。
+  int get _unsavedCount {
+    final s = _settings, saved = _savedSettings;
+    final l = _warningLeadTimes, savedL = _savedLeadTimes;
+    if (s == null || saved == null || l == null || savedL == null) return 0;
+    var n = 0;
+    if (l.primaryWarningLeadSeconds != savedL.primaryWarningLeadSeconds) n++;
+    if (l.advanceWarningLeadSeconds != savedL.advanceWarningLeadSeconds) n++;
+    for (final kind in DangerZoneKind.values) {
+      if (s[kind].waterSideMeters != saved[kind].waterSideMeters) n++;
+      if (s[kind].landSideMeters != saved[kind].landSideMeters) n++;
+    }
+    return n;
+  }
+
+  void _setLeadTimes(double primary, double advance) {
+    // 範囲は従来どおり: 本警告は下限以上・予告より1刻み短い、予告は 9〜25秒。
+    final a = advance.clamp(minWarningTimeSeconds, maxWarningTimeSeconds);
+    final p = primary.clamp(
+        minPrimaryWarningLeadSeconds, a - primaryWarningLeadStepSeconds);
+    final a2 = a < p + primaryWarningLeadStepSeconds
+        ? (p + primaryWarningLeadStepSeconds).ceilToDouble()
+        : a;
+    setState(() => _warningLeadTimes = WarningLeadTimes(
+          primaryWarningLeadSeconds: p.toDouble(),
+          advanceWarningLeadSeconds: a2.toDouble(),
+        ));
   }
 
   void _setDeveloperSafetyShapeOverlay(bool enabled) {
@@ -198,29 +236,37 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   Widget build(BuildContext context) {
     final settings = _settings;
     final warningLeadTimes = _warningLeadTimes;
-    final primarySliderMax = warningLeadTimes == null
-        ? primaryWarningLeadSeconds + primaryWarningLeadStepSeconds
-        : warningLeadTimes.advanceWarningLeadSeconds -
-            primaryWarningLeadStepSeconds;
-    final advanceSliderMin = warningLeadTimes == null
-        ? minWarningTimeSeconds
-        : (warningLeadTimes.primaryWarningLeadSeconds +
-                primaryWarningLeadStepSeconds)
-            .clamp(minWarningTimeSeconds, maxWarningTimeSeconds)
-            .toDouble();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('警告の設定'),
-        actions: [
-          TextButton(
-            onPressed: settings == null || _busy ? null : _save,
-            child: Text(
-              _busy ? '保存中…' : '保存',
-              style: const TextStyle(color: Colors.white),
+      appBar: AppBar(title: const Text('警告の設定')),
+      // 変更があるときだけ下に保存バー(件数・元に戻す・保存)。右上の「保存」の
+      // 文字だけでは、未保存かどうかが分からなかった。
+      bottomNavigationBar: _unsavedCount == 0 && !_busy
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(children: [
+                  Expanded(
+                    child: Text('保存していない変更 $_unsavedCount件',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _settings = _savedSettings;
+                              _warningLeadTimes = _savedLeadTimes;
+                            }),
+                    child: const Text('元に戻す'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: settings == null || _busy ? null : _save,
+                    child: Text(_busy ? '保存中…' : '保存'),
+                  ),
+                ]),
+              ),
             ),
-          ),
-        ],
-      ),
       body: settings == null || warningLeadTimes == null
           ? const AppLoadingView(message: '警告の設定を読み込んでいます…')
           : ListView(
@@ -239,92 +285,72 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '本警告（連続音）: ${warningLeadTimes.primaryWarningLeadSeconds.toStringAsFixed(1)}秒前',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        LeadTimeAxis(
+                          primarySeconds:
+                              warningLeadTimes.primaryWarningLeadSeconds,
+                          advanceSeconds:
+                              warningLeadTimes.advanceWarningLeadSeconds,
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '8+の停止時間約8.15秒より前に連続音へ上げる時間です。予告より短く保ちます。',
-                        ),
-                        Slider(
-                          value: warningLeadTimes.primaryWarningLeadSeconds,
-                          min: minPrimaryWarningLeadSeconds,
-                          max: primarySliderMax,
-                          divisions:
-                              ((warningLeadTimes.advanceWarningLeadSeconds -
-                                          primaryWarningLeadStepSeconds -
-                                          minPrimaryWarningLeadSeconds) /
-                                      primaryWarningLeadStepSeconds)
-                                  .round(),
-                          label:
+                        ValueStepper(
+                          label: '連続音',
+                          caption: '止まるまでの時間より長く・'
+                              '${minPrimaryWarningLeadSeconds.toStringAsFixed(1)}秒以上・'
+                              '${primaryWarningLeadStepSeconds.toStringAsFixed(1)}秒刻み',
+                          value:
                               '${warningLeadTimes.primaryWarningLeadSeconds.toStringAsFixed(1)}秒前',
-                          onChanged: _busy
+                          changed: warningLeadTimes.primaryWarningLeadSeconds !=
+                              primaryWarningLeadSeconds,
+                          keyPrefix: 'lead-primary',
+                          onDecrement: _busy
                               ? null
-                              : (value) => setState(
-                                    () => _warningLeadTimes = WarningLeadTimes(
-                                      primaryWarningLeadSeconds: value,
-                                      advanceWarningLeadSeconds:
-                                          warningLeadTimes
-                                              .advanceWarningLeadSeconds,
-                                    ),
-                                  ),
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds -
+                                      primaryWarningLeadStepSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds),
+                          onIncrement: _busy
+                              ? null
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds +
+                                      primaryWarningLeadStepSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds),
                         ),
-                        Text(
-                          '${minPrimaryWarningLeadSeconds.toStringAsFixed(1)}秒以上・${primaryWarningLeadStepSeconds.toStringAsFixed(1)}秒刻み',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          '予告（断続音・予測地平）: ${warningLeadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'この時間までを予測し、連続音の前に断続音で知らせます。予測が届かない先では音を鳴らしません。',
-                        ),
-                        Slider(
-                          value: warningLeadTimes.advanceWarningLeadSeconds,
-                          min: advanceSliderMin,
-                          max: maxWarningTimeSeconds,
-                          divisions:
-                              ((maxWarningTimeSeconds - advanceSliderMin) /
-                                      warningTimeStepSeconds)
-                                  .round(),
-                          label:
+                        ValueStepper(
+                          label: '予告(断続音)',
+                          caption: 'ここより先は予測しない・'
+                              '${minWarningTimeSeconds.toStringAsFixed(0)}〜${maxWarningTimeSeconds.toStringAsFixed(0)}秒',
+                          value:
                               '${warningLeadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
-                          onChanged: _busy
+                          changed: warningLeadTimes.advanceWarningLeadSeconds !=
+                              advanceWarningLeadSeconds,
+                          keyPrefix: 'lead-advance',
+                          onDecrement: _busy
                               ? null
-                              : (value) => setState(
-                                    () => _warningLeadTimes = WarningLeadTimes(
-                                      primaryWarningLeadSeconds:
-                                          warningLeadTimes
-                                              .primaryWarningLeadSeconds,
-                                      advanceWarningLeadSeconds: value,
-                                    ),
-                                  ),
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds -
+                                      warningTimeStepSeconds),
+                          onIncrement: _busy
+                              ? null
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds +
+                                      warningTimeStepSeconds),
                         ),
-                        Text(
-                          '${minWarningTimeSeconds.toStringAsFixed(0)}〜${maxWarningTimeSeconds.toStringAsFixed(0)}秒前・${warningTimeStepSeconds.toStringAsFixed(0)}秒刻み',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (warningLeadTimes.primaryWarningLeadSeconds !=
+                                primaryWarningLeadSeconds ||
+                            warningLeadTimes.advanceWarningLeadSeconds !=
+                                advanceWarningLeadSeconds)
+                          TextButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _setLeadTimes(primaryWarningLeadSeconds,
+                                    advanceWarningLeadSeconds),
+                            icon: const Icon(Icons.restore),
+                            label: const Text('既定(10秒・13秒)に戻す'),
+                          ),
                       ],
                     ),
                   ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(
-                            () => _warningLeadTimes = const WarningLeadTimes(
-                              primaryWarningLeadSeconds:
-                                  primaryWarningLeadSeconds,
-                              advanceWarningLeadSeconds:
-                                  advanceWarningLeadSeconds,
-                            ),
-                          ),
-                  icon: const Icon(Icons.restore),
-                  label: const Text('警告時間をデフォルトに戻す（本警告10秒前・予告13秒前）'),
                 ),
                 const SizedBox(height: 24),
                 const _SectionHeader(
@@ -445,6 +471,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
     bool symmetric = false,
   }) {
     final offsets = _settings![kind];
+    final defaults = DangerZoneSettings.defaults()[kind];
     return Card(
       margin: const EdgeInsets.only(top: 12),
       child: Padding(
@@ -458,10 +485,13 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
             const SizedBox(height: 12),
             if (symmetric)
               _rangeSlider(
+                kind: kind,
                 label: waterLabel,
                 value: offsets.waterSideMeters >= offsets.landSideMeters
                     ? offsets.waterSideMeters
                     : offsets.landSideMeters,
+                defaultValue: defaults.waterSideMeters,
+                keyPrefix: 'zone-${kind.name}-water',
                 onChanged: (value) => _update(
                   kind,
                   waterSideMeters: value,
@@ -470,13 +500,19 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
               )
             else ...[
               _rangeSlider(
+                kind: kind,
                 label: waterLabel,
                 value: offsets.waterSideMeters,
+                defaultValue: defaults.waterSideMeters,
+                keyPrefix: 'zone-${kind.name}-water',
                 onChanged: (value) => _update(kind, waterSideMeters: value),
               ),
               _rangeSlider(
+                kind: kind,
                 label: landLabel,
                 value: offsets.landSideMeters,
+                defaultValue: defaults.landSideMeters,
+                keyPrefix: 'zone-${kind.name}-land',
                 onChanged: (value) => _update(kind, landSideMeters: value),
               ),
             ],
@@ -487,28 +523,32 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   }
 
   Widget _rangeSlider({
+    required DangerZoneKind kind,
     required String label,
     required double value,
+    required double defaultValue,
+    required String keyPrefix,
     ValueChanged<double>? onChanged,
   }) {
     final safeValue = value
         .clamp(minDangerZoneOffsetMeters, maxDangerZoneOffsetMeters)
         .toDouble();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label: ${safeValue.toStringAsFixed(1)} m'),
-        Slider(
-          value: safeValue,
-          min: minDangerZoneOffsetMeters,
-          max: maxDangerZoneOffsetMeters,
-          divisions: ((maxDangerZoneOffsetMeters - minDangerZoneOffsetMeters) /
-                  dangerZoneOffsetStepMeters)
-              .round(),
-          label: '${safeValue.toStringAsFixed(1)} m',
-          onChanged: _busy ? null : onChanged,
-        ),
-      ],
+    void step(double d) => onChanged?.call((safeValue + d)
+        .clamp(minDangerZoneOffsetMeters, maxDangerZoneOffsetMeters)
+        .toDouble());
+    return ValueStepper(
+      label: label,
+      caption: '既定 ${defaultValue.toStringAsFixed(1)}m ・ '
+          '${minDangerZoneOffsetMeters.toStringAsFixed(0)}〜${maxDangerZoneOffsetMeters.toStringAsFixed(0)}m',
+      value: '${safeValue.toStringAsFixed(1)} m',
+      changed: safeValue != defaultValue,
+      keyPrefix: keyPrefix,
+      onDecrement: _busy || safeValue <= minDangerZoneOffsetMeters
+          ? null
+          : () => step(-dangerZoneOffsetStepMeters),
+      onIncrement: _busy || safeValue >= maxDangerZoneOffsetMeters
+          ? null
+          : () => step(dangerZoneOffsetStepMeters),
     );
   }
 }

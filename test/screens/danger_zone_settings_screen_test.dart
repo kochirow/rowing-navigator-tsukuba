@@ -44,24 +44,23 @@ void main() {
     await tester.tap(find.text('設定を開く'));
     await tester.pumpAndSettle();
 
-    final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
-    // 先頭2本は本警告/予告。その後に岸・橋・中州の2方向と流木周囲が並ぶ。
-    expect(sliders, hasLength(9));
-    for (final slider in sliders.skip(2)) {
-      expect(slider.min, minDangerZoneOffsetMeters);
-      expect(slider.max, maxDangerZoneOffsetMeters);
-      expect(slider.divisions, 60);
-      expect(slider.onChanged, isNotNull);
-    }
+    // スライダーは −/+ のステッパーになった(0.5m 刻み・0〜30m)。
+    expect(find.byType(Slider), findsNothing);
     expect(find.text('固定流木'), findsOneWidget);
-    expect(find.text('水上側: 5.0 m'), findsOneWidget);
-    expect(find.text('陸側: 15.0 m'), findsOneWidget);
-    expect(find.text('内側: 5.0 m'), findsNWidgets(2));
-    expect(find.text('外側: 5.0 m'), findsNWidgets(2));
+    expect(find.text('水上側'), findsOneWidget);
+    expect(find.text('陸側'), findsOneWidget);
+    expect(find.text('内側'), findsNWidgets(2));
+    expect(find.text('外側'), findsNWidgets(2));
+    expect(find.text('15.0 m'), findsOneWidget);
 
-    sliders[2].onChanged!(12.5);
-    await tester.pump();
-    expect(find.text('水上側: 12.5 m'), findsOneWidget);
+    // 変更があるときだけ下に保存バーが出る。
+    expect(find.text('保存'), findsNothing);
+    for (var i = 0; i < 15; i++) {
+      await tester.tap(find.byKey(const ValueKey('zone-shore-water-plus')));
+      await tester.pump();
+    }
+    expect(find.text('12.5 m'), findsOneWidget);
+    expect(find.text('保存していない変更 1件'), findsOneWidget);
 
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
