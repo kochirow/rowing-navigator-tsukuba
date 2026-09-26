@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v7</title>
+<title>画面刷新 試作 v8</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -339,7 +339,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v7</h1>
+  <h1>画面刷新 試作 v8</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -420,7 +420,7 @@ background:#000;color:#fff}
     <div class="badges" id="badges"></div>
     <div class="warnchip" id="warnchip"></div>
     <div class="navleft">
-      <div class="mcb"><button aria-label="追跡(オン)" style="border:2px solid #fff;color:#fff"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>追跡</span></div>
+      <div class="mcb" id="followBtn"></div>
       <div class="mcb"><button aria-label="メニュー" style="color:#c9d3dc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
       <button class="endmini" data-toast="確認ダイアログ「航行を終了しますか?」"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><rect x="8.5" y="8.5" width="7" height="7" rx="1" fill="currentColor" stroke="none"/></svg>終了</button>
     </div>
@@ -643,9 +643,12 @@ function edgePoint(angle) {
 const NAV_PAL = {
   proposal: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
     self: '#ffffff', selfEdge: '#000000', other: '#5ed3f3', otherEdge: '#001018', otherLabel: '#8fd8ee',
+    threat: '#ff4d4d', threatEdge: '#ffffff', threatLabel: '#ff8a8a',
     stop: 'rgba(255,255,255,.7)', warnLine: 'rgba(255,255,255,.4)', hazard: '#ffb547' },
   current: { land: '#05070a', water: '#123142', bank: 'rgba(255,255,255,.16)', center: 'rgba(255,255,255,.38)',
     self: '#f44336', selfEdge: '#ffffff', other: '#c9d3dc', otherEdge: '#000000', otherLabel: '#9aa6b3',
+    // 現行寄りは自艇が赤なので、警告の相手も赤くしない(自他の色を被せない)。
+    threat: '#c9d3dc', threatEdge: '#000000', threatLabel: '#9aa6b3',
     stop: 'rgba(255,82,82,.55)', warnLine: 'rgba(255,204,85,.5)', hazard: '#ffb547' },
 };
 function navMap(warn, dir, glow) {
@@ -658,6 +661,9 @@ function navMap(warn, dir, glow) {
   const otherX = Math.max(cx - 66, Math.min(cx + 66, o.x)), otherY = Math.max(320, Math.min(800, o.y));
   const otherRot = ang + 180; // 先端を自艇へ向ける
   const hz = P.hazard;
+  // 警告の相手になった艇だけ赤。画面の端の赤い点滅と同じ色で、光った向きと地図上の艇が結びつく。
+  const isThreat = warn !== 'none';
+  const oc = isThreat ? P.threat : P.other, oe = isThreat ? P.threatEdge : P.otherEdge, ol = isThreat ? P.threatLabel : P.otherLabel;
   return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
     <rect width="390" height="844" fill="${P.land}"/>
     <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880 L${cx + 86},880 C${cx + 74},560 ${cx + 92},250 ${cx + 80},-20 Z" fill="${P.water}"/>
@@ -673,10 +679,10 @@ function navMap(warn, dir, glow) {
     <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="${P.stop}" stroke-width="1.5"/>
     <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="${P.warnLine}" stroke-width="1.5" stroke-dasharray="4 4"/>
     <g transform="translate(${otherX},${otherY}) rotate(${otherRot})">
-      <path d="M0,-26 L0,-90" stroke="${P.other}" stroke-opacity=".5" stroke-width="1.5"/>
-      ${homePlate(46, P.other, P.otherEdge, false).replace('stroke-width="1.5"', 'stroke-width="2"')}
+      <path d="M0,-26 L0,-90" stroke="${oc}" stroke-opacity=".6" stroke-width="1.5"/>
+      ${homePlate(46, oc, oe, false).replace('stroke-width="1.5"', 'stroke-width="2"')}
     </g>
-    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="${P.otherLabel}" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
+    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="${ol}" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
     <g transform="translate(${selfX},${selfY})">${homePlate(52, P.self, P.selfEdge, true).replace('stroke-width="1.5"', 'stroke-width="2"')}</g>
   </svg>`;
 }
@@ -687,7 +693,7 @@ $('#map-home').innerHTML = riverMap();
 const state = {
   screen: 'home',
   home: { check: 'ok' },
-  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal' },
+  nav: { warn: 'none', health: 'ok', fix: 'ok', dir: 'rr', pal: 'proposal', follow: 'on' },
   list: { period: 'month' },
   rec: { sel: 'all', gaze: 'off', metric: 'pace', cursor: 0, speed: 30 },
 };
@@ -726,6 +732,7 @@ const SCENARIOS = {
     { key: 'health', label: '能力', opts: [['ok', '正常'], ['gps', 'GPS弱い'], ['rx', '他艇受信不可']] },
     { key: 'dir', label: '向き(漕手から)', opts: [['rr', '右後ろ'], ['r', '右'], ['b', '真後ろ'], ['lr', '左後ろ'], ['l', '左'], ['unk', '不明']] },
     { key: 'fix', label: '計器', opts: [['ok', '計測中'], ['long', '長い練習'], ['wait', '測位待ち']] },
+    { key: 'follow', label: '追従', opts: [['on', '追従中'], ['off', '止めている']] },
   ],
   list: [], warn: [],
   rec: [
@@ -813,6 +820,10 @@ function renderNav() {
     }
   }
   $('#map-nav').innerHTML = navMap(n.warn, n.dir, glow);
+  // 追従ボタン。押したときに起きることを名前にする:
+  // 追従中 → 押すと追従を止める / 止めている → 押すと現在位置へ戻って追従を再開する。
+  const fOn = n.follow === 'on';
+  $('#followBtn').innerHTML = `<button aria-label="${fOn ? '追従中。押すと追従を止める' : '現在位置へ戻る'}" style="${fOn ? 'border:2px solid #fff;color:#fff' : 'color:#c9d3dc'}"><svg viewBox="0 0 24 24" fill="${fOn ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>${fOn ? '追従中' : '現在位置'}</span>`;
   const wait = n.fix === 'wait', long = n.fix === 'long';
   const V = wait ? { p: '—:—', s: '—', d: '0', t: '0:00' }
     : long ? { p: '2:05', s: '34', d: '12,480', t: '1:28:40' }
@@ -920,6 +931,9 @@ function renderRec() {
     ? `<b class="num">${s.km} km</b> ・ <b class="num">${s.t}</b> ・ ${Math.floor(s.a)}分〜${Math.floor(s.b)}分`
     : `<b class="num">7.27 km</b> ・ <b class="num">1:14:20</b> ・ 漕ぎ <b class="num">30:14</b> ・ 4セット`;
   $('#rmap').innerHTML = recMap(s);
+  // 直前の位置から新しい位置へ滑らかに寄せる。
+  const mv = $('#mapview');
+  requestAnimationFrame(() => requestAnimationFrame(() => { mv.style.transform = mv.dataset.to; lastMapView = mv.dataset.to; }));
   const np = $('#nowpill');
   np.className = 'nowpill2' + (r.cursor > 0 ? ' show' : '');
   np.innerHTML = `<b>${fmtMin(r.cursor)}</b>${curVals(r.cursor)}`;
@@ -965,6 +979,7 @@ function trackPts() {
   return pts;
 }
 const TRACK = trackPts();
+let lastMapView = null;
 function recMap(s) {
   const light = document.documentElement.dataset.theme === 'light';
   const land = light ? '#e9edf1' : '#0b0f14', water = light ? '#bfdfeb' : '#132536', road = light ? '#ffffff' : '#161d26';
@@ -979,8 +994,15 @@ function recMap(s) {
   }
   const cur = TRACK.reduce((best, p) => Math.abs(p.tMin - state.rec.cursor) < Math.abs(best.tMin - state.rec.cursor) ? p : best, TRACK[0]);
   const grid = [...Array(9)].map((_, i) => `<path d="M${-40 + i * 60},400 L${40 + i * 60},230" stroke="${road}" stroke-width="3"/>`).join('');
-  return `<svg class="map" viewBox="0 0 390 400" preserveAspectRatio="xMidYMid slice">
-    <rect width="390" height="400" fill="${land}"/>
+  // 区間を選ぶと、その区間の航跡が収まるように地図を寄せる(アプリの replay_map.dart の _fit と同じ)。
+  // 全体のときは全航跡。見出しと数字に隠れない帯(y 110〜215)へ収める。
+  const pts = s ? TRACK.filter(p => SETS[p.k] === s) : TRACK;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+  const k = Math.min(3, Math.max(1, Math.min(300 / (bx1 - bx0 + 30), 100 / (by1 - by0 + 20))));
+  const tx = 195 - (bx0 + bx1) / 2 * k, ty = 162 - (by0 + by1) / 2 * k;
+  return `<svg class="map" viewBox="0 0 390 400" preserveAspectRatio="xMidYMid slice"><g id="mapview" data-to="translate(${tx}px,${ty}px) scale(${k})" style="transform:${lastMapView || `translate(${tx}px,${ty}px) scale(${k})`};transition:transform .5s ease">
+    <rect x="-400" y="-400" width="1200" height="1200" fill="${land}"/>
     ${grid}
     <path d="M-10,190 C90,160 220,100 400,70 L400,-10 L140,-10 C100,40 40,80 -10,100 Z" fill="${water}"/>
     <path d="M-10,250 C60,235 120,222 170,210 C240,192 320,168 400,150 L400,70 C220,100 90,160 -10,190 Z" fill="${water}"/>
@@ -988,8 +1010,8 @@ function recMap(s) {
     <path d="M24,262 C34,240 40,222 52,200" stroke="${light ? '#9aa6b3' : '#4a5563'}" stroke-width="4" fill="none" stroke-linecap="round"/>
     ${casing}${segs}
     <circle cx="52" cy="200" r="7" fill="#fff" stroke="${light ? '#0f1720' : '#05070a'}" stroke-width="2.5"/>
-    ${state.rec.cursor > 0 ? `<circle cx="${cur.x}" cy="${cur.y}" r="9" fill="#ff6b4a" stroke="#fff" stroke-width="3"/>` : ''}
-  </svg>`;
+    ${state.rec.cursor > 0 ? `<circle cx="${cur.x}" cy="${cur.y}" r="${9 / k}" fill="#ff6b4a" stroke="#fff" stroke-width="${3 / k}"/>` : ''}
+  </g></svg>`;
 }
 function recTimeline(s, cursor) {
   const W = 260, x = m => (m / TOTAL_MIN) * W;
@@ -1252,9 +1274,12 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v7) 配色の考え方',
+    h: '② 航行中(v8) 配色の考え方',
     li: [
       ['赤と琥珀は警告・注意だけ(航空の表示基準)', 'FAA AC 25-11B は赤=警告・琥珀=注意を厳格に予約し、ほかに使うと警告に慣れて効かなくなるとする。色は6色以内。ここでは 白・シアン・琥珀・赤 と水面の紺・陸の黒だけ。'],
+      ['警告の相手になった他艇だけ赤(v8)', '他艇との衝突がいちばん大事なので、危ない艇は赤で目立たせる。ただし全艇を常に赤にはしない: 2〜12艇がいつも赤いと赤が「すぐ見る」の意味を失い、どの艇が危ないかも区別できない。TCAS も他機は普段シアン/白で、脅威になった機だけ琥珀・赤に変わる。画面の端の赤い点滅と同じ色なので、光った向きと地図上の艇が結びつく。自艇は白なので自他の色は被らない。'],
+      ['「追跡」→ 押したときに起きることを名前に(v8)', '追従中は「追従中」(白い縁)、止めているときは「現在位置」(押すと自艇へ戻って追従を再開)。「現在位置」だけにすると、追従中に押したとき追従が止まるのが名前と合わない。'],
+      ['水面を紺にしている理由', '暗いので電池に効く(OLED)。背景を暗く抑えると白・シアン・琥珀・赤の記号が浮く(水面との比: 白13.6・シアン7.8・琥珀7.7・赤4.3)。青みを残すのは「ここが水」と一目で分かるため(陸の黒との差は小さいので岸の線が補う)。'],
       ['自艇=白、他艇=シアン(TCAS と同じ)', '航空機の衝突防止表示は、自機=白、他機=白/シアン、注意=琥珀、回避指示=赤。警告を赤い光にした今、自艇まで赤だと「赤=危ない」が2つの意味を持つ。自艇は画面の定位置(横中央・上から45%)にいるので、色で探す必要もない。'],
       ['他艇のシアンは暗い水面で一番浮く', '紺の水面との明るさの差が大きく(色相が近くても明度で分かれる)、白の自艇とも赤・琥珀とも混ざらない。色覚の型によらず白とシアンは見分けやすい。'],
       ['自艇の予測線も白に', '停止距離=白の実線、警告距離=白の破線(色でなく線の種類で区別)。既存の「赤・黄で塗り分け」の要件を変える提案なので、採用するなら要件の更新が要る。'],
@@ -1268,6 +1293,7 @@ const NOTES = {
     h: '⑤ 記録画面(v7) 旧版の迫力 × 視線の順番',
     li: [
       ['地図を画面の端まで敷く(旧版)', '地図・虹色の航跡・太い数字は Strava の活動ページの型で、見て楽しい入口になる。その下端に答え(ペース・レート・1漕距離)を重ねた。目が地図を下へなでると、そのまま数字に着く。'],
+      ['区間を選ぶと地図がその区間へ寄る(アプリの機能のまま)', 'セット・全体を選ぶと、その航跡が収まるよう地図が寄る(replay_map.dart の _fit)。つまみで端を細かく合わせている間は、地図が跳ねないよう寄せない。試作でも再現した。'],
       ['地図と時間軸は上に残す', 'Strava も「要約はページのどこを見ても残る」。下のカード・グラフを読んでいる間も、どこ・いつと答えが見える。'],
       ['時間軸はペースの色を細い帯で(旧版の味)', '地図より細く、選んでいない区間は薄く。選んだ区間は旧版と同じティールの括弧で囲む。'],
       ['セットは旧版のカード(平均ペース+色の帯)を小さく', '選ぶと上の数字・地図・括弧が一緒に変わる。'],
