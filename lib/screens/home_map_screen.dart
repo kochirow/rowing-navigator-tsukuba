@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/providers/nav_config_providers.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
+import '../features/home_map/prediction_shapes.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_setting_modal.dart';
 import 'package:rowing_navigator/features/home_map/widgets/navigation_safety_settings_sheet.dart';
 
@@ -42,7 +42,6 @@ import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
-import '../services/swept_outline_service.dart';
 import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
@@ -51,8 +50,6 @@ import '../models/mooring_area.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
-import '../theme/boat_palette.dart';
-import '../theme/nav_palette.dart';
 import '../theme/map_layer_spec.dart';
 import '../utils/tactile_feedback.dart';
 import '../hooks/use_navigator.dart';
@@ -1135,7 +1132,6 @@ class HomeMapScreen extends HookConsumerWidget {
       // ###########################
       // 船舶領域を可視化
       // ###########################
-      final shipDomainService = ShipDomainService();
       // 全艇の船舶領域を取得
       final myBoat = navigator.myBoat.value;
       final allBoats = [
@@ -1153,103 +1149,15 @@ class HomeMapScreen extends HookConsumerWidget {
       )) {
         return null;
       }
-      // 1艇につき3つの図形だけを描く。
-      //   ① 船体領域(t=0)     … いま艇がある場所
-      //   ② 掃引外形(凸包)     … どこまで届くか
-      //   ③ 停止距離ライン     … どこまでなら止まれるか
-      // 以前はサンプルごとに2枚(最大48枚)を重ねていたが、中身は同じ
-      // 六角形の平行移動の繰り返しで、情報は増えないまま画面が埋まる。
-      final newShipDomains = <Polygon>{};
-      final newStoppingDistanceLines = <Polyline>{};
-      for (final boat in allBoats) {
-        final speed = boat.speed;
-        final stoppingDistance = evalService.getStoppingDistance(boat);
-        final warningDistance = max(
-          stoppingDistance,
-          navigator.warningTimeSeconds.value * speed,
-        );
-        final sampleDistances =
-            shipDomainDisplaySampleDistances(warningDistance);
-
-        // 地図の表示形状は従来どおり。低速時の横拡張は安全判定専用で、
-        // 描画すると停止のたびに領域が太って見え、意味を誤解させる(不変条件6)。
-        ShipDomains domainsAt(double distance) {
-          final t = speed > 0 ? distance / speed : 0.0;
-          return shipDomainService.getShipDomains(
-            evalService.predictPosition(boat, t),
-            headingReliable: true,
-          );
-        }
-
-        // 夜の配色では、自艇の予測を白、他艇の予測を他艇の色(赤系)の
-        // 細線にする。停止距離=実線・届く範囲=破線で区別する(色では分けない)。
-        // 明るい地図では従来どおり(黒・橙・赤)。
-        final isMine = myBoat != null && boat.boatId == myBoat.boatId;
-        final nightLine = isMine
-            ? NavPalette.selfPrediction
-            : BoatPalette.otherBoat.withValues(alpha: 0.6);
-
-        // ① 船体領域。塗るのはここだけで、いま艇が在る場所を示す。
-        newShipDomains.add(Polygon(
-          polygonId: PolygonId('ship_body_${boat.boatId}'),
-          points: domainsAt(0).shipBodyDomain.points,
-          strokeWidth: 2,
-          strokeColor: useNightMap
-              ? nightLine.withValues(alpha: 0.5)
-              : Colors.black.withValues(alpha: 0.45),
-          fillColor: useNightMap
-              ? Colors.transparent
-              : Colors.black.withValues(alpha: 0.08),
-          zIndex: predictionShapeZIndex,
-        ));
-
-        // ② 掃引外形。「塗り = 実在する危険」「線 = 予測」の規則を守り、
-        // 塗りはほぼ透明にして輪郭で伝える。
-        final sweptPoints = sweptOutline([
-          for (final distance in sampleDistances)
-            domainsAt(distance).exclusiveDomain.points,
-        ]);
-        if (sweptPoints.length >= 3 && useNightMap) {
-          // 夜の配色: 破線にするためポリラインの閉じた輪で描く
-          // (ポリゴンの輪郭は破線にできない)。
-          newStoppingDistanceLines.add(Polyline(
-            polylineId: PolylineId('sweep_outline_${boat.boatId}'),
-            points: [...sweptPoints, sweptPoints.first],
-            width: 2,
-            color: nightLine.withValues(alpha: isMine ? 0.55 : 0.45),
-            patterns: [PatternItem.dash(12), PatternItem.gap(10)],
-            zIndex: predictionShapeZIndex,
-          ));
-        } else if (sweptPoints.length >= 3) {
-          newShipDomains.add(Polygon(
-            polygonId: PolygonId('sweep_outline_${boat.boatId}'),
-            points: sweptPoints,
-            strokeWidth: 3,
-            strokeColor: const Color(0xFFF9A825).withValues(alpha: 0.9),
-            fillColor: const Color(0xFFF9A825).withValues(alpha: 0.06),
-            zIndex: predictionShapeZIndex,
-          ));
-        }
-
-        // ③ 停止距離の位置での排他領域を、閉じた輪のポリラインで描く。
-        // 速度0のときは掃引そのものが無いので出さない。
-        if (speed > 0) {
-          final stopPoints = domainsAt(stoppingDistance).exclusiveDomain.points;
-          if (stopPoints.length >= 3) {
-            newStoppingDistanceLines.add(Polyline(
-              polylineId: PolylineId('stop_line_${boat.boatId}'),
-              points: [...stopPoints, stopPoints.first],
-              width: 2,
-              color: useNightMap
-                  ? nightLine.withValues(alpha: isMine ? 0.85 : 0.6)
-                  : const Color(0xFFD32F2F),
-              zIndex: predictionShapeZIndex,
-            ));
-          }
-        }
-      }
-      shipDomains.value = newShipDomains;
-      stoppingDistanceLines.value = newStoppingDistanceLines;
+      final shapes = buildPredictionShapes(
+        boats: allBoats,
+        myBoatId: myBoat?.boatId,
+        evalService: evalService,
+        warningTimeSeconds: navigator.warningTimeSeconds.value,
+        night: useNightMap,
+      );
+      shipDomains.value = shapes.polygons;
+      stoppingDistanceLines.value = shapes.polylines;
       shipDomainRenderSnapshot.value = nextRenderSnapshot;
       return null;
     }, [
