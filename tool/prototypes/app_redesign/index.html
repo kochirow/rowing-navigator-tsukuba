@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>画面刷新 試作 v5</title>
+<title>画面刷新 試作 v6</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
 <style>
@@ -190,13 +190,14 @@ background:#000;color:#fff}
 .edge.show{display:block}
 .edge.pulse{animation:edgep 1s infinite}
 @keyframes edgep{50%{opacity:.15}}
+.glowpulse{animation:edgep 1s infinite}
 /* 操作は左下にまとめる。すれ違う艇は漕手の右後ろ(画面の右下)から来ることが多い。
    真後ろ(画面の下の中央)も前方の見通しなので空けておく。 */
 .navleft{position:absolute;left:12px;bottom:26px;z-index:8;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
-.endmini{height:40px;border-radius:20px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:800;background:#000;color:var(--danger);border:1.5px solid color-mix(in srgb,var(--danger) 60%,transparent)}
+.endmini{height:40px;border-radius:20px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:800;background:#000;color:#9aa6b3;border:1.5px solid #2a333d}
 .endmini svg{width:18px;height:18px}
 #s-nav .mcb button{background:#000;border-color:var(--line)}
-#s-nav .mcb span{background:rgba(0,0,0,.8)}
+#s-nav .mcb span{background:rgba(0,0,0,.8);color:#9aa6b3}
 
 /* ---------- ③ 記録一覧 ---------- */
 .seg{display:flex;background:var(--s2);border-radius:14px;padding:3px;gap:2px}
@@ -333,7 +334,7 @@ background:#000;color:#fff}
 <body>
 
 <div class="toolbar">
-  <h1>画面刷新 試作 v5</h1>
+  <h1>画面刷新 試作 v6</h1>
   <div class="tabs" id="tabs">
     <button data-s="home" class="on">① 出艇前</button>
     <button data-s="nav">② 航行中</button>
@@ -403,8 +404,8 @@ background:#000;color:#fff}
     <div class="edge" id="edge"></div>
     <div class="inst" id="inst">
       <div class="g">
-        <div class="m pace acc" style="--c:var(--m-pace)"><div class="v num" id="vPace">1:58</div><div class="k" id="kPace">/500m</div></div>
-        <div class="m spm acc" style="--c:var(--m-spm)"><div class="v num" id="vSpm">32</div><div class="k">spm</div></div>
+        <div class="m pace"><div class="v num" id="vPace">1:58</div><div class="k" id="kPace">/500m</div></div>
+        <div class="m spm"><div class="v num" id="vSpm">32</div><div class="k">spm</div></div>
       </div>
       <div class="g2">
         <div class="m dist"><div class="v num" id="vDist">6,480</div><div class="k">m</div></div>
@@ -414,8 +415,8 @@ background:#000;color:#fff}
     <div class="badges" id="badges"></div>
     <div class="warnchip" id="warnchip"></div>
     <div class="navleft">
-      <div class="mcb"><button aria-label="追跡" style="background:var(--acc);color:var(--acc-ink);border-color:var(--acc)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>追跡</span></div>
-      <div class="mcb"><button aria-label="メニュー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
+      <div class="mcb"><button aria-label="追跡(オン)" style="border:2px solid #fff;color:#fff"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg></button><span>追跡</span></div>
+      <div class="mcb"><button aria-label="メニュー" style="color:#c9d3dc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span>メニュー</span></div>
       <button class="endmini" data-toast="確認ダイアログ「航行を終了しますか?」"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><rect x="8.5" y="8.5" width="7" height="7" rx="1" fill="currentColor" stroke="none"/></svg>終了</button>
     </div>
   </section>
@@ -621,7 +622,7 @@ function edgePoint(angle) {
   const t = Math.min(tx, ty);
   return { x: SELF.x + dx * t, y: SELF.y + dy * t };
 }
-function navMap(warn, dir) {
+function navMap(warn, dir, glow) {
   // 右側通行で自艇は中央線の左を走るので、中央線は自艇の右に見える。
   const selfY = SELF.y, selfX = SELF.x, cx = SELF.x + 26;
   const ang = DIRS[dir][1] ?? 150;
@@ -632,20 +633,22 @@ function navMap(warn, dir) {
   return `<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
     <rect width="390" height="844" fill="#07090b"/>
     <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880 L${cx + 86},880 C${cx + 74},560 ${cx + 92},250 ${cx + 80},-20 Z" fill="#1c4d62"/>
-    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880" stroke="rgba(255,82,82,.55)" stroke-width="2" fill="none"/>
-    <path d="M${cx + 80},-20 C${cx + 92},250 ${cx + 74},560 ${cx + 86},880" stroke="rgba(255,82,82,.55)" stroke-width="2" fill="none"/>
-    <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="#ffffff" stroke-width="2" stroke-dasharray="10 9" fill="none" opacity=".85"/>
-    <rect x="${cx - 100}" y="552" width="200" height="22" fill="rgba(255,160,77,.28)" stroke="#ffa04d" stroke-width="2"/>
-    <rect x="${cx - 12}" y="556" width="10" height="14" fill="rgba(255,82,82,.7)"/>
-    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="rgba(255,82,82,.6)" stroke="#ff5252" stroke-width="1.5"/>
-    <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="#ff5252" stroke-width="2"/>
-    <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="#ffcc55" stroke-width="2" stroke-dasharray="4 4"/>
+    <path d="M${cx - 82},-20 C${cx - 90},250 ${cx - 70},560 ${cx - 86},880" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
+    <path d="M${cx + 80},-20 C${cx + 92},250 ${cx + 74},560 ${cx + 86},880" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none"/>
+    ${glow ? `<defs><radialGradient id="glowG" gradientUnits="userSpaceOnUse" cx="${glow.x}" cy="${glow.y}" r="130">
+      <stop offset="0" stop-color="#ff2828" stop-opacity=".9"/><stop offset=".45" stop-color="#ff2828" stop-opacity=".35"/><stop offset="1" stop-color="#ff2828" stop-opacity="0"/></radialGradient></defs>
+      <rect class="glowpulse" width="390" height="844" fill="url(#glowG)"/>` : ''}
+    <path d="M${cx},-20 C${cx - 4},250 ${cx + 4},560 ${cx},880" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="10 9" fill="none" opacity=".45"/>
+    <rect x="${cx - 100}" y="552" width="200" height="22" fill="rgba(255,160,77,.14)" stroke="rgba(255,160,77,.7)" stroke-width="1.5"/>
+    <rect x="${cx - 12}" y="556" width="10" height="14" fill="rgba(255,160,77,.5)"/>
+    <ellipse cx="${cx + 62}" cy="760" rx="16" ry="8" fill="rgba(255,160,77,.22)" stroke="rgba(255,160,77,.7)" stroke-width="1.5"/>
+    <path d="M${selfX - 9},${selfY + 26} L${selfX - 9},${selfY + 120} L${selfX + 9},${selfY + 120} L${selfX + 9},${selfY + 26}" fill="none" stroke="rgba(255,82,82,.5)" stroke-width="1.5"/>
+    <path d="M${selfX - 9},${selfY + 120} L${selfX - 9},${selfY + 190} L${selfX + 9},${selfY + 190} L${selfX + 9},${selfY + 120}" fill="none" stroke="rgba(255,204,85,.45)" stroke-width="1.5" stroke-dasharray="4 4"/>
     <g transform="translate(${otherX},${otherY}) rotate(${otherRot})">
-      <path d="M0,-26 L0,-100" stroke="#eef3f7" stroke-width="2.5" opacity=".75"/>
-      <g opacity=".35">${homePlate(46, 'none', '#eef3f7', false).replace('stroke-width="1.5"', 'stroke-width="9"')}</g>
-      ${homePlate(46, '#eef3f7', warn === 'none' ? '#000' : '#ff5252', false).replace('stroke-width="1.5"', `stroke-width="${warn === 'none' ? 2 : 3.5}"`)}
+      <path d="M0,-26 L0,-90" stroke="rgba(201,211,220,.45)" stroke-width="1.5"/>
+      ${homePlate(46, '#c9d3dc', '#000', false).replace('stroke-width="1.5"', 'stroke-width="2"')}
     </g>
-    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="800" fill="#eef3f7" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
+    <text x="${Math.min(otherX, 330)}" y="${otherY + (otherRot % 360 > 90 && otherRot % 360 < 270 ? -36 : 44)}" text-anchor="middle" font-size="13" font-weight="700" fill="#9aa6b3" font-family="Noto Sans JP" paint-order="stroke" stroke="#000" stroke-width="3">4x 佐藤</text>
     <g transform="translate(${selfX},${selfY})">${homePlate(52, '#f44336', '#fff', true)}</g>
   </svg>`;
 }
@@ -759,29 +762,28 @@ function renderNav() {
   $('#badges').style.top = '302px';
   // 警告: 脅威のいる向きに、自艇から少し離して小さく置く。
   // 方位が信頼できないとき(回頭中など。不変条件10)は向きを出さず、定位置に矢印なしで置く。
-  $('#map-nav').innerHTML = navMap(n.warn, n.dir);
   // 警告は「脅威の向きの画面の端が赤く点滅する」だけ。秒数・対象の絵は出さない。
   // 予告と本警告は見た目を分けない(漕手にとってはどちらも後方確認の合図)。
   // 向きが分からないとき(不変条件10)は画面の縁全体を点滅させる。
+  // 光は地図の層(艇より下)に描く。上に重ねると他艇が赤く染まって見える。
+  // 向きが分からないとき(不変条件10)は画面の縁全体を点滅させる(ここだけ上の層)。
   const edge = $('#edge');
   $('#warnchip').className = 'warnchip';
   const ang = DIRS[n.dir][1];
-  if (n.warn === 'none') {
-    edge.className = 'edge';
-    edge.removeAttribute('style');
-  } else {
-    let bg;
+  let glow = null;
+  edge.className = 'edge';
+  edge.removeAttribute('style');
+  if (n.warn !== 'none') {
     if (ang == null) {
-      bg = 'box-shadow:inset 0 0 0 12px rgba(255,40,40,.7), inset 0 0 60px 20px rgba(255,40,40,.35)';
+      edge.className = 'edge show pulse';
+      edge.setAttribute('style', 'box-shadow:inset 0 0 0 10px rgba(255,40,40,.75)');
     } else {
       const rad = ang * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
       const t = Math.min(dx ? ((dx > 0 ? 390 : 0) - SELF.x) / dx : 1e9, dy ? ((dy > 0 ? 844 : 0) - SELF.y) / dy : 1e9);
-      const ex = SELF.x + dx * t, ey = SELF.y + dy * t;
-      bg = `background:radial-gradient(circle at ${ex}px ${ey}px, rgba(255,40,40,.85), rgba(255,40,40,.35) 90px, rgba(255,40,40,0) 210px)`;
+      glow = { x: SELF.x + dx * t, y: SELF.y + dy * t };
     }
-    edge.className = 'edge show pulse';
-    edge.setAttribute('style', bg);
   }
+  $('#map-nav').innerHTML = navMap(n.warn, n.dir, glow);
   const wait = n.fix === 'wait', long = n.fix === 'long';
   const V = wait ? { p: '—:—', s: '—', d: '0', t: '0:00' }
     : long ? { p: '2:05', s: '34', d: '12,480', t: '1:28:40' }
@@ -1205,17 +1207,16 @@ const NOTES = {
     ask: '「航行スタート」を押すと、シートを開かずに前回の設定で始まる。これで良いか。',
   },
   nav: {
-    h: '② 航行中(v5)',
+    h: '② 航行中(v6)',
     li: [
-      ['自艇の位置は今のアプリのまま', '追跡中(既定)は自艇を画面の横中央・上から45%に固定し、地図の方が動く。v4までの試作は中央から少しずれていたので直した(アプリは変えていない)。'],
-      ['警告は「その向きの画面の端が赤く点滅」だけ', '秒数・対象の絵のカードはやめた。予告と本警告も同じ見た目(漕手にとってはどちらも「後ろを確認」の合図で、見分ける必要がない)。切迫度の違いは音(断続音/連続音)が受け持つ。'],
-      ['向きが分からないときは画面の縁全体', '回頭中など方位が信頼できないとき(不変条件10)。'],
-      ['他艇は暗い地図で一番明るい物にする', '今は全艇同じ濃い青みグレー(明るい地図用)で、暗い地図では沈む。明るい灰白の塗り+黒い縁+淡い光輪にして、どの背景でも浮かせる。艇ごとの色分けはしない(航行中の既存方針: 色を暗記させない・赤=自艇を守る)。'],
-      ['警告の相手だけ赤い縁', '画面の端が光ったとき、どの艇かを地図の上ですぐ結べる。'],
-      ['名前ラベルは今どおり常時', '艇種と名前を小さく、黒い縁取りで。'],
-      ['計器・左下の操作はv3のまま', 'ペース76・レート70・距離46・chrono 36。操作は左下の縦1列。'],
+      ['色の役割を1つずつに絞る', '赤=自艇と警告の点滅だけ。白=計器の数字。灰色=他艇・操作・ラベル。橙=固定の危険区域(橋・橋脚・流木)。水面の青と黒い陸。それ以外の色は使わない。'],
+      ['他艇は灰色1色、赤を一切使わない', '自艇(赤)と同じ色を他艇に乗せない。警告の相手でも縁を赤くしない(どの艇かは画面の端の光る向きと地図で分かる)。光輪もやめて、暗い地図の上で明るい灰色の形だけにする。'],
+      ['地図の線は細く薄く', '岸の線・中央線・予測の線を細く半透明に。予測の赤(停止距離)と黄(警告距離)の区別は残す(既存の要件)。'],
+      ['計器と操作から色を抜く', 'ペース・レートの上の色の帯をやめ、白と灰色だけに。追跡は白い縁で「オン」を示し、終了とメニューは灰色。'],
+      ['警告は画面の端の赤い点滅だけ(v5のまま)', '予告も本警告も同じ見た目。向きが分からないときは縁全体。'],
+      ['自艇の位置・計器の大きさ・左下の操作はそのまま', '自艇は横中央・上から45%。ペース76・レート70・距離46・chrono 36。'],
     ],
-    ask: '(1) 他艇の明るい灰白は中央線(白い破線)と紛れないか。(2) 警告の相手に赤い縁を付けるのは「赤は自艇だけ」の約束に触れる。塗りは灰白のままで縁だけ赤なら許容できるか。',
+    ask: '流木・橋脚を橙にまとめたが(赤を自艇と警告に空けるため)、流木だけは赤の方が危険が伝わると感じるか。',
   },
   rec: {
     h: '⑤ 記録画面(視線の順番)',
