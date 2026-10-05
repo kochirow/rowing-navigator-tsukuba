@@ -9,7 +9,9 @@ import 'package:rowing_navigator/config/boat_config.dart';
 import 'package:rowing_navigator/config/display_name_config.dart';
 import 'package:rowing_navigator/features/home_map/widgets/rounded_button.dart';
 
+import '../../../models/workout_plan.dart';
 import '../../../providers/nav_config_providers.dart';
+import '../../../screens/workout_setup_screen.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/navigation_defaults_service.dart';
 import '../../../types/boat_type.dart';
@@ -25,10 +27,20 @@ class NavSettingModal extends HookConsumerWidget {
   ) onPressStartNav;
   final Future<void> Function()? onPressTestAudio;
 
+  /// 開いた時点で決めてある、この航行で使うワークアウト。無ければ null。
+  final WorkoutPlan? preparedWorkout;
+
+  /// この航行で使うワークアウトを決めた・やめた(null)とき。
+  /// 渡したときだけ、ワークアウトの欄を出す。表示専用の機能なので、
+  /// 決めなくても航行は始められる。
+  final void Function(WorkoutPlan? plan)? onWorkoutChanged;
+
   const NavSettingModal({
     super.key,
     required this.onPressStartNav,
     this.onPressTestAudio,
+    this.preparedWorkout,
+    this.onWorkoutChanged,
   });
 
   Widget _sectionTitle(BuildContext context, String title, String subtitle) {
@@ -91,6 +103,26 @@ class NavSettingModal extends HookConsumerWidget {
     // 前回設定を復元できたかどうか。復元できたときだけ、スクロールなしで
     // 開始できる近道を先頭に出す。
     final restoredSummary = useState<String?>(null);
+    // シートは開いた時点の値で組まれ、呼び出し元の再描画では更新されない。
+    // ここで持って、変えたら呼び出し元へ知らせる。
+    final workoutPlan = useState<WorkoutPlan?>(preparedWorkout);
+
+    void setWorkout(WorkoutPlan? plan) {
+      workoutPlan.value = plan;
+      onWorkoutChanged?.call(plan);
+    }
+
+    Future<void> openWorkoutSetup() async {
+      final plan = await Navigator.of(context).push<WorkoutPlan>(
+        MaterialPageRoute(
+          builder: (_) => WorkoutSetupScreen(
+            initial: workoutPlan.value,
+            beforeNavigation: true,
+          ),
+        ),
+      );
+      if (plan != null) setWorkout(plan);
+    }
 
     useEffect(() {
       var disposed = false;
@@ -229,6 +261,17 @@ class NavSettingModal extends HookConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ワークアウトは、どちらの「航行スタート」より上に置く。
+                    // 前回設定の近道から始める人も、押す前に必ず目に入る。
+                    if (onWorkoutChanged != null) ...[
+                      _WorkoutEntry(
+                        plan: workoutPlan.value,
+                        enabled: !isStarting.value,
+                        onTap: openWorkoutSetup,
+                        onClear: () => setWorkout(null),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     // 出艇直前に毎回7項目をスクロールして確認するのは現実的でない。
                     // 前回設定を復元できたときは、まずそのまま開始できる道を出し、
                     // 変えたい人だけ下の詳細を触ればよいようにする。
@@ -469,6 +512,106 @@ class NavSettingModal extends HookConsumerWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 航行開始前の、ワークアウトの欄。
+///
+/// 決めてあれば内容と始まり方を出し、無ければ「フリー」と出す。
+/// 押すと設定画面へ入る。決めたメニューは航行開始で準備された状態になる
+/// (`UseWorkout.prepared`)。
+class _WorkoutEntry extends StatelessWidget {
+  const _WorkoutEntry({
+    required this.plan,
+    required this.enabled,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final WorkoutPlan? plan;
+  final bool enabled;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final dimens = context.dimens;
+    final plan = this.plan;
+    return Material(
+      color: colors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(dimens.radiusLg),
+        side: BorderSide(
+          color: plan == null ? colors.textDisabled : colors.primary,
+          width: plan == null ? 1 : 2,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            dimens.space3,
+            dimens.space3,
+            dimens.space1,
+            dimens.space3,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.timer_outlined, color: colors.textSecondary),
+              SizedBox(width: dimens.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ワークアウト',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      plan == null
+                          ? '決めていません(フリー)'
+                          : '${workoutShortName(plan)} ・ '
+                              '${formatRest(plan.restUnit, plan.restValue)}',
+                      key: const ValueKey('nav-setting-workout-summary'),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      plan == null
+                          ? '押すと、この航行で使うメニューを決められます'
+                          : plan.autoStart
+                              ? '航行を始めると READY で待ち、漕ぎ出しで1本目'
+                              : '航行中に、ワークアウトのボタンから始めます',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (plan != null)
+                TextButton(
+                  onPressed: enabled ? onClear : null,
+                  child: const Text('やめる'),
+                )
+              else
+                Padding(
+                  padding: EdgeInsets.only(right: dimens.space2),
+                  child: Icon(Icons.chevron_right, color: colors.textSecondary),
+                ),
+            ],
+          ),
         ),
       ),
     );
