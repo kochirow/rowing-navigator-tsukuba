@@ -13,6 +13,8 @@ class UseWorkout {
     required this.status,
     required this.start,
     required this.stop,
+    required this.prepared,
+    required this.prepare,
   });
 
   /// 実行中のメニュー。無ければ null。
@@ -20,11 +22,22 @@ class UseWorkout {
   final WorkoutStatus? status;
   final void Function(WorkoutPlan plan) start;
   final void Function() stop;
+
+  /// 航行前に決めておいたメニュー。無ければ null。
+  ///
+  /// 航行が始まると、「漕ぎ出したらワークを始める」のメニューは READY で始まり
+  /// (漕ぎ出しで1本目)、そうでないメニューは準備されたまま残って、航行中の
+  /// ワークアウトのボタンから始める。どちらも航行が終われば消える。
+  final WorkoutPlan? prepared;
+
+  /// 航行前のメニューを決める。null で取り消す。
+  final void Function(WorkoutPlan? plan) prepare;
 }
 
 /// 本物の測位([fixProcessedAt] が進んだとき)と 1本ごとの解析結果で進める。
 /// 推測した自艇の位置(GPS 途絶中)では進めない。値は描画の最中に同期して
 /// 進める(`useLapMetrics` と同じ理由)。航行が終われば止める。
+/// 航行前に決めたメニュー([UseWorkout.prepared])も、航行が終われば消す。
 UseWorkout useWorkout({
   required Boat? myBoat,
   required DateTime fixProcessedAt,
@@ -36,6 +49,33 @@ UseWorkout useWorkout({
   final lastFix = useRef<DateTime?>(null);
   final lastStroke = useRef<DateTime?>(null);
   final store = useMemoized(WorkoutMenuStore.new);
+  final prepared = useState<WorkoutPlan?>(null);
+  final wasNavigating = useRef(false);
+
+  void begin(WorkoutPlan plan) {
+    lastFix.value = null;
+    lastStroke.value = motion?.latestStrokeBoundary;
+    engine.value = WorkoutEngine(plan);
+    // 始めたメニューが準備ぶんの役目を引き継ぐ(二重に残さない)。
+    prepared.value = null;
+    store.recordUse(plan, DateTime.now());
+  }
+
+  if (navigating != wasNavigating.value) {
+    wasNavigating.value = navigating;
+    final plan = prepared.value;
+    if (plan != null) {
+      if (!navigating) {
+        // 航行が終わったら消す(次の航行へ持ち越さない)。
+        Future.microtask(() => prepared.value = null);
+      } else if (plan.autoStart) {
+        // 航行開始。READY で待ち、漕ぎ出しで1本目が始まる。
+        // 「漕ぎ出したら始める」でないメニューは、桟橋で1本目が始まって
+        // しまうので自動では始めず、準備されたまま残す。
+        Future.microtask(() => begin(plan));
+      }
+    }
+  }
 
   final e = engine.value;
   if (e != null && !navigating) {
@@ -62,12 +102,9 @@ UseWorkout useWorkout({
   return UseWorkout(
     plan: e?.plan,
     status: e?.status,
-    start: (plan) {
-      lastFix.value = null;
-      lastStroke.value = motion?.latestStrokeBoundary;
-      engine.value = WorkoutEngine(plan);
-      store.recordUse(plan, DateTime.now());
-    },
+    start: begin,
     stop: () => engine.value = null,
+    prepared: prepared.value,
+    prepare: (plan) => prepared.value = plan,
   );
 }

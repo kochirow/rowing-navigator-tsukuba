@@ -558,6 +558,9 @@ class HomeMapScreen extends HookConsumerWidget {
               : '地図種別・航路の中央線・高コントラスト・航路の断面・艇速',
           onTap: openDisplayPanel,
         ),
+        // 航行前のワークアウトの準備。航行中は地図右のボタンが入口。
+        if (isObserver)
+          workoutPrepareMenuAction(context, workout, section: prepare),
         MapMenuAction(
           icon: Icons.add_location_alt_outlined,
           title: '危険区域を追加',
@@ -1890,6 +1893,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   running: workout.plan,
                                                   onStart: workout.start,
                                                   onStop: workout.stop,
+                                                  prepared: workout.prepared,
                                                 ),
                                               ),
                                             ),
