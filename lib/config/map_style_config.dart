@@ -124,8 +124,18 @@ const highContrastMapStyle = '''
 /// 読み取りたいのは水面とアプリ側で描く物(岸・危険区域・艇・中央線)だけ
 /// なので、文字・店・交通は消す。道路と建物はごく暗く残す。橋の道路は
 /// 川を横切る目印になり、位置の見当を失わないため。
-/// 水面は紺(`#123142`)。白い自艇・赤い他艇・琥珀の危険区域がどれも
-/// 4:1 以上の差で浮く(白13.6・琥珀7.7・赤4.3)。
+/// 水面は紺(`#17405a`)。**見分けたい順は「岸(陸)・危険区域・他艇」で、
+/// 自艇ではない**(2026-10-06 利用者決定)。自艇は画面の定位置にいて探す必要が
+/// ないが、岸・危険区域・他艇は画面の中を動いてくる。
+///
+/// 以前の `#123142` は白い自艇との差(13.6)を優先した値で、陸との差が
+/// 1.48 しかなく、川の形が地図の色だけでは読めなかった。少し明るくして
+/// 陸との差を 1.84 にした。黒い陸はそのまま(電力)で、水面だけを持ち上げる。
+/// 引き換えに他艇の赤との差は 4.45 → 3.58 に下がるが、他艇の印には白い縁が
+/// あり(`BoatPalette.otherBoat`)、白との差は 10.9 ある。
+/// 危険区域の琥珀は、線・塗りを濃くして補った(`HazardPalette` の夜の配色)。
+/// 実機の直射日光下では未確認。変えるときは
+/// `test/config/night_map_style_test.dart` の比も合わせて見直す。
 ///
 /// 高コントラスト・航空写真を選んだときは、その選択を優先する(原則2)。
 const navigationNightMapStyle = '''
@@ -137,6 +147,6 @@ const navigationNightMapStyle = '''
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
   {"featureType":"road","elementType":"geometry","stylers":[{"color":"#10161d"}]},
   {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"color":"#0a0e13"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#123142"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#17405a"}]}
 ]
 ''';
