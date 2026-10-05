@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../../../hooks/use_workout.dart';
 import '../../../models/workout_plan.dart';
 import '../../../screens/workout_setup_screen.dart';
 import '../../../services/workout_menu_store.dart';
 import '../../../theme/nav_palette.dart';
+import 'map_menu_sheet.dart';
 
 /// 航行中のワークアウトのボタンから開く、呼び出し用のシート。
 ///
 /// 練習前に作って登録したメニュー・過去のメニューを選んで、すぐ始める。
 /// 細かい設定は「新しく作る・細かく変える」(設定画面)。実行中は「終える」。
+/// 航行前に決めたメニュー([prepared])がまだ始まっていなければ、先頭に出す。
 Future<void> showWorkoutQuickSheet(
   BuildContext context, {
   required WorkoutPlan? running,
   required void Function(WorkoutPlan) onStart,
   required void Function() onStop,
+  WorkoutPlan? prepared,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -27,6 +31,7 @@ Future<void> showWorkoutQuickSheet(
     ),
     builder: (sheetContext) => _WorkoutQuickSheet(
       running: running,
+      prepared: prepared,
       onStart: (plan) {
         Navigator.of(sheetContext).pop();
         onStart(plan);
@@ -39,14 +44,55 @@ Future<void> showWorkoutQuickSheet(
   );
 }
 
+/// 出艇前のメニューに出す、ワークアウトの準備の項目。
+///
+/// 設定画面で決めたメニューは、すぐには始めず [UseWorkout.prepare] へ渡す。
+/// 航行が始まると準備された状態になり、航行が終われば消える
+/// (`UseWorkout.prepared`)。
+MapMenuAction workoutPrepareMenuAction(
+  BuildContext context,
+  UseWorkout workout, {
+  String? section,
+}) {
+  final prepared = workout.prepared;
+  return MapMenuAction(
+    icon: Icons.timer_outlined,
+    title: 'ワークアウト',
+    subtitle: prepared == null
+        ? 'メニューを作る・登録する・次の航行で使うメニューを決める'
+        : '次の航行で使う: ${workoutShortName(prepared)}',
+    section: section,
+    onTap: () async {
+      final plan = await Navigator.of(context).push<WorkoutPlan>(
+        MaterialPageRoute(
+          builder: (_) => WorkoutSetupScreen(
+            initial: prepared,
+            beforeNavigation: true,
+            onCancelPrepared:
+                prepared == null ? null : () => workout.prepare(null),
+          ),
+        ),
+      );
+      if (plan == null) return;
+      workout.prepare(plan);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('次の航行で使うメニュー: ${workoutShortName(plan)}'),
+      ));
+    },
+  );
+}
+
 class _WorkoutQuickSheet extends StatefulWidget {
   const _WorkoutQuickSheet({
     required this.running,
+    required this.prepared,
     required this.onStart,
     required this.onStop,
   });
 
   final WorkoutPlan? running;
+  final WorkoutPlan? prepared;
   final void Function(WorkoutPlan) onStart;
   final void Function() onStop;
 
@@ -79,6 +125,7 @@ class _WorkoutQuickSheetState extends State<_WorkoutQuickSheet> {
   @override
   Widget build(BuildContext context) {
     final running = widget.running;
+    final prepared = running == null ? widget.prepared : null;
     return SafeArea(
       top: false,
       child: ListView(
@@ -113,6 +160,40 @@ class _WorkoutQuickSheetState extends State<_WorkoutQuickSheet> {
                       minimumSize: const Size(88, 44),
                     ),
                     child: const Text('終える'),
+                  ),
+                ],
+              ),
+            ),
+          if (prepared != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('準備したメニュー', style: _eyebrow),
+                        Text(
+                          '${workoutShortName(prepared)} ・ '
+                          '${formatRest(prepared.restUnit, prepared.restValue)}',
+                          style: const TextStyle(
+                            color: NavPalette.value,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => widget.onStart(prepared),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: NavPalette.work,
+                      foregroundColor: NavPalette.surface,
+                      minimumSize: const Size(88, 48),
+                    ),
+                    child: const Text('始める'),
                   ),
                 ],
               ),
@@ -153,7 +234,8 @@ class _WorkoutQuickSheetState extends State<_WorkoutQuickSheet> {
             onTap: () async {
               final plan = await Navigator.of(context).push<WorkoutPlan>(
                 MaterialPageRoute(
-                  builder: (_) => WorkoutSetupScreen(initial: running),
+                  builder: (_) =>
+                      WorkoutSetupScreen(initial: running ?? prepared),
                 ),
               );
               if (plan != null) widget.onStart(plan);

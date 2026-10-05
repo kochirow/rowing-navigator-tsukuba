@@ -10,12 +10,28 @@ import '../theme/nav_palette.dart';
 /// 練習の前にここで作って「★ 登録」しておくと、航行中はワークアウトのボタンから
 /// 呼び出すだけでよい。「このメニューで始める」で作ったメニューを返す(pop)。
 ///
+/// [beforeNavigation] のときは航行前の準備として開いている。作ったメニューは
+/// すぐには始まらず、次の航行で使うメニューとして返す(始まり方は
+/// `UseWorkout.prepared` を参照)。
+///
 /// 上から順に決める5つのかたまり(選ぶ → ワーク → 本間レスト → セット →
 /// 数え方と始め方)に分け、いまの内容を画面の下へ常に出す。
 class WorkoutSetupScreen extends StatefulWidget {
-  const WorkoutSetupScreen({super.key, this.initial});
+  const WorkoutSetupScreen({
+    super.key,
+    this.initial,
+    this.beforeNavigation = false,
+    this.onCancelPrepared,
+  });
 
   final WorkoutPlan? initial;
+
+  /// 航行前に開いているとき true。
+  final bool beforeNavigation;
+
+  /// すでに決めてある「次の航行で使うメニュー」を取り消す。
+  /// 渡したときだけ取り消しのボタンを出す。
+  final VoidCallback? onCancelPrepared;
 
   @override
   State<WorkoutSetupScreen> createState() => _WorkoutSetupScreenState();
@@ -108,9 +124,24 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
         ),
         children: [
           Text(
-            '上から順に決めます。いまの内容は、いつも画面の下に出ています。',
+            widget.beforeNavigation
+                ? '次の航行で使うメニューを、漕ぎ出す前に決めておけます。'
+                    '上から順に決めます。いまの内容は、いつも画面の下に出ています。'
+                : '上から順に決めます。いまの内容は、いつも画面の下に出ています。',
             style: TextStyle(color: colors.textSecondary),
           ),
+          if (widget.onCancelPrepared case final cancel?)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  cancel();
+                  Navigator.of(context).pop();
+                },
+                icon: const Icon(Icons.close),
+                label: const Text('次の航行で使うのをやめる'),
+              ),
+            ),
           _SettingCard(
             step: 1,
             title: 'メニューを選ぶ',
@@ -322,6 +353,14 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
                 ].join(' ・ '),
                 style: TextStyle(color: colors.textSecondary),
               ),
+              if (widget.beforeNavigation)
+                Text(
+                  p.autoStart
+                      ? '航行を始めると READY で待ち、漕ぎ出したら1本目が始まります。'
+                      : '航行中に、ワークアウトのボタンから始めます。',
+                  key: const ValueKey('workout-setup-start-note'),
+                  style: TextStyle(color: colors.textSecondary),
+                ),
               SizedBox(height: dimens.space2),
               Row(
                 children: [
@@ -341,7 +380,9 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
                       onPressed: () => Navigator.of(context).pop(_plan),
                       style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(48)),
-                      child: const Text('このメニューで始める'),
+                      child: Text(
+                        widget.beforeNavigation ? '次の航行で使う' : 'このメニューで始める',
+                      ),
                     ),
                   ),
                 ],

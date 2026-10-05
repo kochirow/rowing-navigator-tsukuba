@@ -20,6 +20,8 @@ Future<void> _pump(
   required ThemeData theme,
   Size size = const Size(390, 844),
   ValueChanged<WorkoutPlan?>? onResult,
+  bool beforeNavigation = false,
+  VoidCallback? onCancelPrepared,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -33,7 +35,12 @@ Future<void> _pump(
             child: TextButton(
               onPressed: () async {
                 final plan = await Navigator.of(context).push<WorkoutPlan>(
-                  MaterialPageRoute(builder: (_) => const WorkoutSetupScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => WorkoutSetupScreen(
+                      beforeNavigation: beforeNavigation,
+                      onCancelPrepared: onCancelPrepared,
+                    ),
+                  ),
                 );
                 onResult?.call(plan);
               },
@@ -106,5 +113,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isNotNull);
     expect(result!.sameMenuAs(_plan), isTrue);
+  });
+
+  testWidgets('航行前は「次の航行で使う」になり、始まり方を先に伝える', (tester) async {
+    WorkoutPlan? result;
+    var cancelled = 0;
+    await _pump(
+      tester,
+      theme: buildAppTheme(),
+      size: const Size(320, 568),
+      beforeNavigation: true,
+      onCancelPrepared: () => cancelled++,
+      onResult: (p) => result = p,
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('このメニューで始める'), findsNothing);
+    final note = find.byKey(const ValueKey('workout-setup-start-note'));
+    expect(tester.widget<Text>(note).data, contains('漕ぎ出したら1本目'));
+
+    // 「漕ぎ出したら始める」を切ると、自動では始まらないことを伝える。
+    await tester.scrollUntilVisible(
+      find.text('漕ぎ出したらワークを始める'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final autoStart = find.widgetWithText(SwitchListTile, '漕ぎ出したらワークを始める');
+    await tester.ensureVisible(autoStart);
+    await tester.pumpAndSettle();
+    await tester.tap(autoStart);
+    await tester.pump();
+    expect(tester.widget<Text>(note).data, contains('ワークアウトのボタンから'));
+
+    await tester.tap(find.text('次の航行で使う'));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.autoStart, isFalse);
+    expect(cancelled, 0);
+  });
+
+  testWidgets('決めてあるメニューは、設定画面から取り消せる', (tester) async {
+    WorkoutPlan? result = _plan;
+    var cancelled = 0;
+    await _pump(
+      tester,
+      theme: buildAppTheme(),
+      beforeNavigation: true,
+      onCancelPrepared: () => cancelled++,
+      onResult: (p) => result = p,
+    );
+    await tester.tap(find.text('次の航行で使うのをやめる'));
+    await tester.pumpAndSettle();
+    expect(cancelled, 1);
+    expect(result, isNull);
   });
 }
