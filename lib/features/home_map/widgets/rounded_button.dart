@@ -87,14 +87,21 @@ class RoundedButton extends StatelessWidget {
                   ),
                   SizedBox(width: compact ? 8 : 10),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: compact ? 16 : 20,
-                    fontWeight: FontWeight.bold,
-                    color: foreground,
-                    // 淡い面のときに白いハローを敷くと文字が滲む。
-                    shadows: border == null && useHalo ? _labelHalo : null,
+                // 幅390ptの端末では「この設定で航行スタート」が数px はみ出す。
+                // 収まらないときだけ文字を縮め、切れた表示にしない。
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: compact ? 16 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: foreground,
+                        // 淡い面のときに白いハローを敷くと文字が滲む。
+                        shadows: border == null && useHalo ? _labelHalo : null,
+                      ),
+                    ),
                   ),
                 ),
               ],
