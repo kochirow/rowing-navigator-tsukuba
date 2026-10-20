@@ -7,6 +7,9 @@ import 'package:rowing_navigator/services/uncaught_error_journal.dart';
 void main() {
   late Directory directory;
   late File file;
+  // 裏で進むファイル書き込みが終わる前にディレクトリを消すと、
+  // 環境によって「空でない」で失敗する。片付けの前に全部待つ。
+  final created = <UncaughtErrorJournal>[];
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('uncaught_journal');
@@ -14,14 +17,21 @@ void main() {
   });
 
   tearDown(() async {
+    for (final journal in created) {
+      await journal.flushForTest();
+    }
+    created.clear();
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  UncaughtErrorJournal journal({int maxUnreported = 50}) =>
-      UncaughtErrorJournal(
-        fileProvider: () async => file,
-        maxUnreported: maxUnreported,
-      );
+  UncaughtErrorJournal journal({int maxUnreported = 50}) {
+    final subject = UncaughtErrorJournal(
+      fileProvider: () async => file,
+      maxUnreported: maxUnreported,
+    );
+    created.add(subject);
+    return subject;
+  }
 
   test('記録した例外を取り出せ、取り出すと空になる', () async {
     final subject = journal();
