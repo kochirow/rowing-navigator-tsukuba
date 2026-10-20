@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 
 import '../config/hazard_profile_config.dart';
+import '../config/navigator_config.dart';
 import '../models/ashore_area.dart';
 import '../models/mooring_area.dart';
 import '../models/channel_lane.dart';
@@ -89,6 +91,8 @@ class DangerZoneSettingsResolution {
 /// データの追加・修正は JSON ファイルを編集するだけでよい。
 /// 基準形状は端末内に保持し、Firestoreのチーム共有文書からは
 /// 検証済みの位置校正・危険範囲だけを適用する。
+const _defaultManagedHazardRefreshTimeout = managedHazardRefreshTimeout;
+
 class PresetObstacleService {
   static const presetAssetPath = 'assets/data/sakuragawa_obstacles.json';
   static const expectedProfileVersion = currentHazardProfileDataVersion;
@@ -109,6 +113,9 @@ class PresetObstacleService {
   final bool previewLocalFixedObstacleCalibrations;
   final bool previewLocalDangerZoneSettings;
 
+  /// 固定流木の共有形状をサーバーから取り直すときの待ち時間の上限。
+  final Duration managedHazardRefreshTimeout;
+
   PresetObstacleService({
     DangerZoneSettingsService? settingsService,
     FixedObstacleCalibrationService? calibrationService,
@@ -123,7 +130,10 @@ class PresetObstacleService {
     bool? useLocalFixedObstacleCalibrations,
     this.previewLocalFixedObstacleCalibrations = false,
     this.previewLocalDangerZoneSettings = false,
-  })  : _settingsService = settingsService ?? DangerZoneSettingsService(),
+    Duration? managedHazardRefreshTimeout,
+  })  : managedHazardRefreshTimeout =
+            managedHazardRefreshTimeout ?? _defaultManagedHazardRefreshTimeout,
+        _settingsService = settingsService ?? DangerZoneSettingsService(),
         _calibrationService =
             calibrationService ?? FixedObstacleCalibrationService(),
         _warningSettingsService =
@@ -555,7 +565,11 @@ class PresetObstacleService {
         ManagedHazardState? managedState;
         try {
           managedState = refreshManagedHazards
-              ? await _managedHazardService.fetchLatest()
+              // 電波の弱い場所で航行開始を待たせない。上限を超えたら
+              // 下のcatchでキャッシュ/同梱形状へ縮退する(不変条件5)。
+              ? await _managedHazardService
+                  .fetchLatest()
+                  .timeout(managedHazardRefreshTimeout)
               : await _managedHazardService.loadCached();
         } catch (e) {
           // オフラインやRules未適用でも同梱形状を必ず残す。

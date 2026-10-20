@@ -12,6 +12,7 @@ import 'session_store_service.dart';
 import 'practice_log_store_service.dart';
 import 'static_obstacle_service.dart';
 import 'team_service.dart';
+import 'uncaught_error_journal.dart';
 
 /// Firebase匿名アカウントと、端末内の関連データを削除する。
 ///
@@ -49,6 +50,7 @@ class AccountDataDeletionService {
     await SessionStoreService().deleteAllSessions();
     await PracticeLogStoreService().deleteAllPracticeLogs();
     await _deleteTemporaryExports();
+    await appUncaughtErrorJournal.clearAll();
     final preferences = await SharedPreferences.getInstance();
     await preferences.clear();
   }
