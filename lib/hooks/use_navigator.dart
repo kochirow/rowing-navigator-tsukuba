@@ -391,7 +391,7 @@ UseNavigator useNavigator() {
   final previousContractFixTimestamp = useRef<DateTime?>(null);
   final lastContractViolationAt = useRef<Map<String, Duration>>({});
   final positionIntegrityState = useRef(PositionIntegrityState.trusted);
-  final lastProtectionBudget = useRef<ProtectionBudget?>(null);
+  final lastStaleProtectionBudget = useRef<StaleProtectionBudgetSample?>(null);
   final diagnosticSequence = useRef(0);
   final diagnosticEventDroppedCount = useRef(0);
   final alertEventDroppedCount = useRef(0);
@@ -2385,11 +2385,19 @@ UseNavigator useNavigator() {
           protectionRadiusMeters: staleSolution?.safetySet.boundingRadiusMeters,
           integrityState: positionIntegrityState.value.name,
           budget: staleSolution?.budget,
-          previousBudget: lastProtectionBudget.value,
+          // 同じ測位から外挿した台帳どうしだけを比べる(測位時の台帳は
+          // 成分の作り方が違い、新しい測位では正当に縮む)。
+          previousBudget: comparablePreviousStaleBudget(
+            previous: lastStaleProtectionBudget.value,
+            currentSolutionTimestamp: staleSolution?.timestamp,
+          ),
         ),
       );
       if (staleSolution != null) {
-        lastProtectionBudget.value = staleSolution.budget;
+        lastStaleProtectionBudget.value = StaleProtectionBudgetSample(
+          solutionTimestamp: staleSolution.timestamp,
+          budget: staleSolution.budget,
+        );
       }
       for (final violation in contractViolations) {
         final lastAt = lastContractViolationAt.value[violation.contractId];
@@ -3233,7 +3241,6 @@ UseNavigator useNavigator() {
       budget: protectionBudget,
     ));
     previousContractFixTimestamp.value = rawPos.timestamp;
-    lastProtectionBudget.value = protectionBudget;
     for (final violation in contractViolations) {
       final lastAt = lastContractViolationAt.value[violation.contractId];
       if (lastAt == null ||
@@ -4159,7 +4166,7 @@ UseNavigator useNavigator() {
       previousContractFixTimestamp.value = null;
       lastContractViolationAt.value = {};
       positionIntegrityState.value = PositionIntegrityState.trusted;
-      lastProtectionBudget.value = null;
+      lastStaleProtectionBudget.value = null;
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
