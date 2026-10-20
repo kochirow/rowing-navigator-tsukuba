@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/safety_snapshot.dart';
 import '../theme/app_theme.dart';
 import 'privacy_data_screen.dart';
+import 'usage_guide/troubleshooting_guide_page.dart';
 
 /// 端末の今の状態と、この端末が持っているデータの行き先をまとめた画面。
 ///
@@ -153,6 +154,21 @@ class DeviceStatusScreen extends StatelessWidget {
             margin: EdgeInsets.zero,
             child: Column(
               children: [
+                // 現地で「鳴らない」と言われたとき最初に開かれるのがこの画面なので、
+                // 仕様上の静音や表示のみの挙動の説明へここから飛べるようにする。
+                ListTile(
+                  leading: const Icon(Icons.build_outlined),
+                  title: const Text(TroubleshootingGuidePage.title),
+                  subtitle: const Text('音が鳴らない・他の艇が出ないなど'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TroubleshootingGuidePage(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
                   title: const Text('プライバシーとデータ'),
