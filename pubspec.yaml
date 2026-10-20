@@ -93,6 +93,9 @@ flutter:
     - assets/audio/
     - assets/images/
     - assets/data/
+    # クレジット表記の原本。ライセンス画面へそのまま出す(credits_config.dart)。
+    - LICENSE
+    - NOTICE
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
