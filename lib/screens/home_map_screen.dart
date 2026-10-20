@@ -9,7 +9,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/providers/nav_config_providers.dart';
-import 'package:rowing_navigator/services/ship_domain_service.dart';
 import '../features/home_map/prediction_shapes.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_setting_modal.dart';
 import 'package:rowing_navigator/features/home_map/widgets/navigation_safety_settings_sheet.dart';
@@ -26,7 +25,6 @@ import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
 import '../features/home_map/widgets/map_display_panel.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
-import '../features/home_map/widgets/lane_cross_section_strip.dart';
 import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
 import '../features/home_map/widgets/reverse_guidance_audio_notice.dart';
@@ -38,7 +36,6 @@ import '../hooks/use_practice_log_recording.dart';
 import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
 import '../services/channel_centerline.dart';
-import '../services/channel_cross_section.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/map_render_update_policy.dart';
 import '../services/safety_shape_overlay_service.dart';
@@ -59,7 +56,6 @@ import '../hooks/use_nav_map.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/map_display_settings_service.dart';
-import '../services/navigation_defaults_service.dart';
 import '../services/permission_service.dart';
 import '../services/preset_obstacle_service.dart';
 import '../services/team_service.dart';
@@ -232,9 +228,6 @@ class HomeMapScreen extends HookConsumerWidget {
     // 同じプロファイルを読んで独立に行う。読めなくても航行・警告は動く。
     final mooringAreas = useState<List<MooringArea>>(const []);
     final mooringAreaLines = useState<Set<Polyline>>({});
-    // レーンの左右はレーン形状から決まり、走っている間は変わらないので
-    // 1つのインスタンスで保持させる。
-    final laneCrossSectionService = useMemoized(ChannelCrossSectionService.new);
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     // 航行中の「夜の配色」。航行中かつ通常地図のときだけ暗い地図にし、
@@ -261,10 +254,6 @@ class HomeMapScreen extends HookConsumerWidget {
         navMap.mapType.value == MapType.normal &&
         !highContrastMap.value;
     final showDeveloperSafetyShapeOverlay = useState(false);
-    // 航路の断面インジケータは補助表示。既定は非表示で、航行開始時の設定か
-    // 「表示」パネルで出す。中央線からの位置は地図でも読めるので、
-    // 必要な人だけが出す。
-    final laneCrossSectionEnabled = useState(false);
     useStrokeTraceSharing(
       // 監視への共有は計測と一体で、切替を持たない。航行中の画面には
       // 波形を出さない(2026-08-13に廃止)が、陸上で見る監視端末では
@@ -277,7 +266,6 @@ class HomeMapScreen extends HookConsumerWidget {
       trace: navigator.latestStrokeTrace,
     );
     final mapDisplaySettings = useMemoized(MapDisplaySettingsService.new);
-    final navigationDefaults = useMemoized(NavigationDefaultsService.new);
     final safetyShapeOverlayService =
         useMemoized(SafetyShapeOverlayService.new);
     final announcedImminentWarnings = useRef(<String>{});
@@ -489,7 +477,6 @@ class HomeMapScreen extends HookConsumerWidget {
     // 高さの上限を画面の55%にしているのは、上部の計器カードと警告バナーを
     // 覆わないため。警告表示はメニュー・パネルより常に優先する。
     void openDisplayPanel() {
-      final isNavigating = navigator.mode.value == NavMode.navigator;
       unawaited(showModalBottomSheet<void>(
         context: context,
         backgroundColor: Colors.transparent,
@@ -510,20 +497,6 @@ class HomeMapScreen extends HookConsumerWidget {
             highContrastMap.value = next;
             unawaited(mapDisplaySettings.saveHighContrast(next));
           },
-          laneCrossSection: isNavigating ? laneCrossSectionEnabled : null,
-          onLaneCrossSectionChanged: isNavigating
-              ? (next) {
-                  laneCrossSectionEnabled.value = next;
-                  unawaited(
-                    navigationDefaults
-                        .saveLaneCrossSectionEnabled(next)
-                        .catchError((Object error) {
-                      debugPrint('Failed to save lane cross section display: '
-                          '$error');
-                    }),
-                  );
-                }
-              : null,
         ),
       ));
     }
@@ -554,9 +527,8 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.layers_outlined,
           title: '表示',
-          subtitle: isObserver
-              ? '地図種別・航路の中央線・高コントラスト'
-              : '地図種別・航路の中央線・高コントラスト・航路の断面・艇速',
+          subtitle:
+              isObserver ? '地図種別・航路の中央線・高コントラスト' : '地図種別・航路の中央線・高コントラスト・艇速',
           onTap: openDisplayPanel,
         ),
         // 航行前のワークアウトの準備。航行中は地図右のボタンが入口。
@@ -1338,27 +1310,6 @@ class HomeMapScreen extends HookConsumerWidget {
       navigator.mode.value,
     ]);
 
-    // ##########################
-    // 航路断面インジケータ(表示専用)
-    // ##########################
-    // 「中央線のどちら側にいるか」だけを計器カードの直下へ出す。地図と同じ
-    // 情報だが、地図は回転・拡大が変わるうえ視線コストが高い。警告には
-    // しない(レーン外は違反ではない: 原則4)。
-    final laneCrossSection = () {
-      final myBoat = navigator.myBoat.value;
-      if (navigator.mode.value != NavMode.navigator || myBoat == null) {
-        return ChannelCrossSection.unavailable;
-      }
-      return laneCrossSectionService.describe(
-        position: LatLng(myBoat.lat, myBoat.lng),
-        headingDegrees: myBoat.heading,
-        // 低速時の course-over-ground は最大90度ずれる。左右を誤って
-        // 出すくらいなら出さない(不変条件10)。
-        headingIsReliable: ShipDomainService.headingIsReliable(myBoat),
-        resolver: navigator.channelLaneResolver.value,
-      );
-    }();
-
     // AppBarが無いので、ステータスバー(時刻・電池)の文字色を自分で決める。
     // 放っておくと端末のテーマに従い、ダークモードでは明るい地図の上に白い
     // 文字が乗って読めなくなる。地図は通常・高コントラストなら明るく、
@@ -1512,7 +1463,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                     // いまが出艇前か監視中かを示す。
                                     //
                                     // **航行中は出さない。** 航行中は計器カード・
-                                    // 警告バナー・断面インジケータが同じ上部に
+                                    // 警告バナーが同じ上部に
                                     // 積み上がり、水面を削る側の影響が大きい。
                                     // しかも航行中であることは、経過時間が
                                     // 進んでいることと「航行終了」ボタンが
@@ -1655,25 +1606,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                             workoutPlan: workout.plan,
                                             workoutStatus: workout.status,
                                           ),
-                                        ),
-                                      ),
-                                    // 航路断面インジケータ。**計器カードの外側**へ
-                                    // 置く。カードは高さ上限つきのスクロール領域
-                                    // なので、中へ入れると小型端末で下端が
-                                    // 隠れて「いつもの場所」でなくなる。
-                                    //
-                                    // 画面下部へ置かないのは、地図が
-                                    // `rowingMapBearing` で回っていて画面の
-                                    // 下半分が進行方向にあたるため
-                                    // (`navigationSelfBoatScreenRatio` 参照)。
-                                    if (navigator.mode.value ==
-                                            NavMode.navigator &&
-                                        laneCrossSectionEnabled.value)
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: LaneCrossSectionStrip(
-                                          crossSection: laneCrossSection,
-                                          portrait: !isLandscape,
                                         ),
                                       ),
                                     // コーチモードの艇一覧パネル(同じく上部40%以内で内部スクロール)
@@ -2037,8 +1969,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                                       ));
                                                     },
                                                     onPressStartNav: (displayName,
-                                                        strokeRateEnabled,
-                                                        showLaneCrossSection) async {
+                                                        strokeRateEnabled) async {
                                                       try {
                                                         final user =
                                                             auth.currentUser;
@@ -2074,9 +2005,6 @@ class HomeMapScreen extends HookConsumerWidget {
                                                                     .bestForNavigation,
                                                             strokeRateEnabled:
                                                                 strokeRateEnabled);
-                                                        laneCrossSectionEnabled
-                                                                .value =
-                                                            showLaneCrossSection;
                                                         try {
                                                           await navigator
                                                               .startNavigation(
