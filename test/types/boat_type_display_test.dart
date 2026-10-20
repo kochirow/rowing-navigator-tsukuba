@@ -8,11 +8,17 @@ void main() {
     expect(boatTypeDisplayLabel('r_2x'), '2x');
     expect(boatTypeDisplayLabel('r_4x'), '4x');
     expect(boatTypeDisplayLabel('r_8p'), '8+');
+    expect(boatTypeDisplayLabel('r_2m'), '2-');
+    expect(boatTypeDisplayLabel('r_2p'), '2+');
+    expect(boatTypeDisplayLabel('r_4m'), '4-');
+    expect(boatTypeDisplayLabel('r_4p'), '4+');
   });
 
   test('列挙に無い古い名前は数字から推定し、推定できなければそのまま返す', () {
     expect(boatTypeDisplayLabel('8+'), '8+');
     expect(boatTypeDisplayLabel('1x'), '1x');
+    expect(boatTypeDisplayLabel('4+'), '4+');
+    expect(boatTypeDisplayLabel('2-'), '2-');
     expect(boatTypeDisplayLabel(''), '');
     expect(boatTypeDisplayLabel('カヌー'), 'カヌー');
   });
