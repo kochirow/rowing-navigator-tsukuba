@@ -17,6 +17,9 @@ class StaticObstacleService {
   static const minTemporaryRadiusMeters = 1.0;
   static const maxTemporaryRadiusMeters = 100.0;
   static const circlePointCount = 24;
+
+  /// 削除の印を付けてから、元に戻せる期間。Rules の7日と一致させる。
+  static const softDeleteRetention = Duration(days: 7);
   final StaticObstacleAPI staticObstacleRef;
 
   StaticObstacleService({String? teamId})
@@ -70,44 +73,90 @@ class StaticObstacleService {
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
     final List<StaticObstacle> obstacles = [];
+    final List<DeletedTemporaryObstacle> deleted = [];
     for (final doc in snapshot.docs) {
       // 1件の不正な危険区域データで全体の受信を止めない。
       try {
-        final obstacle = doc.data();
-        final rawPoints = obstacle['points'];
-        if (rawPoints is! List ||
-            rawPoints.length < 3 ||
-            rawPoints.length > maxTemporaryObstaclePoints) {
+        final data = doc.data();
+        final removed = parseDeletedTemporaryObstacle(doc.id, data);
+        if (removed != null) {
+          deleted.add(removed);
           continue;
         }
-        final points = (obstacle['points'] as List<dynamic>)
-            .whereType<GeoPoint>()
-            .map<LatLng>((point) => LatLng(point.latitude, point.longitude))
-            .toList();
-        if (points.length != rawPoints.length) continue;
-        final rawCenter = obstacle['center'];
-        final rawRadius = obstacle['radiusMeters'];
-        final center = rawCenter is GeoPoint
-            ? LatLng(rawCenter.latitude, rawCenter.longitude)
-            : null;
-        final radius = rawRadius is num && rawRadius.isFinite
-            ? rawRadius.toDouble()
-            : null;
-        obstacles.add(StaticObstacle(
-          id: doc.id,
-          name: obstacle['name'] as String?,
-          points: points,
-          kind: StaticObstacleKind.fromJson(obstacle['kind'] as String?),
-          warningAudioAsset: obstacle['warningAudio'] as String?,
-          isTemporary: true,
-          circleCenter: center,
-          circleRadiusMeters: radius,
-        ));
+        final obstacle = parseTemporaryObstacle(doc.id, data);
+        if (obstacle != null) obstacles.add(obstacle);
       } catch (e) {
         debugPrint('Invalid static obstacle ignored: ${doc.id} $e');
       }
     }
-    return {'obstacles': obstacles};
+    deleted.sort((a, b) =>
+        (b.deletedAt ?? DateTime(0)).compareTo(a.deletedAt ?? DateTime(0)));
+    return {'obstacles': obstacles, 'deleted': deleted};
+  }
+
+  /// 削除の印(`deletedAt`)が付いた文書かどうか。
+  static bool isSoftDeleted(Map<String, dynamic> data) =>
+      data.containsKey('deletedAt');
+
+  /// 有効な臨時危険区域を1件読む。削除済み・形が不正なら null。
+  ///
+  /// **削除の印が付いたものは警告にも地図にも出さない。** 印を付けた時点で
+  /// 従来の削除と同じ扱いになり、違いは「元に戻せる」ことだけである。
+  static StaticObstacle? parseTemporaryObstacle(
+    String id,
+    Map<String, dynamic> obstacle,
+  ) {
+    if (isSoftDeleted(obstacle)) return null;
+    final rawPoints = obstacle['points'];
+    if (rawPoints is! List ||
+        rawPoints.length < 3 ||
+        rawPoints.length > maxTemporaryObstaclePoints) {
+      return null;
+    }
+    final points = rawPoints
+        .whereType<GeoPoint>()
+        .map<LatLng>((point) => LatLng(point.latitude, point.longitude))
+        .toList();
+    if (points.length != rawPoints.length) return null;
+    final rawCenter = obstacle['center'];
+    final rawRadius = obstacle['radiusMeters'];
+    final center = rawCenter is GeoPoint
+        ? LatLng(rawCenter.latitude, rawCenter.longitude)
+        : null;
+    final radius =
+        rawRadius is num && rawRadius.isFinite ? rawRadius.toDouble() : null;
+    return StaticObstacle(
+      id: id,
+      name: obstacle['name'] as String?,
+      points: points,
+      kind: StaticObstacleKind.fromJson(obstacle['kind'] as String?),
+      warningAudioAsset: obstacle['warningAudio'] as String?,
+      isTemporary: true,
+      circleCenter: center,
+      circleRadiusMeters: radius,
+    );
+  }
+
+  /// 削除の印が付いた臨時危険区域を1件読む(元に戻す一覧用)。
+  static DeletedTemporaryObstacle? parseDeletedTemporaryObstacle(
+    String id,
+    Map<String, dynamic> data,
+  ) {
+    if (!isSoftDeleted(data)) return null;
+    final rawDeletedAt = data['deletedAt'];
+    final rawCenter = data['center'];
+    final rawRadius = data['radiusMeters'];
+    return DeletedTemporaryObstacle(
+      id: id,
+      name: data['name'] as String? ?? '臨時危険区域',
+      deletedAt: rawDeletedAt is Timestamp ? rawDeletedAt.toDate() : null,
+      deletedBy: data['deletedBy'] as String?,
+      center: rawCenter is GeoPoint
+          ? LatLng(rawCenter.latitude, rawCenter.longitude)
+          : null,
+      radiusMeters:
+          rawRadius is num && rawRadius.isFinite ? rawRadius.toDouble() : null,
+    );
   }
 
   Future<void> addStaticObstacle(StaticObstacle obstacle) async {
@@ -202,10 +251,47 @@ class StaticObstacleService {
     });
   }
 
+  /// 削除する。文書は消さず「削除済み」の印を付ける。
+  ///
+  /// 1人の誤操作・悪意でチーム全艇の警告が消えても、誰でも元に戻せるように
+  /// する。印の付いた区域は警告にも地図にも出さない(従来の削除と同じ)。
+  /// 印から [softDeleteRetention] を過ぎたものは [purgeExpiredDeleted] で消える。
   Future<void> deleteStaticObstacle(String obstacleId) async {
-    _requireUser();
-    await staticObstacleRef.collection.doc(obstacleId).delete();
+    final user = _requireUser();
+    await staticObstacleRef.collection.doc(obstacleId).update({
+      'deletedAt': FieldValue.serverTimestamp(),
+      'deletedBy': user.uid,
+    });
     debugPrint("Completed deleteStaticObstacle");
+  }
+
+  /// 削除の印を外して元に戻す。戻した人を更新者として残す。
+  Future<void> restoreTemporaryObstacle(String obstacleId) async {
+    final user = _requireUser();
+    await staticObstacleRef.collection.doc(obstacleId).update({
+      'deletedAt': FieldValue.delete(),
+      'deletedBy': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'confirmedAt': FieldValue.serverTimestamp(),
+      'updatedBy': user.uid,
+    });
+  }
+
+  /// 削除の印から保持期間を過ぎた文書を消す。失敗しても何もしない
+  /// (同期上限100件を圧迫しないための掃除であり、安全機能ではない)。
+  Future<void> purgeExpiredDeleted({DateTime? now}) async {
+    try {
+      final cutoff = (now ?? DateTime.now()).subtract(softDeleteRetention);
+      final snapshot = await staticObstacleRef.collection
+          .where('deletedAt', isLessThan: Timestamp.fromDate(cutoff))
+          .limit(20)
+          .get();
+      for (final document in snapshot.docs) {
+        await document.reference.delete();
+      }
+    } catch (error) {
+      debugPrint('Expired deleted obstacle purge skipped: $error');
+    }
   }
 
   User _requireUser() {
@@ -227,4 +313,23 @@ class StaticObstacleService {
       throw ArgumentError('Invalid temporary circle');
     }
   }
+}
+
+/// 削除の印が付いた臨時危険区域(元に戻す一覧に出す)。
+class DeletedTemporaryObstacle {
+  final String id;
+  final String name;
+  final DateTime? deletedAt;
+  final String? deletedBy;
+  final LatLng? center;
+  final double? radiusMeters;
+
+  const DeletedTemporaryObstacle({
+    required this.id,
+    required this.name,
+    this.deletedAt,
+    this.deletedBy,
+    this.center,
+    this.radiusMeters,
+  });
 }

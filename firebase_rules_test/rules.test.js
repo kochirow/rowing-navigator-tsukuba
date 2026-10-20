@@ -10,6 +10,7 @@ const {
   Timestamp,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -619,6 +620,78 @@ async function run() {
       await assertSucceeds(
         deleteDoc(doc(u1.firestore(), "teams", teamA, "temporary_obstacles", "shared")),
       );
+    });
+
+    await check("hazard deletion is a recoverable mark, and only old marks can be purged", async () => {
+      const path = ["teams", teamA, "temporary_obstacles", "recoverable"];
+      await assertSucceeds(setDoc(doc(u1.firestore(), ...path), temporaryHazard("u1")));
+      // 新規作成で削除済みの印は付けられない。
+      await assertFails(setDoc(doc(u2.firestore(), "teams", teamA, "temporary_obstacles", "born-deleted"), {
+        ...temporaryHazard("u2"),
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      // 他人の区域を本当に消すことはできない(旧版アプリの削除はここで止まる)。
+      await assertFails(deleteDoc(doc(u2.firestore(), ...path)));
+      // 削除の印を付けるのはチーム全員ができる。印の主は自分でなければならない。
+      await assertFails(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u1",
+      }));
+      await assertFails(updateDoc(doc(b1.firestore(), "teams", teamA, "temporary_obstacles", "recoverable"), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "b1",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      // 二重に印を付けて削除者を書き換えることはできない。
+      await assertFails(updateDoc(doc(u1.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u1",
+      }));
+      // 印が付いて間もないものは、作成者・管理者以外は本当に消せない。
+      await assertFails(deleteDoc(doc(u2.firestore(), ...path)));
+      // チーム全員が元に戻せる。
+      await assertFails(updateDoc(doc(b1.firestore(), "teams", teamA, "temporary_obstacles", "recoverable"), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "b1",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "u2",
+      }));
+      // アカウント削除時に自分の削除記録を匿名化できる。
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedBy: "deleted-account",
+      }));
+      // 7日を過ぎた印は誰でも掃除できる。
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), "teams", teamA, "temporary_obstacles", "stale-mark"), {
+          ...temporaryHazard("u1"),
+          createdAt: Timestamp.now(),
+          confirmedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          deletedAt: Timestamp.fromMillis(Date.now() - 8 * 24 * 60 * 60 * 1000),
+          deletedBy: "u1",
+        });
+      });
+      await assertSucceeds(
+        deleteDoc(doc(u2.firestore(), "teams", teamA, "temporary_obstacles", "stale-mark")),
+      );
+      // 作成者は自分の区域を消せる(アカウント削除で使う)。
+      await assertSucceeds(deleteDoc(doc(u1.firestore(), ...path)));
     });
 
     await check("invite codes cannot be listed but exact-code join is atomic", async () => {
