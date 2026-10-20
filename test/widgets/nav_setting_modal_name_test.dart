@@ -19,7 +19,7 @@ void main() {
           theme: buildAppTheme(),
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (name, _, __) async => started.add(name),
+              onPressStartNav: (name, _) async => started.add(name),
             ),
           ),
         ),

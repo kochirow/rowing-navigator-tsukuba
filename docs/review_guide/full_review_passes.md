@@ -21,7 +21,7 @@
 | P01 | `lib/utils/` 全12ファイル + `bounded_position_set` + `geo_service` | 1,400 | E |
 | P02 | 掃引と索引: `continuous_collision_service`, `static_obstacle_index`, `ship_domain_service`, `swept_outline_service`, `metric_polygon_buffer` | 1,200 | E |
 | P03 | 測位: `gps_position_filter`, `gps_health_monitor`, `robust_position_estimator`, `conservative_position_estimator` / `_solution`, `estimator_clock`, `fix_ingress_policy`, `fix_batch_collector`, `position_integrity_monitor`, `motion_state_detector`, `models/fix_envelope` | 1,900 | E, B, G |
-| P04 | 予測と航路: `channel_centerline`, `channel_path_predictor`, `channel_lane_resolver`, `channel_cross_section`, `models/channel_lane` | 900 | E, C |
+| P04 | 予測と航路: `channel_centerline`, `channel_path_predictor`, `channel_lane_resolver`, `models/channel_lane` | 900 | E, C |
 
 ## 第2段: 安全の中核
 

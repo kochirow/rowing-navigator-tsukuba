@@ -465,7 +465,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, strokeRateEnabled, _) async {
+              onPressStartNav: (displayName, strokeRateEnabled) async {
                 submittedName = displayName;
                 submittedStrokeRate = strokeRateEnabled;
               },
@@ -494,7 +494,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: Scaffold(
-            body: NavSettingModal(onPressStartNav: (_, __, ___) async {}),
+            body: NavSettingModal(onPressStartNav: (_, __) async {}),
           ),
         ),
       ),
@@ -526,7 +526,7 @@ void main() {
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
                   builder: (_) =>
-                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
+                      NavSettingModal(onPressStartNav: (_, __) async {}),
                 ),
                 child: const Text('航行スタート'),
               ),
@@ -576,7 +576,7 @@ void main() {
                     maxHeight: MediaQuery.sizeOf(context).height * 0.8,
                   ),
                   builder: (_) =>
-                      NavSettingModal(onPressStartNav: (_, __, ___) async {}),
+                      NavSettingModal(onPressStartNav: (_, __) async {}),
                 ),
                 child: const Text('開く'),
               ),
@@ -613,7 +613,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __, ___) async {},
+              onPressStartNav: (_, __) async {},
               onPressTestAudio: () async {
                 tapped = true;
               },
@@ -639,7 +639,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (displayName, _, __) async {
+              onPressStartNav: (displayName, _) async {
                 submittedName = displayName;
               },
             ),
@@ -674,7 +674,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, strokeRateEnabled, __) async {
+              onPressStartNav: (_, strokeRateEnabled) async {
                 submittedStrokeRateEnabled = strokeRateEnabled;
               },
             ),
@@ -707,7 +707,7 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: NavSettingModal(
-              onPressStartNav: (_, __, ___) {
+              onPressStartNav: (_, __) {
                 startCount += 1;
                 return startCompleter.future;
               },

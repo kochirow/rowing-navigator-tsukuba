@@ -33,7 +33,7 @@ void main() {
             body: NavSettingModal(
               preparedWorkout: prepared,
               onWorkoutChanged: onWorkoutChanged,
-              onPressStartNav: (_, __, ___) async => onStart?.call(),
+              onPressStartNav: (_, __) async => onStart?.call(),
             ),
           ),
         ),
