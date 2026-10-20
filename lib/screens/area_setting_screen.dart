@@ -18,6 +18,7 @@ import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../services/static_obstacle_service.dart';
 import '../types/map_editor_mode.dart';
+import '../widgets/report_launcher.dart';
 import '../widgets/rounded_icon_button.dart';
 import '../widgets/app_state_views.dart';
 import '../theme/app_theme.dart';
@@ -485,6 +486,15 @@ class AreaSettingScreen extends HookConsumerWidget {
                       onRadiusChanged: mapEditor.updateDraftRadius,
                       onSave: saveSelection,
                       onDelete: deleteSelection,
+                      onReport: () {
+                        final selected = mapEditor.selectedObstacle.value;
+                        if (selected == null) return;
+                        openReportForm(
+                          context,
+                          subject: '臨時危険区域「${selected.name ?? '名称なし'}」'
+                              '(ID: ${selected.id})',
+                        );
+                      },
                       onCancel: mapEditor.clearSelection,
                     ),
                   ),
@@ -595,6 +605,7 @@ class _TemporaryEditor extends StatelessWidget {
   final ValueChanged<double> onRadiusChanged;
   final VoidCallback onSave;
   final VoidCallback onDelete;
+  final VoidCallback onReport;
   final VoidCallback onCancel;
 
   const _TemporaryEditor({
@@ -603,6 +614,7 @@ class _TemporaryEditor extends StatelessWidget {
     required this.onRadiusChanged,
     required this.onSave,
     required this.onDelete,
+    required this.onReport,
     required this.onCancel,
   });
 
@@ -620,6 +632,14 @@ class _TemporaryEditor extends StatelessWidget {
               onChanged: saving ? null : onRadiusChanged,
             ),
             const Text('赤いマーカーをドラッグすると中心を移動できます。'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onReport,
+                icon: const Icon(Icons.flag_outlined, size: 18),
+                label: const Text('不適切な区域を通報'),
+              ),
+            ),
             _EditorButtons(
               saving: saving,
               onSave: onSave,
