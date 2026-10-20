@@ -75,11 +75,14 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-  # FlutterFire's Swift Package manifests cannot resolve paths containing
-  # Japanese characters in this checkout. Keep iOS plugin integration on the
-  # existing CocoaPods path until the upstream Swift Package issue is fixed.
+  # iOS plugins are integrated through Swift Package Manager. Firebase iOS SDK
+  # stopped publishing to CocoaPods in October 2026 (12.19.0 was the last),
+  # so SwiftPM is the only route for future SDK updates.
+  # google_maps_flutter_ios does not support SwiftPM yet, so the iOS build
+  # mixes SwiftPM (Firebase etc.) and CocoaPods (Google Maps).
+  # See docs/ios_build.md for the build procedure.
   config:
-    enable-swift-package-manager: false
+    enable-swift-package-manager: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
