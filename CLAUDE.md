@@ -89,6 +89,16 @@ flutter run
 
 起動には Firebase 設定と Google Maps API キーが必要(README参照)。
 
+> **配布ビルドには必ず Git SHA を入れる。** 実機ログの `gitCommitSha` が
+> `unknown` だと、どのコードの挙動か確定できない(2026-09-26 に実際に起きた)。
+> - Android: `zsh tool/flutter_with_provenance.sh build apk --release`(appbundle も同様)。
+>   `flutter build` を直接呼ぶと release は Gradle が止める。
+> - iOS: Xcode の Archive でもよい。Runner の Run Script が
+>   `tool/xcode_provenance_env.sh` で SHA を自動で足す。
+>
+> Firebase Rules の Emulator テスト(`firebase_rules_test/`)は CI の
+> `firebase-rules` ジョブで毎回走る。
+
 ## アーキテクチャ
 
 レイヤー: Presentation(screens/features) → Hooks(hooks/) → Services(services/) → API(api/) → Models(models/)
