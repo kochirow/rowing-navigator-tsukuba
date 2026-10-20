@@ -26,6 +26,10 @@ class UncaughtErrorRecord {
   /// 前回の起動で記録され、今回の起動で読み出したもの。
   final bool previousRun;
 
+  /// この記録の前に、同じ例外を記録せずに数えた回数
+  /// ([UncaughtErrorJournal.repeatWindow] の間引き)。
+  final int suppressedRepeats;
+
   const UncaughtErrorRecord({
     required this.at,
     required this.source,
@@ -33,6 +37,7 @@ class UncaughtErrorRecord {
     required this.message,
     this.stackTop,
     this.previousRun = false,
+    this.suppressedRepeats = 0,
   });
 
   factory UncaughtErrorRecord.capture(
@@ -57,7 +62,21 @@ class UncaughtErrorRecord {
         message: message,
         stackTop: stackTop,
         previousRun: true,
+        suppressedRepeats: suppressedRepeats,
       );
+
+  UncaughtErrorRecord withSuppressedRepeats(int count) => UncaughtErrorRecord(
+        at: at,
+        source: source,
+        errorType: errorType,
+        message: message,
+        stackTop: stackTop,
+        previousRun: previousRun,
+        suppressedRepeats: count,
+      );
+
+  /// 同じ例外かどうかを見分けるキー(発生元・型・文面)。
+  String get repeatKey => '$source|$errorType|$message';
 
   Map<String, dynamic> toJson() => {
         'at': at.toUtc().toIso8601String(),
@@ -65,6 +84,7 @@ class UncaughtErrorRecord {
         'errorType': errorType,
         'message': message,
         if (stackTop != null) 'stackTop': stackTop,
+        if (suppressedRepeats > 0) 'suppressedRepeats': suppressedRepeats,
       };
 
   Map<String, dynamic> toDiagnosticDetails() => {
@@ -87,12 +107,14 @@ class UncaughtErrorRecord {
         return null;
       }
       final stackTop = json['stackTop'];
+      final suppressed = json['suppressedRepeats'];
       return UncaughtErrorRecord(
         at: at,
         source: source,
         errorType: errorType,
         message: message,
         stackTop: stackTop is String ? stackTop : null,
+        suppressedRepeats: suppressed is int && suppressed > 0 ? suppressed : 0,
       );
     } catch (_) {
       return null;
@@ -137,7 +159,19 @@ class UncaughtErrorJournal {
   final int maxPersisted;
   final Future<File?> Function() _fileProvider;
 
+  /// 同じ例外を記録し直すまでの間隔。
+  ///
+  /// 描画のたびに同じ例外が起きると、1件ごとにファイルの書き直しと診断ログへの
+  /// 追記が走り、診断ログの上限(maxSessionDiagnosticEvents)を食い潰して
+  /// 警告・測位の記録まで欠けさせる。診断ログの書き込み自体が例外を出すと
+  /// 記録→例外が繰り返す。同じ例外は間隔ごとに1件だけ残し、間の回数は数える。
+  static const repeatWindow = Duration(seconds: 60);
+
+  /// 間引きのために覚えておく例外の種類の上限。
+  static const maxTrackedRepeatKeys = 100;
+
   final ListQueue<UncaughtErrorRecord> _unreported = ListQueue();
+  final Map<String, ({DateTime lastRecordedAt, int suppressed})> _repeats = {};
   final StreamController<void> _changes = StreamController<void>.broadcast();
   Future<void> _persistQueue = Future.value();
   int _droppedCount = 0;
@@ -155,10 +189,37 @@ class UncaughtErrorJournal {
   int get droppedCount => _droppedCount;
 
   /// 例外を1件記録する。同期的に戻り、ファイル書き込みは裏で直列に行う。
-  void record(Object error, StackTrace? stackTrace, {required String source}) {
+  void record(
+    Object error,
+    StackTrace? stackTrace, {
+    required String source,
+    DateTime? at,
+  }) {
     try {
-      final entry =
-          UncaughtErrorRecord.capture(error, stackTrace, source: source);
+      var entry = UncaughtErrorRecord.capture(
+        error,
+        stackTrace,
+        source: source,
+        at: at,
+      );
+      final key = entry.repeatKey;
+      final previous = _repeats[key];
+      if (previous != null &&
+          entry.at.difference(previous.lastRecordedAt) < repeatWindow) {
+        _repeats[key] = (
+          lastRecordedAt: previous.lastRecordedAt,
+          suppressed: previous.suppressed + 1,
+        );
+        return;
+      }
+      if (previous != null && previous.suppressed > 0) {
+        entry = entry.withSuppressedRepeats(previous.suppressed);
+      }
+      _repeats.remove(key);
+      _repeats[key] = (lastRecordedAt: entry.at, suppressed: 0);
+      while (_repeats.length > maxTrackedRepeatKeys) {
+        _repeats.remove(_repeats.keys.first);
+      }
       _enqueue(entry);
       _persistQueue = _persistQueue.then((_) => _append(entry));
     } catch (_) {

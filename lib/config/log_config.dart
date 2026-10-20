@@ -305,7 +305,8 @@ const diagnosticEventCatalog = <String, dynamic>{
     'position_sharing_unavailable': '初期設定、連続送信失敗、ACK無通知のいずれかで位置共有不能と判定した。',
     'safety_contract_violation': '安全パイプラインの不変条件が満たされなかった。',
     'uncaught_error': 'どこにも捕まえられなかった例外(Flutterフレームワーク内・非同期の未処理)。'
-        '例外の型・先頭300文字・スタック先頭8行だけを端末内に残す。',
+        '例外の型・先頭300文字・スタック先頭8行だけを端末内に残す。'
+        '同じ例外は60秒に1件だけ記録し、間の回数を suppressedRepeats に入れる。',
     'uncaught_error_previous_run': '前回の起動中に記録された未捕捉例外を、今回の航行開始時に書き出したもの。'
         'バックグラウンドで落ちた・航行外で起きた例外の手がかり。',
     'safety_pipeline_error': '位置から警告を計算する安全パイプラインが例外で失敗した。',
