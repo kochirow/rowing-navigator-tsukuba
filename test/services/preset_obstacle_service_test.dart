@@ -1,21 +1,55 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/fixed_obstacle_calibration.dart';
+import 'package:rowing_navigator/models/managed_hazard_model.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/fixed_obstacle_calibration_service.dart';
+import 'package:rowing_navigator/services/managed_hazard_service.dart';
 import 'package:rowing_navigator/services/preset_obstacle_service.dart';
 import 'package:rowing_navigator/services/shared_safety_calibration_service.dart';
 import 'package:rowing_navigator/models/shared_safety_calibration.dart';
 import 'package:rowing_navigator/utils/metric_polygon_buffer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 電波の弱い艇庫を模す: サーバー取得が返ってこない。
+class _HangingManagedHazardService extends ManagedHazardService {
+  var fetchCalls = 0;
+
+  @override
+  Future<ManagedHazardState?> fetchLatest() {
+    fetchCalls += 1;
+    return Completer<ManagedHazardState?>().future;
+  }
+
+  @override
+  Future<ManagedHazardState?> loadCached() async => null;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  test('固定流木のサーバー取得が返らなくても、上限時間で同梱形状に縮退して読み込む', () async {
+    // 不変条件5: 通信が欠けても航行開始を止めない(待たせ続けない)。
+    final managed = _HangingManagedHazardService();
+    final service = PresetObstacleService(
+      managedHazardService: managed,
+      managedHazardRefreshTimeout: const Duration(milliseconds: 50),
+    );
+    final obstacles = await service
+        .loadPresets(refreshManagedHazards: true)
+        .timeout(const Duration(seconds: 10));
+    expect(managed.fetchCalls, 1);
+    expect(
+      obstacles.where((o) => o.kind == StaticObstacleKind.driftwood),
+      isNotEmpty,
+    );
   });
 
   test('旧アプリの固定区域と案内・テスト区域を読み込む', () async {

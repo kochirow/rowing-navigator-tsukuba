@@ -10,6 +10,7 @@ const {
   Timestamp,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -621,6 +622,78 @@ async function run() {
       );
     });
 
+    await check("hazard deletion is a recoverable mark, and only old marks can be purged", async () => {
+      const path = ["teams", teamA, "temporary_obstacles", "recoverable"];
+      await assertSucceeds(setDoc(doc(u1.firestore(), ...path), temporaryHazard("u1")));
+      // 新規作成で削除済みの印は付けられない。
+      await assertFails(setDoc(doc(u2.firestore(), "teams", teamA, "temporary_obstacles", "born-deleted"), {
+        ...temporaryHazard("u2"),
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      // 他人の区域を本当に消すことはできない(旧版アプリの削除はここで止まる)。
+      await assertFails(deleteDoc(doc(u2.firestore(), ...path)));
+      // 削除の印を付けるのはチーム全員ができる。印の主は自分でなければならない。
+      await assertFails(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u1",
+      }));
+      await assertFails(updateDoc(doc(b1.firestore(), "teams", teamA, "temporary_obstacles", "recoverable"), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "b1",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      // 二重に印を付けて削除者を書き換えることはできない。
+      await assertFails(updateDoc(doc(u1.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u1",
+      }));
+      // 印が付いて間もないものは、作成者・管理者以外は本当に消せない。
+      await assertFails(deleteDoc(doc(u2.firestore(), ...path)));
+      // チーム全員が元に戻せる。
+      await assertFails(updateDoc(doc(b1.firestore(), "teams", teamA, "temporary_obstacles", "recoverable"), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "b1",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "u2",
+      }));
+      // アカウント削除時に自分の削除記録を匿名化できる。
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...path), {
+        deletedBy: "deleted-account",
+      }));
+      // 7日を過ぎた印は誰でも掃除できる。
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), "teams", teamA, "temporary_obstacles", "stale-mark"), {
+          ...temporaryHazard("u1"),
+          createdAt: Timestamp.now(),
+          confirmedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          deletedAt: Timestamp.fromMillis(Date.now() - 8 * 24 * 60 * 60 * 1000),
+          deletedBy: "u1",
+        });
+      });
+      await assertSucceeds(
+        deleteDoc(doc(u2.firestore(), "teams", teamA, "temporary_obstacles", "stale-mark")),
+      );
+      // 作成者は自分の区域を消せる(アカウント削除で使う)。
+      await assertSucceeds(deleteDoc(doc(u1.firestore(), ...path)));
+    });
+
     await check("invite codes cannot be listed but exact-code join is atomic", async () => {
       await assertFails(getDocs(collection(u3.firestore(), "invite_codes")));
       await assertSucceeds(getDoc(doc(u3.firestore(), "invite_codes", inviteA)));
@@ -1226,6 +1299,112 @@ async function run() {
           throw new Error("Firestore owner was not anonymized");
         }
       });
+    });
+
+    await check("an administrator hands over the team and a member takes over an abandoned one", async () => {
+      const teamC = "team-c";
+      const inviteC = "HJKMNPQRSTUV";
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const firestore = context.firestore();
+        const database = context.database();
+        const now = Timestamp.now();
+        await setDoc(doc(firestore, "teams", teamC), {
+          name: teamC,
+          inviteCode: inviteC,
+          createdBy: "c1",
+          adminUid: "c1",
+          createdAt: now,
+        });
+        await setDoc(doc(firestore, "invite_codes", inviteC), {
+          teamId: teamC,
+          createdBy: "c1",
+          createdAt: now,
+        });
+        for (const uid of ["c1", "c2", "c3"]) {
+          await setDoc(doc(firestore, "users", uid), {
+            teamId: teamC,
+            joinedAt: now,
+            termsVersion,
+            termsAcceptedAt: now,
+          });
+          await setDoc(doc(firestore, "teams", teamC, "members", uid), {
+            inviteCode: inviteC,
+            joinedAt: now,
+            termsVersion,
+            termsAcceptedAt: now,
+          });
+          await set(ref(database, `team_users/${uid}`), {teamId: teamC, inviteCode: inviteC});
+          await set(ref(database, `team_members/${teamC}/${uid}`), {joinedAt: Date.now()});
+        }
+        await set(ref(database, `team_meta/${teamC}`), {
+          inviteCode: inviteC,
+          ownerUid: "c1",
+          createdAt: Date.now(),
+        });
+        await set(ref(database, `team_invites/${inviteC}`), {
+          teamId: teamC,
+          ownerUid: "c1",
+          createdAt: Date.now(),
+        });
+      });
+      const c1 = testEnv.authenticatedContext("c1");
+      const c2 = testEnv.authenticatedContext("c2");
+      const c3 = testEnv.authenticatedContext("c3");
+
+      // メンバーは管理者がいるうちは奪えない。
+      await assertFails(updateDoc(doc(c2.firestore(), "teams", teamC), {adminUid: "c2"}));
+      await assertFails(update(ref(c2.database()), {
+        [`team_meta/${teamC}/ownerUid`]: "c2",
+        [`team_invites/${inviteC}/ownerUid`]: "c2",
+      }));
+      // メンバーでない相手・別チームの人へは移せない。
+      await assertFails(updateDoc(doc(c1.firestore(), "teams", teamC), {adminUid: "b1"}));
+      await assertFails(update(ref(c1.database()), {
+        [`team_meta/${teamC}/ownerUid`]: "b1",
+      }));
+      // 交代と同時に招待コードを変えることはできない(別操作)。
+      await assertFails(updateDoc(doc(c1.firestore(), "teams", teamC), {
+        adminUid: "c2",
+        inviteCode: "ZYXWVUTSRQPN",
+      }));
+
+      // 管理者が現メンバーへ交代する(RTDB → Firestore の順)。
+      await assertSucceeds(update(ref(c1.database()), {
+        [`team_meta/${teamC}/ownerUid`]: "c2",
+        [`team_invites/${inviteC}/ownerUid`]: "c2",
+      }));
+      await assertSucceeds(updateDoc(doc(c1.firestore(), "teams", teamC), {adminUid: "c2"}));
+      // 元の管理者はもう管理操作できない。
+      await assertFails(updateDoc(doc(c1.firestore(), "teams", teamC), {adminUid: "c1"}));
+
+      // 新しい管理者は招待コードを更新できる(古い招待の削除を含む)。
+      const nextInviteC = "WXYZ23456789";
+      await assertSucceeds(update(ref(c2.database()), {
+        [`team_meta/${teamC}/inviteCode`]: nextInviteC,
+        [`team_invites/${inviteC}`]: null,
+        [`team_invites/${nextInviteC}`]: {
+          teamId: teamC,
+          ownerUid: "c2",
+          createdAt: Date.now(),
+        },
+      }));
+
+      // 管理者が退出(メンバーでなくなる)したら、残ったメンバーが引き継げる。
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await deleteDoc(doc(context.firestore(), "teams", teamC, "members", "c2"));
+        await deleteDoc(doc(context.firestore(), "users", "c2"));
+        await set(ref(context.database(), `team_members/${teamC}/c2`), null);
+        await set(ref(context.database(), `team_users/c2`), null);
+      });
+      await assertSucceeds(update(ref(c3.database()), {
+        [`team_meta/${teamC}/ownerUid`]: "c3",
+        [`team_invites/${nextInviteC}/ownerUid`]: "c3",
+      }));
+      await assertSucceeds(updateDoc(doc(c3.firestore(), "teams", teamC), {adminUid: "c3"}));
+      // 引き継いだ後は、他のメンバーが奪えない。
+      await assertFails(updateDoc(doc(c1.firestore(), "teams", teamC), {adminUid: "c1"}));
+      // 別チームの人は引き継げない。
+      await assertFails(updateDoc(doc(b1.firestore(), "teams", teamC), {adminUid: "b1"}));
     });
 
     process.stdout.write(`1..${checks}\n`);

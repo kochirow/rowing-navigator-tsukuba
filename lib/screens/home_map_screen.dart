@@ -73,6 +73,7 @@ import 'device_status_screen.dart';
 import 'fixed_obstacle_calibration_screen.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
+import 'first_run_guide_screen.dart';
 import 'usage_guide_screen.dart';
 import 'team_screen.dart';
 
@@ -721,7 +722,7 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.help_outline,
           title: '使い方',
-          subtitle: '警告の3段階・地図の色・警告音の試聴',
+          subtitle: '航行・監視・地図と警告音・故障かな？と思ったら',
           section: device,
           onTap: () {
             Navigator.push(
@@ -808,6 +809,14 @@ class HomeMapScreen extends HookConsumerWidget {
         cancelled = true;
       };
     }, [initAttempt.value]);
+
+    // 初めて使う端末にだけ、待機中に案内を1回出す(表示だけ。不変条件5)。
+    useFirstRunGuide(
+      context,
+      ready: !loading.value && phase == HomePhase.ashore,
+      primaryWarningLeadSeconds: navigator.primaryWarningLeadTimeSeconds.value,
+      advanceWarningLeadSeconds: navigator.warningTimeSeconds.value,
+    );
 
     // 地図の見え方設定を復元する。失敗しても既定(通常表示)で続行する。
     useEffect(() {

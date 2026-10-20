@@ -65,3 +65,33 @@ jobs:
       # 必ず明示的に実行する。実機ログ依存の比較は各テストでskipする。
       - name: Verify Stage 1 replay foundations
         run: flutter test test/replay/replay_estimator_smoke_test.dart test/replay/pair_metrics_test.dart test/replay/fault_injection_test.dart test/replay/metamorphic_test.dart test/replay/counterexample_reducer_test.dart
+
+  # Firebase Rules は位置共有・チーム所属・危険区域の権限そのものである。
+  # Rules を変えて壊しても Flutter のテストでは気づけないため、Emulator で
+  # 未認証拒否・別チーム拒否・レート制限・除名などの契約を毎回確認する。
+  # (本番への反映は別。CIが緑でも本番Rulesが同じとは限らない)
+  firebase-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: firebase_rules_test/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install rules test dependencies
+        run: npm ci --prefix firebase_rules_test
+
+      - name: Run Firebase Rules emulator tests
+        run: >
+          npx --yes firebase-tools@15.23.0 emulators:exec
+          --project demo-rowing-team-rules
+          --only database,firestore
+          'npm --prefix firebase_rules_test test'

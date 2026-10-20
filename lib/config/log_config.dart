@@ -78,7 +78,7 @@ const alertFlappingObservationWindow = Duration(seconds: 60);
 const alertFlappingReArmThreshold = 10;
 
 /// 診断イベントの意味と、ログから検証する仮説のカタログ版。
-const diagnosticCatalogVersion = 5;
+const diagnosticCatalogVersion = 6;
 
 /// ZIPに同梱する、AIがイベントを解釈するための最小限のデータ辞書。
 /// ログだけを別のAIへ渡しても、何を観測し、何が未観測なのかを判断できるようにする。
@@ -304,6 +304,10 @@ const diagnosticEventCatalog = <String, dynamic>{
     'position_sharing_setup_retry_failed': '位置共有開始設定の再試行が失敗した。',
     'position_sharing_unavailable': '初期設定、連続送信失敗、ACK無通知のいずれかで位置共有不能と判定した。',
     'safety_contract_violation': '安全パイプラインの不変条件が満たされなかった。',
+    'uncaught_error': 'どこにも捕まえられなかった例外(Flutterフレームワーク内・非同期の未処理)。'
+        '例外の型・先頭300文字・スタック先頭8行だけを端末内に残す。',
+    'uncaught_error_previous_run': '前回の起動中に記録された未捕捉例外を、今回の航行開始時に書き出したもの。'
+        'バックグラウンドで落ちた・航行外で起きた例外の手がかり。',
     'safety_pipeline_error': '位置から警告を計算する安全パイプラインが例外で失敗した。',
     'safety_pipeline_recovered': '安全パイプラインが失敗状態から正常評価へ回復した。',
     'alert_phase_flapping': '同一alertIdの clearing→alerting 往復が単位時間あたりの上限を超えた。'
