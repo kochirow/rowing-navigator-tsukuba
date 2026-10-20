@@ -2017,6 +2017,10 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 builder: (BuildContext
                                                     sheetContext) {
                                                   return NavSettingModal(
+                                                    preparedWorkout:
+                                                        workout.prepared,
+                                                    onWorkoutChanged:
+                                                        workout.prepare,
                                                     onPressTestAudio: () async {
                                                       final ok = await navigator
                                                           .testAudio();
