@@ -13,6 +13,7 @@ import '../../../models/workout_plan.dart';
 import '../../../providers/nav_config_providers.dart';
 import '../../../screens/workout_setup_screen.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/account_display_name_service.dart';
 import '../../../services/navigation_defaults_service.dart';
 import '../../../types/boat_type.dart';
 
@@ -100,6 +101,7 @@ class NavSettingModal extends HookConsumerWidget {
     final laneCrossSectionEnabled = useState(false);
     final isStarting = useState(false);
     final defaultsService = useMemoized(NavigationDefaultsService.new);
+    final accountNameService = useMemoized(AccountDisplayNameService.new);
     // 前回設定を復元できたかどうか。復元できたときだけ、スクロールなしで
     // 開始できる近道を先頭に出す。
     final restoredSummary = useState<String?>(null);
@@ -126,29 +128,43 @@ class NavSettingModal extends HookConsumerWidget {
 
     useEffect(() {
       var disposed = false;
-      unawaited(
-        defaultsService.load().then((defaults) {
-          if (disposed || defaults == null || !context.mounted) return;
-          final boatConfig = boatConfigs.byBoatType(defaults.boatType);
-          final seats = boatConfig.seatPosList;
-          var seat = seats.first;
-          for (final candidate in seats) {
-            if (candidate.position == defaults.seatPosition) {
-              seat = candidate;
-              break;
-            }
-          }
-          nameController.text = defaults.displayName;
-          strokeRateEnabled.value = defaults.strokeRateEnabled;
-          laneCrossSectionEnabled.value = defaults.laneCrossSectionEnabled;
-          ref.read(boatTypeProvider.notifier).state = defaults.boatType;
-          ref.read(seatPositionProvider.notifier).state = seat;
-          restoredSummary.value =
-              '${defaults.displayName}・${boatConfig.label}・${seat.label}';
-        }).catchError((Object error) {
+      Future<void> restore() async {
+        // 名前は毎回アカウントの名前から始める。この航行だけ別の名前に
+        // したいときは書き換えればよく、書き換えた名前は次へ持ち越さない。
+        String? accountName;
+        try {
+          accountName = await accountNameService.load();
+        } catch (error) {
+          debugPrint('Failed to load account display name: $error');
+        }
+        NavigationDefaults? defaults;
+        try {
+          defaults = await defaultsService.load();
+        } catch (error) {
           debugPrint('Failed to restore navigation defaults: $error');
-        }),
-      );
+        }
+        if (disposed || !context.mounted) return;
+        final name = accountName ?? defaults?.displayName;
+        if (name != null) nameController.text = name;
+        if (defaults == null) return;
+        final boatConfig = boatConfigs.byBoatType(defaults.boatType);
+        final seats = boatConfig.seatPosList;
+        var seat = seats.first;
+        for (final candidate in seats) {
+          if (candidate.position == defaults.seatPosition) {
+            seat = candidate;
+            break;
+          }
+        }
+        strokeRateEnabled.value = defaults.strokeRateEnabled;
+        laneCrossSectionEnabled.value = defaults.laneCrossSectionEnabled;
+        ref.read(boatTypeProvider.notifier).state = defaults.boatType;
+        ref.read(seatPositionProvider.notifier).state = seat;
+        restoredSummary.value = '${name ?? defaults.displayName}・'
+            '${boatConfig.label}・${seat.label}';
+      }
+
+      unawaited(restore());
       return () => disposed = true;
     }, const []);
 
@@ -329,7 +345,11 @@ class NavSettingModal extends HookConsumerWidget {
                       ),
                       const SizedBox(height: 20),
                     ],
-                    _sectionTitle(context, '名前', '監視画面で表示する名前を入力してください'),
+                    _sectionTitle(
+                      context,
+                      '名前',
+                      'アカウントの名前が入っています。この航行だけ変えるときは書き換えてください',
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: nameController,
@@ -342,7 +362,7 @@ class NavSettingModal extends HookConsumerWidget {
                       decoration: InputDecoration(
                         labelText: '名前',
                         hintText: '例: 後藤',
-                        helperText: '航行中、監視端末と他の艇に共有されます。',
+                        helperText: '航行中、艇種と一緒に監視端末と他の艇へ共有されます。',
                         errorText: nameError.value,
                         border: const OutlineInputBorder(),
                         prefixIcon: const Icon(Icons.person),

@@ -146,6 +146,8 @@ flutter run
 | `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |
 | `lib/services/swept_outline_service.dart` | 予測掃引の外形(凸包)を1枚にまとめる(純Dart)。**表示専用で判定には使わない** |
 | `lib/services/static_obstacle_service.dart` | 臨時危険区域の CRUD(Firestore)。**削除は `deletedAt` の印を付け、外周(`points`)を空にするだけ**で、7日間は誰でも元に戻せる(中心と半径から外周を作り直す)。外周を空にするのは、削除の印を知らない旧版アプリにも読み飛ばさせるため。印の付いた区域は警告にも地図にも出さない |
+| `lib/services/account_display_name_service.dart` | アカウントの名前(同名可)。**端末内が正**で、メンバー情報(Firestore `members/{uid}.displayName`)へは写しを送るだけ。未登録なら `AccountNameGate`(`app_entry_gate.dart`)が地図の前に登録画面を出すが、判定は端末内だけで**通信を待たない**。送れなければ次の起動で送り直す。航行開始画面の名前欄は毎回この名前から始まり、書き換えはその航行だけ |
+| `lib/types/boat_type.dart` | 艇種(1x/2-/2x/2+/4-/4x/4+/8+)。**寸法・停止距離は `sizeClass`(人数)で共有**し、2+/4+ は cox がバウ側(シートだけ違う)。位置共有の `boatType` には区分を、本当の艇種は `boatClass` で送る(旧版は知らない名前を1xとして読むため)。ラベル「4+ 後藤」は `boatNameLabel` |
 | `lib/config/` | 全設定値(コメント付き)。調整はここ |
 
 **リアルタイムTTSは実装されていない。** 警告は事前生成の音声アセットのみ。

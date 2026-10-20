@@ -7,23 +7,30 @@ class BoatConfigs {
   final BoatConfig r_4x_;
   final BoatConfig r_8p_;
 
+  /// 大きさの区分が同じ艇種(2-/2+、4-/4+)。寸法・停止距離は区分の
+  /// 設定を共有し、表記とシートだけを持つ。
+  final Map<BoatType, BoatConfig> _variants;
+
   BoatConfig get r_1x => r_1x_;
   BoatConfig get r_2x => r_2x_;
   BoatConfig get r_4x => r_4x_;
   BoatConfig get r_8p => r_8p_;
 
-  List<BoatConfig> get allConfigs => [r_1x_, r_2x_, r_4x_, r_8p_];
+  /// 航行開始シートに並べる順。`BoatType` の宣言順と同じ。
+  List<BoatConfig> get allConfigs => BoatType.values.map(byBoatType).toList();
 
   // BoatTypeに従ってBoatConfigを取得
   BoatConfig byBoatType(BoatType type) {
-    switch (type) {
+    final variant = _variants[type];
+    if (variant != null) return variant;
+    switch (type.sizeClass) {
       case BoatType.r_1x:
         return r_1x_;
       case BoatType.r_2x:
         return r_2x_;
       case BoatType.r_4x:
         return r_4x_;
-      case BoatType.r_8p:
+      default:
         return r_8p_;
     }
   }
@@ -33,7 +40,34 @@ class BoatConfigs {
     required this.r_2x_,
     required this.r_4x_,
     required this.r_8p_,
-  });
+    required Map<BoatType, List<SeatPosition>> variantSeats,
+  }) : _variants = {
+          for (final entry in variantSeats.entries)
+            entry.key: _variantOf(
+              entry.key,
+              switch (entry.key.sizeClass) {
+                BoatType.r_2x => r_2x_,
+                BoatType.r_4x => r_4x_,
+                _ => throw ArgumentError.value(
+                    entry.key, 'variantSeats', '2人乗り・4人乗り以外は区分そのもの'),
+              },
+              entry.value,
+            ),
+        };
+
+  static BoatConfig _variantOf(
+    BoatType type,
+    BoatConfig base,
+    List<SeatPosition> seats,
+  ) =>
+      BoatConfig(
+        type: type,
+        label: type.displayLabel,
+        shipDomainParams: base.shipDomainParams,
+        displayHullWidthMeters: base.displayHullWidthMeters,
+        stoppingDistanceFormula: base.stoppingDistanceFormula,
+        seatPosList: seats,
+      );
 }
 
 class BoatConfig {
@@ -171,6 +205,34 @@ BoatConfigs boatConfigs = BoatConfigs(
       SeatPosition(label: 'bow', position: 1),
     ],
   ),
+  // 2-/2+/4-/4+ の寸法・停止距離は、漕手の人数が同じ区分(2x・4x)を使う。
+  // シートだけが違う。**2+ と 4+ の cox は必ずバウ側に乗る**
+  // (利用者確認 2026-10-20)。8+ の cox(艇尾)と取り違えないこと。
+  // position は船首側からの番号なので、cox が 1 になる。
+  variantSeats: {
+    BoatType.r_2m: [
+      SeatPosition(label: 'stroke', position: 2),
+      SeatPosition(label: 'bow', position: 1),
+    ],
+    BoatType.r_2p: [
+      SeatPosition(label: 'stroke', position: 3),
+      SeatPosition(label: 'bow', position: 2),
+      SeatPosition(label: 'cox', position: 1),
+    ],
+    BoatType.r_4m: [
+      SeatPosition(label: 'stroke', position: 4),
+      SeatPosition(label: '3', position: 3),
+      SeatPosition(label: '2', position: 2),
+      SeatPosition(label: 'bow', position: 1),
+    ],
+    BoatType.r_4p: [
+      SeatPosition(label: 'stroke', position: 5),
+      SeatPosition(label: '3', position: 4),
+      SeatPosition(label: '2', position: 3),
+      SeatPosition(label: 'bow', position: 2),
+      SeatPosition(label: 'cox', position: 1),
+    ],
+  },
 );
 
 const seatSpan = 1.4; // 座席間距離

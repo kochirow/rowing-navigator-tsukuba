@@ -51,10 +51,28 @@ void main() {
     return (decorations.first.border! as Border).top.color;
   }
 
+  testWidgets('監視一覧は艇種と名前を並べて表示する', (tester) async {
+    final four = Boat(
+      boatId: 'boat-5678',
+      displayName: '後藤',
+      boatType: BoatType.r_4p,
+      lat: 36.0,
+      lng: 140.0,
+      heading: 180,
+      speed: 2.5,
+      timestamp: DateTime.utc(2026, 7, 20),
+    );
+    await pumpPanel(tester, [BoatStatus(boat: four, ageSec: 2)]);
+
+    expect(find.text('4+ 後藤'), findsOneWidget);
+    // 同じ名前の人がいてもよいので、IDも残す。
+    expect(find.text('ID boat'), findsOneWidget);
+  });
+
   testWidgets('監視一覧に名前を表示する', (tester) async {
     await pumpPanel(tester, [BoatStatus(boat: makeBoat(), ageSec: 2)]);
 
-    expect(find.text('後藤'), findsOneWidget);
+    expect(find.text('1x 後藤'), findsOneWidget);
     expect(find.textContaining('boat'), findsOneWidget);
   });
 
@@ -119,7 +137,7 @@ void main() {
         expect(find.textContaining(anomaly.label), findsOneWidget);
         expect(find.textContaining('分前から'), findsOneWidget);
         expect(find.text('95秒前'), findsOneWidget);
-        expect(find.text('後藤'), findsOneWidget);
+        expect(find.text('1x 後藤'), findsOneWidget);
         expect(find.text('80%'), findsOneWidget);
       });
     }

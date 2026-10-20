@@ -49,7 +49,16 @@ class TeamMembership {
   final RowingTeam team;
   final String userId;
 
-  const TeamMembership({required this.team, required this.userId});
+  /// メンバー情報(Firestore)に登録されている自分の名前。
+  /// 未登録・端末内キャッシュからの復元では null。正は端末内の名前
+  /// (`AccountDisplayNameService`)で、これは取り込みと送り直しの判定に使う。
+  final String? displayName;
+
+  const TeamMembership({
+    required this.team,
+    required this.userId,
+    this.displayName,
+  });
 
   String get teamId => team.id;
   String get inviteCode => team.inviteCode;
@@ -62,16 +71,30 @@ class TeamMemberSummary {
   final String userId;
   final DateTime? joinedAt;
 
-  const TeamMemberSummary({required this.userId, this.joinedAt});
+  /// 本人が登録した名前。この機能より前に参加し、まだ新しい版を起動して
+  /// いないメンバーは null。同じ名前の人がいてもよいので、識別には [shortId] を併記する。
+  final String? displayName;
+
+  const TeamMemberSummary({
+    required this.userId,
+    this.joinedAt,
+    this.displayName,
+  });
 
   factory TeamMemberSummary.fromFirestore(
     String userId,
     Map<String, dynamic> data,
-  ) =>
-      TeamMemberSummary(
-        userId: userId,
-        joinedAt: (data['joinedAt'] as Timestamp?)?.toDate(),
-      );
+  ) {
+    final name = data['displayName'];
+    return TeamMemberSummary(
+      userId: userId,
+      joinedAt: (data['joinedAt'] as Timestamp?)?.toDate(),
+      displayName: name is String && name.trim().isNotEmpty ? name : null,
+    );
+  }
 
   String get shortId => userId.length <= 8 ? userId : userId.substring(0, 8);
+
+  /// 管理画面の表示名。名前が無ければ「名前未登録」。
+  String get displayLabel => displayName ?? '名前未登録';
 }
