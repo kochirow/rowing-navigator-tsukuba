@@ -115,6 +115,10 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            // Flutter の Gradle プラグインも proguard-rules.pro を拾うが、
+            // Firebase の keep ルールが確実に効くよう明示する。
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
         }
     }
 }
