@@ -17,7 +17,8 @@
   12.19.0 で止まる。
 - `google_maps_flutter_ios` 2.15.4 は SwiftPM 未対応なので、Google Maps だけ CocoaPods に残る。
   ビルド時に「The following plugins do not support Swift Package Manager」という警告が出るが、
-  これは想定どおり。対応版が出たら更新すれば `Podfile` / `Podfile.lock` / `Pods` は不要になる。
+  これは想定どおり。SwiftPM 対応の代替実装 `google_maps_flutter_ios_sdk10` へ替えれば
+  CocoaPods は不要になる。今後の改修点として [今後実装したい機能.md](今後実装したい機能.md) の FUT-002 に記録してある。
 - 2026-10-20 時点で SwiftPM が解決した版(`ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved`):
 
   | パッケージ | 版 |
