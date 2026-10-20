@@ -71,6 +71,7 @@ import '../services/safety_orchestrator.dart';
 import '../services/warning_presenter.dart';
 import '../services/safety_evaluation_liveness.dart';
 import '../services/safety_contract_monitor.dart';
+import '../services/uncaught_error_journal.dart';
 import '../services/position_integrity_monitor.dart';
 import '../services/send_policy.dart';
 import '../services/session_analyzer_service.dart';
@@ -455,6 +456,29 @@ UseNavigator useNavigator() {
       type: type,
       details: Map<String, dynamic>.from(details),
     ));
+  }
+
+  /// 捕まえていない例外を診断ログへ書く。航行していない間は溜めておき、
+  /// 次の航行開始時にまとめて書く(前回起動の分も含む)。
+  void flushUncaughtErrors() {
+    if (mode.value != NavMode.navigator || sessionStartedAt.value == null) {
+      return;
+    }
+    for (final record in appUncaughtErrorJournal.drainUnreported()) {
+      if (record.previousRun) {
+        appendDiagnosticEvent(SessionDiagnosticEvent(
+          t: record.at,
+          type: 'uncaught_error_previous_run',
+          details: record.toDiagnosticDetails(),
+        ));
+      } else {
+        appendDiagnosticEvent(SessionDiagnosticEvent(
+          t: record.at,
+          type: 'uncaught_error',
+          details: record.toDiagnosticDetails(),
+        ));
+      }
+    }
   }
 
   /// 航行開始処理中のFirebase工程を、セッション開始後に
@@ -4386,6 +4410,7 @@ UseNavigator useNavigator() {
         gpsHealth.value.snapshot(sessionStartedAt.value!),
         sessionStartedAt.value!,
       );
+      flushUncaughtErrors();
       recordGpsEnvironmentSnapshot('navigation_started', generation, details: {
         if (initialAccuracy != null && initialAccuracy.isFinite)
           'initialGpsAccuracyMeters': initialAccuracy,
@@ -5063,6 +5088,12 @@ UseNavigator useNavigator() {
       ));
     }
   }
+
+  useEffect(() {
+    final subscription =
+        appUncaughtErrorJournal.changes.listen((_) => flushUncaughtErrors());
+    return subscription.cancel;
+  }, const []);
 
   useEffect(() {
     WidgetsBinding.instance.addObserver(metricsObserver);
