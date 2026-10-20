@@ -90,7 +90,8 @@ void main() {
     final subject = journal(maxUnreported: 2);
     final longMessage = 'x' * 1000;
     for (var i = 0; i < 3; i++) {
-      subject.record(Exception(longMessage), null, source: 'flutter');
+      // 文面の違う例外(同じ文面は間引かれる)。
+      subject.record(Exception('$i$longMessage'), null, source: 'flutter');
     }
     await subject.flushForTest();
     final drained = subject.drainUnreported();
@@ -160,5 +161,58 @@ void main() {
     final next = journal();
     await next.loadPreviousRun();
     expect(next.drainUnreported(), isEmpty);
+  });
+
+  test('同じ例外は60秒に1件だけ記録し、間の回数を次の記録に添える', () async {
+    final subject = journal();
+    final start = DateTime.utc(2026, 10, 20, 9);
+    for (var i = 0; i < 120; i++) {
+      // 描画のたびに起きる例外を模す(0.5秒おき)。
+      subject.record(
+        StateError('every frame'),
+        null,
+        source: 'flutter',
+        at: start.add(Duration(milliseconds: 500 * i)),
+      );
+    }
+    var drained = subject.drainUnreported();
+    expect(drained, hasLength(1));
+    expect(drained.single.suppressedRepeats, 0);
+
+    subject.record(
+      StateError('every frame'),
+      null,
+      source: 'flutter',
+      at: start.add(const Duration(seconds: 61)),
+    );
+    drained = subject.drainUnreported();
+    expect(drained, hasLength(1));
+    expect(drained.single.suppressedRepeats, 119);
+    expect(drained.single.toDiagnosticDetails()['suppressedRepeats'], 119);
+    await subject.flushForTest();
+  });
+
+  test('違う例外は間引かない', () {
+    final subject = journal();
+    final at = DateTime.utc(2026, 10, 20, 9);
+    subject.record(StateError('a'), null, source: 'flutter', at: at);
+    subject.record(StateError('b'), null, source: 'flutter', at: at);
+    subject.record(StateError('a'), null, source: 'platform', at: at);
+    expect(subject.drainUnreported(), hasLength(3));
+  });
+
+  test('間引いた回数はファイル経由でも次の起動へ残る', () async {
+    final first = journal();
+    final at = DateTime.utc(2026, 10, 20, 9);
+    first.record(StateError('x'), null, source: 'flutter', at: at);
+    first.record(StateError('x'), null,
+        source: 'flutter', at: at.add(const Duration(seconds: 1)));
+    first.record(StateError('x'), null,
+        source: 'flutter', at: at.add(const Duration(seconds: 70)));
+    await first.flushForTest();
+    final second = journal();
+    await second.loadPreviousRun();
+    final drained = second.drainUnreported();
+    expect(drained.map((r) => r.suppressedRepeats), [0, 1]);
   });
 }

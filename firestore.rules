@@ -88,7 +88,16 @@ service cloud.firestore {
         && data.radiusMeters is number
         && data.radiusMeters >= 1
         && data.radiusMeters <= 100
-        && validCirclePoints(data.points)
+        // 削除の印が付いた区域は外周を空にしてよい。旧版アプリは外周が
+        // 3点未満の区域を読み飛ばすので、旧版の端末からも消える。
+        && (
+          validCirclePoints(data.points)
+          || (
+            data.keys().hasAny(['deletedAt'])
+            && data.points is list
+            && data.points.size() == 0
+          )
+        )
         && data.createdBy is string
         && data.source == 'user_confirmed'
         && data.createdAt is timestamp
@@ -829,9 +838,15 @@ service cloud.firestore {
             || (
               !resource.data.keys().hasAny(['deletedAt'])
               && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['deletedAt', 'deletedBy'])
+                .hasOnly(['deletedAt', 'deletedBy', 'points'])
               && request.resource.data.deletedAt == request.time
               && request.resource.data.deletedBy == request.auth.uid
+              // 外周を変えるなら、空にすることだけを許す。
+              && (
+                !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(['points'])
+                || request.resource.data.points.size() == 0
+              )
             )
             // 元に戻す。チーム全員に許可し、戻した人を更新者として残す。
             || (
@@ -840,7 +855,7 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
                   'deletedAt', 'deletedBy', 'updatedAt', 'updatedBy',
-                  'confirmedAt'
+                  'confirmedAt', 'points'
                 ])
               && request.resource.data.updatedAt == request.time
               && request.resource.data.confirmedAt == request.time

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -66,6 +67,25 @@ class AreaSettingScreen extends HookConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存できませんでした: $error')),
+      );
+    }
+
+    /// 削除・元に戻すの失敗。2人がほぼ同時に同じ区域を操作すると、後の人は
+    /// Rules に拒否される(すでに削除済み・すでに元に戻し済み)。生のエラーでは
+    /// 何が起きたか分からないので、状態が変わっていることを伝える。
+    void showHazardStateError(Object error, {required String failure}) {
+      if (!context.mounted) return;
+      final denied =
+          error is FirebaseException && error.code == 'permission-denied';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            denied
+                ? '$failure。ほかのメンバーがすでに操作したか、'
+                    'アプリが古い可能性があります。画面を開き直して確認してください。'
+                : '$failure: $error',
+          ),
+        ),
       );
     }
 
@@ -234,7 +254,7 @@ class AreaSettingScreen extends HookConsumerWidget {
           const SnackBar(content: Text('臨時危険区域を削除しました。')),
         );
       } catch (error) {
-        showError(error);
+        showHazardStateError(error, failure: '削除できませんでした');
       }
     }
 
@@ -270,7 +290,7 @@ class AreaSettingScreen extends HookConsumerWidget {
                             onPressed: () async {
                               if (!hasExistingTeamSession()) return;
                               try {
-                                await mapEditor.restoreDeleted(item.id);
+                                await mapEditor.restoreDeleted(item);
                                 if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -278,7 +298,8 @@ class AreaSettingScreen extends HookConsumerWidget {
                                   ),
                                 );
                               } catch (error) {
-                                showError(error);
+                                showHazardStateError(error,
+                                    failure: '元に戻せませんでした');
                               }
                             },
                             child: const Text('元に戻す'),

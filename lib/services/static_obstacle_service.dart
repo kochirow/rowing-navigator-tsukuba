@@ -261,14 +261,27 @@ class StaticObstacleService {
     await staticObstacleRef.collection.doc(obstacleId).update({
       'deletedAt': FieldValue.serverTimestamp(),
       'deletedBy': user.uid,
+      // 外周を空にする。旧版アプリは削除の印を知らないが、外周が3点未満の
+      // 区域は読み飛ばすので、旧版の端末でも警告・表示が消える。
+      // 元に戻すときは中心と半径から外周を作り直す(臨時危険区域は円だけ)。
+      'points': const <GeoPoint>[],
     });
     debugPrint("Completed deleteStaticObstacle");
   }
 
   /// 削除の印を外して元に戻す。戻した人を更新者として残す。
-  Future<void> restoreTemporaryObstacle(String obstacleId) async {
+  Future<void> restoreTemporaryObstacle(DeletedTemporaryObstacle item) async {
     final user = _requireUser();
-    await staticObstacleRef.collection.doc(obstacleId).update({
+    final center = item.center;
+    final radius = item.radiusMeters;
+    if (center == null || radius == null) {
+      throw StateError('この区域は中心または半径が読めないため、元に戻せません。');
+    }
+    _validateCircle(center, radius);
+    await staticObstacleRef.collection.doc(item.id).update({
+      'points': createCirclePoints(center, radius)
+          .map((point) => GeoPoint(point.latitude, point.longitude))
+          .toList(growable: false),
       'deletedAt': FieldValue.delete(),
       'deletedBy': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
