@@ -35,6 +35,23 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('固定流木のサーバー取得が返らなくても、上限時間で同梱形状に縮退して読み込む', () async {
+    // 不変条件5: 通信が欠けても航行開始を止めない(待たせ続けない)。
+    final managed = _HangingManagedHazardService();
+    final service = PresetObstacleService(
+      managedHazardService: managed,
+      managedHazardRefreshTimeout: const Duration(milliseconds: 50),
+    );
+    final obstacles = await service
+        .loadPresets(refreshManagedHazards: true)
+        .timeout(const Duration(seconds: 10));
+    expect(managed.fetchCalls, 1);
+    expect(
+      obstacles.where((o) => o.kind == StaticObstacleKind.driftwood),
+      isNotEmpty,
+    );
+  });
+
   test('旧アプリの固定区域と案内・テスト区域を読み込む', () async {
     final service = PresetObstacleService();
     final obstacles = await service.loadPresets();
@@ -496,21 +513,4 @@ double _pointToSegmentDistanceMeters(
   final nearestX = a.x + dx * projection;
   final nearestY = a.y + dy * projection;
   return sqrt(nearestX * nearestX + nearestY * nearestY);
-
-  test('固定流木のサーバー取得が返らなくても、上限時間で同梱形状に縮退して読み込む', () async {
-    // 不変条件5: 通信が欠けても航行開始を止めない(待たせ続けない)。
-    final managed = _HangingManagedHazardService();
-    final service = PresetObstacleService(
-      managedHazardService: managed,
-      managedHazardRefreshTimeout: const Duration(milliseconds: 50),
-    );
-    final obstacles = await service
-        .loadPresets(refreshManagedHazards: true)
-        .timeout(const Duration(seconds: 10));
-    expect(managed.fetchCalls, 1);
-    expect(
-      obstacles.where((o) => o.kind == StaticObstacleKind.driftwood),
-      isNotEmpty,
-    );
-  });
 }
