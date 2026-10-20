@@ -155,7 +155,7 @@ void main() {
     final manifest =
         jsonDecode(files['manifest.json']!) as Map<String, dynamic>;
     expect(manifest['diagnosticPackageSchemaVersion'], 5);
-    expect(manifest['diagnosticCatalogVersion'], 5);
+    expect(manifest['diagnosticCatalogVersion'], 6);
     expect(manifest['app'], containsPair('gitCommitSha', '0123456789abcdef'));
     expect(manifest['app'], containsPair('buildFlavor', 'production'));
     expect(
