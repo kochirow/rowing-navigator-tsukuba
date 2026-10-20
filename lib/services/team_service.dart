@@ -54,6 +54,13 @@ class CannotRemoveTeamAdministratorException implements Exception {
   String toString() => 'チーム管理者はこの画面から削除できません。';
 }
 
+class AdministratorStillPresentException implements Exception {
+  const AdministratorStillPresentException();
+
+  @override
+  String toString() => '管理者がまだチームにいるため、引き継げません。管理者に交代を依頼してください。';
+}
+
 class TeamManagementSyncException implements Exception {
   const TeamManagementSyncException();
 
@@ -545,6 +552,144 @@ class TeamService {
     return _changeInviteCode(memberUidToRemove: memberUid);
   }
 
+  /// 管理者が、現在のメンバーへ管理者を交代する。
+  ///
+  /// 管理者が1人だけで移せないと、機種変更・退部のあとに
+  /// メンバー除名も招待コード更新も誰にもできなくなる。
+  /// RTDBの持ち主を先に移し、次にFirestoreの管理者を移す。途中で
+  /// 失敗しても、同じ操作をやり直せば揃う(RTDB側は移し済みなら飛ばす)。
+  Future<TeamMembership> transferAdministrator(String newAdminUid) async {
+    final user = await _ensureUser();
+    final active = _activeMembership;
+    if (active == null) throw const TeamMembershipInconsistentException();
+    if (!active.isAdministrator) throw const NotTeamAdministratorException();
+    if (newAdminUid.isEmpty || newAdminUid == user.uid) {
+      throw ArgumentError.value(
+          newAdminUid, 'newAdminUid', 'must be another member');
+    }
+    try {
+      await _moveRtdbOwnership(
+        teamId: active.teamId,
+        inviteCode: active.inviteCode,
+        toUid: newAdminUid,
+      );
+    } on FirebaseException {
+      throw const TeamManagementSyncException();
+    }
+    final updatedTeam = await _setFirestoreAdministrator(
+      teamId: active.teamId,
+      expectedInviteCode: active.inviteCode,
+      toUid: newAdminUid,
+      requireCurrentAdmin: user.uid,
+    );
+    return _activate(TeamMembership(team: updatedTeam, userId: user.uid));
+  }
+
+  /// 管理者がチームを退出した・アカウントを削除したときに、
+  /// メンバーが管理者を引き継ぐ。管理者がまだメンバーなら Rules が拒否する。
+  Future<TeamMembership> claimAdministrator() async {
+    final user = await _ensureUser();
+    final active = _activeMembership;
+    if (active == null) throw const TeamMembershipInconsistentException();
+    if (active.isAdministrator) return active;
+    try {
+      await _moveRtdbOwnership(
+        teamId: active.teamId,
+        inviteCode: active.inviteCode,
+        toUid: user.uid,
+      );
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        throw const AdministratorStillPresentException();
+      }
+      throw const TeamManagementSyncException();
+    }
+    try {
+      final updatedTeam = await _setFirestoreAdministrator(
+        teamId: active.teamId,
+        expectedInviteCode: active.inviteCode,
+        toUid: user.uid,
+      );
+      return _activate(TeamMembership(team: updatedTeam, userId: user.uid));
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        throw const AdministratorStillPresentException();
+      }
+      rethrow;
+    }
+  }
+
+  /// 他の端末で管理者が替わったことを、チーム画面を開いたときに反映する。
+  /// 通信できなければ手元の所属のまま返す(画面を止めない)。
+  Future<TeamMembership?> refreshActiveTeam() async {
+    final active = _activeMembership;
+    if (active == null) return null;
+    try {
+      return await _loadAndActivate(
+        active.teamId,
+        active.userId,
+        allowOfflineBridge: true,
+      );
+    } catch (_) {
+      return active;
+    }
+  }
+
+  Future<void> _moveRtdbOwnership({
+    required String teamId,
+    required String inviteCode,
+    required String toUid,
+  }) async {
+    final results = await Future.wait([
+      _database.ref('team_meta/$teamId/ownerUid').get(),
+      _database.ref('team_invites/$inviteCode/ownerUid').get(),
+    ]);
+    final changes = <String, Object?>{};
+    if (results[0].value != toUid) {
+      changes['team_meta/$teamId/ownerUid'] = toUid;
+    }
+    if (results[1].exists && results[1].value != toUid) {
+      changes['team_invites/$inviteCode/ownerUid'] = toUid;
+    }
+    if (changes.isEmpty) return;
+    await _database.ref().update(changes);
+  }
+
+  Future<RowingTeam> _setFirestoreAdministrator({
+    required String teamId,
+    required String expectedInviteCode,
+    required String toUid,
+    String? requireCurrentAdmin,
+  }) {
+    final teamReference = _firestore.collection('teams').doc(teamId);
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(teamReference);
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        throw const TeamMembershipInconsistentException();
+      }
+      final team = RowingTeam.fromFirestore(teamId, data);
+      if (requireCurrentAdmin != null && team.adminUid != requireCurrentAdmin) {
+        throw const NotTeamAdministratorException();
+      }
+      if (team.inviteCode != expectedInviteCode) {
+        // 別端末の管理操作(コード更新)を見落とさない。
+        throw const TeamMembershipInconsistentException();
+      }
+      if (team.adminUid != toUid) {
+        transaction.update(teamReference, {'adminUid': toUid});
+      }
+      return RowingTeam(
+        id: team.id,
+        name: team.name,
+        inviteCode: team.inviteCode,
+        createdBy: team.createdBy,
+        adminUid: toUid,
+        createdAt: team.createdAt,
+      );
+    });
+  }
+
   Stream<List<TeamMemberSummary>> watchManagedTeamMembers() {
     final membership = _activeMembership;
     if (membership == null || !membership.isAdministrator) {
@@ -590,7 +735,9 @@ class TeamService {
       'team_users/${user.uid}': null,
       'team_members/$teamId/${user.uid}': null,
     };
-    if (active?.teamId == teamId && active?.team.createdBy == user.uid) {
+    // RTDBの持ち主は「現在の管理者」である(交代後は作成者と一致しない)。
+    // 持ち主でない人が書くと Rules に拒否され、削除全体が失敗する。
+    if (active?.teamId == teamId && active?.isAdministrator == true) {
       final inviteCode = active?.inviteCode;
       rtdbUpdates['team_meta/$teamId/ownerUid'] = _deletedAccountMarker;
       if (inviteCode != null && inviteCode.isNotEmpty) {
