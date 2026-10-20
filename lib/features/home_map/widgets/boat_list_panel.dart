@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../config/boat_config.dart';
 import '../../../theme/app_theme.dart';
 import '../../../hooks/use_coach_watch.dart';
 import '../../../widgets/app_state_views.dart';
@@ -48,7 +47,6 @@ class BoatListPanel extends StatelessWidget {
   Widget _row(BuildContext context, BoatStatus status) {
     final colors = context.colors;
     final boat = status.boat;
-    final label = boatConfigs.byBoatType(boat.boatType).label;
     final shortId =
         boat.boatId.length > 4 ? boat.boatId.substring(0, 4) : boat.boatId;
     final anomaly = status.anomaly;
@@ -107,7 +105,7 @@ class BoatListPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  boat.displayName,
+                  boat.label,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -116,7 +114,7 @@ class BoatListPanel extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '$label ($shortId)',
+                  'ID $shortId',
                   style: TextStyle(
                     fontSize: 12,
                     color: colors.textSecondary,
@@ -176,8 +174,7 @@ class BoatListPanel extends StatelessWidget {
               // 濡れた手でも押せるよう44pxを確保する。
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               tooltip: '1ストロークの艇速変化',
-              onPressed: () =>
-                  onShowStrokeTrace!(boat.boatId, boat.displayName),
+              onPressed: () => onShowStrokeTrace!(boat.boatId, boat.label),
             ),
         ],
       ),
@@ -190,7 +187,7 @@ class BoatListPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: Semantics(
           button: true,
-          label: '${boat.displayName}。タップで地図をこの艇へ寄せる',
+          label: '${boat.label}。タップで地図をこの艇へ寄せる',
           child: row,
         ),
       ),

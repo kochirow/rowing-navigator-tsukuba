@@ -211,7 +211,7 @@ class ObserverTrafficAwarenessEvaluator {
           outputs.add(ObserverPairAwareness(
             pairId: pairId,
             boatIds: [a.boatId, b.boatId],
-            displayNames: [a.displayName, b.displayName],
+            displayNames: [a.label, b.label],
             phase: next.phase,
             encounter: features.encounter,
             distanceMeters: features.distanceMeters,

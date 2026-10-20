@@ -33,7 +33,7 @@ class ObserverPriorityBanner extends StatelessWidget {
               color: const Color(0xFFC62828),
               icon: Icons.u_turn_left_rounded,
               label:
-                  '逆走：${_names(snapshot.reverseBoats.map((boat) => boat.displayName))}',
+                  '逆走：${_names(snapshot.reverseBoats.map((boat) => boat.label))}',
               onTap: onTapReverse,
             ),
           if (snapshot.reverseBoats.isNotEmpty && snapshot.groups.isNotEmpty)

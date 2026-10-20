@@ -1143,7 +1143,7 @@ class HomeMapScreen extends HookConsumerWidget {
             lat: boat.lat,
             lng: boat.lng,
             heading: boat.heading,
-            title: boat.displayName,
+            title: boat.label,
             snippet: "名前: ${boat.displayName}\n"
                 "艇種: ${boatConfigs.byBoatType(boat.boatType).label}\n"
                 "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
@@ -1151,7 +1151,7 @@ class HomeMapScreen extends HookConsumerWidget {
                 "${boat.battery != null ? '\n電池: ${boat.battery}%' : ''}",
             // 他艇は受信鮮度で既に絞られている。航行中だけ名称を隠すと、
             // 警告対象が誰かを確認できないため、表示対象はすべてラベルを出す。
-            nameLabel: boat.displayName,
+            nameLabel: boat.label, // 「4+ 後藤」
             // 監視モードだけ航跡と同じ識別色にする。航行中は色分けしない
             // (`BoatPalette.otherBoat` の説明を参照)。
             color: coachWatch.boatColors.value[boat.boatId],

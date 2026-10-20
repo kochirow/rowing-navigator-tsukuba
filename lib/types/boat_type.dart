@@ -37,6 +37,13 @@ String boatTypeDisplayLabel(String storedName) {
   return storedName;
 }
 
+/// 航行中の艇のラベル(「4+ 後藤」)。誰がどの艇で漕いでいるかを示す。
+///
+/// 地図の他艇ラベル・監視端末の艇一覧・注意バナーがすべてここを通り、
+/// 書き方をそろえる。表示専用で、衝突評価には使わない。
+String boatNameLabel(BoatType type, String displayName) =>
+    '${type.displayLabel} $displayName';
+
 /// 送受信した艇種名を [BoatType] にする。列挙に無ければ null。
 BoatType? tryParseBoatType(Object? value) {
   if (value is! String) return null;

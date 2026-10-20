@@ -28,4 +28,10 @@ void main() {
       expect(config.type.displayLabel, config.label);
     }
   });
+
+  test('航行中のラベルは艇種と名前を並べる', () {
+    expect(boatNameLabel(BoatType.r_4p, '後藤'), '4+ 後藤');
+    expect(boatNameLabel(BoatType.r_2m, '後藤'), '2- 後藤');
+    expect(boatNameLabel(BoatType.r_8p, '名前未設定'), '8+ 名前未設定');
+  });
 }
