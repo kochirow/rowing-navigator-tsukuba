@@ -97,6 +97,50 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
     }
   }
 
+  Future<void> _transferAdministrator(TeamMemberSummary member) async {
+    if (_isRotating || _removingUid != null) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('管理者を交代しますか？'),
+            content: Text(
+              'メンバーID ${member.shortId}… を管理者にします。'
+              '交代すると、あなたは招待コードの更新やメンバーの削除ができなくなります。'
+              '相手のチーム画面に表示される「あなたのメンバーID」と一致することを確認してください。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('キャンセル'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('交代する'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _removingUid = member.userId);
+    try {
+      await _teamService.transferAdministrator(member.userId);
+      if (!mounted) return;
+      widget.onMembershipChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('メンバー ${member.shortId}… を管理者にしました。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('管理者を交代できませんでした: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _removingUid = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final membership = TeamService.activeMembership;
@@ -117,7 +161,8 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '管理者は招待コードの更新と、メンバーの即時削除を行えます。削除時はコードも更新されます。',
+              '管理者は招待コードの更新と、メンバーの即時削除を行えます。削除時はコードも更新されます。'
+              '機種変更・引退の前には、メンバー右端のメニューから管理者を交代してください。',
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -170,18 +215,34 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
                               '参加日: ${member.joinedAt!.toLocal().toString().split(' ').first}'),
                       trailing: isSelf
                           ? null
-                          : TextButton(
-                              onPressed: _isRotating || _removingUid != null
-                                  ? null
-                                  : () => _removeMember(member),
-                              child: isRemoving
-                                  ? const SizedBox.square(
-                                      dimension: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    )
-                                  : const Text('外す'),
-                            ),
+                          : isRemoving
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : PopupMenuButton<_MemberAction>(
+                                  tooltip: 'メンバーの操作',
+                                  enabled: !_isRotating && _removingUid == null,
+                                  onSelected: (action) {
+                                    switch (action) {
+                                      case _MemberAction.makeAdministrator:
+                                        _transferAdministrator(member);
+                                      case _MemberAction.remove:
+                                        _removeMember(member);
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: _MemberAction.makeAdministrator,
+                                      child: Text('管理者にする'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _MemberAction.remove,
+                                      child: Text('チームから外す'),
+                                    ),
+                                  ],
+                                ),
                     );
                   }).toList(growable: false),
                 );
@@ -193,3 +254,5 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
     );
   }
 }
+
+enum _MemberAction { makeAdministrator, remove }

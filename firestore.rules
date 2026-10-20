@@ -77,7 +77,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'name', 'shape', 'kind', 'center', 'radiusMeters', 'points',
           'createdBy', 'source', 'createdAt', 'confirmedAt', 'updatedAt',
-          'updatedBy', 'expiresAt'
+          'updatedBy', 'expiresAt', 'deletedAt', 'deletedBy'
         ])
         && data.name is string
         && data.name.size() > 0
@@ -97,7 +97,11 @@ service cloud.firestore {
         && data.updatedBy is string
         // expiresAtを持つ旧アプリのデータも読取り・編集を継続可能にする。
         // 新アプリはこのフィールドを作らない。
-        && (!data.keys().hasAny(['expiresAt']) || data.expiresAt is timestamp);
+        && (!data.keys().hasAny(['expiresAt']) || data.expiresAt is timestamp)
+        // 削除は「削除済み」の印を付けるだけにする(元に戻せる)。
+        && (!data.keys().hasAny(['deletedAt']) || data.deletedAt is timestamp)
+        && (!data.keys().hasAny(['deletedBy']) || data.deletedBy is string)
+        && (data.keys().hasAny(['deletedAt']) == data.keys().hasAny(['deletedBy']));
     }
 
     function validManagedHazard(data) {
@@ -715,6 +719,31 @@ service cloud.firestore {
           && request.resource.data.createdBy == 'deleted-account'
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['createdBy'])
+        )
+        // 管理者の交代。管理者が1人だけで移せないと、機種変更・退部で
+        // メンバー除名も招待コード更新も誰にもできなくなる。
+        // 移す先は現在のメンバーに限り、招待コードなど他の項目は変えない。
+        || (
+          isTeamAdmin(teamId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['adminUid'])
+          && request.resource.data.adminUid is string
+          && request.resource.data.adminUid != request.auth.uid
+          && exists(memberPath(teamId, request.resource.data.adminUid))
+        )
+        // 管理者の引き継ぎ。管理者がチームを退出した・アカウントを削除した
+        // (=もうメンバーではない)ときだけ、メンバーの誰かが自分を管理者にできる。
+        || (
+          isTeamMember(teamId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['adminUid'])
+          && request.resource.data.adminUid == request.auth.uid
+          && !exists(memberPath(
+            teamId,
+            resource.data.keys().hasAny(['adminUid'])
+              ? resource.data.adminUid
+              : resource.data.createdBy
+          ))
         );
       allow delete: if false;
 
@@ -754,6 +783,7 @@ service cloud.firestore {
           && request.query.limit <= 100;
         allow create: if isTeamMember(teamId)
           && validTemporaryShape(request.resource.data)
+          && !request.resource.data.keys().hasAny(['deletedAt', 'deletedBy'])
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.updatedBy == request.auth.uid
           && request.resource.data.createdAt == request.time
@@ -768,28 +798,76 @@ service cloud.firestore {
               && request.resource.data.expiresAt <=
                 request.time + duration.value(1445, 'm')
             ));
+        // 形状の検証(24点)は重いので、各操作の分岐の外で1回だけ評価する
+        // (Rulesは1回の評価で1000式までしか数えない)。
         allow update: if isTeamMember(teamId)
           && validTemporaryShape(request.resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'shape', 'center', 'radiusMeters', 'points', 'confirmedAt',
-            'updatedAt', 'updatedBy'
-          ])
-          && request.resource.data.createdBy == resource.data.createdBy
-          && request.resource.data.createdAt == resource.data.createdAt
-          && (!resource.data.keys().hasAny(['expiresAt'])
-            || request.resource.data.expiresAt == resource.data.expiresAt)
-          && request.resource.data.source == resource.data.source
-          && request.resource.data.confirmedAt == request.time
-          && request.resource.data.updatedAt == request.time
           && (
-            request.resource.data.updatedBy == request.auth.uid
+            // 共有編集。
+            (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'shape', 'center', 'radiusMeters', 'points', 'confirmedAt',
+                'updatedAt', 'updatedBy'
+              ])
+              && request.resource.data.createdBy == resource.data.createdBy
+              && request.resource.data.createdAt == resource.data.createdAt
+              && (!resource.data.keys().hasAny(['expiresAt'])
+                || request.resource.data.expiresAt == resource.data.expiresAt)
+              && request.resource.data.source == resource.data.source
+              && request.resource.data.confirmedAt == request.time
+              && request.resource.data.updatedAt == request.time
+              && (
+                request.resource.data.updatedBy == request.auth.uid
+                || (
+                  resource.data.updatedBy == request.auth.uid
+                  && request.resource.data.updatedBy == 'deleted-account'
+                )
+              )
+            )
+            // 削除(印を付ける)。第一発見者がすぐ対応できるよう、チーム全員に許可。
+            // 1人の誤操作・悪意で全艇の警告が消えても、元に戻せるようにする。
             || (
-              resource.data.updatedBy == request.auth.uid
-              && request.resource.data.updatedBy == 'deleted-account'
+              !resource.data.keys().hasAny(['deletedAt'])
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['deletedAt', 'deletedBy'])
+              && request.resource.data.deletedAt == request.time
+              && request.resource.data.deletedBy == request.auth.uid
+            )
+            // 元に戻す。チーム全員に許可し、戻した人を更新者として残す。
+            || (
+              resource.data.keys().hasAny(['deletedAt'])
+              && !request.resource.data.keys().hasAny(['deletedAt', 'deletedBy'])
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly([
+                  'deletedAt', 'deletedBy', 'updatedAt', 'updatedBy',
+                  'confirmedAt'
+                ])
+              && request.resource.data.updatedAt == request.time
+              && request.resource.data.confirmedAt == request.time
+              && request.resource.data.updatedBy == request.auth.uid
+            )
+            // アカウント削除時、削除した人の記録を匿名化する。
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['deletedBy'])
+              && resource.data.deletedBy == request.auth.uid
+              && request.resource.data.deletedBy == 'deleted-account'
             )
           );
-        // 第一発見者がすぐ対応できるよう、チーム全員に許可。
-        allow delete: if isTeamMember(teamId);
+        // 本当に消す(元に戻せない)のは、次の場合だけにする。
+        // - 作成者自身(アカウント削除で自分の登録を消す)
+        // - 管理者
+        // - 削除の印から7日を過ぎたもの(誰でも掃除できる)
+        // 旧版アプリの「削除」は他人の区域では拒否され、区域は残る(安全側)。
+        allow delete: if isTeamMember(teamId)
+          && (
+            resource.data.createdBy == request.auth.uid
+            || isTeamAdmin(teamId)
+            || (
+              resource.data.keys().hasAny(['deletedAt'])
+              && resource.data.deletedAt < request.time - duration.value(7, 'd')
+            )
+          );
       }
 
       match /managed_hazards/fixed_driftwood_01 {

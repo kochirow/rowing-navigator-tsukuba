@@ -197,6 +197,14 @@ const navigationStopTotalBudget = Duration(seconds: 15);
 /// 端末設定/コード既定値へ縮退し、その出所を計器と診断に明示する。
 const sharedSafetyFetchTimeout = Duration(seconds: 3);
 
+/// 航行開始時に固定流木の共有形状をサーバーから取り直す待ち時間の上限。
+///
+/// Firestore の `get()` は、電波の弱い艇庫などで失敗を返すまで長く待つことが
+/// ある。これを待つと航行開始そのものが遅れる(不変条件5)。上限を超えたら
+/// 直前のキャッシュ、無ければ同梱形状で開始する。共有安全設定の取得
+/// ([sharedSafetyFetchTimeout])と同じ3秒にそろえる。
+const managedHazardRefreshTimeout = Duration(seconds: 3);
+
 // ---------------- 画面常時点灯 ----------------
 
 /// 航行中の常時点灯状態をOS復帰後にも再適用する保険の周期。

@@ -16,6 +16,7 @@ import '../models/managed_hazard_model.dart';
 import '../models/navigation_warning.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
+import '../services/static_obstacle_service.dart';
 import '../types/map_editor_mode.dart';
 import '../widgets/report_launcher.dart';
 import '../widgets/rounded_icon_button.dart';
@@ -25,6 +26,14 @@ import 'app_entry_gate.dart';
 import 'danger_zone_settings_screen.dart';
 
 const _sakuragawaFallbackCenter = LatLng(36.069, 140.208);
+
+String _deletedSubtitle(DeletedTemporaryObstacle item) {
+  final at = item.deletedAt?.toLocal();
+  if (at == null) return '削除済み';
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '削除: ${at.month}/${at.day} ${two(at.hour)}:${two(at.minute)}'
+      '${item.radiusMeters == null ? '' : '・半径${item.radiusMeters!.round()}m'}';
+}
 
 class AreaSettingScreen extends HookConsumerWidget {
   /// 航行中に開かれた場合の、進行中の警告。
@@ -197,7 +206,8 @@ class AreaSettingScreen extends HookConsumerWidget {
               title: const Text('臨時危険区域を削除しますか？'),
               content: const Text(
                 '地図上で選択中の赤い危険区域を、チームの共有地図から削除します。'
-                'この操作は取り消せません。',
+                '削除した区域は7日間、右上の「最近削除した区域」から'
+                'チームの誰でも元に戻せます。',
               ),
               actions: [
                 TextButton(
@@ -226,6 +236,59 @@ class AreaSettingScreen extends HookConsumerWidget {
       } catch (error) {
         showError(error);
       }
+    }
+
+    Future<void> showRecentlyDeleted() async {
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) =>
+            ValueListenableBuilder<List<DeletedTemporaryObstacle>>(
+          valueListenable: mapEditor.deletedTemporaryObstacles,
+          builder: (sheetContext, deleted, _) => SafeArea(
+            child: deleted.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
+                    child: Text('最近削除した臨時危険区域はありません。'),
+                  )
+                : ListView(
+                    shrinkWrap: true,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: Text(
+                          '削除から7日間は元に戻せます。戻すと、すぐにチーム全員の'
+                          '地図と警告に戻ります。',
+                        ),
+                      ),
+                      for (final item in deleted)
+                        ListTile(
+                          leading: const Icon(Icons.restore_from_trash),
+                          title: Text(item.name),
+                          subtitle: Text(_deletedSubtitle(item)),
+                          trailing: TextButton(
+                            onPressed: () async {
+                              if (!hasExistingTeamSession()) return;
+                              try {
+                                await mapEditor.restoreDeleted(item.id);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('「${item.name}」を元に戻しました。'),
+                                  ),
+                                );
+                              } catch (error) {
+                                showError(error);
+                              }
+                            },
+                            child: const Text('元に戻す'),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+      );
     }
 
     final warnings = navigationWarnings;
@@ -263,6 +326,18 @@ class AreaSettingScreen extends HookConsumerWidget {
                 ),
               ),
         actions: [
+          ValueListenableBuilder<List<DeletedTemporaryObstacle>>(
+            valueListenable: mapEditor.deletedTemporaryObstacles,
+            builder: (context, deleted, _) => IconButton(
+              tooltip: '最近削除した区域',
+              icon: Badge(
+                isLabelVisible: deleted.isNotEmpty,
+                label: Text('${deleted.length}'),
+                child: const Icon(Icons.restore_from_trash),
+              ),
+              onPressed: showRecentlyDeleted,
+            ),
+          ),
           IconButton(
             tooltip: '固定流木の最新状態を取得',
             icon: const Icon(Icons.sync),

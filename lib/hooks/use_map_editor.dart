@@ -21,6 +21,9 @@ UseMapEditor useMapEditor(
   final obstaclesSubscription = useRef<StreamSubscription?>(null);
   final defaultObstacles = useRef<List<StaticObstacle>>([]);
   final temporaryObstacles = useRef<List<StaticObstacle>>([]);
+  final deletedTemporaryObstacles = useState<List<DeletedTemporaryObstacle>>(
+    const [],
+  );
   final selectedObstacle = useState<StaticObstacle?>(null);
   final draftCenter = useState<LatLng?>(null);
   final draftRadiusMeters = useState<double>(
@@ -191,6 +194,17 @@ UseMapEditor useMapEditor(
     }
   }
 
+  /// 削除の印を外して元に戻す。戻った区域は購読で地図と警告へ戻る。
+  Future<void> restoreDeleted(String obstacleId) async {
+    if (saving.value) return;
+    saving.value = true;
+    try {
+      await env.restoreTemporaryObstacle(obstacleId);
+    } finally {
+      saving.value = false;
+    }
+  }
+
   reloadDefaultObstacles = ({
     bool refreshManagedHazards = false,
   }) async {
@@ -233,6 +247,8 @@ UseMapEditor useMapEditor(
         refreshManagedHazards: temporarySyncEnabled,
       );
       if (cancelled || !isMounted.value || !temporarySyncEnabled) return;
+      // 保持期間を過ぎた削除済みの区域を掃除する(失敗しても続ける)。
+      unawaited(env.purgeExpiredDeletedTemporaryObstacles());
 
       final previous = obstaclesSubscription.value;
       obstaclesSubscription.value = null;
@@ -248,6 +264,8 @@ UseMapEditor useMapEditor(
           if (cancelled || !isMounted.value) return;
           final temporary = List<StaticObstacle>.from(staticObs['obstacles']);
           temporaryObstacles.value = temporary;
+          deletedTemporaryObstacles.value =
+              List<DeletedTemporaryObstacle>.from(staticObs['deleted'] ?? []);
           obstacles.value = [...defaultObstacles.value, ...temporary];
         },
         onError: (Object error, StackTrace stackTrace) {
@@ -292,6 +310,8 @@ UseMapEditor useMapEditor(
     temporaryPreviewPoints: temporaryPreviewPoints,
     managedPreviewPoints: managedPreviewPoints,
     saving: saving,
+    deletedTemporaryObstacles: deletedTemporaryObstacles,
+    restoreDeleted: restoreDeleted,
     setMode: setMode,
     clearSelection: clearSelection,
     selectObstacle: selectObstacle,
@@ -317,6 +337,8 @@ class UseMapEditor {
   final ValueNotifier<List<LatLng>> temporaryPreviewPoints;
   final ValueNotifier<List<LatLng>> managedPreviewPoints;
   final ValueNotifier<bool> saving;
+  final ValueNotifier<List<DeletedTemporaryObstacle>> deletedTemporaryObstacles;
+  final Future<void> Function(String obstacleId) restoreDeleted;
   final void Function(MapEditorMode) setMode;
   final void Function() clearSelection;
   final void Function(StaticObstacle) selectObstacle;
@@ -341,6 +363,8 @@ class UseMapEditor {
     required this.temporaryPreviewPoints,
     required this.managedPreviewPoints,
     required this.saving,
+    required this.deletedTemporaryObstacles,
+    required this.restoreDeleted,
     required this.setMode,
     required this.clearSelection,
     required this.selectObstacle,

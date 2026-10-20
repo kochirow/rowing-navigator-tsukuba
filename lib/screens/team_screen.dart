@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
 import '../config/store_config.dart';
+import '../models/team_model.dart';
 import '../services/team_service.dart';
 import '../widgets/team_invite_share_button.dart';
 import '../widgets/team_administration_card.dart';
@@ -17,6 +18,59 @@ class TeamScreen extends StatefulWidget {
 }
 
 class _TeamScreenState extends State<TeamScreen> {
+  final TeamService _teamService = TeamService();
+  bool _isClaiming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 別の端末で管理者が交代していれば反映する。通信できなければ手元のまま。
+    _teamService.refreshActiveTeam().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _claimAdministrator() async {
+    if (_isClaiming) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('管理者を引き継ぎますか？'),
+            content: const Text(
+              '管理者がチームを退出した、またはアカウントを削除した場合だけ引き継げます。'
+              '管理者がまだチームにいる場合は、管理者に交代を依頼してください。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('キャンセル'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('引き継ぐ'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    setState(() => _isClaiming = true);
+    try {
+      await _teamService.claimAdministrator();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('このチームの管理者になりました。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isClaiming = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final membership = TeamService.activeMembership;
@@ -75,6 +129,13 @@ class _TeamScreenState extends State<TeamScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'この端末は次回以降も自動接続します。退出する場合は、この画面の下部から操作できます。',
+                    style: TextStyle(
+                        fontSize: 12, color: context.colors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'あなたのメンバーID: ${TeamMemberSummary(userId: membership.userId).shortId}'
+                    '${membership.isAdministrator ? '(管理者)' : ''}',
                     style: TextStyle(
                         fontSize: 12, color: context.colors.textSecondary),
                   ),
@@ -161,7 +222,7 @@ class _TeamScreenState extends State<TeamScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'チームメンバーは全員、臨時危険区域の追加・編集・削除と、共有固定危険区域の更新ができます。現場で安全を確認してから操作してください。問題のある利用や危険情報は、通報フォームから運営へ連絡できます。',
+                      'チームメンバーは全員、臨時危険区域の追加・編集・削除と、共有固定危険区域の更新ができます。削除した臨時危険区域は7日間、危険区域の画面から元に戻せます。現場で安全を確認してから操作してください。問題のある利用や危険情報は、通報フォームから運営へ連絡できます。',
                     ),
                   ),
                 ],
@@ -193,6 +254,24 @@ class _TeamScreenState extends State<TeamScreen> {
             TeamAdministrationCard(
               onMembershipChanged: () => setState(() {}),
             ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: const Text('管理者を引き継ぐ'),
+                subtitle: const Text(
+                  '管理者が退出・アカウント削除してチームに管理者がいないときに使います。',
+                ),
+                trailing: _isClaiming
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.chevron_right),
+                onTap: _isClaiming ? null : _claimAdministrator,
+              ),
+            ),
           ],
           const SizedBox(height: 12),
           const _LeaveTeamCard(),
@@ -217,9 +296,11 @@ class _LeaveTeamCardState extends State<_LeaveTeamCard> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('チームから退出しますか？'),
-        content: const Text(
+        content: Text(
           'この端末の現在地・艇情報の共有を停止して、チームの危険区域と位置情報は見られなくなります。\n\n'
-          'チームや他のメンバーのデータ、保存済みの練習記録は削除されません。再参加には招待コードが必要です。',
+          'チームや他のメンバーのデータ、保存済みの練習記録は削除されません。再参加には招待コードが必要です。'
+          '${TeamService.activeMembership?.isAdministrator == true ? '\n\nあなたは管理者です。退出の前に、チーム管理のメンバー一覧から管理者を交代してください。'
+              '交代せずに退出した場合は、残ったメンバーが「管理者を引き継ぐ」で引き継げます。' : ''}',
         ),
         actions: [
           TextButton(

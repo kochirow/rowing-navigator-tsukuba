@@ -71,6 +71,7 @@ import '../services/safety_orchestrator.dart';
 import '../services/warning_presenter.dart';
 import '../services/safety_evaluation_liveness.dart';
 import '../services/safety_contract_monitor.dart';
+import '../services/uncaught_error_journal.dart';
 import '../services/position_integrity_monitor.dart';
 import '../services/send_policy.dart';
 import '../services/session_analyzer_service.dart';
@@ -391,7 +392,7 @@ UseNavigator useNavigator() {
   final previousContractFixTimestamp = useRef<DateTime?>(null);
   final lastContractViolationAt = useRef<Map<String, Duration>>({});
   final positionIntegrityState = useRef(PositionIntegrityState.trusted);
-  final lastProtectionBudget = useRef<ProtectionBudget?>(null);
+  final lastStaleProtectionBudget = useRef<StaleProtectionBudgetSample?>(null);
   final diagnosticSequence = useRef(0);
   final diagnosticEventDroppedCount = useRef(0);
   final alertEventDroppedCount = useRef(0);
@@ -455,6 +456,29 @@ UseNavigator useNavigator() {
       type: type,
       details: Map<String, dynamic>.from(details),
     ));
+  }
+
+  /// 捕まえていない例外を診断ログへ書く。航行していない間は溜めておき、
+  /// 次の航行開始時にまとめて書く(前回起動の分も含む)。
+  void flushUncaughtErrors() {
+    if (mode.value != NavMode.navigator || sessionStartedAt.value == null) {
+      return;
+    }
+    for (final record in appUncaughtErrorJournal.drainUnreported()) {
+      if (record.previousRun) {
+        appendDiagnosticEvent(SessionDiagnosticEvent(
+          t: record.at,
+          type: 'uncaught_error_previous_run',
+          details: record.toDiagnosticDetails(),
+        ));
+      } else {
+        appendDiagnosticEvent(SessionDiagnosticEvent(
+          t: record.at,
+          type: 'uncaught_error',
+          details: record.toDiagnosticDetails(),
+        ));
+      }
+    }
   }
 
   /// 航行開始処理中のFirebase工程を、セッション開始後に
@@ -2385,11 +2409,19 @@ UseNavigator useNavigator() {
           protectionRadiusMeters: staleSolution?.safetySet.boundingRadiusMeters,
           integrityState: positionIntegrityState.value.name,
           budget: staleSolution?.budget,
-          previousBudget: lastProtectionBudget.value,
+          // 同じ測位から外挿した台帳どうしだけを比べる(測位時の台帳は
+          // 成分の作り方が違い、新しい測位では正当に縮む)。
+          previousBudget: comparablePreviousStaleBudget(
+            previous: lastStaleProtectionBudget.value,
+            currentSolutionTimestamp: staleSolution?.timestamp,
+          ),
         ),
       );
       if (staleSolution != null) {
-        lastProtectionBudget.value = staleSolution.budget;
+        lastStaleProtectionBudget.value = StaleProtectionBudgetSample(
+          solutionTimestamp: staleSolution.timestamp,
+          budget: staleSolution.budget,
+        );
       }
       for (final violation in contractViolations) {
         final lastAt = lastContractViolationAt.value[violation.contractId];
@@ -3233,7 +3265,6 @@ UseNavigator useNavigator() {
       budget: protectionBudget,
     ));
     previousContractFixTimestamp.value = rawPos.timestamp;
-    lastProtectionBudget.value = protectionBudget;
     for (final violation in contractViolations) {
       final lastAt = lastContractViolationAt.value[violation.contractId];
       if (lastAt == null ||
@@ -4159,7 +4190,7 @@ UseNavigator useNavigator() {
       previousContractFixTimestamp.value = null;
       lastContractViolationAt.value = {};
       positionIntegrityState.value = PositionIntegrityState.trusted;
-      lastProtectionBudget.value = null;
+      lastStaleProtectionBudget.value = null;
       estimatorClock.reset();
       lastDeadReckoningPredictionTick.value = null;
       previousEstimatedPosition.value = null;
@@ -4379,6 +4410,7 @@ UseNavigator useNavigator() {
         gpsHealth.value.snapshot(sessionStartedAt.value!),
         sessionStartedAt.value!,
       );
+      flushUncaughtErrors();
       recordGpsEnvironmentSnapshot('navigation_started', generation, details: {
         if (initialAccuracy != null && initialAccuracy.isFinite)
           'initialGpsAccuracyMeters': initialAccuracy,
@@ -5056,6 +5088,12 @@ UseNavigator useNavigator() {
       ));
     }
   }
+
+  useEffect(() {
+    final subscription =
+        appUncaughtErrorJournal.changes.listen((_) => flushUncaughtErrors());
+    return subscription.cancel;
+  }, const []);
 
   useEffect(() {
     WidgetsBinding.instance.addObserver(metricsObserver);

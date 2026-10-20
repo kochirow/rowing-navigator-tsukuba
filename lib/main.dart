@@ -12,9 +12,13 @@ import 'package:rowing_navigator/screens/app_entry_gate.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/widgets/app_state_views.dart';
 import 'package:rowing_navigator/services/safety_defaults_migration_service.dart';
+import 'package:rowing_navigator/services/uncaught_error_journal.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 捕まえていない例外を診断ログへ残す(記録を足すだけで挙動は変えない)。
+  installUncaughtErrorHandlers(appUncaughtErrorJournal);
+  unawaited(appUncaughtErrorJournal.loadPreviousRun());
   LicenseRegistry.addLicense(_appLicenses);
   // 移行の失敗・応答停止でアプリが開かなくならないようにする(原則1)。
   await SafetyDefaultsMigrationService().migrateOnStartup();

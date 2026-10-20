@@ -12,6 +12,7 @@ import 'session_store_service.dart';
 import 'practice_log_store_service.dart';
 import 'static_obstacle_service.dart';
 import 'team_service.dart';
+import 'uncaught_error_journal.dart';
 
 /// Firebase匿名アカウントと、端末内の関連データを削除する。
 ///
@@ -39,6 +40,7 @@ class AccountDataDeletionService {
       if (membership != null) {
         await _deleteAuthoredTemporaryObstacles(uid, membership.teamId);
         await _anonymizeTemporaryObstacleEdits(uid, membership.teamId);
+        await _anonymizeTemporaryObstacleDeletions(uid, membership.teamId);
         await _anonymizeManagedHazardEdit(uid, membership.teamId);
         await teamService.detachForAccountDeletion();
       }
@@ -48,6 +50,7 @@ class AccountDataDeletionService {
     await SessionStoreService().deleteAllSessions();
     await PracticeLogStoreService().deleteAllPracticeLogs();
     await _deleteTemporaryExports();
+    await appUncaughtErrorJournal.clearAll();
     final preferences = await SharedPreferences.getInstance();
     await preferences.clear();
   }
@@ -95,6 +98,25 @@ class AccountDataDeletionService {
           'updatedAt': FieldValue.serverTimestamp(),
           'updatedBy': deletedAccountMarker,
         });
+      }
+      await batch.commit();
+    }
+  }
+
+  /// 他人の区域に付けた削除の印から、自分のUIDを外す(印そのものは残す)。
+  Future<void> _anonymizeTemporaryObstacleDeletions(
+    String uid,
+    String teamId,
+  ) async {
+    while (true) {
+      final snapshot = await _temporaryObstacles(teamId)
+          .where('deletedBy', isEqualTo: uid)
+          .limit(FirebaseUsageBudget.maxTemporaryObstaclesPerSync)
+          .get();
+      if (snapshot.docs.isEmpty) return;
+      final batch = _firestore.batch();
+      for (final document in snapshot.docs) {
+        batch.update(document.reference, {'deletedBy': deletedAccountMarker});
       }
       await batch.commit();
     }

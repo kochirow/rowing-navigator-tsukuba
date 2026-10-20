@@ -175,3 +175,31 @@ class SafetyContractMonitor {
     return found;
   }
 }
+
+/// 1秒ウォッチドッグで観測した保護台帳。どの測位から外挿したかを持つ。
+class StaleProtectionBudgetSample {
+  final DateTime solutionTimestamp;
+  final ProtectionBudget budget;
+
+  const StaleProtectionBudgetSample({
+    required this.solutionTimestamp,
+    required this.budget,
+  });
+}
+
+/// 台帳の単調性(`BUDGET_MONOTONIC_*`)で比べてよい直前の台帳を返す。
+///
+/// 単調性は「同じ測位から外挿している間、保護集合が縮まない」という契約である。
+/// 新しい測位が届けば台帳は正当に作り直され、縮んでよい。また測位時の台帳
+/// (解分離を実測で入れる)と外挿台帳(解分離を持たない)は成分の作り方が違う。
+/// 2026-09-26 の実機ログでは、この2つを1つの変数で比べていたため
+/// `BUDGET_MONOTONIC_SEPARATION` が測位のたびに誤検出され、毎分記録されていた。
+/// 同じ測位から外挿した台帳どうしの場合だけ直前の台帳を返す。
+ProtectionBudget? comparablePreviousStaleBudget({
+  required StaleProtectionBudgetSample? previous,
+  required DateTime? currentSolutionTimestamp,
+}) {
+  if (previous == null || currentSolutionTimestamp == null) return null;
+  if (previous.solutionTimestamp != currentSolutionTimestamp) return null;
+  return previous.budget;
+}
