@@ -151,4 +151,14 @@ void main() {
       ['flutter', 'platform'],
     );
   });
+
+  test('アカウントとデータの削除で、未報告の記録とファイルを消す', () async {
+    final subject = journal();
+    subject.record(StateError('private'), null, source: 'flutter');
+    await subject.clearAll();
+    expect(subject.drainUnreported(), isEmpty);
+    final next = journal();
+    await next.loadPreviousRun();
+    expect(next.drainUnreported(), isEmpty);
+  });
 }

@@ -197,6 +197,14 @@ class UncaughtErrorJournal {
     return drained;
   }
 
+  /// アカウントとデータの削除用。未報告の記録とファイルをすべて消す。
+  Future<void> clearAll() {
+    _unreported.clear();
+    _droppedCount = 0;
+    _persistQueue = _persistQueue.then((_) => _clearFile());
+    return _persistQueue;
+  }
+
   /// テスト用: 裏で進んでいるファイル書き込みの完了を待つ。
   Future<void> flushForTest() => _persistQueue;
 
