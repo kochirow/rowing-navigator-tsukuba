@@ -65,6 +65,13 @@ CI の `flutter analyze` だけが落ちます。
 危険区域データ(`assets/data/sakuragawa_obstacles.json`)を編集した場合は、
 `tool/update_hazard_profile_hash.sh` を実行してチェックサムを更新してください。
 
+### iOS ビルドについて
+
+iOS は Firebase を Swift Package Manager で、Google Maps を CocoaPods で取り込む混在構成です。
+`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` を付けてビルドし、Xcode では `ios/Runner.xcworkspace` を開いてください。
+配布ビルドは英数字パスへ `git clone` した複製で作ります。Archive と TestFlight へのアップロードまでの手順は
+[docs/ios_build.md](docs/ios_build.md) にあります。
+
 ### サポートバージョン
 
 下記のバージョンで動作確認を行っています。
