@@ -715,6 +715,31 @@ service cloud.firestore {
           && request.resource.data.createdBy == 'deleted-account'
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['createdBy'])
+        )
+        // 管理者の交代。管理者が1人だけで移せないと、機種変更・退部で
+        // メンバー除名も招待コード更新も誰にもできなくなる。
+        // 移す先は現在のメンバーに限り、招待コードなど他の項目は変えない。
+        || (
+          isTeamAdmin(teamId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['adminUid'])
+          && request.resource.data.adminUid is string
+          && request.resource.data.adminUid != request.auth.uid
+          && exists(memberPath(teamId, request.resource.data.adminUid))
+        )
+        // 管理者の引き継ぎ。管理者がチームを退出した・アカウントを削除した
+        // (=もうメンバーではない)ときだけ、メンバーの誰かが自分を管理者にできる。
+        || (
+          isTeamMember(teamId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['adminUid'])
+          && request.resource.data.adminUid == request.auth.uid
+          && !exists(memberPath(
+            teamId,
+            resource.data.keys().hasAny(['adminUid'])
+              ? resource.data.adminUid
+              : resource.data.createdBy
+          ))
         );
       allow delete: if false;
 
