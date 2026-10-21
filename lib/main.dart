@@ -31,19 +31,11 @@ class FirebaseBootstrap extends StatefulWidget {
   final Future<void> Function()? activateAppCheck;
   final Widget? initializedChild;
 
-  /// 起動画面(標語)を最低限見せる時間。初回の起動だけに効かせ、再試行では待たない。
-  ///
-  /// 準備は1秒足らずで終わることが多く、待たないと標語が一瞬で消えて読めない。
-  /// 1.5秒は「安全・健康第一」を一度読み切れる長さ。これより延ばすと、
-  /// 航行中に落ちたアプリを開き直すときの空白が長くなる。
-  final Duration minimumSplashDuration;
-
   const FirebaseBootstrap({
     super.key,
     this.initialize,
     this.activateAppCheck,
     this.initializedChild,
-    this.minimumSplashDuration = const Duration(milliseconds: 1500),
   });
 
   @override
@@ -69,17 +61,7 @@ class _FirebaseBootstrapState extends State<FirebaseBootstrap> {
   @override
   void initState() {
     super.initState();
-    _initialization = _initializeShowingMotto();
-  }
-
-  Future<void> _initializeShowingMotto() async {
-    final minimumSplash = Future<void>.delayed(widget.minimumSplashDuration);
-    try {
-      await _initialize();
-    } finally {
-      // 失敗しても標語は見せ切ってからエラーへ進む(画面が一瞬で切り替わらない)。
-      await minimumSplash;
-    }
+    _initialization = _initialize();
   }
 
   Future<void> _initialize() async {
