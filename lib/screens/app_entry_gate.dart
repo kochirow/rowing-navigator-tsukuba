@@ -6,6 +6,7 @@ import '../models/team_model.dart';
 import '../services/account_display_name_service.dart';
 import '../services/team_service.dart';
 import '../widgets/app_state_views.dart';
+import '../widgets/startup_motto_view.dart';
 import 'display_name_registration_screen.dart';
 import 'home_map_screen.dart';
 import 'team_onboarding_screen.dart';
@@ -106,7 +107,7 @@ class _AppEntryGateState extends State<AppEntryGate> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            body: AppLoadingView(message: 'チーム情報を確認しています…'),
+            body: StartupMottoView(message: 'チーム情報を確認しています…'),
           );
         }
         if (snapshot.hasError) {
@@ -210,7 +211,7 @@ class _AccountNameGateState extends State<AccountNameGate> {
         final state = snapshot.data;
         if (state == null) {
           return const Scaffold(
-            body: AppLoadingView(message: '名前を確認しています…'),
+            body: StartupMottoView(message: '名前を確認しています…'),
           );
         }
         if (!state.registered && _name == null) {

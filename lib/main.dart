@@ -11,6 +11,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:rowing_navigator/screens/app_entry_gate.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/widgets/app_state_views.dart';
+import 'package:rowing_navigator/widgets/startup_motto_view.dart';
 import 'package:rowing_navigator/services/safety_defaults_migration_service.dart';
 import 'package:rowing_navigator/services/uncaught_error_journal.dart';
 
@@ -30,11 +31,19 @@ class FirebaseBootstrap extends StatefulWidget {
   final Future<void> Function()? activateAppCheck;
   final Widget? initializedChild;
 
+  /// 起動画面(標語)を最低限見せる時間。初回の起動だけに効かせ、再試行では待たない。
+  ///
+  /// 準備は1秒足らずで終わることが多く、待たないと標語が一瞬で消えて読めない。
+  /// 1.5秒は「安全・健康第一」を一度読み切れる長さ。これより延ばすと、
+  /// 航行中に落ちたアプリを開き直すときの空白が長くなる。
+  final Duration minimumSplashDuration;
+
   const FirebaseBootstrap({
     super.key,
     this.initialize,
     this.activateAppCheck,
     this.initializedChild,
+    this.minimumSplashDuration = const Duration(milliseconds: 1500),
   });
 
   @override
@@ -60,7 +69,17 @@ class _FirebaseBootstrapState extends State<FirebaseBootstrap> {
   @override
   void initState() {
     super.initState();
-    _initialization = _initialize();
+    _initialization = _initializeShowingMotto();
+  }
+
+  Future<void> _initializeShowingMotto() async {
+    final minimumSplash = Future<void>.delayed(widget.minimumSplashDuration);
+    try {
+      await _initialize();
+    } finally {
+      // 失敗しても標語は見せ切ってからエラーへ進む(画面が一瞬で切り替わらない)。
+      await minimumSplash;
+    }
   }
 
   Future<void> _initialize() async {
@@ -152,7 +171,7 @@ class _FirebaseBootstrapState extends State<FirebaseBootstrap> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            body: AppLoadingView(message: 'サービスを準備しています…'),
+            body: StartupMottoView(message: 'サービスを準備しています…'),
           );
         }
         if (snapshot.hasError) {
@@ -199,6 +218,12 @@ Stream<LicenseEntry> _appLicenses() async* {
     ['Rowing Navigator 警告音声'],
     '$voiceCredit\n\n警告の読み上げ音声は VOICEVOX(ずんだもん)で作成しています。',
   );
+  try {
+    final text = await rootBundle.loadString('assets/fonts/YujiBoku-OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Yuji Boku(標語の毛筆フォント)'], text);
+  } catch (error) {
+    debugPrint('Font license is unavailable: $error');
+  }
   for (final asset in const ['NOTICE', 'LICENSE']) {
     try {
       final text = await rootBundle.loadString(asset);
