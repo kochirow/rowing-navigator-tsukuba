@@ -63,6 +63,7 @@ import '../types/home_phase.dart';
 import '../types/marker_type.dart';
 import '../types/nav_mode.dart';
 import 'app_entry_gate.dart';
+import 'about_app_screen.dart';
 import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
 import 'device_status_screen.dart';
@@ -709,6 +710,20 @@ class HomeMapScreen extends HookConsumerWidget {
             );
           },
         ),
+        // 読み物なので、漕ぎながら開く場面のない航行中には出さない。
+        if (isObserver)
+          MapMenuAction(
+            icon: Icons.info_outline,
+            title: AboutAppScreen.title,
+            subtitle: '安全・健康第一 — このアプリを作った趣旨',
+            section: device,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutAppScreen()),
+              );
+            },
+          ),
         if (!kReleaseMode)
           MapMenuAction(
             icon: Icons.article_outlined,
