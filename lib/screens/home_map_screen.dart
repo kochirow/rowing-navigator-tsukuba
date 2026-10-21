@@ -1239,6 +1239,9 @@ class HomeMapScreen extends HookConsumerWidget {
     // なる岸の長方形が川の両側を一様に埋め、本当に避けたい流木や中州が
     // その中へ紛れる。バナーと同じ HazardPalette を参照し、
     // 「バナーは流木と言っているのに地図では岸と同じ色」を起こさない。
+    // テーマ色は build で読む。useEffect の本体は初回 build の途中で走り、
+    // そこで Theme.of を呼ぶと flutter_hooks の assert で落ちる(debug のみ)。
+    final hazardThemeColors = context.colors;
     useEffect(() {
       final newObstacles = <Polygon>{};
       for (final obstacle in navigator.obstacles.value) {
@@ -1254,14 +1257,14 @@ class HomeMapScreen extends HookConsumerWidget {
           strokeWidth: HazardPalette.strokeWidthOf(category),
           strokeColor: useNightMap
               ? HazardPalette.nightStrokeColorOf(category)
-              : HazardPalette.strokeColorOf(context, category),
+              : HazardPalette.strokeColorFrom(hazardThemeColors, category),
           fillColor: useNightMap
               ? HazardPalette.nightFillColorOf(
                   category,
                   isTemporary: obstacle.isTemporary,
                 )
-              : HazardPalette.fillColorOf(
-                  context,
+              : HazardPalette.fillColorFrom(
+                  hazardThemeColors,
                   category,
                   isTemporary: obstacle.isTemporary,
                 ),
@@ -1275,6 +1278,7 @@ class HomeMapScreen extends HookConsumerWidget {
       navigator.obstacles.value,
       navigator.warningTimeSeconds.value,
       useNightMap,
+      hazardThemeColors,
     ]);
 
     // ##########################

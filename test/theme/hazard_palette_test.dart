@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/theme/hazard_palette.dart';
@@ -90,5 +91,79 @@ void main() {
       (context) => HazardPalette.colorOf(context, 'unknown_kind'),
     );
     expect(color, isNotNull);
+  });
+
+  testWidgets('テーマ色を先に読む版は、従来の版と同じ色を返す', (tester) async {
+    // 地図の描画は useEffect の中で色を決めるため、build で読んだ AppColors を
+    // 渡す版(…From)を使う。見た目を変えない置き換えであることを保証する。
+    const categories = [
+      'shore',
+      'bridge',
+      'bridgePier',
+      'island',
+      'driftwood',
+      'pile',
+      'other_boat',
+      'curve',
+      'reverse',
+      'testZone',
+      'unknown_kind',
+    ];
+    await underTheme(tester, (context) {
+      final colors = context.colors;
+      for (final category in categories) {
+        expect(
+          HazardPalette.colorFrom(colors, category),
+          HazardPalette.colorOf(context, category),
+          reason: category,
+        );
+        expect(
+          HazardPalette.strokeColorFrom(colors, category),
+          HazardPalette.strokeColorOf(context, category),
+          reason: category,
+        );
+        for (final isTemporary in [false, true]) {
+          expect(
+            HazardPalette.fillColorFrom(
+              colors,
+              category,
+              isTemporary: isTemporary,
+            ),
+            HazardPalette.fillColorOf(
+              context,
+              category,
+              isTemporary: isTemporary,
+            ),
+            reason: '$category temporary=$isTemporary',
+          );
+        }
+      }
+      return null;
+    });
+  });
+
+  testWidgets('useEffect の中で使っても flutter_hooks の assert で落ちない', (tester) async {
+    // 2026-10-21: 地図画面が useEffect の中で HazardPalette.strokeColorOf
+    // (= Theme.of)を呼び、debug ビルドで赤いエラー画面になった。
+    // useEffect の本体は初回 build の途中(HookState.initHook)で走るため、
+    // そこでは継承ウィジェットを読めない。build で読んだ色を渡せば通る。
+    Color? stroke;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: HookBuilder(
+          builder: (context) {
+            final colors = context.colors;
+            useEffect(() {
+              stroke = HazardPalette.strokeColorFrom(colors, 'driftwood');
+              return null;
+            }, [colors]);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(stroke, isNotNull);
   });
 }
