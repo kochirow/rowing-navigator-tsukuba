@@ -99,6 +99,16 @@ flutter run
 > Firebase Rules の Emulator テスト(`firebase_rules_test/`)は CI の
 > `firebase-rules` ジョブで毎回走る。
 
+> **iOS シミュレーター向けは必ず Debug でビルドする。** 共有スキーム `Runner` の
+> Run は Release になっている(実機へ入れてケーブルを抜いても起動させるため。変えない)。
+> Flutter は Release をシミュレーター向けに作れないので、Xcode でシミュレーターを選んで
+> そのまま ▶ を押すと、長いビルドの最後に「release/profile builds are only supported
+> for physical devices」で必ず止まる(2026-10-22 に判明)。
+> - Xcode: Product → Scheme → Edit Scheme → Run → Build Configuration を Debug にする。
+> - コマンド: `xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Debug -destination 'id=<シミュレーターのUDID>' build`
+> - `flutter build ios --simulator` は Flutter 3.44.5 + Xcode 27 では別の理由で失敗する
+>   (lipo の仕様変更。flutter/flutter#188461、Flutter 3.47 系で修正)。
+
 ## アーキテクチャ
 
 レイヤー: Presentation(screens/features) → Hooks(hooks/) → Services(services/) → API(api/) → Models(models/)
