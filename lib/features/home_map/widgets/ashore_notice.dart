@@ -22,48 +22,43 @@ class AshoreNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Container(
-      width: double.infinity,
-      color: colors.cautionSurface,
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      child: Row(
-        children: [
-          Icon(Icons.volume_off, color: colors.caution, size: 22),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '陸上と判定して警告音を止めています',
+    // 画面には絵+1語だけを出す(読ませない)。止まっているのが音だけで、
+    // 判定・表示・記録が続いていることは読み上げで伝える。
+    return Semantics(
+      liveRegion: true,
+      label: '陸上と判定して警告音を止めています。'
+          '衝突判定・画面表示・記録は続いています。川へ戻れば自動で鳴ります。',
+      child: Container(
+        width: double.infinity,
+        color: colors.cautionSurface,
+        padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+        child: Row(
+          children: [
+            Icon(Icons.volume_off, color: colors.caution, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ExcludeSemantics(
+                child: Text(
+                  '陸上',
                   style: TextStyle(
                     color: colors.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  '衝突判定・画面表示・記録は続いています。川へ戻れば自動で鳴ります。',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 4),
-          // 濡れた手でも押せるよう、最小タップ領域を確保する。
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-            child: TextButton(
-              onPressed: onRestoreAudio,
-              child: const Text('音を戻す'),
+            const SizedBox(width: 4),
+            // 濡れた手でも押せるよう、最小タップ領域を確保する。
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+              child: TextButton(
+                onPressed: onRestoreAudio,
+                child: const Text('音を戻す'),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

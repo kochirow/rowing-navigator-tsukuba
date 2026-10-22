@@ -118,14 +118,15 @@ class _NavigationSafetySettingsSheetState
 
   Future<bool> _confirm({
     required String title,
-    required String message,
+    String? message,
     required String applyLabel,
   }) async {
     return await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(title),
-            content: Text(message),
+            // 本文は、押す前に知っておくべきこと(チームへの公開)があるときだけ。
+            content: message == null ? null : Text(message),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -183,9 +184,8 @@ class _NavigationSafetySettingsSheetState
   void _showResult(bool applied) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(applied
-          ? '設定を反映しました。警告は次の評価から新しい設定で継続します。'
-          : '形状を作り直せなかったため、航行中の設定は変更せず従来の警告を続けています。'),
+      content: Text(
+          applied ? '設定を反映しました' : '形状を作り直せなかったため、航行中の設定は変更せず従来の警告を続けています。'),
     ));
   }
 
@@ -211,10 +211,8 @@ class _NavigationSafetySettingsSheetState
     if (_busy || next == null) return;
     final confirmed = await _confirm(
       title: '危険区域の幅を反映しますか？',
-      message: widget.usesSharedSafetySettings
-          ? 'この変更はチームの共有安全設定にも公開されます。新しい全区域を生成できた場合だけ、一括で切り替えます。'
-          : '新しい全区域を生成できた場合だけ、一括で切り替えます。生成に失敗した場合は、現在の警告区域を保ちます。',
-      applyLabel: '生成して反映',
+      message: widget.usesSharedSafetySettings ? 'チームの共有設定にも公開されます。' : null,
+      applyLabel: '反映',
     );
     if (!confirmed || !mounted) return;
     final previous = await _zoneSettings.load();
@@ -241,9 +239,7 @@ class _NavigationSafetySettingsSheetState
     if (_busy || next == null) return;
     final confirmed = await _confirm(
       title: '固定対象物の警告設定を反映しますか？',
-      message: widget.usesSharedSafetySettings
-          ? 'この変更はチームの共有安全設定にも公開されます。対象物は地図に残し、警告対象だけを新しい一式へ切り替えます。'
-          : '対象物は地図に残し、警告対象だけを新しい一式へ切り替えます。',
+      message: widget.usesSharedSafetySettings ? 'チームの共有設定にも公開されます。' : null,
       applyLabel: '反映',
     );
     if (!confirmed || !mounted) return;
@@ -270,8 +266,7 @@ class _NavigationSafetySettingsSheetState
     final revision = widget.pendingSharedSafetyRevision;
     if (_busy || revision == null) return;
     final confirmed = await _confirm(
-      title: '共有安全設定 rev.$revision を反映しますか？',
-      message: '新しい全区域を生成できた場合だけ、一括で切り替えます。生成に失敗した場合は、現在の警告区域を保ちます。',
+      title: '共有設定 版 $revision を反映しますか？',
       applyLabel: '反映',
     );
     if (!confirmed || !mounted) return;
@@ -363,7 +358,7 @@ class _NavigationSafetySettingsSheetState
             ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
-              title: const Text('航行中の安全設定'),
+              title: const Text('航行中の警告設定'),
               subtitle: Text(widget.safetySettingsLabel),
               trailing: _busy
                   ? const SizedBox(
@@ -394,8 +389,7 @@ class _NavigationSafetySettingsSheetState
                             child: ListTile(
                               leading: const Icon(Icons.update),
                               title: Text(
-                                  '共有安全設定 rev.${widget.pendingSharedSafetyRevision}'),
-                              subtitle: const Text('足元の区域を黙って変えず、確認後に一括反映します。'),
+                                  '新しい共有設定 版 ${widget.pendingSharedSafetyRevision}'),
                               trailing: FilledButton(
                                 onPressed:
                                     _busy ? null : _applyPendingSharedRevision,
@@ -407,9 +401,7 @@ class _NavigationSafetySettingsSheetState
                           child: SwitchListTile.adaptive(
                             secondary: const Icon(Icons.directions_boat),
                             title: const Text('逆走注意の音声'),
-                            subtitle: const Text(
-                              'オフにしても逆走の表示・判定・記録は続きます。この航行だけの設定です。',
-                            ),
+                            subtitle: const Text('この航行だけ'),
                             value: _reverseGuidanceAudioEnabled,
                             onChanged: (enabled) {
                               setState(
@@ -424,12 +416,14 @@ class _NavigationSafetySettingsSheetState
                         ExpansionTile(
                           initiallyExpanded: true,
                           leading: const Icon(Icons.timer_outlined),
-                          title: const Text('本警告・予告の秒数'),
+                          title: const Text('警告を始める時間'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
+                            // 2本のスライダーに同じ形の見出しを付ける(以前は
+                            // 予告側だけ見出しが無く、どちらが何か分からなかった)。
                             Text(
-                              '本警告（連続音）の開始: '
+                              '連続音  '
                               '${leadTimes.primaryWarningLeadSeconds.toStringAsFixed(1)}秒前',
                             ),
                             Slider(
@@ -451,6 +445,10 @@ class _NavigationSafetySettingsSheetState
                                               .advanceWarningLeadSeconds,
                                         ),
                                       ),
+                            ),
+                            Text(
+                              '断続音  '
+                              '${leadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
                             ),
                             Slider(
                               value: leadTimes.advanceWarningLeadSeconds,
@@ -482,7 +480,6 @@ class _NavigationSafetySettingsSheetState
                         ExpansionTile(
                           leading: const Icon(Icons.straighten_outlined),
                           title: const Text('危険区域の幅'),
-                          subtitle: const Text('確認後に全区域を生成して一括で差し替えます。'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
@@ -530,7 +527,6 @@ class _NavigationSafetySettingsSheetState
                         ExpansionTile(
                           leading: const Icon(Icons.notifications_off_outlined),
                           title: const Text('固定対象物の警告'),
-                          subtitle: const Text('オフにしても地図表示は残ります。'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [

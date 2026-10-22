@@ -13,12 +13,13 @@ void main() {
     await tester.pumpWidget(wrap(AshoreNotice(onRestoreAudio: () {})));
 
     // 黙って音を止めると「鳴らないアプリ」と区別が付かない。
-    expect(find.text('陸上と判定して警告音を止めています'), findsOneWidget);
+    // 画面は絵+1語、止まっていないものは読み上げで伝える。
+    expect(find.byIcon(Icons.volume_off), findsOneWidget);
+    expect(find.text('陸上'), findsOneWidget);
     expect(
-      find.textContaining('衝突判定・画面表示・記録は続いています'),
+      find.bySemanticsLabel(RegExp('陸上と判定して警告音を止めています.*衝突判定・画面表示・記録は続いています')),
       findsOneWidget,
     );
-    expect(find.textContaining('川へ戻れば自動で鳴ります'), findsOneWidget);
   });
 
   testWidgets('「音を戻す」で手動解除できる(原則2)', (tester) async {

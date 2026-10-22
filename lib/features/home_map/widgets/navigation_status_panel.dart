@@ -108,7 +108,7 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
     widget.onLowerReset?.call();
     final undo = widget.onLowerUndo;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: const Text('下の計器を0にしました(記録は練習全体を残します)'),
+      content: const Text('下の計器を0にしました'),
       action:
           undo == null ? null : SnackBarAction(label: '元に戻す', onPressed: undo),
     ));

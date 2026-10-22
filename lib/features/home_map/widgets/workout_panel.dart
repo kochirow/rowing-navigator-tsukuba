@@ -192,8 +192,9 @@ class WorkoutPanel extends StatelessWidget {
           RestUnit.time => (formatWorkoutClock(r.ceil()), ''),
           RestUnit.strokes => ('${r.ceil()}', 'count'),
           RestUnit.distance => ('${r.ceil()}', 'm'),
-          // 未定: 経過を出す(漕ぎ出したら次へ)。
-          RestUnit.open => (formatWorkoutClock(r.floor()), '漕ぎ出すと次へ'),
+          // 未定: 経過を出す(漕ぎ出したら次へ)。増えていく時計がそれを示すので、
+          // 単位の欄に説明の文は置かない。
+          RestUnit.open => (formatWorkoutClock(r.floor()), ''),
         };
       case WorkoutPhase.ready:
       case WorkoutPhase.work:

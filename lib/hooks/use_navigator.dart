@@ -225,7 +225,7 @@ UseNavigator useNavigator() {
   final sharedSafetyTeamIdHash = useState<String?>(null);
   final appliedSharedSafetyRevision = useState<int?>(null);
   final pendingSharedSafetyRevision = useState<int?>(null);
-  final safetySettingsLabel = useState('安全設定: 読込中');
+  final safetySettingsLabel = useState('読込中');
   final safetySettingsNeedsAttention = useState(true);
   final isStaticProfileUnavailable = useState(false);
   // 航路中心線。無い場合は従来の直線予測へ縮退する(警告は止まらない)。
@@ -1079,15 +1079,15 @@ UseNavigator useNavigator() {
             : fetch == SharedSafetyFetchResult.unavailable
                 ? '(取得不可)'
                 : '';
-        safetySettingsLabel.value = '安全設定: 共有 rev.${revision ?? "?"}$suffix';
+        safetySettingsLabel.value = '共有 版 ${revision ?? "?"}$suffix';
         safetySettingsNeedsAttention.value =
             fetch != SharedSafetyFetchResult.fresh;
       case DangerZoneSettingsSource.local:
-        safetySettingsLabel.value = '安全設定: この端末のみ';
+        safetySettingsLabel.value = 'この端末のみ';
         safetySettingsNeedsAttention.value = true;
       case DangerZoneSettingsSource.codeDefault:
       case null:
-        safetySettingsLabel.value = '安全設定: 既定値';
+        safetySettingsLabel.value = '既定値';
         safetySettingsNeedsAttention.value = true;
     }
   }
