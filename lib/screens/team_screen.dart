@@ -155,16 +155,6 @@ class _TeamScreenState extends State<TeamScreen> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '位置情報と共有危険区域は、このチーム内だけで表示されます。',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'この端末は次回以降も自動接続します。退出する場合は、この画面の下部から操作できます。',
-                    style: TextStyle(
-                        fontSize: 12, color: context.colors.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
                   Text(
                     'あなたのメンバーID: ${TeamMemberSummary(userId: membership.userId).shortId}'
                     '${membership.isAdministrator ? '(管理者)' : ''}',
@@ -189,11 +179,8 @@ class _TeamScreenState extends State<TeamScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              subtitle: const Text('航行中の艇のラベルと、管理者のメンバー一覧に表示されます。'),
-              trailing: TextButton(
-                onPressed: () => _editAccountName(membership),
-                child: const Text('変更'),
-              ),
+              // 行全体で変更できるので「変更」ボタンは重ねない。
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => _editAccountName(membership),
             ),
           ),
@@ -210,11 +197,7 @@ class _TeamScreenState extends State<TeamScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'このコードを知る人は参加できます。管理者はコードを更新して、古いコードを即時無効にできます。',
-                  ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -246,18 +229,18 @@ class _TeamScreenState extends State<TeamScreen> {
                       );
                     },
                     icon: const Icon(Icons.copy),
-                    label: const Text('招待コードをコピー'),
+                    label: const Text('コピー'),
                   ),
                   const SizedBox(height: 10),
                   TeamInviteShareButton(
                     teamName: membership.team.name,
                     inviteCode: membership.inviteCode,
-                    label: '招待コードを共有',
+                    label: '共有',
                     filled: true,
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    '注意: コードを知る人はチームの位置情報と危険区域を共有できます。SNS等に公開しないでください。',
+                    'コードを知る人は誰でも参加できます。SNS等に公開しないでください。',
                     style: TextStyle(
                         fontSize: 12, color: context.colors.textSecondary),
                   ),
@@ -266,29 +249,12 @@ class _TeamScreenState extends State<TeamScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.edit_location_alt_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'チームメンバーは全員、臨時危険区域の追加・編集・削除と、共有固定危険区域の更新ができます。削除した臨時危険区域は7日間、危険区域の画面から元に戻せます。現場で安全を確認してから操作してください。問題のある利用や危険情報は、通報フォームから運営へ連絡できます。',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
+          // 危険区域の権限の説明カードは「使い方」のチームのページへ移した
+          // (操作の無い説明だけのカードだった)。
           Card(
             child: ListTile(
               leading: const Icon(Icons.flag_outlined),
               title: const Text('通報・お問い合わせ'),
-              subtitle: const Text('不適切な利用、危険情報、招待コードの漏洩は運営へ連絡してください。'),
               trailing: const Icon(Icons.open_in_new),
               onTap: () async {
                 final opened = await launchUrl(
@@ -403,18 +369,7 @@ class _LeaveTeamCardState extends State<_LeaveTeamCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'チームから退出',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: errorColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'この端末をチームから外します。もう一度参加するには招待コードが必要です。',
-            ),
-            const SizedBox(height: 14),
+            // 見出しと説明は置かない。ボタン名が言い、失うものは確認ダイアログが示す。
             OutlinedButton.icon(
               onPressed: _isLeaving ? null : _confirmAndLeave,
               style: OutlinedButton.styleFrom(foregroundColor: errorColor),

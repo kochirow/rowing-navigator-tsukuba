@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../config/display_name_config.dart';
 import '../services/account_display_name_service.dart';
-import '../theme/app_theme.dart';
+import '../types/boat_type.dart';
+import '../widgets/boat_name_tag.dart';
 
 /// アカウントの名前を登録・変更する画面。
 ///
@@ -84,26 +85,8 @@ class _DisplayNameRegistrationScreenState
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Icon(
-                Icons.badge_outlined,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                first ? 'あなたの名前を登録してください' : '名前を変更します',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                '航行中、他の艇と監視端末に「4+ 後藤」のように艇種と一緒に表示され、'
-                '誰が漕いでいるかが分かります。チームの管理者のメンバー一覧にも表示されます。',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
+              // 「何に使われるか」は文章でなく、地図に出る札そのもので見せる
+              // (欄の下のプレビュー)。見出しは画面名(AppBar)と重なるので置かない。
               TextField(
                 key: const ValueKey('account-display-name-field'),
                 controller: _controller,
@@ -127,14 +110,18 @@ class _DisplayNameRegistrationScreenState
                 },
                 onSubmitted: (_) => _submit(),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '同じ名前の人がいても登録できます。航行ごとに別の名前にしたいときは、'
-                '航行開始の画面で書き換えられます。',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.colors.textSecondary,
-                ),
+              // 艇種は航行ごとに選ぶので、ここでは例として 4+ を付けて見せる。
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) {
+                  final name = value.text.trim();
+                  if (name.isEmpty) return const SizedBox.shrink();
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child:
+                        BoatNameTag(label: boatNameLabel(BoatType.r_4p, name)),
+                  );
+                },
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
