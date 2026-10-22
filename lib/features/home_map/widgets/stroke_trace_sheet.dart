@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../config/stroke_trace_config.dart';
 import '../../../models/shared_stroke_trace.dart';
 import '../../../services/stroke_speed_trace.dart';
 import '../../../services/stroke_trace_history.dart';
@@ -107,7 +106,8 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
     if (_history.isStale(_now)) {
       return '${age.inSeconds}秒前を最後に途絶';
     }
-    return '${age.inSeconds}秒前のストローク';
+    // 新しい間は、緑の点と動いている波形がそれを示す。文字は出さない。
+    return '';
   }
 
   @override
@@ -138,8 +138,6 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
             const SizedBox(height: 14),
             Row(
               children: [
-                Icon(Icons.show_chart, color: colors.primary, size: 22),
-                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     widget.displayName,
@@ -192,24 +190,15 @@ class _StrokeTraceSheetState extends State<StrokeTraceSheet> {
               onDarkSurface: false,
               // 途絶中に古い波形を流し続けない。止まった事実を出す。
               live: !stale,
-              emptyLabel: _receivedAnything
-                  ? '$sharedStrokeTraceFreshnessSeconds秒以上、新しい波形が届いていません'
-                  : '波形の受信を待っています',
+              // 途絶の事実は上の行が出すので、ここでは繰り返さない。
+              // 未受信のときだけ、届く条件をここに添える。
+              emptyLabel: _receivedAnything ? '' : '艇側でレートの計測がオンのときだけ届きます',
             ),
-            const SizedBox(height: 12),
-            if (latest != null)
-              StrokeMetricsChips.fromSharedTrace(latest)
-            else
-              Text(
-                '艇側で「SPM・艇速変化を計測する」がONのときだけ表示できます。',
-                style: TextStyle(fontSize: 12, color: colors.textSecondary),
-              ),
-            const SizedBox(height: 12),
-            Text(
-              '縦軸が艇速、横軸が時間。細い縦線がキャッチ(入水)で、'
-              '直近2ストロークぶんが表示されます。',
-              style: TextStyle(fontSize: 12, color: colors.textSecondary),
-            ),
+            // グラフの読み方は「使い方」の監視のページに置く(常設しない)。
+            if (latest != null) ...[
+              const SizedBox(height: 12),
+              StrokeMetricsChips.fromSharedTrace(latest),
+            ],
           ],
         ),
       ),

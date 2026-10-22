@@ -13,12 +13,12 @@ import '../features/home_map/prediction_shapes.dart';
 import 'package:rowing_navigator/features/home_map/widgets/nav_setting_modal.dart';
 import 'package:rowing_navigator/features/home_map/widgets/navigation_safety_settings_sheet.dart';
 
-import '../config/boat_config.dart';
 import '../config/coach_config.dart';
 import '../config/map_style_config.dart';
 import '../config/navigator_config.dart';
 import '../features/home_map/widgets/boat_list_panel.dart';
 import '../features/home_map/widgets/boat_status_card.dart';
+import '../features/home_map/widgets/practice_log_status.dart';
 import '../features/home_map/widgets/background_location_disclosure_dialog.dart';
 import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
@@ -1112,11 +1112,9 @@ class HomeMapScreen extends HookConsumerWidget {
             lng: myBoat.lng,
             heading: travelBearing,
             title: '自艇',
-            snippet: "${myBoat.boatId}\n"
-                "BoatType: ${myBoat.boatType}\n"
-                "速度: ${myBoat.speed.toStringAsFixed(1)} m/s\n"
-                "進路: ${myBoat.heading.toStringAsFixed(1)}°\n"
-                "画面上の艇印: 下向き",
+            // 吹き出しは値だけ。名前・艇種は札とタイトルが既に示す。
+            snippet: "${myBoat.speed.toStringAsFixed(1)} m/s ・ "
+                "${myBoat.heading.toStringAsFixed(0)}°",
           ));
         }
         // 他艇は新しい受信値が届いた時だけ描画位置を更新する。
@@ -1132,11 +1130,9 @@ class HomeMapScreen extends HookConsumerWidget {
             lng: boat.lng,
             heading: boat.heading,
             title: boat.label,
-            snippet: "名前: ${boat.displayName}\n"
-                "艇種: ${boatConfigs.byBoatType(boat.boatType).label}\n"
-                "速度: ${boat.speed.toStringAsFixed(1)} m/s\n"
-                "進路: ${boat.heading.toStringAsFixed(1)}°"
-                "${boat.battery != null ? '\n電池: ${boat.battery}%' : ''}",
+            snippet: "${boat.speed.toStringAsFixed(1)} m/s ・ "
+                "${boat.heading.toStringAsFixed(0)}°"
+                "${boat.battery != null ? ' ・ 電池 ${boat.battery}%' : ''}",
             // 他艇は受信鮮度で既に絞られている。航行中だけ名称を隠すと、
             // 警告対象が誰かを確認できないため、表示対象はすべてラベルを出す。
             nameLabel: boat.label, // 「4+ 後藤」
@@ -1469,7 +1465,12 @@ class HomeMapScreen extends HookConsumerWidget {
                         // 注意表示は地図の側へ伸びる。監視中は従来どおり上。
                         final noticesBelowInstruments =
                             navigator.mode.value == NavMode.navigator;
+                        final practiceLogError =
+                            practiceLogRecording.error.value;
                         final notices = <Widget>[
+                          if (navigator.mode.value == NavMode.observer &&
+                              practiceLogError != null)
+                            PracticeLogFailureNotice(message: practiceLogError),
                           // 陸上と判定して警告音を止めている間は、
                           // その事実を必ず画面へ出す。黙って音を
                           // 止めると「鳴らないアプリ」と区別できない。
@@ -1536,7 +1537,11 @@ class HomeMapScreen extends HookConsumerWidget {
                                       ? CrossAxisAlignment.start
                                       : CrossAxisAlignment.center,
                                   children: [
-                                    // いまが出艇前か監視中かを示す。
+                                    // いまが出艇前であることを示す。
+                                    //
+                                    // **監視中も出さない(2026-10-23)。** 監視中で
+                                    // あることは、下の「監視終了」と右の「艇一覧」
+                                    // 「全艇」ボタンが既に示している。
                                     //
                                     // **航行中は出さない。** 航行中は計器カード・
                                     // 警告バナーが同じ上部に
@@ -1544,7 +1549,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                     // しかも航行中であることは、経過時間が
                                     // 進んでいることと「航行終了」ボタンが
                                     // 出ていることで既に分かる。
-                                    if (phase != HomePhase.navigating)
+                                    if (phase == HomePhase.ashore)
                                       NavPhaseChip(phase: phase),
                                     // 監視者が即時に読むべき逆走・対向接近だけを
                                     // 地図上部に最大2本で表示する。既存衝突警報や
@@ -2186,24 +2191,29 @@ class HomeMapScreen extends HookConsumerWidget {
                                             navigator.mode.value ==
                                                 NavMode.observer &&
                                             navigator.isWatching.value)
-                                          RoundedButton(
-                                            label: practiceLogRecording
-                                                        .log.value ==
-                                                    null
-                                                ? '監視終了'
-                                                : '監視終了（記録中）',
-                                            icon: Icons.visibility_off,
-                                            // 「航行終了」と同じ見た目にそろえる。
-                                            // 塗りつぶしの赤に白文字は、暗色テーマの
-                                            // 明るい赤の上で読めない(約2.6:1)。
-                                            color: context
-                                                .colors.mapControlSurface,
-                                            foregroundColor:
-                                                context.colors.danger,
-                                            borderColor: context.colors.danger
-                                                .withValues(alpha: 0.6),
-                                            compact: true,
-                                            onPressed: navigator.stopWatching,
+                                          RecordingDot(
+                                            // 記録中であることは、括弧書きの
+                                            // 文字でなく左上の赤い点で示す
+                                            // (記録はほぼ常に動いている)。
+                                            recording: practiceLogRecording
+                                                        .log.value !=
+                                                    null &&
+                                                practiceLogError == null,
+                                            child: RoundedButton(
+                                              label: '監視終了',
+                                              icon: Icons.visibility_off,
+                                              // 「航行終了」と同じ見た目にそろえる。
+                                              // 塗りつぶしの赤に白文字は、暗色テーマの
+                                              // 明るい赤の上で読めない(約2.6:1)。
+                                              color: context
+                                                  .colors.mapControlSurface,
+                                              foregroundColor:
+                                                  context.colors.danger,
+                                              borderColor: context.colors.danger
+                                                  .withValues(alpha: 0.6),
+                                              compact: true,
+                                              onPressed: navigator.stopWatching,
+                                            ),
                                           ),
                                       ]),
                                 ),

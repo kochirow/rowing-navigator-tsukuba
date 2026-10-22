@@ -5,6 +5,10 @@ import '../../../services/observer_traffic_awareness_evaluator.dart';
 /// 監視で即時に読むべき逆走・対向接近だけを、最大2本に圧縮して示す。
 ///
 /// 航行中のSafetyBannerとは別物であり、音声・既存衝突警報を変更しない。
+///
+/// 画面の文字は艇名だけにする。「逆走」「接近中」は色(赤/橙)と記号
+/// (Uターン/すれ違い)が言うので前置きにせず、その分だけ艇名を多く出す。
+/// 読み上げには前置きを残す。
 class ObserverPriorityBanner extends StatelessWidget {
   final ObserverTrafficSnapshot snapshot;
   final VoidCallback? onTapReverse;
@@ -32,8 +36,8 @@ class ObserverPriorityBanner extends StatelessWidget {
             _PriorityRow(
               color: const Color(0xFFC62828),
               icon: Icons.u_turn_left_rounded,
-              label:
-                  '逆走：${_names(snapshot.reverseBoats.map((boat) => boat.label))}',
+              kind: '逆走',
+              label: _names(snapshot.reverseBoats.map((boat) => boat.label)),
               onTap: onTapReverse,
             ),
           if (snapshot.reverseBoats.isNotEmpty && snapshot.groups.isNotEmpty)
@@ -42,6 +46,7 @@ class ObserverPriorityBanner extends StatelessWidget {
             _PriorityRow(
               color: const Color(0xFFDE6B16),
               icon: Icons.swap_horiz_rounded,
+              kind: '接近中',
               label: _approachingLabel(snapshot.groups),
               onTap: onTapApproaching,
             ),
@@ -60,19 +65,23 @@ class ObserverPriorityBanner extends StatelessWidget {
     final first = groups.first;
     final names = _names(first.displayNames);
     final suffix = groups.length > 1 ? '・ほか${groups.length - 1}組' : '';
-    return '接近中：$names$suffix';
+    return '$names$suffix';
   }
 }
 
 class _PriorityRow extends StatelessWidget {
   final Color color;
   final IconData icon;
+
+  /// 読み上げだけに付ける種類名(画面では色と記号が示す)。
+  final String kind;
   final String label;
   final VoidCallback? onTap;
 
   const _PriorityRow({
     required this.color,
     required this.icon,
+    required this.kind,
     required this.label,
     this.onTap,
   });
@@ -81,7 +90,8 @@ class _PriorityRow extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
         liveRegion: true,
         button: onTap != null,
-        label: label,
+        label: '$kind：$label',
+        excludeSemantics: true,
         child: Material(
           color: Colors.transparent,
           child: InkWell(

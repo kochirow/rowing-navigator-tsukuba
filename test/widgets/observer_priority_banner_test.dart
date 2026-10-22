@@ -56,8 +56,11 @@ void main() {
       ),
     );
 
-    expect(find.text('逆走：1x A艇・1x B艇'), findsOneWidget);
-    expect(find.text('接近中：C艇・D艇・E艇'), findsOneWidget);
+    // 種類は色と記号が示し、文字は艇名だけ。読み上げには種類を残す。
+    expect(find.text('1x A艇・1x B艇'), findsOneWidget);
+    expect(find.text('C艇・D艇・E艇'), findsOneWidget);
+    expect(find.bySemanticsLabel('逆走：1x A艇・1x B艇'), findsOneWidget);
+    expect(find.bySemanticsLabel('接近中：C艇・D艇・E艇'), findsOneWidget);
     expect(find.byIcon(Icons.u_turn_left_rounded), findsOneWidget);
     expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
   });
@@ -73,7 +76,7 @@ void main() {
       ),
     );
 
-    expect(find.text('接近中：A・B・C・ほか1艇・ほか1組'), findsOneWidget);
+    expect(find.text('A・B・C・ほか1艇・ほか1組'), findsOneWidget);
     expect(find.byType(InkWell), findsOneWidget);
   });
 }

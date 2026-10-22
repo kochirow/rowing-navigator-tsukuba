@@ -77,7 +77,9 @@ void main() {
     controller.add(_trace(now.subtract(const Duration(milliseconds: 2400))));
     await deliver(tester);
 
-    expect(find.text('0秒前のストローク'), findsOneWidget);
+    // 新しい間は鮮度を文字にせず、緑の点で示す。
+    expect(find.textContaining('秒前'), findsNothing);
+    expect(find.byIcon(Icons.circle), findsOneWidget);
     expect(find.text('25 spm'), findsOneWidget);
     expect(find.text('1ストローク'), findsOneWidget);
     expect(find.text('10.1m'), findsOneWidget);
@@ -89,14 +91,14 @@ void main() {
     await pumpSheet(tester);
     controller.add(_trace(now.subtract(const Duration(milliseconds: 2400))));
     await deliver(tester);
-    expect(find.textContaining('秒前のストローク'), findsOneWidget);
+    expect(find.byIcon(Icons.circle), findsOneWidget);
 
     now = now.add(
       const Duration(seconds: sharedStrokeTraceFreshnessSeconds + 2),
     );
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.textContaining('秒前のストローク'), findsNothing);
+    expect(find.byIcon(Icons.circle), findsNothing);
     expect(find.textContaining('を最後に途絶'), findsOneWidget);
   });
 

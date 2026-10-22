@@ -44,7 +44,7 @@ class BoatListPanel extends StatelessWidget {
     this.boatColors = const {},
   });
 
-  Widget _row(BuildContext context, BoatStatus status) {
+  Widget _row(BuildContext context, BoatStatus status, {required bool showId}) {
     final colors = context.colors;
     final boat = status.boat;
     final shortId =
@@ -84,20 +84,19 @@ class BoatListPanel extends StatelessWidget {
               shape: BoxShape.circle,
             ),
           ),
-          Icon(
-            // 更新途絶は「通信が来ていない」ことであって、艇の異常とは限らない。
-            // 警告アイコンではなく中立的な cloud_off で示す。
-            emphasized
-                ? Icons.warning
-                : isRoutineAnomaly
-                    ? Icons.cloud_off
-                    : Icons.check_circle,
-            size: 20,
-            color: emphasized
-                ? colors.danger
-                : isRoutineAnomaly
-                    ? colors.textSecondary
-                    : colors.ok,
+          // 印は異常のある行だけに出す。全行に緑のチェックを並べると、
+          // 異常の印が埋もれる。正常な行は幅だけ確保して文字位置を揃える。
+          SizedBox(
+            width: 20,
+            child: hasAnomaly
+                ? Icon(
+                    // 更新途絶は「通信が来ていない」ことであって、艇の異常とは
+                    // 限らない。警告アイコンではなく中立的な cloud_off で示す。
+                    emphasized ? Icons.warning : Icons.cloud_off,
+                    size: 20,
+                    color: emphasized ? colors.danger : colors.textSecondary,
+                  )
+                : null,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -113,14 +112,17 @@ class BoatListPanel extends StatelessWidget {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'ID $shortId',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colors.textSecondary,
+                // IDは人には読めないので、同じ札の艇が並んで見分けが
+                // 要るときだけ出す(同名は許している)。
+                if (showId)
+                  Text(
+                    'ID $shortId',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
                 if (hasAnomaly)
                   Text(
                     // 「いつから」が分からないと、様子見か即対応かを
@@ -197,6 +199,11 @@ class BoatListPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final seen = <String>{};
+    final duplicateLabels = <String>{
+      for (final s in statuses)
+        if (!seen.add(s.boat.label)) s.boat.label,
+    };
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -221,7 +228,7 @@ class BoatListPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '航行中の艇 ${statuses.length}隻',
+                  '${statuses.length}隻',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -229,7 +236,8 @@ class BoatListPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                ...statuses.map((status) => _row(context, status)),
+                ...statuses.map((status) => _row(context, status,
+                    showId: duplicateLabels.contains(status.boat.label))),
               ],
             ),
     );

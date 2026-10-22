@@ -65,25 +65,43 @@ void main() {
     await pumpPanel(tester, [BoatStatus(boat: four, ageSec: 2)]);
 
     expect(find.text('4+ 後藤'), findsOneWidget);
-    // 同じ名前の人がいてもよいので、IDも残す。
-    expect(find.text('ID boat'), findsOneWidget);
+    // IDは人には読めないので、見分けが要らなければ出さない。
+    expect(find.textContaining('ID '), findsNothing);
+  });
+
+  testWidgets('同じ札の艇が並ぶときだけIDで見分ける', (tester) async {
+    Boat goto(String id) => Boat(
+          boatId: id,
+          displayName: '後藤',
+          boatType: BoatType.r_1x,
+          lat: 36.0,
+          lng: 140.0,
+          heading: 180,
+          speed: 2.5,
+          timestamp: DateTime.utc(2026, 7, 20),
+        );
+    await pumpPanel(tester, [
+      BoatStatus(boat: goto('aaaa-1'), ageSec: 2),
+      BoatStatus(boat: goto('bbbb-2'), ageSec: 2),
+    ]);
+
+    expect(find.text('ID aaaa'), findsOneWidget);
+    expect(find.text('ID bbbb'), findsOneWidget);
   });
 
   testWidgets('監視一覧に名前を表示する', (tester) async {
     await pumpPanel(tester, [BoatStatus(boat: makeBoat(), ageSec: 2)]);
 
     expect(find.text('1x 後藤'), findsOneWidget);
-    expect(find.textContaining('boat'), findsOneWidget);
   });
 
   testWidgets('異常が無ければ強調しない', (tester) async {
     await pumpPanel(tester, [BoatStatus(boat: makeBoat(), ageSec: 2)]);
 
     expect(rowBorderColor(tester), isNull);
-    expect(
-      tester.widget<Icon>(find.byIcon(Icons.check_circle)).color,
-      AppColors.light.ok,
-    );
+    // 正常な行には印を出さない(異常の印を埋もれさせない)。
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(find.byIcon(Icons.warning), findsNothing);
   });
 
   group('強調度は異常の重さに合わせる', () {
