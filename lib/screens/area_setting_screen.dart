@@ -277,8 +277,7 @@ class AreaSettingScreen extends HookConsumerWidget {
                       const Padding(
                         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                         child: Text(
-                          '削除から7日間は元に戻せます。戻すと、すぐにチーム全員の'
-                          '地図と警告に戻ります。',
+                          '削除から7日間、元に戻せます',
                         ),
                       ),
                       for (final item in deleted)
@@ -325,22 +324,8 @@ class AreaSettingScreen extends HookConsumerWidget {
                   builder: (context, active, _) => Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        color: const Color(0xFF1B5E20),
-                        child: const Text(
-                          '航行中です。警告は音と下のバナーで継続しています',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      // 航行中であることはタイトルが、警告が続いていることは
+                      // このバナーが示すので、説明の帯は重ねない。
                       SafetyBanner(warnings: active),
                     ],
                   ),
@@ -691,7 +676,7 @@ class _ManagedEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _EditorCard(
-        title: '固定流木（削除なし）',
+        title: '固定流木',
         child: Column(
           children: [
             _CompactSlider(

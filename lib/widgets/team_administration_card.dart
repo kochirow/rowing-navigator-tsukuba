@@ -161,8 +161,9 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '管理者は招待コードの更新と、メンバーの即時削除を行えます。削除時はコードも更新されます。'
-              '機種変更・引退の前には、メンバー右端のメニューから管理者を交代してください。',
+              // できること(コード更新・削除)はボタンとメニューが示す。
+              // 見落とすと困る手順だけを残す。
+              '機種変更・引退の前に、メンバー右端のメニューから管理者を交代してください。',
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

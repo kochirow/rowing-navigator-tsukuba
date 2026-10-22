@@ -202,7 +202,7 @@ class _WorkoutQuickSheetState extends State<_WorkoutQuickSheet> {
             child: Text('登録したメニュー', style: _eyebrow),
           ),
           _MenuRow(
-            empty: '練習の前に「新しく作る」で作って登録しておくと、ここから呼び出せます。',
+            empty: 'まだありません',
             items: [
               for (final w in _favorites) (top: '★ ${w.name}', plan: w.plan),
             ],
@@ -213,7 +213,7 @@ class _WorkoutQuickSheetState extends State<_WorkoutQuickSheet> {
             child: Text('過去のメニュー', style: _eyebrow),
           ),
           _MenuRow(
-            empty: 'まだありません。',
+            empty: 'まだありません',
             items: [
               for (final w in _history)
                 (top: '${w.usedAt.month}/${w.usedAt.day}', plan: w.plan),

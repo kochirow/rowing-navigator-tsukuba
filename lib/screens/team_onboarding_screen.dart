@@ -251,12 +251,6 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
           style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 6),
-        Text(
-          '一度参加すると、通常は次回以降の操作なしで同じチームに自動接続します。',
-          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
       ],
     );
   }
@@ -316,12 +310,7 @@ class _TeamOnboardingScreenState extends State<TeamOnboardingScreen> {
                 fontWeight: FontWeight.bold,
               ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          creating
-              ? 'チーム名を決めると、管理者が更新できる招待コードを発行します。'
-              : 'チームメンバーから受け取った招待コードを入力してください。',
-        ),
+        // 何を入れるかは欄の名前と例が示すので、導入文は置かない。
         const SizedBox(height: 24),
         if (creating)
           TextField(

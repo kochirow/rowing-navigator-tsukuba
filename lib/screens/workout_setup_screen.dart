@@ -123,13 +123,8 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
           dimens.space5,
         ),
         children: [
-          Text(
-            widget.beforeNavigation
-                ? '次の航行で使うメニューを、漕ぎ出す前に決めておけます。'
-                    '上から順に決めます。いまの内容は、いつも画面の下に出ています。'
-                : '上から順に決めます。いまの内容は、いつも画面の下に出ています。',
-            style: TextStyle(color: colors.textSecondary),
-          ),
+          // 画面の作りを説明する導入文は置かない。番号付きのカードが
+          // 順番を、下に固定した「いまの内容」が結果を示す。
           if (widget.onCancelPrepared case final cancel?)
             Align(
               alignment: Alignment.centerLeft,
@@ -145,12 +140,10 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
           _SettingCard(
             step: 1,
             title: 'メニューを選ぶ',
-            caption: '前に作ったメニューを使うときは、ここから選びます。'
-                '新しく作るときは、そのまま 2 へ。',
             children: [
               const _SubLabel('登録したメニュー'),
               _Row(
-                empty: 'まだありません。下で作って「登録」を押すと、ここに並びます。',
+                empty: 'まだありません',
                 children: [
                   for (final w in _favorites)
                     WorkoutMenuCard(
@@ -192,7 +185,6 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
           _SettingCard(
             step: 2,
             title: 'ワーク',
-            caption: '1本を何で区切るかと、その長さ・本数。',
             children: [
               _Seg<WorkUnit>(
                 values: const {
@@ -226,7 +218,6 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
           _SettingCard(
             step: 3,
             title: '本間レスト',
-            caption: '1本ごとの休み。',
             children: [
               _Seg<RestUnit>(
                 values: const {
@@ -265,7 +256,8 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
           _SettingCard(
             step: 4,
             title: 'セット',
-            caption: '2〜3 を何回か繰り返すときだけ。1 のままなら繰り返しません。',
+            // 「何を繰り返すか」は番号でしか示せないので、ここだけ添える。
+            caption: '2〜3 の繰り返し',
             children: [
               _Stepper(
                 label: 'セット数',

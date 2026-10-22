@@ -47,7 +47,7 @@ void main() {
     final published = await pumpGate(tester);
 
     expect(find.text('地図'), findsNothing);
-    expect(find.text('あなたの名前を登録してください'), findsOneWidget);
+    expect(find.text('名前の登録'), findsOneWidget);
     final field = tester.widget<TextField>(
       find.byKey(const ValueKey('account-display-name-field')),
     );
