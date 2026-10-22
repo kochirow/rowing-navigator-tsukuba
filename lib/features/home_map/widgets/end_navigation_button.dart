@@ -40,8 +40,10 @@ class EndNavigationButton extends StatelessWidget {
       await onStop();
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('航行終了処理でエラーが発生しました。資源解放は継続しました: $error'),
+      // 例外の文面は利用者が対処できる情報ではないので、ログにだけ残す。
+      debugPrint('航行終了処理の例外: $error');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('終了処理でエラーが発生しました。もう一度試してください'),
       ));
     }
   }

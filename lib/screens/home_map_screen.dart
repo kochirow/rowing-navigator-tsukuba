@@ -140,8 +140,10 @@ _NavigationStartRecovery _navigationStartRecoveryFor(Object error) {
       message: '通信データを準備できません。通信状態を確認し、同じ画面から再試行してください。',
     );
   }
-  return _NavigationStartRecovery(
-    message: '航行の準備を完了できませんでした。同じ画面から再試行してください。\n$detail',
+  // 例外の文面は利用者が対処できる情報ではないので、画面に出さずログへ残す。
+  debugPrint('航行開始の失敗: $detail');
+  return const _NavigationStartRecovery(
+    message: '航行の準備を完了できませんでした。同じ画面から再試行してください。',
   );
 }
 
@@ -1030,7 +1032,7 @@ class HomeMapScreen extends HookConsumerWidget {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('電池残量が$level%です。航行はそのまま継続できます。'),
+            content: Text('電池残量 $level%'),
             duration: const Duration(seconds: 4),
             behavior: SnackBarBehavior.floating,
           ));
@@ -1837,14 +1839,15 @@ class HomeMapScreen extends HookConsumerWidget {
                                                         pos.longitude, 0.0,
                                                         force: true);
                                                   } catch (e) {
+                                                    debugPrint('現在地の取得失敗: $e');
                                                     if (!context.mounted) {
                                                       return;
                                                     }
                                                     ScaffoldMessenger.of(
                                                             context)
                                                         .showSnackBar(SnackBar(
-                                                      content: Text(
-                                                          '現在地を取得できません: $e'),
+                                                      content: const Text(
+                                                          '現在地を取得できません'),
                                                     ));
                                                   }
                                                 },
@@ -2169,11 +2172,12 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   // 位置が取れないだけ。監視は続く。
                                                 }
                                               } catch (e) {
+                                                debugPrint('監視開始の失敗: $e');
                                                 if (!context.mounted) return;
                                                 ScaffoldMessenger.of(context)
                                                     .showSnackBar(SnackBar(
                                                   content:
-                                                      Text('監視を開始できません: $e'),
+                                                      const Text('監視を開始できません'),
                                                 ));
                                               }
                                             },
