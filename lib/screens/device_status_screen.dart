@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../config/credits_config.dart';
+
 import '../models/safety_snapshot.dart';
 import '../theme/app_theme.dart';
 import 'privacy_data_screen.dart';
@@ -183,12 +185,34 @@ class DeviceStatusScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('クレジット'),
+                  subtitle: const Text('警告音声: $voiceCredit'),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('クレジット'),
+                      content: const Text(
+                        '$originalDeveloperCredit\n\n警告音声: $voiceCredit',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('閉じる'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.description_outlined),
                   title: const Text('オープンソースライセンス'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'Rowing Navigator',
+                    applicationLegalese: applicationLegalese,
                   ),
                 ),
               ],

@@ -166,10 +166,19 @@ class Message {
     return null;
   }
 
-  static BoatType _parseBoatType(dynamic value) {
-    return BoatType.values.any((elm) => elm.toString().split('.').last == value)
-        ? BoatType.values.byName(value)
-        : BoatType.r_1x; // 艇種の識別子が不正な場合は1xとする
+  /// 受信した艇種を決める。
+  ///
+  /// 当たり判定の大きさは、旧版も読む `boatType`(大きさの区分)に従う。
+  /// `boatClass` は区分が `boatType` と一致するときだけ採用する。食い違うと
+  /// 新旧の端末で同じ艇の大きさが変わってしまうため、旧版と同じ答えを優先する。
+  static BoatType _parseBoatType(dynamic boatType, [dynamic boatClass]) {
+    final sized = tryParseBoatType(boatType);
+    final rigged = tryParseBoatType(boatClass);
+    if (rigged != null &&
+        (sized == null || sized.sizeClass == rigged.sizeClass)) {
+      return rigged;
+    }
+    return sized ?? BoatType.r_1x; // 艇種の識別子が不正な場合は1xとする
   }
 
   /// accuracyとして意味のある値(有限・正)のみ通し、それ以外はnullにする
@@ -190,7 +199,8 @@ class Message {
       'profileVersion': _profileVersion,
       'sessionId': _sessionId,
       'sequence': _sequence,
-      'boatType': _boatType.toString().split('.').last,
+      'boatType': _boatType.sizeClass.name,
+      'boatClass': _boatType.name,
       'lat': _lat,
       'lng': _lng,
       'heading': _heading,
@@ -219,7 +229,7 @@ class Message {
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
-      boatType: _parseBoatType(json['boatType']),
+      boatType: _parseBoatType(json['boatType'], json['boatClass']),
       lat: json['lat'].toDouble(),
       lng: json['lng'].toDouble(),
       heading: json['heading'].toDouble(),
@@ -248,7 +258,8 @@ class Message {
       'displayName': _displayName,
       'sessionId': _sessionId,
       'sequence': _sequence,
-      'boatType': _boatType.toString().split('.').last,
+      'boatType': _boatType.sizeClass.name,
+      'boatClass': _boatType.name,
       'lat': _lat,
       'lng': _lng,
       // protocolではcourseに統一。headingも旧版互換用に残す。
@@ -304,7 +315,10 @@ class Message {
   /// 不変プロファイル。送信内容が変わった時だけ上書きする。
   Map<String, dynamic> toRtdbProfileJson({Object? updatedAt}) => {
         'displayName': _displayName,
-        'boatType': _boatType.name,
+        // 旧版は boatType だけを読む。大きさの区分を送り、4+ が旧版で
+        // 1x に縮むのを防ぐ(BoatTypeDisplay.sizeClass)。
+        'boatType': _boatType.sizeClass.name,
+        'boatClass': _boatType.name,
         'protocolVersion': _protocolVersion,
         'appVersion': _appVersion,
         'profileVersion': _profileVersion,
@@ -325,6 +339,7 @@ class Message {
       'boatId': boatId,
       'displayName': profile['displayName'],
       'boatType': profile['boatType'],
+      if (profile['boatClass'] != null) 'boatClass': profile['boatClass'],
       'sessionId': compact['s'],
       'sequence': compact['q'],
       'serverUpdatedAt': compact['u'],
@@ -364,7 +379,7 @@ class Message {
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
       sequence: (json['sequence'] as num?)?.toInt() ?? 0,
-      boatType: _parseBoatType(json['boatType']),
+      boatType: _parseBoatType(json['boatType'], json['boatClass']),
       lat: (json['lat'] as num).toDouble(),
       lng: (json['lng'] as num).toDouble(),
       heading: ((json['course'] ?? json['heading']) as num).toDouble(),

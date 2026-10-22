@@ -55,7 +55,7 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('メンバーをチームから外しますか？'),
             content: Text(
-              'メンバーID ${member.shortId}… のFirestore・位置共有へのアクセスを停止します。'
+              '${member.displayLabel}(メンバーID ${member.shortId}…)のFirestore・位置共有へのアクセスを停止します。'
               '同時に招待コードも更新されるため、古いコードでの再参加はできません。',
             ),
             actions: [
@@ -104,7 +104,7 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('管理者を交代しますか？'),
             content: Text(
-              'メンバーID ${member.shortId}… を管理者にします。'
+              '${member.displayLabel}(メンバーID ${member.shortId}…)を管理者にします。'
               '交代すると、あなたは招待コードの更新やメンバーの削除ができなくなります。'
               '相手のチーム画面に表示される「あなたのメンバーID」と一致することを確認してください。',
             ),
@@ -129,7 +129,7 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
       if (!mounted) return;
       widget.onMembershipChanged();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('メンバー ${member.shortId}… を管理者にしました。')),
+        SnackBar(content: Text('${member.displayLabel} を管理者にしました。')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -207,12 +207,19 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
                       leading: Icon(isSelf
                           ? Icons.admin_panel_settings
                           : Icons.person_outline),
-                      title:
-                          Text(isSelf ? 'あなた（管理者）' : 'メンバー ${member.shortId}…'),
-                      subtitle: member.joinedAt == null
-                          ? null
-                          : Text(
-                              '参加日: ${member.joinedAt!.toLocal().toString().split(' ').first}'),
+                      // 同じ名前の人がいてもよいので、メンバーIDを必ず併記する。
+                      title: Text(
+                        isSelf
+                            ? '${member.displayLabel}（あなた・管理者）'
+                            : member.displayLabel,
+                      ),
+                      subtitle: Text(
+                        [
+                          'メンバーID ${member.shortId}…',
+                          if (member.joinedAt != null)
+                            '参加日: ${member.joinedAt!.toLocal().toString().split(' ').first}',
+                        ].join('　'),
+                      ),
                       trailing: isSelf
                           ? null
                           : isRemoving

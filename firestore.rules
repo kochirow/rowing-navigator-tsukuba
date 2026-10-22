@@ -34,6 +34,16 @@ service cloud.firestore {
         );
     }
 
+    // 航行中のラベルと管理画面に出す名前。同じ名前の人がいてもよい。
+    // 上限20文字はRTDBのboat_profiles/displayNameと同じ。
+    function validMemberDisplayName(name) {
+      return name is string
+        && name.size() > 0
+        && name.size() <= 20
+        && name.trim() == name
+        && !name.matches('.*[\\x00-\\x1f\\x7f].*');
+    }
+
     function validTermsAcceptance(data) {
       return data.termsVersion == '2026-08-03'
         && data.termsAcceptedAt == request.time;
@@ -88,7 +98,16 @@ service cloud.firestore {
         && data.radiusMeters is number
         && data.radiusMeters >= 1
         && data.radiusMeters <= 100
-        && validCirclePoints(data.points)
+        // 削除の印が付いた区域は外周を空にしてよい。旧版アプリは外周が
+        // 3点未満の区域を読み飛ばすので、旧版の端末からも消える。
+        && (
+          validCirclePoints(data.points)
+          || (
+            data.keys().hasAny(['deletedAt'])
+            && data.points is list
+            && data.points.size() == 0
+          )
+        )
         && data.createdBy is string
         && data.source == 'user_confirmed'
         && data.createdAt is timestamp
@@ -765,7 +784,13 @@ service cloud.firestore {
           && existsAfter(invitePath(request.resource.data.inviteCode))
           && getAfter(invitePath(request.resource.data.inviteCode)).data.teamId
             == teamId;
-        allow update: if false;
+        // 本人が自分の名前だけを登録・変更できる。参加日や招待コードは変えられない。
+        allow update: if signedIn()
+          && request.auth.uid == uid
+          && isTeamMember(teamId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName'])
+          && validMemberDisplayName(request.resource.data.displayName);
         allow delete: if signedIn()
           && !existsAfter(userPath(uid))
           && (
@@ -829,9 +854,15 @@ service cloud.firestore {
             || (
               !resource.data.keys().hasAny(['deletedAt'])
               && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['deletedAt', 'deletedBy'])
+                .hasOnly(['deletedAt', 'deletedBy', 'points'])
               && request.resource.data.deletedAt == request.time
               && request.resource.data.deletedBy == request.auth.uid
+              // 外周を変えるなら、空にすることだけを許す。
+              && (
+                !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(['points'])
+                || request.resource.data.points.size() == 0
+              )
             )
             // 元に戻す。チーム全員に許可し、戻した人を更新者として残す。
             || (
@@ -840,7 +871,7 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
                   'deletedAt', 'deletedBy', 'updatedAt', 'updatedBy',
-                  'confirmedAt'
+                  'confirmedAt', 'points'
                 ])
               && request.resource.data.updatedAt == request.time
               && request.resource.data.confirmedAt == request.time

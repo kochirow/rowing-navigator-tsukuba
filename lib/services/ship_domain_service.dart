@@ -6,7 +6,6 @@ import 'dart:math';
 import '../config/boat_config.dart';
 import '../config/risk_evaluator_config.dart';
 import '../models/boat_model.dart';
-import '../types/boat_type.dart';
 import '../utils/geo_math.dart';
 
 class ShipDomainParam {
@@ -150,28 +149,10 @@ class ShipDomainService {
     double lateralInflateMeters = 0,
     bool? headingReliable,
   }) {
-    BoatType boatType = boat.boatType;
-    ShipDomainParam shipBodyParam; // 船体領域
-    ShipDomainParam exclusiveParam; // 排他領域
-
-    switch (boatType) {
-      case BoatType.r_1x:
-        shipBodyParam = boatConfigs.r_1x_.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_1x_.shipDomainParams.exclusiveParam;
-        break;
-      case BoatType.r_2x:
-        shipBodyParam = boatConfigs.r_2x_.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_2x_.shipDomainParams.exclusiveParam;
-        break;
-      case BoatType.r_4x:
-        shipBodyParam = boatConfigs.r_4x_.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_4x_.shipDomainParams.exclusiveParam;
-        break;
-      case BoatType.r_8p:
-        shipBodyParam = boatConfigs.r_8p_.shipDomainParams.shipBodyParam;
-        exclusiveParam = boatConfigs.r_8p_.shipDomainParams.exclusiveParam;
-        break;
-    }
+    // 2-/4+ などは大きさの区分(2x・4x)の寸法を共有する(BoatConfigs)。
+    final params = boatConfigs.byBoatType(boat.boatType).shipDomainParams;
+    var shipBodyParam = params.shipBodyParam; // 船体領域
+    var exclusiveParam = params.exclusiveParam; // 排他領域
     if (!(headingReliable ?? headingIsReliable(boat))) {
       shipBodyParam = _widenForHeadingUncertainty(shipBodyParam);
       exclusiveParam = _widenForHeadingUncertainty(exclusiveParam);

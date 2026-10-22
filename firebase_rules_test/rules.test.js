@@ -692,6 +692,44 @@ async function run() {
       );
       // 作成者は自分の区域を消せる(アカウント削除で使う)。
       await assertSucceeds(deleteDoc(doc(u1.firestore(), ...path)));
+
+      // 削除時に外周を空にできる(旧版アプリからも消えるようにする)。
+      const emptied = ["teams", teamA, "temporary_obstacles", "emptied"];
+      await assertSucceeds(setDoc(doc(u1.firestore(), ...emptied), temporaryHazard("u1")));
+      // 外周を別の形へ変えながら削除の印を付けることはできない。
+      await assertFails(updateDoc(doc(u2.firestore(), ...emptied), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+        points: temporaryHazard("u2").points.slice(0, 3),
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...emptied), {
+        deletedAt: serverTimestamp(),
+        deletedBy: "u2",
+        points: [],
+      }));
+      // 外周が空のまま印だけ外すことはできない(元に戻すときは外周を作り直す)。
+      await assertFails(updateDoc(doc(u2.firestore(), ...emptied), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "u2",
+      }));
+      await assertSucceeds(updateDoc(doc(u2.firestore(), ...emptied), {
+        deletedAt: deleteField(),
+        deletedBy: deleteField(),
+        points: temporaryHazard("u2").points,
+        updatedAt: serverTimestamp(),
+        confirmedAt: serverTimestamp(),
+        updatedBy: "u2",
+      }));
+      // 削除の印が無い区域の外周は空にできない。
+      await assertFails(updateDoc(doc(u2.firestore(), ...emptied), {
+        points: [],
+        confirmedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        updatedBy: "u2",
+      }));
     });
 
     await check("invite codes cannot be listed but exact-code join is atomic", async () => {
@@ -739,6 +777,43 @@ async function run() {
       await assertFails(get(ref(u1.database(), `team_members/${teamA}`)));
       await assertSucceeds(get(ref(u1.database(), `team_members/${teamA}/u1`)));
       await assertFails(get(ref(u1.database(), `team_members/${teamA}/u2`)));
+    });
+
+    await check("members can set only their own display name", async () => {
+      const own = doc(u2.firestore(), "teams", teamA, "members", "u2");
+      await assertSucceeds(updateDoc(own, {displayName: "後藤"}));
+      // 同じ名前の人がいてもよい。
+      await assertSucceeds(
+        updateDoc(doc(u1.firestore(), "teams", teamA, "members", "u1"), {
+          displayName: "後藤",
+        }),
+      );
+      await assertSucceeds(updateDoc(own, {displayName: "あいうえおかきくけこさしすせそたちつてと"}));
+      await assertFails(updateDoc(own, {displayName: "あいうえおかきくけこさしすせそたちつてとな"}));
+      await assertFails(updateDoc(own, {displayName: ""}));
+      await assertFails(updateDoc(own, {displayName: " 後藤"}));
+      await assertFails(updateDoc(own, {displayName: "後\n藤"}));
+      await assertFails(updateDoc(own, {displayName: 42}));
+      // 名前以外の項目は本人でも変えられない。
+      await assertFails(updateDoc(own, {displayName: "後藤", inviteCode: inviteB}));
+      await assertFails(updateDoc(own, {joinedAt: Timestamp.now()}));
+      // 管理者でも他人の名前は変えられない。他チームからも変えられない。
+      await assertFails(
+        updateDoc(doc(u1.firestore(), "teams", teamA, "members", "u2"), {
+          displayName: "別人",
+        }),
+      );
+      await assertFails(
+        updateDoc(doc(b1.firestore(), "teams", teamA, "members", "u2"), {
+          displayName: "別人",
+        }),
+      );
+      // 管理者のメンバー一覧には名前が載る。
+      const listed = await getDocs(collection(u1.firestore(), "teams", teamA, "members"));
+      const names = Object.fromEntries(listed.docs.map((d) => [d.id, d.data().displayName]));
+      if (names.u2 !== "あいうえおかきくけこさしすせそたちつてと") {
+        throw new Error(`unexpected member names: ${JSON.stringify(names)}`);
+      }
     });
 
     await check("first team creation, first join, and restart restoration succeed", async () => {

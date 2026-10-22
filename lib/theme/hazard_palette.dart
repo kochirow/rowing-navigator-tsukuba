@@ -17,15 +17,23 @@ class HazardPalette {
 
   /// カテゴリの基準色。バナーのチップ背景と地図の輪郭線に使う。
   static Color colorOf(BuildContext context, String category) =>
+      colorFrom(context.colors, category);
+
+  /// [colorOf] のテーマ色を先に読んでおく版。
+  ///
+  /// `useEffect` の本体は初回 build の途中(HookState.initHook)で走るため、
+  /// そこで `Theme.of` を呼ぶと flutter_hooks の assert で落ちる。
+  /// build で `context.colors` を読み、その値をこちらへ渡す。
+  static Color colorFrom(AppColors colors, String category) =>
       switch (category) {
-        'shore' => context.colors.danger,
-        'bridge' => context.colors.warning,
-        'bridgePier' => context.colors.danger,
+        'shore' => colors.danger,
+        'bridge' => colors.warning,
+        'bridgePier' => colors.danger,
         'island' => const Color(0xFF8D6E00),
         'driftwood' => const Color(0xFF6D4C41),
         'pile' => const Color(0xFF4E342E),
         'other_boat' => const Color(0xFFAD1457),
-        'curve' => context.colors.info,
+        'curve' => colors.info,
         'reverse' => const Color(0xFF8E24AA),
         'testZone' => const Color(0xFF00838F),
         _ => const Color(0xFF455A64),
@@ -50,7 +58,11 @@ class HazardPalette {
 
   /// 塗りが薄い区域ほど輪郭線を頼りにするため、線は常に不透明寄りにする。
   static Color strokeColorOf(BuildContext context, String category) =>
-      colorOf(context, category).withValues(alpha: 0.85);
+      strokeColorFrom(context.colors, category);
+
+  /// [strokeColorOf] のテーマ色を先に読んでおく版([colorFrom] 参照)。
+  static Color strokeColorFrom(AppColors colors, String category) =>
+      colorFrom(colors, category).withValues(alpha: 0.85);
 
   /// 岸のように枚数が多い区域は細く、点在する物体は太くする。
   static int strokeWidthOf(String category) => switch (category) {
@@ -67,7 +79,15 @@ class HazardPalette {
     String category, {
     bool isTemporary = false,
   }) =>
-      colorOf(context, category).withValues(
+      fillColorFrom(context.colors, category, isTemporary: isTemporary);
+
+  /// [fillColorOf] のテーマ色を先に読んでおく版([colorFrom] 参照)。
+  static Color fillColorFrom(
+    AppColors colors,
+    String category, {
+    bool isTemporary = false,
+  }) =>
+      colorFrom(colors, category).withValues(
         alpha: fillOpacityOf(category, isTemporary: isTemporary),
       );
 

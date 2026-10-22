@@ -61,8 +61,8 @@ class EnvService {
     await staticObstacleService.deleteStaticObstacle(obstacleId);
   }
 
-  Future<void> restoreTemporaryObstacle(String obstacleId) =>
-      staticObstacleService.restoreTemporaryObstacle(obstacleId);
+  Future<void> restoreTemporaryObstacle(DeletedTemporaryObstacle item) =>
+      staticObstacleService.restoreTemporaryObstacle(item);
 
   Future<void> purgeExpiredDeletedTemporaryObstacles() =>
       staticObstacleService.purgeExpiredDeleted();

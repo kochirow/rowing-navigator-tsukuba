@@ -62,4 +62,17 @@ void main() {
     });
     expect(StaticObstacleService.parseTemporaryObstacle('d', data), isNull);
   });
+
+  test('外周を空にした削除済みの区域も、中心と半径から元に戻す一覧に出る', () {
+    final data = _hazard(extra: {
+      'points': const <GeoPoint>[],
+      'deletedAt': Timestamp.fromDate(DateTime.utc(2026, 10, 20)),
+      'deletedBy': 'u2',
+    });
+    expect(StaticObstacleService.parseTemporaryObstacle('e', data), isNull);
+    final deleted =
+        StaticObstacleService.parseDeletedTemporaryObstacle('e', data);
+    expect(deleted?.center, isNotNull);
+    expect(deleted?.radiusMeters, 5);
+  });
 }

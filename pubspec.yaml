@@ -93,7 +93,22 @@ flutter:
     - assets/audio/
     - assets/images/
     - assets/data/
+    # 標語の毛筆フォントのライセンス。ライセンス画面へ出す(main.dart)。
+    - assets/fonts/YujiBoku-OFL.txt
+    # クレジット表記の原本。ライセンス画面へそのまま出す(credits_config.dart)。
+    - LICENSE
+    - NOTICE
   #   - images/a_dot_burr.jpeg
+
+  # 起動画面と「このアプリについて」の標語「安全・健康第一」だけに使う毛筆フォント。
+  # Yuji Boku(SIL OFL 1.1、https://github.com/google/fonts/tree/main/ofl/yujiboku)
+  # から標語の7文字だけを切り出している(8.5MB → 約7KB)。文字を足すときは:
+  #   pyftsubset YujiBoku-Regular.ttf --text="安全・健康第一" \
+  #     --layout-features='*' --no-hinting --output-file=assets/fonts/YujiBoku-Motto.ttf
+  fonts:
+    - family: YujiBokuMotto
+      fonts:
+        - asset: assets/fonts/YujiBoku-Motto.ttf
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
