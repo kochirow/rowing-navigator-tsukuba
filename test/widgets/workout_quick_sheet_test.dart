@@ -46,7 +46,10 @@ void main() {
       plan: null,
       status: null,
       start: (_) => started++,
+      startNow: () {},
       stop: () {},
+      undoStop: () {},
+      dismiss: () {},
       prepared: null,
       prepare: preparedCalls.add,
     );
@@ -70,7 +73,10 @@ void main() {
       plan: null,
       status: null,
       start: (_) {},
+      startNow: () {},
       stop: () {},
+      undoStop: () {},
+      dismiss: () {},
       prepared: _plan,
       prepare: (_) {},
     );

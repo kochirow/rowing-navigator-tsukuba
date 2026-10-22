@@ -65,9 +65,13 @@ class NavStatusCard extends StatelessWidget {
   /// 下半分の RESET。null なら出さない。
   final VoidCallback? onLowerReset;
 
-  /// ワークアウト中は、下半分をワークアウトの表示に置き換える。
+  /// ワークアウト中・待機中は、下半分をワークアウトの表示に置き換える。
+  /// [workoutStatus] が null なら待機中([WorkoutPanel] 参照)。
   final WorkoutPlan? workoutPlan;
   final WorkoutStatus? workoutStatus;
+  final VoidCallback? onWorkoutStart;
+  final VoidCallback? onWorkoutStop;
+  final VoidCallback? onWorkoutDismiss;
 
   const NavStatusCard({
     super.key,
@@ -86,6 +90,9 @@ class NavStatusCard extends StatelessWidget {
     this.onLowerReset,
     this.workoutPlan,
     this.workoutStatus,
+    this.onWorkoutStart,
+    this.onWorkoutStop,
+    this.onWorkoutDismiss,
   });
 
   // 数字が変わっても幅が揺れない等幅数字
@@ -588,8 +595,14 @@ class NavStatusCard extends StatelessWidget {
             // 距離(m)・chrono・DPS・count が順に出る。既定は 左=距離・右=chrono。
             // 値はリセットからのもので、記録は練習全体のまま残る。
             const SizedBox(height: _plateGap),
-            if (workoutPlan != null && workoutStatus != null)
-              WorkoutPanel(plan: workoutPlan!, status: workoutStatus!)
+            if (workoutPlan != null)
+              WorkoutPanel(
+                plan: workoutPlan!,
+                status: workoutStatus,
+                onStart: onWorkoutStart,
+                onStop: onWorkoutStop,
+                onDismiss: onWorkoutDismiss,
+              )
             else
               NavLowerDrums(
                 values: lowerValues ??

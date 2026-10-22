@@ -109,4 +109,72 @@ void main() {
     await tester.pumpAndSettle();
     expect(workout.plan, isNull);
   });
+
+  testWidgets('待機のメニューは ▶ で1本目から始まる(漕ぎ出しを待たない)', (tester) async {
+    await pump(tester);
+    final manual = _auto.copyWith(autoStart: false);
+    workout.prepare(manual);
+    navigating.value = true;
+    await tester.pumpAndSettle();
+    expect(workout.plan, isNull);
+
+    workout.startNow();
+    await tester.pump();
+    expect(workout.plan, manual);
+    expect(workout.status!.phase, WorkoutPhase.work);
+    expect(workout.prepared, isNull);
+  });
+
+  testWidgets('READY は ▶ で漕ぎ出しを待たずに始まる', (tester) async {
+    await pump(tester);
+    workout.prepare(_auto);
+    navigating.value = true;
+    await tester.pumpAndSettle();
+    expect(workout.status!.phase, WorkoutPhase.ready);
+
+    workout.startNow();
+    await tester.pump();
+    expect(workout.status!.phase, WorkoutPhase.work);
+  });
+
+  testWidgets('■ で止めると同じメニューの待機へ戻り、元に戻すと続きから', (tester) async {
+    await pump(tester);
+    workout.prepare(_auto);
+    navigating.value = true;
+    await tester.pumpAndSettle();
+    workout.startNow();
+    await tester.pump();
+
+    workout.stop();
+    await tester.pump();
+    expect(workout.plan, isNull);
+    expect(workout.prepared, _auto, reason: '▶ でやり直せる');
+
+    workout.undoStop();
+    await tester.pump();
+    expect(workout.plan, _auto);
+    expect(workout.status!.phase, WorkoutPhase.work);
+    expect(workout.prepared, isNull);
+
+    // ■ → ▶ はやり直し。元に戻すはもう効かない。
+    workout.stop();
+    workout.startNow();
+    await tester.pump();
+    final restarted = workout.status;
+    workout.undoStop();
+    await tester.pump();
+    expect(workout.status!.phase, restarted!.phase);
+    expect(workout.prepared, isNull);
+  });
+
+  testWidgets('× で外すと、実行中も待機も消えて元の計器へ戻る', (tester) async {
+    await pump(tester);
+    workout.prepare(_auto.copyWith(autoStart: false));
+    navigating.value = true;
+    await tester.pumpAndSettle();
+    workout.dismiss();
+    await tester.pump();
+    expect(workout.plan, isNull);
+    expect(workout.prepared, isNull);
+  });
 }
