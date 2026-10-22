@@ -1461,6 +1461,62 @@ class HomeMapScreen extends HookConsumerWidget {
                         // 380px以内なので、高さを許しても地図は右側に残る。
                         final topOverlayBudget = overlayConstraints.maxHeight *
                             (isLandscape ? 0.72 : 0.4);
+                        // 航行中は、注意表示(陸上・逆走の静音・音声の不具合・
+                        // GPSなどの能力低下)を計器の**下**に出す。計器の上に
+                        // 積むと、出たり消えたりするたびに計器が上下して
+                        // 読みにくい(2026-10-23 利用者)。計器の位置は固定し、
+                        // 注意表示は地図の側へ伸びる。監視中は従来どおり上。
+                        final noticesBelowInstruments =
+                            navigator.mode.value == NavMode.navigator;
+                        final notices = <Widget>[
+                          // 陸上と判定して警告音を止めている間は、
+                          // その事実を必ず画面へ出す。黙って音を
+                          // 止めると「鳴らないアプリ」と区別できない。
+                          // 判定を誤っていると感じたら、ここから
+                          // すぐ音へ戻せる。
+                          if (navigator.mode.value == NavMode.navigator &&
+                              navigator.isAshore.value)
+                            AshoreNotice(
+                              onRestoreAudio: navigator.overrideAshoreToWater,
+                            ),
+                          // 逆走だけを静音にした状態は、設定シートを閉じても
+                          // 消さない。音以外の安全経路は継続していることを
+                          // 誤解させず、次の出艇には持ち越さない。
+                          if (navigator.mode.value == NavMode.navigator &&
+                              !navigator.reverseGuidanceAudioEnabled.value)
+                            const ReverseGuidanceAudioNotice(),
+                          if (navigator.audioError.value != null)
+                            Container(
+                              width: double.infinity,
+                              color: context.colors.danger,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.volume_off,
+                                      color: Colors.white),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      navigator.audioError.value!,
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          // 能力低下は計器カードの下に絵+短い語で(大きな
+                          // 警告バナーを外したので、ここで必ず見せる)。
+                          if (navigator.mode.value == NavMode.navigator)
+                            NavCapabilityBadges(
+                              warnings: navigator.activeWarnings.value,
+                              gpsQuality: navigator.gpsQuality.value,
+                              gpsAccuracyMeters:
+                                  navigator.myBoat.value?.accuracy,
+                            ),
+                        ];
                         return Stack(
                             alignment: Alignment.center,
                             children: <Widget>[
@@ -1527,60 +1583,10 @@ class HomeMapScreen extends HookConsumerWidget {
                                         anomalies: coachWatch.anomalies.value,
                                         onTap: () => showBoatList.value = true,
                                       ),
-                                    // 陸上と判定して警告音を止めている間は、
-                                    // その事実を必ず画面へ出す。黙って音を
-                                    // 止めると「鳴らないアプリ」と区別できない。
-                                    // 判定を誤っていると感じたら、ここから
-                                    // すぐ音へ戻せる。
-                                    if (navigator.mode.value ==
-                                            NavMode.navigator &&
-                                        navigator.isAshore.value)
-                                      AshoreNotice(
-                                        onRestoreAudio:
-                                            navigator.overrideAshoreToWater,
-                                      ),
-                                    // 逆走だけを静音にした状態は、設定シートを閉じても
-                                    // 消さない。音以外の安全経路は継続していることを
-                                    // 誤解させず、次の出艇には持ち越さない。
-                                    if (navigator.mode.value ==
-                                            NavMode.navigator &&
-                                        !navigator
-                                            .reverseGuidanceAudioEnabled.value)
-                                      const ReverseGuidanceAudioNotice(),
-                                    if (navigator.audioError.value != null)
-                                      Container(
-                                        width: double.infinity,
-                                        color: context.colors.danger,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.volume_off,
-                                                color: Colors.white),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                navigator.audioError.value!,
-                                                style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight:
-                                                        FontWeight.bold),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    // 能力低下は計器カードの上に絵+短い語で(大きな
-                                    // 警告バナーを外したので、ここで必ず見せる)。
-                                    if (navigator.mode.value ==
-                                        NavMode.navigator)
-                                      NavCapabilityBadges(
-                                        warnings:
-                                            navigator.activeWarnings.value,
-                                        gpsQuality: navigator.gpsQuality.value,
-                                        gpsAccuracyMeters:
-                                            navigator.myBoat.value?.accuracy,
-                                      ),
+                                    // 航行中の注意表示は計器の下へ出す(下の
+                                    // `noticesBelowInstruments`)。上に積むと、
+                                    // 出たり消えたりするたびに計器が上下する。
+                                    if (!noticesBelowInstruments) ...notices,
                                     // 縦向きは上部40%以内、横向きは左上の小型カードにする。
                                     // 警告バナーはカードに含めず、独立した細い表示を保つ。
                                     if (navigator.mode.value ==
@@ -1634,6 +1640,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                           ),
                                         ),
                                       ),
+                                    if (noticesBelowInstruments) ...notices,
                                     // コーチモードの艇一覧パネル(同じく上部40%以内で内部スクロール)
                                     if (navigator.mode.value ==
                                             NavMode.observer &&
