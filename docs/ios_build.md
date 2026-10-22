@@ -142,6 +142,8 @@ App Store Connect は同じビルド番号の再アップロードを受け付�
 | `No such module 'GoogleMaps'` など | `Runner.xcodeproj` を開いている。`Runner.xcworkspace` を開く |
 | 日本語パスで Swift Package が解決できない | 4章の英数字パスの複製でビルドする |
 | 診断ログの `gitCommitSha` が `unknown` | Git 管理外のフォルダでビルドした。`git clone` した複製でやり直す |
+| シミュレーターで ▶ Run すると長いビルドの最後に「release/profile builds are only supported for physical devices」 | 共有スキームの Run は実機用に Release。シミュレーターは Edit Scheme → Run → Build Configuration を Debug にする(スキームは変えない) |
+| `flutter build ios --simulator` が「does not contain architectures "arm64 x86_64"」で失敗する | Xcode 27 の lipo の仕様変更(flutter/flutter#188461、Flutter 3.47 系で修正)。機種を指定して Debug でビルドする: `xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Debug -destination 'id=<UDID>' build` |
 
 ## 9. 参考: ビルド結果の中身(2026-10-20 確認)
 
