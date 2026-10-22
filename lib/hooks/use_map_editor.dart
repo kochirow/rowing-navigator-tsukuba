@@ -195,11 +195,11 @@ UseMapEditor useMapEditor(
   }
 
   /// 削除の印を外して元に戻す。戻った区域は購読で地図と警告へ戻る。
-  Future<void> restoreDeleted(String obstacleId) async {
+  Future<void> restoreDeleted(DeletedTemporaryObstacle item) async {
     if (saving.value) return;
     saving.value = true;
     try {
-      await env.restoreTemporaryObstacle(obstacleId);
+      await env.restoreTemporaryObstacle(item);
     } finally {
       saving.value = false;
     }
@@ -338,7 +338,7 @@ class UseMapEditor {
   final ValueNotifier<List<LatLng>> managedPreviewPoints;
   final ValueNotifier<bool> saving;
   final ValueNotifier<List<DeletedTemporaryObstacle>> deletedTemporaryObstacles;
-  final Future<void> Function(String obstacleId) restoreDeleted;
+  final Future<void> Function(DeletedTemporaryObstacle item) restoreDeleted;
   final void Function(MapEditorMode) setMode;
   final void Function() clearSelection;
   final void Function(StaticObstacle) selectObstacle;

@@ -41,6 +41,9 @@ class Boat {
   String? get sessionId => _sessionId;
   DateTime? get serverUpdatedAt => _serverUpdatedAt;
 
+  /// 地図・艇一覧に出すラベル(「4+ 後藤」)。表示専用。
+  String get label => boatNameLabel(_boatType, _displayName);
+
   Boat({
     required String boatId,
     String displayName = fallbackDisplayName,

@@ -56,7 +56,7 @@ void main() {
       ),
     );
 
-    expect(find.text('逆走：A艇・B艇'), findsOneWidget);
+    expect(find.text('逆走：1x A艇・1x B艇'), findsOneWidget);
     expect(find.text('接近中：C艇・D艇・E艇'), findsOneWidget);
     expect(find.byIcon(Icons.u_turn_left_rounded), findsOneWidget);
     expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);

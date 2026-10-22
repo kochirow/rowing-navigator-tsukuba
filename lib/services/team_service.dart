@@ -582,7 +582,11 @@ class TeamService {
       toUid: newAdminUid,
       requireCurrentAdmin: user.uid,
     );
-    return _activate(TeamMembership(team: updatedTeam, userId: user.uid));
+    return _activate(TeamMembership(
+      team: updatedTeam,
+      userId: user.uid,
+      displayName: active.displayName,
+    ));
   }
 
   /// 管理者がチームを退出した・アカウントを削除したときに、
@@ -610,7 +614,11 @@ class TeamService {
         expectedInviteCode: active.inviteCode,
         toUid: user.uid,
       );
-      return _activate(TeamMembership(team: updatedTeam, userId: user.uid));
+      return _activate(TeamMembership(
+        team: updatedTeam,
+        userId: user.uid,
+        displayName: active.displayName,
+      ));
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') {
         throw const AdministratorStillPresentException();
@@ -688,6 +696,29 @@ class TeamService {
         createdAt: team.createdAt,
       );
     });
+  }
+
+  /// 自分の名前をメンバー情報へ書く。管理者のメンバー一覧に出る。
+  ///
+  /// 航行中のラベルは端末内の名前から位置共有で送るので、これが失敗しても
+  /// 航行・位置共有は止まらない(呼び出し側は失敗を握って次の起動で送り直す)。
+  Future<void> updateMyDisplayName(String name) async {
+    final membership = _activeMembership;
+    final user = _auth.currentUser;
+    if (membership == null || user == null || user.uid != membership.userId) {
+      throw StateError('チームへの参加が必要です。');
+    }
+    await _firestore
+        .collection('teams')
+        .doc(membership.teamId)
+        .collection('members')
+        .doc(user.uid)
+        .update({'displayName': name});
+    _activeMembership = TeamMembership(
+      team: membership.team,
+      userId: membership.userId,
+      displayName: name,
+    );
   }
 
   Stream<List<TeamMemberSummary>> watchManagedTeamMembers() {
@@ -901,7 +932,12 @@ class TeamService {
       throw const TeamMembershipInconsistentException();
     }
     final team = RowingTeam.fromFirestore(teamId, data);
-    final membership = TeamMembership(team: team, userId: uid);
+    final storedName = memberSnapshot.data()?['displayName'];
+    final membership = TeamMembership(
+      team: team,
+      userId: uid,
+      displayName: storedName is String ? storedName : null,
+    );
     try {
       await _activateRtdbMembership(
         uid: uid,
@@ -1013,6 +1049,7 @@ class TeamService {
       final nextMembership = TeamMembership(
         team: updatedTeam!,
         userId: user.uid,
+        displayName: active.displayName,
       );
       // Firestoreでアクセスを先に失効させる。RTDB側の更新が失敗した場合は
       // 成功として画面遷移せず、管理者に再試行を促す。

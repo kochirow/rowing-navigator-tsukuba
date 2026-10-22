@@ -48,6 +48,10 @@ class RemoteBoatMessage {
   final double? speedAccuracy;
   final int? battery;
   final String? boatType;
+
+  /// 艇種の本当の名前(`r_4p` など)。2026-10-20 以降の版だけが送る。
+  /// [boatType] は大きさの区分(`r_4x` など)で、旧版はこちらだけを読む。
+  final String? boatClass;
   final double? turnRate;
   final String? navigationState;
   final List<String> capabilities;
@@ -76,6 +80,7 @@ class RemoteBoatMessage {
     required this.speedAccuracy,
     required this.battery,
     required this.boatType,
+    required this.boatClass,
     required this.turnRate,
     required this.navigationState,
     required this.capabilities,
@@ -279,6 +284,8 @@ class RemoteBoatMessage {
     }
     // 未知の艇種名は将来版で追加された可能性がある。位置自体は残し、
     // 現行版がBoatへ変換する際はMessageの安全な1x既定値へ縮退する。
+    // boatClass は表示用の任意項目。壊れていても位置は捨てず値だけ落とす。
+    final boatClass = _optionalString(json['boatClass'], maxLength: 32);
     final navigationState =
         _optionalString(json['navigationState'], maxLength: 32);
     if (json['navigationState'] != null && navigationState == null) {
@@ -329,6 +336,7 @@ class RemoteBoatMessage {
         speedAccuracy: speedAccuracy,
         battery: battery,
         boatType: boatType,
+        boatClass: boatClass,
         turnRate: turnRate,
         navigationState: navigationState,
         capabilities: List.unmodifiable(capabilities),
@@ -358,6 +366,7 @@ class RemoteBoatMessage {
         'speedAccuracy': speedAccuracy,
         'battery': battery,
         'boatType': boatType,
+        if (boatClass != null) 'boatClass': boatClass,
         'turnRate': turnRate,
         'navigationState': navigationState,
         'capabilities': capabilities,

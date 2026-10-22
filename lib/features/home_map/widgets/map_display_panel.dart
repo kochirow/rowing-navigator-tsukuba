@@ -31,12 +31,6 @@ class MapDisplayPanel extends StatelessWidget {
   final ValueListenable<bool> highContrast;
   final ValueChanged<bool> onHighContrastChanged;
 
-  /// 航路の断面インジケータ。航行中だけ渡す。監視端末は自艇の位置を
-  /// 持たないので、行ごと出さない。「使えない項目を無効表示で並べる」より、
-  /// その状態に無い機能は最初から現れないほうが読む量が減る。
-  final ValueListenable<bool>? laneCrossSection;
-  final ValueChanged<bool>? onLaneCrossSectionChanged;
-
   const MapDisplayPanel({
     super.key,
     required this.mapType,
@@ -45,16 +39,12 @@ class MapDisplayPanel extends StatelessWidget {
     required this.onShowChannelCenterlineChanged,
     required this.highContrast,
     required this.onHighContrastChanged,
-    this.laneCrossSection,
-    this.onLaneCrossSectionChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final dimens = context.dimens;
-    final laneCrossSection = this.laneCrossSection;
-    final onLaneCrossSectionChanged = this.onLaneCrossSectionChanged;
 
     return Material(
       color: colors.card,
@@ -178,14 +168,6 @@ class MapDisplayPanel extends StatelessWidget {
                   onChanged: onHighContrastChanged,
                 ),
               ),
-              if (laneCrossSection != null && onLaneCrossSectionChanged != null)
-                _DisplaySwitch(
-                  icon: Icons.straighten,
-                  title: '航路の断面',
-                  description: '中央線のどちら側かを帯で出します（警告ではありません）',
-                  value: laneCrossSection,
-                  onChanged: onLaneCrossSectionChanged,
-                ),
               SizedBox(height: dimens.space4),
             ],
           ),

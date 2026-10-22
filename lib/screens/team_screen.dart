@@ -5,10 +5,12 @@ import '../theme/app_theme.dart';
 
 import '../config/store_config.dart';
 import '../models/team_model.dart';
+import '../services/account_display_name_service.dart';
 import '../services/team_service.dart';
 import '../widgets/team_invite_share_button.dart';
 import '../widgets/team_administration_card.dart';
 import 'app_entry_gate.dart';
+import 'display_name_registration_screen.dart';
 
 class TeamScreen extends StatefulWidget {
   const TeamScreen({super.key});
@@ -19,15 +21,45 @@ class TeamScreen extends StatefulWidget {
 
 class _TeamScreenState extends State<TeamScreen> {
   final TeamService _teamService = TeamService();
+  final AccountDisplayNameService _displayNameService =
+      AccountDisplayNameService();
   bool _isClaiming = false;
+  String? _accountName;
 
   @override
   void initState() {
     super.initState();
+    _displayNameService.load().then((name) {
+      if (mounted) setState(() => _accountName = name);
+    }).catchError((Object error) {
+      debugPrint('Failed to load account display name: $error');
+    });
     // 別の端末で管理者が交代していれば反映する。通信できなければ手元のまま。
     _teamService.refreshActiveTeam().then((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _editAccountName(TeamMembership membership) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (routeContext) => DisplayNameRegistrationScreen(
+          service: _displayNameService,
+          initialName: _accountName,
+          firstRegistration: false,
+          onSaved: (name) {
+            Navigator.of(routeContext).pop();
+            if (mounted) setState(() => _accountName = name);
+            // メンバー一覧への写し。失敗しても次の起動で送り直す。
+            _displayNameService.publishIfNeeded(
+              userId: membership.userId,
+              serverName: TeamService.activeMembership?.displayName,
+              publish: _teamService.updateMyDisplayName,
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _claimAdministrator() async {
@@ -141,6 +173,28 @@ class _TeamScreenState extends State<TeamScreen> {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              key: const ValueKey('team-account-name'),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              leading: const Icon(Icons.badge_outlined),
+              title: Text(
+                _accountName ?? '名前未登録',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: const Text('航行中の艇のラベルと、管理者のメンバー一覧に表示されます。'),
+              trailing: TextButton(
+                onPressed: () => _editAccountName(membership),
+                child: const Text('変更'),
+              ),
+              onTap: () => _editAccountName(membership),
             ),
           ),
           const SizedBox(height: 12),
