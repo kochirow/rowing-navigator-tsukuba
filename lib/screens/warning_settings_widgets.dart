@@ -183,27 +183,24 @@ class ValueStepper extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w800)),
                   ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: changed
-                          ? colors.primary.withValues(alpha: 0.14)
-                          : null,
-                      border: changed
-                          ? null
-                          : Border.all(color: colors.textDisabled),
-                      borderRadius: BorderRadius.circular(6),
+                  // 印は変えた項目にだけ付ける。全項目に「既定」が
+                  // 並ぶと、変えた項目の「変更」が目立たない。
+                  if (changed) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('変更',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: colors.primary)),
                     ),
-                    child: Text(changed ? '変更' : '既定',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: changed
-                                ? colors.primary
-                                : colors.textSecondary)),
-                  ),
+                  ],
                 ]),
                 if (caption != null)
                   Text(caption!,

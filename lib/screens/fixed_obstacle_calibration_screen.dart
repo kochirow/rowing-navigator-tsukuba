@@ -967,16 +967,35 @@ class _FixedObstacleCalibrationScreenState
               child: Material(
                 color: Colors.black.withValues(alpha: 0.76),
                 borderRadius: BorderRadius.circular(12),
+                // 色の説明は文章でなく、見本+1語の凡例にする。
                 child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    '航行中には操作しないでください。橋下のGPS 1点だけで決めず、'
-                    '航空写真と複数回・両方向の航跡を照合します。'
-                    '白線が補正前、水色線が調整後、青い点は動かせる座標点、'
-                    '緑の点は選択中の座標点です。色付き線が推定航跡、'
-                    '灰色破線が生GPS、薄い円が測位精度、赤ピンが警告開始、'
-                    '紫ピンが「位置ずれ」評価です。',
-                    style: TextStyle(color: Colors.white),
+                  padding: EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '航行中は操作しない・GPS 1点で決めず、両方向の航跡と照合',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 6),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          _LegendItem.line(Colors.white, '補正前'),
+                          _LegendItem.line(Colors.lightBlueAccent, '調整後'),
+                          _LegendItem.dot(Colors.lightBlue, '座標点'),
+                          _LegendItem.dot(Colors.green, '選択中'),
+                          _LegendItem.line(Colors.lightGreenAccent, '航跡'),
+                          _LegendItem.line(Color(0xFFB0BEC5), '生GPS',
+                              dashed: true),
+                          _LegendItem.dot(Colors.red, '警告開始'),
+                          _LegendItem.dot(Colors.purpleAccent, '位置ずれ'),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1054,6 +1073,51 @@ class _FixedObstacleCalibrationScreenState
           ],
         );
       },
+    );
+  }
+}
+
+/// 地図の凡例1項目(線または点の見本+1語)。
+class _LegendItem extends StatelessWidget {
+  const _LegendItem.line(this.color, this.label, {this.dashed = false})
+      : isDot = false;
+  const _LegendItem.dot(this.color, this.label)
+      : isDot = true,
+        dashed = false;
+
+  final Color color;
+  final String label;
+  final bool isDot;
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    final swatch = isDot
+        ? Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          )
+        : SizedBox(
+            width: 18,
+            height: 3,
+            child: dashed
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (var i = 0; i < 3; i++)
+                        Container(width: 4, height: 3, color: color),
+                    ],
+                  )
+                : ColoredBox(color: color),
+          );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        swatch,
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ],
     );
   }
 }

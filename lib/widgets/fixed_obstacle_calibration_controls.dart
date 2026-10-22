@@ -159,8 +159,8 @@ class FixedObstacleCalibrationPublishPanel extends StatelessWidget {
     final message = statusMessage ??
         (status == FixedObstacleCalibrationPublishStatus.publishing
             ? 'チームへ公開しています…'
-            : 'スライダー操作はこの端末だけに保存されます。'
-                '確認後に公開すると、同じチームの端末へ反映されます。');
+            // 操作部品の名前(以前は「スライダー」)に依存しない言い方にする。
+            : '公開するまで、チームの端末には反映されません');
 
     return DecoratedBox(
       decoration: BoxDecoration(

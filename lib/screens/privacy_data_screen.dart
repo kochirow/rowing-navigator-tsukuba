@@ -93,11 +93,10 @@ class _PrivacyDataScreenState extends State<PrivacyDataScreen> {
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: const Text('プライバシーポリシー'),
-            subtitle: Text(
-              privacyPolicyUrl.isEmpty
-                  ? '公開URLが未設定です（公開ビルド前に必須）'
-                  : privacyPolicyUrl,
-            ),
+            // URLそのものは出さない(押せば開く)。未設定のときだけ知らせる。
+            subtitle: privacyPolicyUrl.isEmpty
+                ? const Text('公開URLが未設定です（公開ビルド前に必須）')
+                : null,
             onTap: privacyPolicyUrl.isEmpty
                 ? null
                 : () => _openUrl(privacyPolicyUrl),
@@ -105,15 +104,14 @@ class _PrivacyDataScreenState extends State<PrivacyDataScreen> {
           ListTile(
             leading: const Icon(Icons.support_agent),
             title: const Text('サポート'),
-            subtitle: Text(
-              supportUrl.isEmpty ? 'サポートURLが未設定です（公開ビルド前に必須）' : supportUrl,
-            ),
+            subtitle: supportUrl.isEmpty
+                ? const Text('サポートURLが未設定です（公開ビルド前に必須）')
+                : null,
             onTap: supportUrl.isEmpty ? null : () => _openUrl(supportUrl),
           ),
           ListTile(
             leading: const Icon(Icons.flag_outlined),
             title: const Text('通報・お問い合わせ'),
-            subtitle: const Text('不適切な利用、危険情報、招待コードの漏洩を運営へ連絡する'),
             onTap: () => _openUrl(supportReportFormUrl),
           ),
           const Divider(height: 32),
