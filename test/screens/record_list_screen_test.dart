@@ -77,10 +77,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今月の記録はありません'), findsOneWidget);
-    // 一覧は絞られていないので、「切り替えると見られる」とは書かない。
-    expect(find.text('これまでの記録は下の一覧から開けます'), findsOneWidget);
+    // 一覧は絞られていない。切替が集計カードの中にあるので、説明文は要らない。
+    expect(find.text('これまでの記録は下の一覧から開けます'), findsNothing);
     expect(find.text('記録一覧'), findsOneWidget);
-    expect(find.text('全期間・1件'), findsOneWidget);
+    expect(find.text('1件'), findsOneWidget);
   });
 
   testWidgets('艇種は内部名ではなく「8+」で出し、一覧が全期間であることを示す', (tester) async {
@@ -120,7 +120,7 @@ void main() {
     expect(find.text('8+'), findsOneWidget);
     // 集計は今月(1本)だが、一覧は期間によらず全件。
     expect(find.text('1 本'), findsOneWidget);
-    expect(find.text('全期間・2件'), findsOneWidget);
+    expect(find.text('2件'), findsOneWidget);
   });
 
   /// ハイレート×5本（40秒・5m/s・SR34）をSR20のパドル（80秒・2.3m/s）でつなぐ練習。

@@ -5,7 +5,7 @@ import '../../../theme/record_palette.dart';
 import '../replay_controller.dart';
 import '../replay_format.dart';
 
-/// 選択区間の名前と4つの数字。「全体」のときは時間の内訳も出す。
+/// 選択区間の名前と範囲・操作。「全体」のときは時間の内訳も出す。
 class SelectionCard extends StatelessWidget {
   final ReplayController controller;
   final VoidCallback onShare;
@@ -23,8 +23,10 @@ class SelectionCard extends StatelessWidget {
     final String kind, name, range;
     Color? nameTag;
     String? tag;
+    // 眉(kind)は名前で分からないときだけ出す。「セット」+「2セット目」、
+    // 「全体」+「この日の練習」は同じことを2回言う。
     if (set != null) {
-      kind = 'セット';
+      kind = '';
       name = '${set.index + 1}セット目';
       tag = set.intensity.label;
       nameTag = p.intensity(set.intensity.index);
@@ -41,7 +43,7 @@ class SelectionCard extends StatelessWidget {
           '${bout.indexInSet + 1}${parent.intensity.unit}目${dir == null ? '' : ' ・ $dir'}';
       range = '${fmtDuration(sel.start)} – ${fmtDuration(sel.end)}';
     } else if (c.isAll) {
-      kind = '全体';
+      kind = '';
       name = 'この日の練習';
       range = '${fmtDuration(sel.start)} – ${fmtDuration(sel.end)}';
     } else {
@@ -70,13 +72,15 @@ class SelectionCard extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(kind,
-                        style: TextStyle(
-                            fontSize: 12,
-                            letterSpacing: 1,
-                            fontWeight: FontWeight.w800,
-                            color: p.textSub)),
-                    const SizedBox(height: 3),
+                    if (kind.isNotEmpty) ...[
+                      Text(kind,
+                          style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 1,
+                              fontWeight: FontWeight.w800,
+                              color: p.textSub)),
+                      const SizedBox(height: 3),
+                    ],
                     Text.rich(
                         TextSpan(children: [
                           TextSpan(text: name),
@@ -104,48 +108,9 @@ class SelectionCard extends StatelessWidget {
             const SizedBox(width: 6),
             _Pill(label: '共有', palette: p, accent: true, onTap: onShare),
           ]),
-          const SizedBox(height: 14),
-          Row(children: [
-            Expanded(
-                child: _Tile(
-                    palette: p,
-                    color: p.metricPace,
-                    label: '平均 /500m',
-                    value: fmtPace(st.paceSecPer500))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _Tile(
-                    palette: p,
-                    color: p.metricSpm,
-                    label: '平均SR',
-                    value: st.averageSpm == null
-                        ? '--'
-                        : '${st.averageSpm!.round()}',
-                    unit: 'spm')),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-                child: _Tile(
-                    palette: p,
-                    color: p.metricDps,
-                    label: '平均DPS',
-                    value: st.averageDps == null
-                        ? '--'
-                        : st.averageDps!.toStringAsFixed(1),
-                    unit: 'm')),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _Tile(
-                    palette: p,
-                    color: p.textSub,
-                    label: '距離 ・ 時間',
-                    value: st.distance >= 1000
-                        ? (st.distance / 1000).toStringAsFixed(2)
-                        : '${st.distance.round()}',
-                    unit: st.distance >= 1000 ? 'km' : 'm',
-                    sub: fmtDuration(set?.range.duration ?? st.duration))),
-          ]),
+          // 4つの数字(/500m・SR・DPS・距離と時間)は、地図の下端の「答え」
+          // (AnswerOverlay)が同じ選択区間について大きく出している。
+          // ここで繰り返さず、名前・範囲・操作と、平均の注記だけにする。
           if (note != null) ...[
             const SizedBox(height: 10),
             Text(note, style: TextStyle(fontSize: 12, color: p.textSub)),
@@ -252,77 +217,6 @@ class _Overview extends StatelessWidget {
           '練習時間 = 艇が動いていた時間の合計（パドル・アップを含む）。'
           '記録の長さ ${fmtDuration(o.recordSec)}。',
           style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
-        ),
-      ]),
-    );
-  }
-}
-
-class _Tile extends StatelessWidget {
-  final RecordPalette palette;
-  final Color color;
-  final String label;
-  final String value;
-  final String? unit;
-  final String? sub;
-
-  const _Tile({
-    required this.palette,
-    required this.color,
-    required this.label,
-    required this.value,
-    this.unit,
-    this.sub,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = palette;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 11, 10, 10),
-      decoration: BoxDecoration(
-        color: p.surfaceHigh,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(children: [
-        Container(width: 3, height: 44, color: color),
-        const SizedBox(width: 8),
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: p.textSub)),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: value),
-                  if (unit != null)
-                    TextSpan(
-                        text: ' $unit',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: p.textSub)),
-                ]),
-                style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    color: p.text,
-                    fontFeatures: const [FontFeature.tabularFigures()]),
-              ),
-            ),
-            if (sub != null)
-              Text(sub!,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: p.textSub)),
-          ]),
         ),
       ]),
     );

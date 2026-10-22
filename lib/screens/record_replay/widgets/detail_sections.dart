@@ -264,9 +264,6 @@ class _FineAdjustState extends State<_FineAdjust> {
           ],
         ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('ふだんは時間軸のつまみで選べます。ここでは秒単位で合わせたり、時刻を入力したりできます。',
-          style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub)),
-      const SizedBox(height: 8),
       nudges(true),
       const SizedBox(height: 6),
       nudges(false),

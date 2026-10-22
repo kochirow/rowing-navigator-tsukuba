@@ -47,7 +47,7 @@ class SetTable extends StatelessWidget {
     return RecordCard(
       palette: p,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('各セット（自動検出）',
+        Text('各セット',
             style: TextStyle(
                 fontSize: 12,
                 letterSpacing: 1,
