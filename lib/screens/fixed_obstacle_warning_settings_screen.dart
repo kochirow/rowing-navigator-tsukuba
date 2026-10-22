@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/fixed_obstacle_warning_settings.dart';
@@ -24,6 +25,9 @@ class _FixedObstacleWarningSettingsScreenState
   final _presetService = PresetObstacleService();
   final _sharedSafetyService = SharedSafetyCalibrationService();
   FixedObstacleWarningSettings? _settings;
+
+  /// 開いた時点の設定。ここから変わったときだけ下に保存バーを出す。
+  FixedObstacleWarningSettings? _initialSettings;
   List<FixedObstacleCalibrationTarget>? _targets;
   bool _saving = false;
   bool _publishing = false;
@@ -51,6 +55,7 @@ class _FixedObstacleWarningSettingsScreenState
       if (!mounted) return;
       setState(() {
         _settings = results[0] as FixedObstacleWarningSettings;
+        _initialSettings = _settings;
         _targets = results[1] as List<FixedObstacleCalibrationTarget>;
       });
       try {
@@ -64,6 +69,7 @@ class _FixedObstacleWarningSettingsScreenState
             _settings = FixedObstacleWarningSettings(
               disabledSourceIds: shared.disabledWarningSourceIds,
             );
+            _initialSettings = _settings;
           }
         });
       } catch (_) {
@@ -196,6 +202,14 @@ class _FixedObstacleWarningSettingsScreenState
     });
   }
 
+  bool get _changed {
+    final settings = _settings;
+    final initial = _initialSettings;
+    if (settings == null || initial == null) return false;
+    return !setEquals(
+        settings.disabledSourceIds.toSet(), initial.disabledSourceIds.toSet());
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
@@ -225,40 +239,40 @@ class _FixedObstacleWarningSettingsScreenState
       );
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('警告対象となる障害物の選択'),
-        actions: [
-          TextButton(
-            onPressed: settings == null || _busy ? null : _save,
-            child: Text(
-              _busy ? '保存中…' : '保存',
-              style: const TextStyle(color: Colors.white),
+      appBar: AppBar(title: const Text('警告対象となる障害物の選択')),
+      // 「警告の設定」と同じく、変更があるときだけ下に保存バーを出す。
+      // 右上の「保存」の文字だけでは、未保存かどうかが分からない。
+      bottomNavigationBar: !_changed && !_saving
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(children: [
+                  const Expanded(
+                    child: Text('保存していない変更',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  TextButton(
+                    onPressed:
+                        _busy ? null : () => _updateSettings(_initialSettings!),
+                    child: const Text('元に戻す'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: settings == null || _busy ? null : _save,
+                    child: Text(_saving ? '保存中…' : '保存'),
+                  ),
+                ]),
+              ),
             ),
-          ),
-        ],
-      ),
       body: settings == null || targets == null
           ? const AppLoadingView(message: '固定対象物を読み込んでいます…')
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: Text(
-                      'オフにした対象物は、通常は地図に表示したまま衝突判定・画面警告・音声警告から外れます。ただし現在未使用の逆走注意エリアと島2（上流）は、オフの間は航行地図からも非表示になります。「保存」はこの端末だけに保存します。「チームに公開」を押すと、同じチームの端末にも反映されます。座標調整や危険範囲は変更しません。',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '固定対象物ごとの警告',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                const Text('オン: 警告対象　オフ: 警告しない'),
-                const SizedBox(height: 8),
+                // 説明カードと「オン: 警告対象」の凡例は外した。スイッチと
+                // 画面名が言う。例外(未使用の区域はオフで地図からも消える)
+                // だけを、その行の副題に書く。
                 for (final target in orderedTargets)
                   Card(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -267,7 +281,7 @@ class _FixedObstacleWarningSettingsScreenState
                       subtitle: Text(
                         FixedObstacleWarningSettings.isSettingsLastSourceId(
                                 target.sourceId)
-                            ? '${target.kind.displayLabel}・現在は未使用（初期オフ）'
+                            ? '${target.kind.displayLabel}・未使用(オフの間は地図にも出ない)'
                             : target.kind.displayLabel,
                       ),
                       value: settings.isEnabled(target.sourceId),
@@ -284,7 +298,7 @@ class _FixedObstacleWarningSettingsScreenState
                       ? null
                       : () => _updateSettings(FixedObstacleWarningSettings()),
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('初期設定に戻す（逆走注意エリア・島2（上流）をオフ）'),
+                  label: const Text('初期設定に戻す'),
                 ),
                 const SizedBox(height: 24),
                 FixedObstacleCalibrationPublishPanel(

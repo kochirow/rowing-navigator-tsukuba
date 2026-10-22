@@ -274,10 +274,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
               children: [
                 // 設定を「時間」と「距離」と「対象」の3つの問いへ分ける。
                 // どれも警告の設定だが、答えている問いが違う。
-                const _SectionHeader(
-                  '警告のタイミングの調整',
-                  '到達までの残り時間で、音が上がる段階を決めます。',
-                ),
+                // 見出しは問いだけ。何を決めるのかは下の図が見せる。
+                const _SectionHeader('警告のタイミングの調整'),
                 Card(
                   margin: const EdgeInsets.only(top: 12),
                   child: Padding(
@@ -293,9 +291,9 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                         ),
                         ValueStepper(
                           label: '連続音',
-                          caption: '止まるまでの時間より長く・'
-                              '${minPrimaryWarningLeadSeconds.toStringAsFixed(1)}秒以上・'
-                              '${primaryWarningLeadStepSeconds.toStringAsFixed(1)}秒刻み',
+                          // 止まるまでの時間との関係は上の図(▲)が見せる。
+                          caption:
+                              '${minPrimaryWarningLeadSeconds.toStringAsFixed(1)}秒以上',
                           value:
                               '${warningLeadTimes.primaryWarningLeadSeconds.toStringAsFixed(1)}秒前',
                           changed: warningLeadTimes.primaryWarningLeadSeconds !=
@@ -316,7 +314,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                         ),
                         ValueStepper(
                           label: '予告(断続音)',
-                          caption: 'ここより先は予測しない・'
+                          caption:
                               '${minWarningTimeSeconds.toStringAsFixed(0)}〜${maxWarningTimeSeconds.toStringAsFixed(0)}秒',
                           value:
                               '${warningLeadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
@@ -346,30 +344,27 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                                 : () => _setLeadTimes(primaryWarningLeadSeconds,
                                     advanceWarningLeadSeconds),
                             icon: const Icon(Icons.restore),
-                            label: const Text('既定(10秒・13秒)に戻す'),
+                            label: const Text('既定に戻す'),
                           ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
-                const _SectionHeader(
-                  '障害物の当たり判定の調整',
-                  '基準線から片側へ広げる実距離です。既定は岸が水上側5m・陸側15m、'
-                      '橋は内外5m、その他は片側5m。カーブ・逆走区域は別管理です。',
-                ),
+                // 既定値は各項目の「変更」の印と「既定に戻す」が示すので、
+                // 見出しや説明に繰り返し書かない。設定値の根拠は
+                // DESIGN_PRINCIPLES にある。
+                const _SectionHeader('障害物の当たり判定の調整'),
                 const SizedBox(height: 4),
                 _zoneCard(
                   kind: DangerZoneKind.shore,
                   title: '岸',
-                  description: '岸から数mを走る正常運用を妨げないため水上側は5m、陸地側の欠損を覆うため陸側は15mです。',
                   waterLabel: '水上側',
                   landLabel: '陸側',
                 ),
                 _zoneCard(
                   kind: DangerZoneKind.bridge,
                   title: '橋',
-                  description: '毎回通過する橋で警告を形骸化させないため、内側・外側とも既定5mです。',
                   waterLabel: '内側',
                   landLabel: '外側',
                 ),
@@ -383,7 +378,6 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 _zoneCard(
                   kind: DangerZoneKind.driftwood,
                   title: '固定流木',
-                  description: '固定流木の外周から全方向へ広げる危険範囲を調整します。',
                   waterLabel: '周囲',
                   landLabel: '周囲',
                   symmetric: true,
@@ -399,7 +393,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                             _publishMessage = null;
                           }),
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('デフォルト値に戻す（岸5m/15m・橋は両側5m）'),
+                  label: const Text('既定に戻す'),
                 ),
                 const SizedBox(height: 24),
                 FixedObstacleCalibrationPublishPanel(
@@ -414,16 +408,13 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                   onPublish: _publishDangerZones,
                 ),
                 const SizedBox(height: 24),
-                const _SectionHeader(
-                  '警告対象となる障害物の選択',
-                  '対象物ごとに警告を止められます。距離を0にして止めないこと。',
-                ),
+                const _SectionHeader('警告対象となる障害物の選択'),
                 Card(
                   margin: const EdgeInsets.only(top: 12),
                   child: ListTile(
                     leading: const Icon(Icons.notifications_off_outlined),
-                    title: const Text('警告対象となる障害物の選択'),
-                    subtitle: const Text('橋・岸・中州・流木ごとに警告のオン・オフ'),
+                    // 見出しと同じ語を繰り返さず、中身を名前にする。
+                    title: const Text('橋・岸・中州・流木ごとのオン・オフ'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
                       final changed = await Navigator.push<bool>(
@@ -465,7 +456,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   Widget _zoneCard({
     required DangerZoneKind kind,
     required String title,
-    required String description,
+    String? description,
     required String waterLabel,
     required String landLabel,
     bool symmetric = false,
@@ -480,8 +471,10 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(description, style: Theme.of(context).textTheme.bodySmall),
+            if (description != null) ...[
+              const SizedBox(height: 4),
+              Text(description, style: Theme.of(context).textTheme.bodySmall),
+            ],
             const SizedBox(height: 12),
             if (symmetric)
               _rangeSlider(
@@ -538,8 +531,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
         .toDouble());
     return ValueStepper(
       label: label,
-      caption: '既定 ${defaultValue.toStringAsFixed(1)}m ・ '
-          '${minDangerZoneOffsetMeters.toStringAsFixed(0)}〜${maxDangerZoneOffsetMeters.toStringAsFixed(0)}m',
+      caption: '${minDangerZoneOffsetMeters.toStringAsFixed(0)}〜'
+          '${maxDangerZoneOffsetMeters.toStringAsFixed(0)}m',
       value: '${safeValue.toStringAsFixed(1)} m',
       changed: safeValue != defaultValue,
       keyPrefix: keyPrefix,
@@ -559,32 +552,21 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
 /// 並ぶ。見出しがないと、上から順に読んでも何を決めているのか分からない。
 class _SectionHeader extends StatelessWidget {
   final String title;
-  final String description;
 
-  const _SectionHeader(this.title, this.description);
+  const _SectionHeader(this.title);
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            description,
-            style: TextStyle(fontSize: 13, color: colors.textSecondary),
-          ),
-        ],
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: colors.textPrimary,
+        ),
       ),
     );
   }

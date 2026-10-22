@@ -537,7 +537,7 @@ class _NavigationSafetySettingsSheetState
                                   FixedObstacleWarningSettings
                                           .isSettingsLastSourceId(
                                               target.sourceId)
-                                      ? '${target.kind.displayLabel}・現在は未使用（初期オフ）'
+                                      ? '${target.kind.displayLabel}・未使用(オフの間は地図にも出ない)'
                                       : target.kind.displayLabel,
                                 ),
                                 value: warnings.isEnabled(target.sourceId),

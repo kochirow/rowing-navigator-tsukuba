@@ -81,7 +81,6 @@ class DeviceStatusScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     final dimens = context.dimens;
     final now = clock?.call() ?? DateTime.now();
     final fixAge = lastFixAt == null
@@ -130,28 +129,10 @@ class DeviceStatusScreen extends StatelessWidget {
               _Row('読み込み済みの危険区域', '$obstacleCount 件'),
             ],
           ),
-          Container(
-            padding: EdgeInsets.all(dimens.space3),
-            decoration: BoxDecoration(
-              color: colors.cautionSurface,
-              borderRadius: dimens.borderMd,
-              border: Border.all(color: colors.caution),
-            ),
-            child: const Text(
-              '上の値は現在の状態を表示するだけです。'
-              'ここから警告の設定を変更することはできません。',
-            ),
-          ),
+          // 「上の値は表示するだけ」の注意書きは外した(操作部品が無いことが
+          // 示す)。下の行き先には見出しを付けない(直下の「プライバシーと
+          // データ」と同じ語を重ね、「故障かな？」はその見出しに属さなかった)。
           SizedBox(height: dimens.space5),
-          Text(
-            'データとプライバシー',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary,
-            ),
-          ),
-          SizedBox(height: dimens.space2),
           Card(
             margin: EdgeInsets.zero,
             child: Column(
@@ -174,7 +155,7 @@ class DeviceStatusScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
                   title: const Text('プライバシーとデータ'),
-                  subtitle: const Text('取得データの確認、ポリシー、アカウント削除'),
+                  subtitle: const Text('取得データ・ポリシー・アカウント削除'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(
                     context,
