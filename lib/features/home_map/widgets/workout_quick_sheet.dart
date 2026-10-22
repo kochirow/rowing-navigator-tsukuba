@@ -58,9 +58,8 @@ MapMenuAction workoutPrepareMenuAction(
   return MapMenuAction(
     icon: Icons.timer_outlined,
     title: 'ワークアウト',
-    subtitle: prepared == null
-        ? 'メニューを作る・登録する・次の航行で使うメニューを決める'
-        : '次の航行で使う: ${workoutShortName(prepared)}',
+    subtitle:
+        prepared == null ? null : '次の航行で使う: ${workoutShortName(prepared)}',
     section: section,
     onTap: () async {
       final plan = await Navigator.of(context).push<WorkoutPlan>(
