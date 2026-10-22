@@ -227,7 +227,7 @@ class NavigationWarningService {
         StaticObstacleKind.shore => '岸に接近',
         StaticObstacleKind.bridge => '橋に接近',
         StaticObstacleKind.bridgePier => '橋脚に接近',
-        StaticObstacleKind.island => '中洲に接近',
+        StaticObstacleKind.island => '中州に接近',
         StaticObstacleKind.driftwood => '流木に接近',
         StaticObstacleKind.pile => '杭に接近',
         StaticObstacleKind.curve => 'カーブ注意',

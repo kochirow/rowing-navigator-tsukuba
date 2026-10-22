@@ -33,7 +33,7 @@ const anomalyReannounceSec = 120;
 /// 既定は空 = 無音。監視者は画面を見られる位置にいる
 /// (DESIGN_PRINCIPLES 1.3「コーチ艇はいない」・1.4「監視者は陸上にいる」)。
 /// 実運用ではトランシーバーアプリ(Buddycom)の音声と干渉し、艇庫周辺の近隣にも
-/// 響く。情報は `BoatListPanel` と `CoachAnomalyChip` に全て出ており、
+/// 響く。情報は `BoatListPanel` と `ObserverStatusIcon` に全て出ており、
 /// 音は情報を足していない。
 ///
 /// トレードオフ: 監視者が画面から目を離している間、沈・電池切れへの気づきが
