@@ -84,12 +84,15 @@ class _FirebaseBootstrapState extends State<FirebaseBootstrap> {
   Future<void> _activateConfiguredAppCheck() {
     final customActivator = widget.activateAppCheck;
     if (customActivator != null) return customActivator();
+    // firebase_app_check 0.5 で引数が provider オブジェクトへ変わった。
+    // Apple の既定は DeviceCheck なので、App Attest を明示し続けること。
     return FirebaseAppCheck.instance.activate(
-      androidProvider:
-          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      appleProvider: kDebugMode
-          ? AppleProvider.debug
-          : AppleProvider.appAttestWithDeviceCheckFallback,
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleAppAttestWithDeviceCheckFallbackProvider(),
     );
   }
 
