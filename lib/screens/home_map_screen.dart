@@ -1622,8 +1622,15 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 lap.setRightIndex,
                                             onLowerReset: lap.reset,
                                             onLowerUndo: lap.undoReset,
-                                            workoutPlan: workout.plan,
+                                            // 準備したメニューは待機として
+                                            // 出し、▶ で始められるようにする。
+                                            workoutPlan: workout.plan ??
+                                                workout.prepared,
                                             workoutStatus: workout.status,
+                                            onWorkoutStart: workout.startNow,
+                                            onWorkoutStop: workout.stop,
+                                            onWorkoutUndoStop: workout.undoStop,
+                                            onWorkoutDismiss: workout.dismiss,
                                           ),
                                         ),
                                       ),
@@ -1852,7 +1859,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   context,
                                                   running: workout.plan,
                                                   onStart: workout.start,
-                                                  onStop: workout.stop,
+                                                  onStop: workout.dismiss,
                                                   prepared: workout.prepared,
                                                 ),
                                               ),

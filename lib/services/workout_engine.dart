@@ -38,8 +38,12 @@ class WorkoutStatus {
 /// - セット間レスト: 時間で減り 0 で次のセット。
 /// - 「漕ぎ出したら始める」なら、最初のワークは漕ぎ出しで始まる。
 class WorkoutEngine {
-  WorkoutEngine(this.plan)
-      : _phase = plan.autoStart ? WorkoutPhase.ready : WorkoutPhase.work;
+  /// [waitForRowing] が偽なら、「漕ぎ出したら始める」のメニューでも READY を
+  /// 飛ばして1本目から始める(▶ を押して始めたとき)。
+  WorkoutEngine(this.plan, {bool? waitForRowing})
+      : _phase = (waitForRowing ?? plan.autoStart)
+            ? WorkoutPhase.ready
+            : WorkoutPhase.work;
 
   final WorkoutPlan plan;
 
@@ -103,6 +107,11 @@ class WorkoutEngine {
         plan.restUnit == RestUnit.strokes) {
       _advanceRest(1);
     }
+  }
+
+  /// READY で待っているときに、漕ぎ出しを待たず1本目を始める(▶)。
+  void startNow() {
+    if (_phase == WorkoutPhase.ready) _startWork();
   }
 
   void _startWork() {

@@ -28,9 +28,16 @@ class NavigationStatusPanel extends StatefulWidget {
   /// 直前の RESET を取り消す。RESET のあとの通知に「元に戻す」として出す。
   final VoidCallback? onLowerUndo;
 
-  /// ワークアウト中は下半分をワークアウトの表示に置き換える。
+  /// ワークアウト中・待機中は下半分をワークアウトの表示に置き換える。
+  /// [workoutStatus] が null なら待機中。
   final WorkoutPlan? workoutPlan;
   final WorkoutStatus? workoutStatus;
+  final VoidCallback? onWorkoutStart;
+  final VoidCallback? onWorkoutStop;
+
+  /// 直前の ■ を取り消す。■ のあとの通知に「元に戻す」として出す。
+  final VoidCallback? onWorkoutUndoStop;
+  final VoidCallback? onWorkoutDismiss;
 
   final DateTime Function()? clock;
 
@@ -52,6 +59,10 @@ class NavigationStatusPanel extends StatefulWidget {
     this.onLowerUndo,
     this.workoutPlan,
     this.workoutStatus,
+    this.onWorkoutStart,
+    this.onWorkoutStop,
+    this.onWorkoutUndoStop,
+    this.onWorkoutDismiss,
     this.clock,
   });
 
@@ -103,6 +114,17 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
     ));
   }
 
+  /// ■。水しぶきや手の当たりで押しうるので、RESET と同じく「元に戻す」を付ける。
+  void _stopWorkout() {
+    widget.onWorkoutStop?.call();
+    final undo = widget.onWorkoutUndoStop;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+      content: const Text('ワークアウトを止めました'),
+      action:
+          undo == null ? null : SnackBarAction(label: '元に戻す', onPressed: undo),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return NavStatusCard(
@@ -121,6 +143,9 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       onLowerReset: widget.onLowerReset == null ? null : _reset,
       workoutPlan: widget.workoutPlan,
       workoutStatus: widget.workoutStatus,
+      onWorkoutStart: widget.onWorkoutStart,
+      onWorkoutStop: widget.onWorkoutStop == null ? null : _stopWorkout,
+      onWorkoutDismiss: widget.onWorkoutDismiss,
     );
   }
 }

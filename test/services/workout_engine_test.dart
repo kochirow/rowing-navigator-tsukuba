@@ -83,4 +83,25 @@ void main() {
     expect(engine.status.phase, WorkoutPhase.setRest, reason: '2本でセット終わり');
     expect(engine.status.rep, 3);
   });
+
+  test('▶: READY から漕ぎ出しを待たずに始められ、最初から始めることもできる', () {
+    const plan = WorkoutPlan(
+      workUnit: WorkUnit.distance,
+      workValue: 500,
+      reps: 2,
+      restUnit: RestUnit.time,
+      restValue: 60,
+    );
+    final engine = WorkoutEngine(plan);
+    expect(engine.status.phase, WorkoutPhase.ready);
+    engine.startNow();
+    expect(engine.status.phase, WorkoutPhase.work);
+    expect(engine.status.remaining, 500);
+    // WORK 中に押しても何も変わらない(やり直しは ■ → ▶)。
+    engine.startNow();
+    expect(engine.status.phase, WorkoutPhase.work);
+
+    expect(WorkoutEngine(plan, waitForRowing: false).status.phase,
+        WorkoutPhase.work);
+  });
 }
