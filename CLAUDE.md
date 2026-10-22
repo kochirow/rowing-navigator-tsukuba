@@ -96,6 +96,13 @@ flutter run
 > - iOS: Xcode の Archive でもよい。Runner の Run Script が
 >   `tool/xcode_provenance_env.sh` で SHA を自動で足す。
 >
+> **iOS は Firebase を Swift Package Manager で取り込む**(2026-10-20 から。
+> Firebase iOS SDK は CocoaPods での配布を 12.19.0 で終えた)。Google Maps だけ
+> CocoaPods に残る混在構成。`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` を付けないと
+> `pod install` が固まる。Xcode では `ios/Runner.xcworkspace` を開く。
+> 日本語パスでも iOS ビルドは通るが(2026-10-20 確認)、配布ビルドは Android と同じく
+> 英数字パスの `git clone` 複製で作る。手順は [docs/ios_build.md](docs/ios_build.md)。
+>
 > Firebase Rules の Emulator テスト(`firebase_rules_test/`)は CI の
 > `firebase-rules` ジョブで毎回走る。
 
