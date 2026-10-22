@@ -18,6 +18,7 @@ import '../config/map_style_config.dart';
 import '../config/navigator_config.dart';
 import '../features/home_map/widgets/boat_list_panel.dart';
 import '../features/home_map/widgets/boat_status_card.dart';
+import '../features/home_map/widgets/practice_log_status.dart';
 import '../features/home_map/widgets/background_location_disclosure_dialog.dart';
 import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
@@ -1456,31 +1457,9 @@ class HomeMapScreen extends HookConsumerWidget {
                         final practiceLogError =
                             practiceLogRecording.error.value;
                         final notices = <Widget>[
-                          // 練習一括ログを保存できないときは、黙って失敗させず
-                          // 常設で示す(原則6)。監視そのものは続いている。
                           if (navigator.mode.value == NavMode.observer &&
                               practiceLogError != null)
-                            Semantics(
-                              liveRegion: true,
-                              label: practiceLogError,
-                              excludeSemantics: true,
-                              child: Container(
-                                width: double.infinity,
-                                color: context.colors.cautionSurface,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 7),
-                                child: Row(children: [
-                                  Icon(Icons.sd_card_alert_outlined,
-                                      color: context.colors.caution, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text('記録できません',
-                                      style: TextStyle(
-                                          color: context.colors.textPrimary,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold)),
-                                ]),
-                              ),
-                            ),
+                            PracticeLogFailureNotice(message: practiceLogError),
                           // 陸上と判定して警告音を止めている間は、
                           // その事実を必ず画面へ出す。黙って音を
                           // 止めると「鳴らないアプリ」と区別できない。
@@ -2201,7 +2180,7 @@ class HomeMapScreen extends HookConsumerWidget {
                                             navigator.mode.value ==
                                                 NavMode.observer &&
                                             navigator.isWatching.value)
-                                          _RecordingDot(
+                                          RecordingDot(
                                             // 記録中であることは、括弧書きの
                                             // 文字でなく左上の赤い点で示す
                                             // (記録はほぼ常に動いている)。
@@ -2232,42 +2211,6 @@ class HomeMapScreen extends HookConsumerWidget {
                       }),
                     ),
                   ]),
-      ),
-    );
-  }
-}
-
-/// ボタンの左上に、記録中を示す小さな赤い点を重ねる。
-class _RecordingDot extends StatelessWidget {
-  const _RecordingDot({required this.recording, required this.child});
-
-  final bool recording;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!recording) return child;
-    return Semantics(
-      hint: '記録中',
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          child,
-          Positioned(
-            left: 2,
-            top: 2,
-            child: Container(
-              key: const ValueKey('watch-recording-dot'),
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: context.colors.danger,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
