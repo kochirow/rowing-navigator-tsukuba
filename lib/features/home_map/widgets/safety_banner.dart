@@ -251,7 +251,7 @@ class _WarningChip extends StatelessWidget {
         'shore' => '岸',
         'bridge' => '橋',
         'bridgePier' => '橋脚',
-        'island' => '中洲',
+        'island' => '中州',
         'driftwood' => '流木',
         'pile' => '杭',
         'other_boat' => '他艇',
@@ -265,7 +265,7 @@ class _WarningChip extends StatelessWidget {
         'other_boat_track_lost' => '他艇途絶',
         'static_profile_unavailable' => '危険区域',
         'audio_unavailable' => '警告音',
-        'pipeline_unresponsive' => '警告停止',
+        'pipeline_unresponsive' => '判定停止',
         // 未知の種別は title を出すしかないが、「〜に接近」の語尾は落とす。
         // 接近したから鳴っているのであって、対象名だけで用は足りる。
         _ => _withoutApproachSuffix(warning.title),

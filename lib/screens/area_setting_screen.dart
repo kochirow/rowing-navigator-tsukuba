@@ -793,7 +793,7 @@ class _EditorButtons extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           TextButton(
-              onPressed: saving ? null : onCancel, child: const Text('取消')),
+              onPressed: saving ? null : onCancel, child: const Text('キャンセル')),
           if (onDelete != null)
             TextButton(
               onPressed: saving ? null : onDelete,

@@ -528,8 +528,7 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.layers_outlined,
           title: '表示',
-          subtitle:
-              isObserver ? '地図種別・航路の中央線・高コントラスト' : '地図種別・航路の中央線・高コントラスト・艇速',
+          subtitle: '地図種別・航路の中央線・高コントラスト',
           onTap: openDisplayPanel,
         ),
         // 航行前のワークアウトの準備。航行中は地図右のボタンが入口。
@@ -1040,7 +1039,7 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, [navigator.mode.value, navigator.batteryLevel.value]);
 
-    // 監視異常の提示は「地図上の小さなチップ(CoachAnomalyChip)+ 艇一覧」で行う。
+    // 監視異常の提示は「地図上の件数の印(ObserverStatusIcon)+ 艇一覧」で行う。
     // ここが受け持つのは音だけで、既定では一度も鳴らない。
     //
     // 以前は新規異常のたびに `playCoachAnomalyAlert()`(= 他艇衝突と同じ
