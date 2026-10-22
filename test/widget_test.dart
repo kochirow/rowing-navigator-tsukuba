@@ -684,10 +684,12 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('レート(SPM)を計測する'));
+    await tester.ensureVisible(find.text('レート(SPM)'));
     await tester.pumpAndSettle();
+    // 見出しとスイッチ名で同じ語を2回出さない。
     expect(find.text('レート(SPM)'), findsOneWidget);
-    expect(find.textContaining('艇にスマホを固定して使用'), findsOneWidget);
+    // 名前を入れると、地図に出る札をそのまま見せる。
+    expect(find.text('1x 後藤'), findsOneWidget);
     // 航行中の艇速変化グラフは廃止した(2026-08-13)。表示の切替も出さない。
     expect(find.textContaining('艇速変化を表示'), findsNothing);
 

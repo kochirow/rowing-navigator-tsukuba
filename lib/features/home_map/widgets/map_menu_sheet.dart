@@ -49,16 +49,10 @@ class MapMenuSheet extends StatelessWidget {
   final List<MapMenuAction> actions;
   final double heightFactor;
 
-  /// 先頭に大きなタイルで並べる、よく使う行き先(練習記録・チーム・使い方)。
-  /// 隠れたメニューの奥に埋もれないようにする。下の一覧からは消さない
-  /// (覚えた位置をずらさない)。
-  final List<MapMenuAction> tiles;
-
   const MapMenuSheet({
     super.key,
     required this.actions,
     this.heightFactor = 0.8,
-    this.tiles = const [],
   }) : assert(heightFactor > 0 && heightFactor <= 1);
 
   static String? _subtitleOf(MapMenuAction action) => action.enabled
@@ -106,46 +100,7 @@ class MapMenuSheet extends StatelessWidget {
                     borderRadius: dimens.borderSm,
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    dimens.space5,
-                    dimens.space1,
-                    dimens.space5,
-                    dimens.space1,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'メニュー',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-                if (tiles.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      dimens.space4,
-                      dimens.space2,
-                      dimens.space4,
-                      dimens.space2,
-                    ),
-                    child: Row(
-                      children: [
-                        for (final t in tiles)
-                          Expanded(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              child: _MenuTile(action: t),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                // 見出し「メニュー」は置かない(押したボタンの名前の繰り返し)。
                 for (final (index, action) in actions.indexed) ...[
                   // 塊が変わったところにだけ見出しを出す。
                   if (action.section != null &&
@@ -212,48 +167,6 @@ class MapMenuSheet extends StatelessWidget {
                 SizedBox(height: dimens.space2),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({required this.action});
-
-  final MapMenuAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Material(
-      color: colors.canvas,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: colors.textDisabled.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () {
-          Navigator.of(context).pop();
-          action.onTap();
-        },
-        child: SizedBox(
-          height: 88,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(action.icon, size: 28, color: colors.primary),
-              const SizedBox(height: 8),
-              Text(
-                action.title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
           ),
         ),
       ),

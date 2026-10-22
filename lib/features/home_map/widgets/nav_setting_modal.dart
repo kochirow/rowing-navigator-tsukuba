@@ -16,6 +16,7 @@ import '../../../theme/app_theme.dart';
 import '../../../services/account_display_name_service.dart';
 import '../../../services/navigation_defaults_service.dart';
 import '../../../types/boat_type.dart';
+import '../../../widgets/boat_name_tag.dart';
 
 /// 航行開始前の設定シート(艇種・シート位置)。
 /// 出艇直前の慌ただしい状況で使うため、選択肢は大きなチップで表示し、
@@ -43,20 +44,12 @@ class NavSettingModal extends HookConsumerWidget {
     this.onWorkoutChanged,
   });
 
-  Widget _sectionTitle(BuildContext context, String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          subtitle,
-          style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
-        ),
-      ],
+  /// 見出しは1語だけ。「選んでください」のような副題は付けない
+  /// (チップが並んでいれば選ぶものだと分かる)。
+  Widget _sectionTitle(BuildContext context, String title) {
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
     );
   }
 
@@ -95,6 +88,8 @@ class NavSettingModal extends HookConsumerWidget {
     final boatType = ref.watch(boatTypeProvider);
     final seatPosision = ref.watch(seatPositionProvider);
     final nameController = useTextEditingController();
+    // 名前の札のプレビューを、打つたびに更新する。
+    useListenable(nameController);
     final nameError = useState<String?>(null);
     final strokeRateEnabled = useState(true);
     final isStarting = useState(false);
@@ -328,24 +323,10 @@ class NavSettingModal extends HookConsumerWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: Text(
-                          '変更する場合は、下の項目を編集してください。',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                     ],
-                    _sectionTitle(
-                      context,
-                      '名前',
-                      'アカウントの名前が入っています。この航行だけ変えるときは書き換えてください',
-                    ),
-                    const SizedBox(height: 12),
+                    // 名前は欄そのものの見出し(labelText)で足りるので、
+                    // 上に同じ語の見出しを重ねない。
                     TextField(
                       controller: nameController,
                       maxLength: maxDisplayNameLength,
@@ -357,7 +338,6 @@ class NavSettingModal extends HookConsumerWidget {
                       decoration: InputDecoration(
                         labelText: '名前',
                         hintText: '例: 後藤',
-                        helperText: '航行中、艇種と一緒に監視端末と他の艇へ共有されます。',
                         errorText: nameError.value,
                         border: const OutlineInputBorder(),
                         prefixIcon: const Icon(Icons.person),
@@ -366,8 +346,17 @@ class NavSettingModal extends HookConsumerWidget {
                         if (nameError.value != null) nameError.value = null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    _sectionTitle(context, '艇種', '乗る艇の種類を選んでください'),
+                    // 「艇種と一緒に他の艇と監視端末へ共有される」ことを、
+                    // 地図に出る札そのもので見せる。
+                    if (nameController.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      BoatNameTag(
+                        label:
+                            boatNameLabel(boatType, nameController.text.trim()),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    _sectionTitle(context, '艇種'),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 10,
@@ -387,7 +376,7 @@ class NavSettingModal extends HookConsumerWidget {
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                    _sectionTitle(context, '端末の位置', '端末を置くシートを選んでください'),
+                    _sectionTitle(context, '端末の位置'),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 10,
@@ -405,20 +394,16 @@ class NavSettingModal extends HookConsumerWidget {
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                    _sectionTitle(
-                      context,
-                      'レート(SPM)',
-                      '艇にスマホを固定して使用・電池残量が少ない場合はオフ推奨',
-                    ),
-                    const SizedBox(height: 8),
+                    // 見出しとスイッチ名で同じ語を2回出さない。スイッチの行を
+                    // 見出しにする。電池との関係は左のアイコン(速度計/節電)が示す。
                     Material(
                       color: Colors.transparent,
                       child: SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
-                          'レート(SPM)を計測する',
+                          'レート(SPM)',
                           style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+                              fontSize: 19, fontWeight: FontWeight.bold),
                         ),
                         // 艇速変化の波形もここで一緒に計測している。航行中の画面には
                         // 出さない(2026-08-13に廃止)が、監視端末では見られるので、
@@ -470,15 +455,6 @@ class NavSettingModal extends HookConsumerWidget {
                           icon: const Icon(Icons.volume_up),
                           label: const Text('音声を確認する'),
                           onPressed: onPressTestAudio,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '必要なら、開始前に警告音を実際に確認できます。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.colors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -571,17 +547,18 @@ class _WorkoutEntry extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      plan == null
-                          ? '押すと、この航行で使うメニューを決められます'
-                          : plan.autoStart
-                              ? '航行を始めると READY で待ち、漕ぎ出しで1本目'
-                              : '航行中に、ワークアウトのボタンから始めます',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colors.textSecondary,
+                    // 押せることは右の › が示す。始まり方だけは
+                    // メニューごとに違うので、決めてあるときに添える。
+                    if (plan != null)
+                      Text(
+                        plan.autoStart
+                            ? '航行を始めると READY で待ち、漕ぎ出しで1本目'
+                            : '航行中に、ワークアウトのボタンから始めます',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colors.textSecondary,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

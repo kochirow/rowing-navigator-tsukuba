@@ -539,7 +539,6 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.add_location_alt_outlined,
           title: '危険区域を追加',
-          subtitle: '流木を見つけたら、その場で登録',
           section: prepare,
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
@@ -566,10 +565,10 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.shield_outlined,
           title: isObserver ? '警告の設定' : '航行中の警告設定',
-          // 1階層目のサブタイトルには、その中にある項目を並べる。
-          // 開かないと何が入っているのか分からない状態にしない。
-          subtitle:
-              isObserver ? '警告のタイミング・障害物の当たり判定・警告対象の選択' : '地図と警告を見ながら、確認して反映',
+          // 副題は、名前だけでは中身が分からない項目にだけ付け、
+          // 中身を短く並べる(2026-10-23 利用者決定)。名前で分かる項目
+          // (チーム・練習記録・使い方など)には付けない。
+          subtitle: isObserver ? '時間・当たり判定・対象' : '時間・区域の幅・対象・逆走の音',
           section: prepare,
           onTap: () async {
             if (!isObserver) {
@@ -621,7 +620,6 @@ class HomeMapScreen extends HookConsumerWidget {
           MapMenuAction(
             icon: Icons.straighten,
             title: '既設危険区域の位置の調整',
-            subtitle: '橋・岸・中州を0.5m単位で校正し、チームへ公開',
             section: prepare,
             onTap: () async {
               await Navigator.push(
@@ -637,7 +635,6 @@ class HomeMapScreen extends HookConsumerWidget {
           MapMenuAction(
             icon: Icons.groups_outlined,
             title: 'チーム',
-            subtitle: '招待コードの確認・共有',
             section: prepare,
             onTap: () {
               Navigator.push(
@@ -652,7 +649,6 @@ class HomeMapScreen extends HookConsumerWidget {
           MapMenuAction(
             icon: Icons.timeline_outlined,
             title: '練習記録',
-            subtitle: '距離・スプリット・ピース',
             section: records,
             onTap: () {
               Navigator.push(
@@ -665,7 +661,8 @@ class HomeMapScreen extends HookConsumerWidget {
           MapMenuAction(
             icon: Icons.folder_zip_outlined,
             title: '練習一括ログ',
-            subtitle: '監視端末に記録した全艇の位置・警告状態',
+            // 「練習記録」と名前が近いので、何の記録かだけ添える。
+            subtitle: '監視中に記録した全艇の位置',
             section: records,
             onTap: () {
               Navigator.push(
@@ -684,7 +681,7 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.monitor_heart_outlined,
           title: '端末とデータ',
-          subtitle: 'GPS精度・最終測位・安全機能の状態・プライバシー',
+          subtitle: 'GPS・安全機能の状態・プライバシー',
           section: device,
           onTap: () {
             Navigator.push(
@@ -696,7 +693,6 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuAction(
           icon: Icons.help_outline,
           title: '使い方',
-          subtitle: '航行・監視・地図と警告音・故障かな？と思ったら',
           section: device,
           onTap: () {
             Navigator.push(
@@ -716,7 +712,6 @@ class HomeMapScreen extends HookConsumerWidget {
           MapMenuAction(
             icon: Icons.info_outline,
             title: AboutAppScreen.title,
-            subtitle: '安全・健康第一 — このアプリを作った趣旨',
             section: device,
             onTap: () {
               Navigator.push(
@@ -740,15 +735,9 @@ class HomeMapScreen extends HookConsumerWidget {
         context: context,
         backgroundColor: Colors.transparent,
         isScrollControlled: true,
-        builder: (_) => MapMenuSheet(
-          actions: actions,
-          // よく使う行き先を先頭にタイルで(一覧からは消さない)。
-          tiles: [
-            for (final a in actions)
-              if (a.enabled && const {'練習記録', 'チーム', '使い方'}.contains(a.title))
-                a,
-          ],
-        ),
+        // 先頭のタイル(練習記録・チーム・使い方)は下の一覧と同じ行き先を
+        // 2回出していたので廃止した(2026-10-23)。
+        builder: (_) => MapMenuSheet(actions: actions),
       );
     }
 

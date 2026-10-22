@@ -53,7 +53,9 @@ class _PreviousNavSettingsLabelState extends State<PreviousNavSettingsLabel> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        '前回: $text',
+        // 「前回:」とは書かない。航行スタートの真上という位置が
+        // 「この設定で始まる」ことを示す。
+        text,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 13,
