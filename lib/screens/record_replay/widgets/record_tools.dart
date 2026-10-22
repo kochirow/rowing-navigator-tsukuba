@@ -176,8 +176,6 @@ class RecordTools extends HookWidget {
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('警告エピソード', style: eyebrow),
             const SizedBox(height: 6),
-            Text('航跡の時刻と関連付けています。現地で感じた内容を選ぶと端末内の記録へ保存されます。',
-                style: TextStyle(fontSize: 12, color: p.textSub)),
             for (final e in episodes)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -230,8 +228,7 @@ class RecordTools extends HookWidget {
         palette: p,
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('共有・削除', style: eyebrow),
-          const SizedBox(height: 10),
+          // 見出しは置かない。ボタンの名前(GPX・CSV・診断データ・削除)が言う。
           Row(children: [
             Expanded(
               child: Builder(builder: (b) {

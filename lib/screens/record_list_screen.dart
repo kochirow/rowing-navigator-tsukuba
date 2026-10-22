@@ -116,8 +116,8 @@ class RecordListScreen extends HookConsumerWidget {
                       now: clock?.call() ?? DateTime.now(),
                     ),
                     SizedBox(height: context.dimens.space4),
-                    // 一覧は期間の切替に関係なく全件。上の集計と範囲が違うことを
-                    // 見出しの横に書いておく。
+                    // 一覧は期間の切替に関係なく全件。期間の切替は集計カードの
+                    // 中にあるので、絞られるのが集計だけだと形で分かる。
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
@@ -131,7 +131,7 @@ class RecordListScreen extends HookConsumerWidget {
                         ),
                         SizedBox(width: context.dimens.space2),
                         Text(
-                          '全期間・${sessions.value.length}件',
+                          '${sessions.value.length}件',
                           style: TextStyle(
                             fontSize: 13,
                             color: context.colors.textSecondary,
@@ -182,83 +182,92 @@ class _PeriodSummaryCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedButton<SessionAggregationPeriod>(
-          segments: const [
-            ButtonSegment(
-              value: SessionAggregationPeriod.thisWeek,
-              label: Text('今週'),
-            ),
-            ButtonSegment(
-              value: SessionAggregationPeriod.thisMonth,
-              label: Text('今月'),
-            ),
-            ButtonSegment(
-              value: SessionAggregationPeriod.all,
-              label: Text('全期間'),
-            ),
-          ],
-          selected: {period},
-          onSelectionChanged: (selection) => onChanged(selection.single),
-          style: const ButtonStyle(
-            minimumSize: WidgetStatePropertyAll(Size.fromHeight(48)),
-          ),
-        ),
-        SizedBox(height: dimens.space3),
         Card(
           elevation: dimens.elevationSm,
           shape: RoundedRectangleBorder(borderRadius: dimens.borderLg),
-          child: aggregate.sessionCount == 0
-              ? AppEmptyView(
-                  icon: Icons.calendar_month_outlined,
-                  title: _emptyTitle,
-                  // 下の一覧は期間によらず全件を出している(集計だけが期間で変わる)。
-                  // 「切り替えると見られる」と書くと、一覧まで絞られていると誤読される。
-                  message: 'これまでの記録は下の一覧から開けます',
-                )
-              : Padding(
-                  padding: EdgeInsets.all(dimens.space4),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SummaryStat(
-                              label: '合計距離',
-                              value:
-                                  '${(aggregate.totalDistanceMeters / 1000).toStringAsFixed(1)} km',
-                            ),
-                          ),
-                          SizedBox(width: dimens.space2),
-                          Expanded(
-                            child: _SummaryStat(
-                              label: '本数',
-                              value: '${aggregate.sessionCount} 本',
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: dimens.space2),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SummaryStat(
-                              label: '合計時間',
-                              value: formatDuration(aggregate.totalDurationSec),
-                            ),
-                          ),
-                          SizedBox(width: dimens.space2),
-                          Expanded(
-                            child: _SummaryStat(
-                              label: '平均 /500m',
-                              value:
-                                  '${formatPace(aggregate.avgPaceSecPer500)} /500m',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+          // 期間の切替はカードの中に置く。切り替わるのはこのカードの集計
+          // だけで、下の一覧は全件のままであることを、説明文でなく形で示す。
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    dimens.space3, dimens.space3, dimens.space3, 0),
+                child: SegmentedButton<SessionAggregationPeriod>(
+                  segments: const [
+                    ButtonSegment(
+                      value: SessionAggregationPeriod.thisWeek,
+                      label: Text('今週'),
+                    ),
+                    ButtonSegment(
+                      value: SessionAggregationPeriod.thisMonth,
+                      label: Text('今月'),
+                    ),
+                    ButtonSegment(
+                      value: SessionAggregationPeriod.all,
+                      label: Text('全期間'),
+                    ),
+                  ],
+                  selected: {period},
+                  onSelectionChanged: (selection) =>
+                      onChanged(selection.single),
+                  style: const ButtonStyle(
+                    minimumSize: WidgetStatePropertyAll(Size.fromHeight(48)),
                   ),
                 ),
+              ),
+              aggregate.sessionCount == 0
+                  ? AppEmptyView(
+                      icon: Icons.calendar_month_outlined,
+                      title: _emptyTitle,
+                    )
+                  : Padding(
+                      padding: EdgeInsets.all(dimens.space4),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SummaryStat(
+                                  label: '合計距離',
+                                  value:
+                                      '${(aggregate.totalDistanceMeters / 1000).toStringAsFixed(1)} km',
+                                ),
+                              ),
+                              SizedBox(width: dimens.space2),
+                              Expanded(
+                                child: _SummaryStat(
+                                  label: '練習',
+                                  value: '${aggregate.sessionCount} 本',
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: dimens.space2),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SummaryStat(
+                                  label: '合計時間',
+                                  value: formatDuration(
+                                      aggregate.totalDurationSec),
+                                ),
+                              ),
+                              SizedBox(width: dimens.space2),
+                              Expanded(
+                                child: _SummaryStat(
+                                  label: '平均',
+                                  value:
+                                      '${formatPace(aggregate.avgPaceSecPer500)} /500m',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+            ],
+          ),
         ),
       ],
     );
@@ -414,7 +423,7 @@ class _SessionListCard extends StatelessWidget {
                           value: formatDuration(summary.durationSec),
                         ),
                         _ListStat(
-                          label: '平均 /500m',
+                          label: '平均',
                           value:
                               '${formatPace(summary.avgPaceSecPer500)} /500m',
                         ),
@@ -570,7 +579,6 @@ List<Widget> _groupedSessionList(
       margin: const EdgeInsets.only(top: 4),
       child: ExpansionTile(
         title: Text('短い記録 ${short.length}件'),
-        subtitle: const Text('1分未満・100m未満'),
         children: [
           for (final s in short)
             ListTile(

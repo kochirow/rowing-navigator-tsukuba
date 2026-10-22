@@ -80,16 +80,8 @@ class MetricChartCard extends StatelessWidget {
             ),
           ),
         ]),
-        const SizedBox(height: 8),
-        Text(
-          [
-            if (c.chartRanges.length > 1)
-              'レストを詰めて、漕いだ部分だけを並べています。本をタップするとその本を拡大します。',
-            if (c.metric == ChartMetric.pace) '上が速い。',
-            '縦軸は練習中のタイムに合わせているので、遅いパドルなどは下端に張り付きます。',
-          ].join(''),
-          style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
-        ),
+        // グラフの読み方の常設段落は外した(使い方へ)。レストの切れ目は
+        // グラフの中の「レスト」の印が、拡大の操作はグラフ下の一言が示す。
       ]),
     );
   }
