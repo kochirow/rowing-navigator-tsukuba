@@ -11,10 +11,10 @@ enum WarningDisplayUrgency {
   /// 表示のみ(音は鳴っていない)。
   monitoring,
 
-  /// 単発音・断続音。
+  /// 1回だけの読み上げ。
   action,
 
-  /// 連続音。
+  /// 繰り返し鳴る警告音。
   imminent,
 }
 

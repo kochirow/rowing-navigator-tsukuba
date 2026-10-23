@@ -177,7 +177,7 @@ UseNavigator useNavigator() {
   final primaryWarningLeadTimeSeconds =
       useState<double>(primaryWarningLeadSeconds);
   // 予測地平。公開APIの名称は既存画面との互換性のため保つが、W12以降は
-  // 「断続音の予告開始時間」と同じ advanceWarningLeadSeconds を入れる。
+  // 「確実な当たり予測の鳴り始め」と同じ advanceWarningLeadSeconds を入れる。
   final warningTimeSeconds = useState<double>(defaultWarningTimeSeconds);
   final myBoat = useState<Boat?>(null);
   final otherBoats = useState<List<Boat>>([]);
@@ -348,7 +348,7 @@ UseNavigator useNavigator() {
   // 走り、鳴っている警告音を無音の警告が消していた(実機ログで216回)。
   // 音は `SafetyOrchestrator` が独立に選ぶ `audioDirective` から出す。
   final currentWarning = useState<NavigationWarning?>(null);
-  // 警告音(連続音・断続音)の指示。表示 primary とは独立に選ばれる。
+  // 警告音の指示。表示 primary とは独立に選ばれる。
   final audioDirective = useState<AudioDirective?>(null);
   // 鳴っている音のカテゴリ(診断ログ用)。表示primaryとは別になりうる。
   final audioDirectiveCategory = useState<String?>(null);
@@ -1649,11 +1649,11 @@ UseNavigator useNavigator() {
             warningTimeSeconds.value = shared.advanceWarningLeadSeconds;
             safetyOrchestrator.value?.updatePresentationConfig(
               AlertPresentationConfig(
-                continuousAudioDeadline: Duration(
+                lowConfidenceAudioStartDeadline: Duration(
                   milliseconds:
                       (shared.primaryWarningLeadSeconds * 1000).round(),
                 ),
-                intermittentAudioDeadline: Duration(
+                audioStartDeadline: Duration(
                   milliseconds:
                       (shared.advanceWarningLeadSeconds * 1000).round(),
                 ),
@@ -1718,10 +1718,10 @@ UseNavigator useNavigator() {
         warningTimeSeconds.value = shared.advanceWarningLeadSeconds;
         safetyOrchestrator.value?.updatePresentationConfig(
           AlertPresentationConfig(
-            continuousAudioDeadline: Duration(
+            lowConfidenceAudioStartDeadline: Duration(
               milliseconds: (shared.primaryWarningLeadSeconds * 1000).round(),
             ),
-            intermittentAudioDeadline: Duration(
+            audioStartDeadline: Duration(
               milliseconds: (shared.advanceWarningLeadSeconds * 1000).round(),
             ),
           ),
@@ -1833,10 +1833,10 @@ UseNavigator useNavigator() {
     // 作り直すと表示中の警告を消してしまうため、提示時間だけを更新する。
     safetyOrchestrator.value?.updatePresentationConfig(
       AlertPresentationConfig(
-        continuousAudioDeadline: Duration(
+        lowConfidenceAudioStartDeadline: Duration(
           milliseconds: (primaryWarningLeadTimeSeconds.value * 1000).round(),
         ),
-        intermittentAudioDeadline: Duration(
+        audioStartDeadline: Duration(
           milliseconds: (warningTimeSeconds.value * 1000).round(),
         ),
       ),
@@ -4430,10 +4430,10 @@ UseNavigator useNavigator() {
         sessionGeneration: generation,
         mooringAreas: mooringAreaPolygons.value,
         presentationConfig: AlertPresentationConfig(
-          continuousAudioDeadline: Duration(
+          lowConfidenceAudioStartDeadline: Duration(
             milliseconds: (primaryWarningLeadTimeSeconds.value * 1000).round(),
           ),
-          intermittentAudioDeadline: Duration(
+          audioStartDeadline: Duration(
             milliseconds: (warningTimeSeconds.value * 1000).round(),
           ),
         ),

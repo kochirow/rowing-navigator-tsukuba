@@ -10,30 +10,30 @@ import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 void main() {
   const config = defaultAlertPresentationConfig;
 
-  test('本警告10秒・予告13秒は予測地平と一致する', () {
+  test('鳴り始め13秒は予測地平と一致し、確度が低いときは10秒まで待つ', () {
     expect(
-      config.continuousAudioDeadline,
+      config.lowConfidenceAudioStartDeadline,
       Duration(milliseconds: (primaryWarningLeadSeconds * 1000).round()),
     );
     expect(
-      config.intermittentAudioDeadline,
+      config.audioStartDeadline,
       Duration(milliseconds: (advanceWarningLeadSeconds * 1000).round()),
+    );
+    expect(
+      config.lowConfidenceAudioStartDeadline,
+      lessThanOrEqualTo(config.audioStartDeadline),
     );
     expect(advanceWarningLeadSeconds, greaterThan(primaryWarningLeadSeconds));
     expect(primaryWarningLeadSeconds, greaterThanOrEqualTo(8.5));
     expect(defaultWarningTimeSeconds, advanceWarningLeadSeconds);
   });
 
-  test('区域進入の読み上げ周期は衝突警告の断続音より薄い', () {
+  test('区域進入の読み上げ周期は5秒(衝突警告の繰り返しより薄い)', () {
     // カーブ・逆走は「いま操作を変えろ」ではなく「この先の形に備えろ」。
     // 衝突警告と同じ密度で鳴らすと、5m/sで20〜40秒かかるカーブ区域の
-    // 通過中に7〜13回鳴り、原則4(過剰警告は安全機能の破壊)へ直行する。
-    expect(
-      config.guidanceRepeatInterval,
-      greaterThan(config.intermittentRepeatInterval),
-    );
+    // 通過中に何度も鳴り、原則4(過剰警告は安全機能の破壊)へ直行する。
+    // 衝突警告は読み上げを間を空けずに繰り返す(1種類)。
     expect(config.guidanceRepeatInterval, const Duration(seconds: 5));
-    expect(config.intermittentRepeatInterval, const Duration(seconds: 3));
   });
 
   test('区域進入の読み上げ周期は再武装間隔と衝突しない', () {

@@ -43,7 +43,6 @@ class MapAndAlertsGuidePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dimens = context.dimens;
-    final colors = context.colors;
     final primary = formatGuideSeconds(primaryWarningLeadSeconds);
     final advance = formatGuideSeconds(advanceWarningLeadSeconds);
     final guidanceSeconds = formatGuideSeconds(
@@ -57,38 +56,33 @@ class MapAndAlertsGuidePage extends StatelessWidget {
         padding: EdgeInsets.all(dimens.space4),
         children: [
           GuideSection(
-            title: '警告の3段階',
-            description: '音の鳴り方は「あと何秒で届くか」だけで決まります。'
+            title: '警告音',
+            description: '警告音は1種類です。鳴っていたら、すぐ周りを確認してください。'
                 '何に近づいているかは、音声で読み上げます(「他艇に注意」「橋に注意」など)。',
             child: Column(
               children: [
                 GuideUrgencyRow(
                   icon: Icons.graphic_eq,
-                  title: '連続音',
-                  body: 'あと$primary秒以内に届きます。すぐ周りを確認してください。',
+                  title: '鳴る',
+                  body: 'あと$advance秒以内に届きます。届かなくなるまで繰り返します。',
                 ),
                 GuideUrgencyRow(
-                  icon: Icons.more_horiz,
-                  title:
-                      '断続音（${formatGuideSeconds(guideIntermittentIntervalSeconds)}秒ごと）',
-                  body: 'あと$primary〜$advance秒で届きます。',
+                  icon: Icons.blur_on,
+                  title: '不確かなとき',
+                  body: 'GPSの誤差や回頭中の向きのブレを含めたときだけ当たる見込みなら、'
+                      'あと$primary秒以内になってから鳴らします。',
                 ),
                 const GuideUrgencyRow(
                   icon: Icons.visibility_outlined,
                   title: '表示のみ',
                   body: '近くにありますが、届く見込みはありません。音は鳴りません。',
                 ),
-                Text(
-                  'GPSの誤差を含めたときだけ当たる見込みがある場合は、1段下げて鳴らします。',
-                  style: TextStyle(fontSize: 13, color: colors.textSecondary),
-                ),
               ],
             ),
           ),
           GuideSection(
             title: '航行画面の縁が光る',
-            description: '衝突の警告音が鳴っている間、相手のいる側の画面の縁が赤く点滅します。'
-                '連続音と断続音で見た目は変わりません。',
+            description: '衝突の警告音が鳴っている間、相手のいる側の画面の縁が赤く点滅します。',
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

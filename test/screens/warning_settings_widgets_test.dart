@@ -22,7 +22,7 @@ void main() {
           body: Padding(
             padding: const EdgeInsets.all(16),
             child: ValueStepper(
-              label: '連続音',
+              label: '不確かなとき',
               caption: '8.5秒以上',
               value: '10.0秒前',
               changed: false,

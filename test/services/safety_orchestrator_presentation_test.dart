@@ -1235,9 +1235,13 @@ void main() {
       expect(candidate.behavior, AlertBehavior.continuousAction);
     });
 
-    test('静的区域のGPS帯だけの重なりは、従来どおり1段下げる(S3-06)', () {
+    test('静的区域のGPS帯だけの重なりは、接近中なら確実な候補と同じく鳴る(S3-06改)', () {
       // 危険区域は絶対座標に固定なので、自艇のGNSS誤差ぶんだけ広げた帯で
-      // 「だけ」重なる候補は本当に確度が低い。降格は維持する。
+      // 「だけ」重なる候補は確度が低い。確度は鳴り始めの遅れ(10秒)で
+      // 表すが、すでに重なっていれば到達は0秒なので鳴り始めの条件を満たす。
+      // 2026-10-23 までは1段下げて断続音にしていた。重なった瞬間に音を
+      // 弱めると、10秒前から鳴っていた音が到達の瞬間に止まってしまう。
+      // 並走・係留(距離が縮まらない重なり)は別の分岐が表示のみへ落とす。
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-static-guard-demotion',
         sessionGeneration: 1,
@@ -1270,7 +1274,7 @@ void main() {
       );
       final candidate = result.snapshot.activeAlerts.single.candidate;
       expect(candidate.confidence, lessThan(1.0));
-      expect(candidate.behavior, isNot(AlertBehavior.continuousAction));
+      expect(candidate.behavior, AlertBehavior.continuousAction);
     });
 
     test('確度の高い他艇接近は低速でも従来どおり鳴る', () {

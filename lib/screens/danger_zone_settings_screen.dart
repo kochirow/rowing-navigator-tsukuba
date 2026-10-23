@@ -110,7 +110,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   }
 
   void _setLeadTimes(double primary, double advance) {
-    // 範囲は従来どおり: 本警告は下限以上・予告より1刻み短い、予告は 9〜25秒。
+    // 範囲は従来どおり: 不確かなときは下限以上・鳴り始めより1刻み短い、鳴り始めは 9〜25秒。
     final a = advance.clamp(minWarningTimeSeconds, maxWarningTimeSeconds);
     final p = primary.clamp(
         minPrimaryWarningLeadSeconds, a - primaryWarningLeadStepSeconds);
@@ -290,7 +290,31 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                               warningLeadTimes.advanceWarningLeadSeconds,
                         ),
                         ValueStepper(
-                          label: '連続音',
+                          // 警告音は1種類。2つの値はどちらも鳴り始めで、
+                          // こちらは確実な当たり予測(予測地平と同じ)。
+                          label: '鳴り始め',
+                          caption:
+                              '${minWarningTimeSeconds.toStringAsFixed(0)}〜${maxWarningTimeSeconds.toStringAsFixed(0)}秒',
+                          value:
+                              '${warningLeadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
+                          changed: warningLeadTimes.advanceWarningLeadSeconds !=
+                              advanceWarningLeadSeconds,
+                          keyPrefix: 'lead-advance',
+                          onDecrement: _busy
+                              ? null
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds -
+                                      warningTimeStepSeconds),
+                          onIncrement: _busy
+                              ? null
+                              : () => _setLeadTimes(
+                                  warningLeadTimes.primaryWarningLeadSeconds,
+                                  warningLeadTimes.advanceWarningLeadSeconds +
+                                      warningTimeStepSeconds),
+                        ),
+                        ValueStepper(
+                          label: '不確かなとき',
                           // 止まるまでの時間との関係は上の図(▲)が見せる。
                           caption:
                               '${minPrimaryWarningLeadSeconds.toStringAsFixed(1)}秒以上',
@@ -311,28 +335,6 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                                   warningLeadTimes.primaryWarningLeadSeconds +
                                       primaryWarningLeadStepSeconds,
                                   warningLeadTimes.advanceWarningLeadSeconds),
-                        ),
-                        ValueStepper(
-                          label: '予告(断続音)',
-                          caption:
-                              '${minWarningTimeSeconds.toStringAsFixed(0)}〜${maxWarningTimeSeconds.toStringAsFixed(0)}秒',
-                          value:
-                              '${warningLeadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
-                          changed: warningLeadTimes.advanceWarningLeadSeconds !=
-                              advanceWarningLeadSeconds,
-                          keyPrefix: 'lead-advance',
-                          onDecrement: _busy
-                              ? null
-                              : () => _setLeadTimes(
-                                  warningLeadTimes.primaryWarningLeadSeconds,
-                                  warningLeadTimes.advanceWarningLeadSeconds -
-                                      warningTimeStepSeconds),
-                          onIncrement: _busy
-                              ? null
-                              : () => _setLeadTimes(
-                                  warningLeadTimes.primaryWarningLeadSeconds,
-                                  warningLeadTimes.advanceWarningLeadSeconds +
-                                      warningTimeStepSeconds),
                         ),
                         if (warningLeadTimes.primaryWarningLeadSeconds !=
                                 primaryWarningLeadSeconds ||
