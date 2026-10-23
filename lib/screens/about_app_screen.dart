@@ -63,7 +63,7 @@ class AboutAppScreen extends StatelessWidget {
           dimens.space6,
         ),
         children: [
-          const Center(child: ClubMottoCalligraphy(fontSize: 40)),
+          const Center(child: ClubMottoCalligraphy(fontSize: 32)),
           SizedBox(height: dimens.space4),
           Text(
             '「安全・健康第一」は、OBで元監督の北之園さんが'
