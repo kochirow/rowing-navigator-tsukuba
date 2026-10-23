@@ -105,6 +105,44 @@ void main() {
     expect(second.snapshot.audioDirective!.eventId, isNotNull);
   });
 
+  test('橋をくぐっている間でも、近づいてくる他艇の音声が鳴る', () {
+    // 2026-10-23 シミュレーション: 橋・岸への重なりが音声1本を取り続け、
+    // 他艇への警告は立っているのに「他艇に注意」が危険地点まで
+    // 流れなかった(桜川上流の危ない場面の2〜6%)。
+    final orchestrator = SafetyOrchestrator(
+      sessionId: 'session-bridge-boat',
+      sessionGeneration: 1,
+    );
+    SafetyOrchestratorResult step(int second, double bridgeDistance) =>
+        orchestrator.processAssessment(
+          assessment: assessment([
+            // 橋の下へ入っていく(重なっていて距離が縮まる = 繰り返し音)。
+            staticThreat(
+              'bridge-main',
+              overlap: true,
+              kind: StaticObstacleKind.bridge,
+              distanceMeters: bridgeDistance,
+            ),
+            boatThreat('boat-a', entrySeconds: 10),
+          ]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 3,
+        );
+
+    step(0, 0);
+    final result = step(1, -2);
+    final byCategory = {
+      for (final alert in result.snapshot.activeAlerts)
+        alert.candidate.category: alert.candidate,
+    };
+    // 前提: 橋は繰り返し音として立っている。
+    expect(byCategory['bridge']?.behavior, AlertBehavior.continuousAction);
+    final directive = result.snapshot.audioDirective!;
+    expect(directive.alertId, byCategory['other_boat']!.alertId);
+    expect(directive.mode, AudioDirectiveMode.loop);
+  });
+
   test('通常品質は単発safeで音を止めず2秒で解除する', () {
     final orchestrator = SafetyOrchestrator(
       sessionId: 'session-a',

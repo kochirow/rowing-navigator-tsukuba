@@ -449,6 +449,127 @@ void main() {
     );
   });
 
+  group('音声の対象: 岸・橋(桁)の重なりは近づいてくる相手に譲る', () {
+    // 2026-10-23 シミュレーション: 橋の下・岸際では岸・橋の読み上げが
+    // 音声1本を取り続け、他艇への警告は立っているのに「他艇に注意」が
+    // 危険地点まで流れなかった(桜川上流の危ない場面の2〜6%)。
+    const comparator = AlertCandidateComparator();
+    AlertCandidate voiced(AlertCandidate c) =>
+        c.copyWith(audioAsset: 'audio/${c.category}.mp3');
+    final boat = voiced(candidate(
+      'other_boat/b1',
+      0,
+      'fix',
+      deadline: const Duration(seconds: 12),
+      category: 'other_boat',
+    ));
+    final bridgeOverlap = voiced(candidate(
+      'bridge/main',
+      0,
+      'fix',
+      overlap: true,
+      category: 'bridge',
+    ));
+    final shoreOverlap = voiced(candidate(
+      'shore/north',
+      0,
+      'fix',
+      overlap: true,
+      category: 'shore',
+    ));
+
+    test('橋・岸に重なっていても、近づいてくる他艇の音声を先にする', () {
+      for (final staticOverlap in [bridgeOverlap, shoreOverlap]) {
+        expect(
+          comparator.selectAudioPrimary([staticOverlap, boat])?.alertId,
+          boat.alertId,
+        );
+        // 表示primaryの順位は変えない(重なっている方が先のまま)。
+        expect(
+          comparator.selectPrimary([staticOverlap, boat])?.alertId,
+          staticOverlap.alertId,
+        );
+      }
+    });
+
+    test('鳴っている橋の音声から、ロックを待たずに他艇へ切り替わる', () {
+      expect(
+        comparator.selectAudioPrimary(
+          [bridgeOverlap, boat],
+          currentAudioAlertId: bridgeOverlap.alertId,
+        )?.alertId,
+        boat.alertId,
+      );
+    });
+
+    test('橋脚・杭など硬い物への重なりは、今までどおり他艇より先', () {
+      for (final category in ['bridgePier', 'pile', 'driftwood', 'island']) {
+        final hard = voiced(candidate(
+          '$category/x',
+          0,
+          'fix',
+          overlap: true,
+          category: category,
+        ));
+        expect(
+          comparator.selectAudioPrimary([boat, hard])?.alertId,
+          hard.alertId,
+          reason: category,
+        );
+      }
+    });
+
+    test('他艇に重なっているなら、橋への重なりより先', () {
+      final boatOverlap = voiced(candidate(
+        'other_boat/b2',
+        0,
+        'fix',
+        overlap: true,
+        category: 'other_boat',
+      ));
+      expect(
+        comparator.selectAudioPrimary([bridgeOverlap, boatOverlap])?.alertId,
+        boatOverlap.alertId,
+      );
+    });
+
+    test('重なっていない候補どうしは今までどおり到達時間の順', () {
+      // 橋(重なり)・橋脚(5秒)・他艇(12秒)。一対の規則にすると順序が
+      // 循環するので、重なっていない候補は種類によらず到達時間で並べる。
+      final pier = voiced(candidate(
+        'bridgePier/p1',
+        0,
+        'fix',
+        deadline: const Duration(seconds: 5),
+        category: 'bridgePier',
+      ));
+      final inputs = [bridgeOverlap, pier, boat];
+      final permutations = [
+        [inputs[0], inputs[1], inputs[2]],
+        [inputs[0], inputs[2], inputs[1]],
+        [inputs[1], inputs[0], inputs[2]],
+        [inputs[1], inputs[2], inputs[0]],
+        [inputs[2], inputs[0], inputs[1]],
+        [inputs[2], inputs[1], inputs[0]],
+      ];
+      for (final order in permutations) {
+        final sorted = [...order]..sort(comparator.compareForAudio);
+        expect(
+          sorted.map((c) => c.alertId).toList(),
+          ['bridgePier/p1', 'other_boat/b1', 'bridge/main'],
+        );
+      }
+    });
+
+    test('繰り返し音の段は単発より先のまま(段は崩さない)', () {
+      final onceBoat = boat.copyWith(behavior: AlertBehavior.singleAction);
+      expect(
+        comparator.selectAudioPrimary([onceBoat, bridgeOverlap])?.alertId,
+        bridgeOverlap.alertId,
+      );
+    });
+  });
+
   test('反復、単発、異常、案内、表示のみの順で音声対象を調停する', () {
     const comparator = AlertCandidateComparator();
     final ordered = comparator.ordered([

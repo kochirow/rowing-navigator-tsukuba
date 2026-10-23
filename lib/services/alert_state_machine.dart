@@ -170,6 +170,43 @@ class AlertCandidateComparator {
     return List.unmodifiable(result);
   }
 
+  /// 音声1本の対象を選ぶための順序。[compare] と違うのは1点だけ:
+  /// **岸・橋(桁)に「いま重なっている」候補は、重なっていない候補の後ろに回る。**
+  ///
+  /// [compare] は「いま重なっている」を到達時間より先に見る。橋の下を
+  /// くぐる間や岸際を並走する間は岸・橋の読み上げが音声を取り続け、
+  /// 近づいてくる他艇の「他艇に注意」が危険地点まで入れなかった
+  /// (2026-10-23 シミュレーション: 桜川上流の危ない場面の2〜6%。
+  /// 警告そのものは間に合って立っていた)。岸・橋は通過・並走するのが
+  /// 正常な区域(DESIGN_PRINCIPLES 1.4)なので、近づいてくる相手を先にする。
+  ///
+  /// - 橋脚・杭・流木・中州・他艇に重なっている候補は、今までどおり最優先
+  /// - 重なっていない候補(他艇・橋脚など)は、今までどおり到達時間の順
+  /// - 岸・橋(桁)への重なりは、その後ろ
+  ///
+  /// 「他艇だけが岸・橋の重なりに割り込める」という一対の規則にすると、
+  /// 橋(重なり) > 橋脚(5秒) > 他艇(12秒) > 橋(重なり) と順序が循環し、
+  /// 並べ替えの結果が入力順で変わってしまう。そのため重なっていない候補は
+  /// 種類によらず同じ段にまとめた。結果として、橋をくぐる間に前方の
+  /// 橋脚へ近づくときも「橋脚に注意」が先に流れる。
+  ///
+  /// 表示primary([compare])は変えない。画面の縁の点滅は音声の対象に従う。
+  int compareForAudio(AlertCandidate a, AlertCandidate b) {
+    var result = _behaviorBand(a.behavior).compareTo(_behaviorBand(b.behavior));
+    if (result != 0) return result;
+    result = _audioOverlapTier(a).compareTo(_audioOverlapTier(b));
+    if (result != 0) return result;
+    return compare(a, b);
+  }
+
+  /// 岸・橋(桁)。重なっていても、通過・並走するのが正常な区域。
+  static const _passThroughCategories = {'shore', 'bridge'};
+
+  static int _audioOverlapTier(AlertCandidate candidate) {
+    if (!candidate.currentOverlap) return 1;
+    return _passThroughCategories.contains(candidate.category) ? 2 : 0;
+  }
+
   /// Selects a primary without making sort order depend on input order.
   ///
   /// The current primary is retained only when behavior, overlap, and quality
@@ -178,8 +215,16 @@ class AlertCandidateComparator {
   AlertCandidate? selectPrimary(
     Iterable<AlertCandidate> candidates, {
     String? currentPrimaryAlertId,
+  }) =>
+      _selectWithLock(
+        ordered(candidates),
+        currentPrimaryAlertId: currentPrimaryAlertId,
+      );
+
+  AlertCandidate? _selectWithLock(
+    List<AlertCandidate> sorted, {
+    String? currentPrimaryAlertId,
   }) {
-    final sorted = ordered(candidates);
     if (sorted.isEmpty) return null;
     final best = sorted.first;
     if (currentPrimaryAlertId == null ||
@@ -210,18 +255,20 @@ class AlertCandidateComparator {
 
   /// 音声アセットを持つ候補だけを対象に、持続音の対象を選ぶ。
   ///
-  /// 表示のprimaryと分けるためだけの入口で、順位付けもロックの挙動も
-  /// [selectPrimary] と同じものを使う。無音の system fault
+  /// 表示のprimaryと分ける入口。ロックの挙動は [selectPrimary] と同じで、
+  /// 順位付けだけ [compareForAudio] を使う。無音の system fault
   /// (`position_sharing_unavailable` など)が表示primaryになっても、
-  /// 鳴っている音を止めない経路にするために必要。
+  /// 鳴っている音を止めない経路にするためにも必要。
   AlertCandidate? selectAudioPrimary(
     Iterable<AlertCandidate> candidates, {
     String? currentAudioAlertId,
-  }) =>
-      selectPrimary(
-        candidates.where((candidate) => candidate.audioAsset != null),
-        currentPrimaryAlertId: currentAudioAlertId,
-      );
+  }) {
+    final sorted = candidates
+        .where((candidate) => candidate.audioAsset != null)
+        .toList()
+      ..sort(compareForAudio);
+    return _selectWithLock(sorted, currentPrimaryAlertId: currentAudioAlertId);
+  }
 
   bool _lockCompatible(AlertCandidate current, AlertCandidate challenger) {
     return _behaviorBand(current.behavior) ==
