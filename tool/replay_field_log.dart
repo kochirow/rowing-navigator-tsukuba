@@ -69,6 +69,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 import 'package:rowing_navigator/models/alert_candidate.dart';
 import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/models/danger_zone_settings.dart';
@@ -130,8 +131,10 @@ void main() {
             .toList(growable: false),
         settings: settings,
       ),
-      // カーブ・逆走は完成ポリゴンなので基準線展開の対象外。
-      ...await _guidanceZones(),
+      // カーブ・逆走・橋脚・杭は完成ポリゴンなので基準線展開の対象外。
+      // 橋脚・杭はアプリでは `loadPresets` が足している。再生で落とすと
+      // 橋脚の警告が丸ごと測れない(2026-10-23 まで落ちていた)。
+      ...await _polygonZones(),
     ];
 
     final ashoreAreas = await service.loadAshoreAreas();
@@ -146,9 +149,8 @@ void main() {
     // 総量を測っているつもりで別のものを測ることになる(実際に誤った
     // 数字を出した)。既定は「実機ログそのまま」にし、合成を混ぜるときは
     // 明示させる。`SCENARIO=default` と書けば同梱シナリオを使える。
-    final scenarioPath = _scenarioPath == 'default'
-        ? _defaultScenarioPath
-        : _scenarioPath;
+    final scenarioPath =
+        _scenarioPath == 'default' ? _defaultScenarioPath : _scenarioPath;
     final scenario = _readScenario(scenarioPath);
     if (scenarioPath.isNotEmpty) {
       // ignore: avoid_print
@@ -194,6 +196,10 @@ void main() {
     final phaseByAlertId = <String, AlertPhase>{};
     final seenEventIds = <String>{};
     final audioStartTimeline = <String>[];
+    // 音が鳴っていた測位の数(≒秒)。開始回数だけでは「鳴り続けた長さ」が
+    // 分からない。鳴り方(繰り返し/1回)とカテゴリで分ける。
+    final audibleSamples = <String, int>{};
+    final lowConfidenceAudibleSamples = <String, int>{};
     String? previousDirectiveKey;
     var ashoreSamples = 0;
     var unusableSamples = 0;
@@ -259,7 +265,9 @@ void main() {
         boat,
         otherBoats,
         obstacles,
-        warningTimeSeconds: 10,
+        // アプリと同じ予測地平で評価する。10秒固定だと、13秒前から
+        // 鳴り始める警告が再生に現れない(2026-10-23 まで10秒固定だった)。
+        warningTimeSeconds: advanceWarningLeadSeconds,
         centerline: centerline,
       );
       final result = orchestrator.processAssessment(
@@ -281,6 +289,22 @@ void main() {
         for (final alert in result.snapshot.activeAlerts)
           alert.candidate.alertId: alert.candidate.category,
       };
+      final confidenceById = {
+        for (final alert in result.snapshot.activeAlerts)
+          alert.candidate.alertId: alert.candidate.confidence,
+      };
+      if (directive != null && !ashore.isAshore) {
+        final category = categoryById[directive.alertId] ?? '?';
+        final key = '$category/${directive.mode.name}';
+        audibleSamples[key] = (audibleSamples[key] ?? 0) + 1;
+        // 確度の低い候補(GPS誤差込み・回頭中の方位のブレでのみ当たる)が
+        // どれだけ鳴っているか。原則4の監視対象。
+        final confidence = confidenceById[directive.alertId] ?? 1.0;
+        if (confidence < 1.0) {
+          lowConfidenceAudibleSamples[key] =
+              (lowConfidenceAudibleSamples[key] ?? 0) + 1;
+        }
+      }
       if (directive != null) {
         final category = categoryById[directive.alertId] ?? '?';
         final key = '${directive.alertId}:${directive.mode.name}:'
@@ -340,6 +364,8 @@ void main() {
       'scenarioCases': scenario.cases,
       'mooringAreasInjected': scenario.mooringAreas.length,
       'audioStarts': playsByCategory,
+      'audibleSamples': audibleSamples,
+      'lowConfidenceAudibleSamples': lowConfidenceAudibleSamples,
       'audioStartTimeline': audioStartTimeline,
       'audioEpisodes': audioEpisodesByCategory,
       'reArmByAlertId': reArmByAlertId,
@@ -359,6 +385,10 @@ GPS利用不可だった測位: $unusableSamples
 他艇の注入: ${scenario.boatCount} 艇
 持続音の開始回数 (合計 ${total(playsByCategory)}):
 ${_format(playsByCategory)}
+音が鳴っていた測位数 (合計 ${total(audibleSamples)}):
+${_format(audibleSamples)}
+うち確度の低い候補 (合計 ${total(lowConfidenceAudibleSamples)}):
+${_format(lowConfidenceAudibleSamples)}
 鳴った時刻:
 ${_formatList(audioStartTimeline)}
 音声エピソードの新規発行 (合計 ${total(audioEpisodesByCategory)}):
@@ -435,7 +465,7 @@ DangerZoneSettings _dangerZoneSettingsFrom(Map<String, dynamic> manifest) {
   return settings;
 }
 
-Future<List<StaticObstacle>> _guidanceZones() async {
+Future<List<StaticObstacle>> _polygonZones() async {
   final raw = jsonDecode(
     File('assets/data/sakuragawa_obstacles.json').readAsStringSync(),
   ) as Map<String, dynamic>;
@@ -443,10 +473,15 @@ Future<List<StaticObstacle>> _guidanceZones() async {
   for (final item in raw['obstacles'] as List<dynamic>) {
     final map = item as Map<String, dynamic>;
     final kind = StaticObstacleKind.fromJson(map['kind'] as String?);
-    if (!kind.isEntryGuidance) continue;
+    final isPolygonHazard = kind == StaticObstacleKind.bridgePier ||
+        kind == StaticObstacleKind.pile;
+    if (!kind.isEntryGuidance && !isPolygonHazard) continue;
     zones.add(StaticObstacle(
       id: map['id'] as String,
       sourceId: map['id'] as String,
+      bridgeId: kind == StaticObstacleKind.bridgePier
+          ? map['bridgeId'] as String?
+          : null,
       name: map['name'] as String?,
       points: (map['points'] as List<dynamic>)
           .map<LatLng>((p) => LatLng(
