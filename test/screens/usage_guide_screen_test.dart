@@ -58,13 +58,14 @@ void main() {
     expect(find.textContaining('幅[m]'), findsNothing);
   });
 
-  testWidgets('警告の段階の秒数は、実際に効いている設定値で説明する', (tester) async {
+  testWidgets('警告音の鳴り始めの秒数は、実際に効いている設定値で説明する', (tester) async {
     // 以前は「約7秒」「約10秒」と直書きで、既定の10秒・13秒と食い違っていた。
     await tester.pumpWidget(_app(const UsageGuideScreen()));
     await _openEntry(tester, '地図と警告音');
-    expect(find.textContaining('あと10秒以内に届きます'), findsOneWidget);
-    expect(find.textContaining('あと10〜13秒で届きます'), findsOneWidget);
-    expect(find.text('断続音（3秒ごと）'), findsOneWidget);
+    expect(find.textContaining('あと13秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと10秒以内になってから鳴らします'), findsOneWidget);
+    // 警告音は1種類(2026-10-23)。断続音の説明は残さない。
+    expect(find.textContaining('断続音'), findsNothing);
     expect(find.textContaining('約7秒'), findsNothing);
 
     // 設定画面やチーム共有で変えた値は、目次からそのまま下位ページへ届く。
@@ -76,8 +77,8 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _openEntry(tester, '地図と警告音');
-    expect(find.textContaining('あと8.5秒以内に届きます'), findsOneWidget);
-    expect(find.textContaining('あと8.5〜15秒で届きます'), findsOneWidget);
+    expect(find.textContaining('あと15秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと8.5秒以内になってから鳴らします'), findsOneWidget);
   });
 
   testWidgets('警告の見た目は刷新後の航行画面どおりに説明する', (tester) async {

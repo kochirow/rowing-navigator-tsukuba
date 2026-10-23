@@ -25,10 +25,10 @@ class UsageGuideScreen extends StatelessWidget {
     this.advanceWarningLeadSeconds = risk_config.advanceWarningLeadSeconds,
   });
 
-  /// 連続音へ上がる残り時間(秒)。
+  /// 確度の低い当たり予測で警告音が鳴り始める残り時間(秒)。
   final double primaryWarningLeadSeconds;
 
-  /// 断続音で予告を始める残り時間(秒)。予測地平と同じ値。
+  /// 確実な当たり予測で警告音が鳴り始める残り時間(秒)。予測地平と同じ値。
   final double advanceWarningLeadSeconds;
 
   void _push(BuildContext context, Widget page) {

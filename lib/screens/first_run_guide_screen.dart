@@ -264,14 +264,13 @@ class _FirstRunGuideScreenState extends State<FirstRunGuideScreen> {
     return _pageBody(context, '警告は音で聞く', [
       GuideUrgencyRow(
         icon: Icons.graphic_eq,
-        title: '連続音',
-        body: 'あと$primary秒以内に届きます。',
+        title: '鳴る',
+        body: 'あと$advance秒以内に届きます。届かなくなるまで繰り返します。',
       ),
       GuideUrgencyRow(
-        icon: Icons.more_horiz,
-        title:
-            '断続音（${formatGuideSeconds(guideIntermittentIntervalSeconds)}秒ごと）',
-        body: 'あと$primary〜$advance秒で届きます。',
+        icon: Icons.blur_on,
+        title: '不確かなとき',
+        body: 'あと$primary秒以内になってから鳴らします。',
       ),
       const GuideUrgencyRow(
         icon: Icons.visibility_outlined,

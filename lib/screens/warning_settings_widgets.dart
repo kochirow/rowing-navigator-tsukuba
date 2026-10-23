@@ -6,12 +6,15 @@ import '../theme/app_theme.dart';
 /// 警告の設定画面の部品(表示と入力だけ。値の範囲・保存は画面側が持つ)。
 
 /// 艇種ごとの止まるまでの時間 [秒](`boat_config.dart` の停止距離の式の根拠)。
-/// 連続音をこれより短くできない理由を、図で見せるために使う。
+/// 確度の低い当たり予測の鳴り始めを、これより短くできない理由を図で見せる。
 const _stopSeconds = {'2x': 6.60, '4x': 6.68, '1x': 6.95, '8+': 8.15};
 
-/// 「残り秒数」の1本の軸に、連続音・断続音・音なしの帯と、艇種ごとの
-/// 止まるまでの時間を並べた図。長い説明文とスライダーでは読み取れなかった
-/// 関係を、図1枚で見せる。
+/// 「残り秒数」の1本の軸に、鳴る帯・確実なときだけ鳴る帯・音なしの帯と、
+/// 艇種ごとの止まるまでの時間を並べた図。長い説明文とスライダーでは
+/// 読み取れなかった関係を、図1枚で見せる。
+///
+/// 警告音は1種類(2026-10-23)。帯の違いは鳴り方ではなく、
+/// 「確度が低い当たり予測でも鳴るか」だけである。
 class LeadTimeAxis extends StatelessWidget {
   const LeadTimeAxis({
     super.key,
@@ -26,8 +29,8 @@ class LeadTimeAxis extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Semantics(
-      label: '連続音は${primarySeconds.toStringAsFixed(1)}秒前から、'
-          '予告は${advanceSeconds.toStringAsFixed(0)}秒前から',
+      label: '警告音は${advanceSeconds.toStringAsFixed(0)}秒前から、'
+          '不確かなときは${primarySeconds.toStringAsFixed(1)}秒前から',
       child: SizedBox(
         height: 120,
         child: CustomPaint(
@@ -105,12 +108,13 @@ class _AxisPainter extends CustomPainter {
     label('${maxT.toStringAsFixed(0)}秒先', Offset(right, 0), sub,
         align: TextAlign.right);
     if (x(primary) - left > 52) {
-      label('連続音', Offset((left + x(primary)) / 2, barTop + 7), Colors.white,
+      label('鳴る', Offset((left + x(primary)) / 2, barTop + 7), Colors.white,
           align: TextAlign.center);
     }
-    if (x(advance) - x(primary) > 44) {
-      label('断続音', Offset((x(primary) + x(advance)) / 2, barTop + 7),
-          Colors.black,
+    // 既定(10秒・13秒)では帯が約47px(幅402pt)しかないので、2文字に収める。
+    if (x(advance) - x(primary) > 30) {
+      label(
+          '確実', Offset((x(primary) + x(advance)) / 2, barTop + 7), Colors.black,
           align: TextAlign.center);
     }
     label('音なし(予測の外)', Offset((x(advance) + right) / 2, barTop + 7), sub,

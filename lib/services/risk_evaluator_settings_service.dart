@@ -4,9 +4,10 @@ import '../config/risk_evaluator_config.dart';
 
 /// 衝突警告の提示と予測に使う2つの先読み時間。
 ///
-/// [primaryWarningLeadSeconds] は連続音へ上げる切替点、
-/// [advanceWarningLeadSeconds] は断続音の開始点かつ予測地平である。
-/// 予測地平を本警告より長く保つことで、予測が届かない先では音を鳴らさない。
+/// [advanceWarningLeadSeconds] は確実な当たり予測の鳴り始めで、予測地平と同じ。
+/// [primaryWarningLeadSeconds] は確度の低い当たり予測の鳴り始め。
+/// 警告音は1種類で、どちらも「いつ鳴り始めるか」だけを決める。
+/// 予測地平より先では予測が届かないので、音を鳴らさない。
 class WarningLeadTimes {
   const WarningLeadTimes({
     required this.primaryWarningLeadSeconds,

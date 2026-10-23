@@ -421,9 +421,33 @@ class _NavigationSafetySettingsSheetState
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
                             // 2本のスライダーに同じ形の見出しを付ける(以前は
-                            // 予告側だけ見出しが無く、どちらが何か分からなかった)。
+                            // 片方だけ見出しが無く、どちらが何か分からなかった)。
+                            // 警告音は1種類で、2つの値はどちらも鳴り始め
+                            // (確実な当たり予測/確度の低い当たり予測)。
                             Text(
-                              '連続音  '
+                              '鳴り始め  '
+                              '${leadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
+                            ),
+                            Slider(
+                              value: leadTimes.advanceWarningLeadSeconds,
+                              min: advanceMin,
+                              max: maxWarningTimeSeconds,
+                              divisions: ((maxWarningTimeSeconds - advanceMin) /
+                                      warningTimeStepSeconds)
+                                  .round(),
+                              label:
+                                  '${leadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
+                              onChanged: _busy
+                                  ? null
+                                  : (value) => setState(
+                                      () => _leadTimes = WarningLeadTimes(
+                                            primaryWarningLeadSeconds: leadTimes
+                                                .primaryWarningLeadSeconds,
+                                            advanceWarningLeadSeconds: value,
+                                          )),
+                            ),
+                            Text(
+                              '不確かなとき  '
                               '${leadTimes.primaryWarningLeadSeconds.toStringAsFixed(1)}秒前',
                             ),
                             Slider(
@@ -445,28 +469,6 @@ class _NavigationSafetySettingsSheetState
                                               .advanceWarningLeadSeconds,
                                         ),
                                       ),
-                            ),
-                            Text(
-                              '断続音  '
-                              '${leadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
-                            ),
-                            Slider(
-                              value: leadTimes.advanceWarningLeadSeconds,
-                              min: advanceMin,
-                              max: maxWarningTimeSeconds,
-                              divisions: ((maxWarningTimeSeconds - advanceMin) /
-                                      warningTimeStepSeconds)
-                                  .round(),
-                              label:
-                                  '${leadTimes.advanceWarningLeadSeconds.toStringAsFixed(0)}秒前',
-                              onChanged: _busy
-                                  ? null
-                                  : (value) => setState(
-                                      () => _leadTimes = WarningLeadTimes(
-                                            primaryWarningLeadSeconds: leadTimes
-                                                .primaryWarningLeadSeconds,
-                                            advanceWarningLeadSeconds: value,
-                                          )),
                             ),
                             Align(
                               alignment: Alignment.centerRight,

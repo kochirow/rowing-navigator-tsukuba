@@ -509,7 +509,6 @@ class SafetyOrchestrator {
       );
       final baseBehavior = base.behavior;
       var behavior = baseBehavior;
-      var repeating = base.repeating;
       final extraReasonCodes = <String>[...base.reasonCodes];
       // 各静音規則は、適用の直前に [SuppressionRule.permits] を通す。
       // 権限(カテゴリ・切迫度・必要な入力)を満たさない規則は適用しない。
@@ -531,7 +530,6 @@ class SafetyOrchestrator {
           permitted(SuppressionRules.lowSpeedStatic)) {
         // 正常な橋下・岸際の休憩では、検知・表示・記録を残して音だけ止める。
         behavior = _quieter(behavior, AlertBehavior.visualOnly);
-        repeating = false;
       }
       if (_isUncertaintyOnlyEntry(candidate) &&
           _isLowSpeed &&
@@ -553,7 +551,6 @@ class SafetyOrchestrator {
           // この規則も他の提示規則と同じく、直前の結果を下げるだけにする。
           // 直接代入すると規則の適用順で警告を戻したり消したりしてしまう。
           behavior = _quieter(behavior, AlertBehavior.visualOnly);
-          repeating = false;
           extraReasonCodes.add('PRESENTATION_UNCERTAINTY_ONLY_VISUAL');
         }
       }
@@ -582,7 +579,6 @@ class SafetyOrchestrator {
             _isOtherBoatAtRest(candidate, otherBoatSpeedById);
         if (silenceStatic || silenceBoat) {
           behavior = _quieter(behavior, AlertBehavior.visualOnly);
-          repeating = false;
           extraReasonCodes.add('PRESENTATION_MOORING_AREA_SILENT');
         }
       }
@@ -599,30 +595,23 @@ class SafetyOrchestrator {
         // 停止前から存在した同一脅威は表示を残しつつ音だけ止める。
         // 停止後に初めて現れた別脅威は単発音を許可する。
         behavior = _quieter(behavior, AlertBehavior.visualOnly);
-        repeating = false;
       } else if (canSuppressAtRest &&
           _stableStopped &&
           baseBehavior == AlertBehavior.continuousAction) {
         behavior = _quieter(behavior, AlertBehavior.singleAction);
-        repeating = false;
       } else if (canSuppressAtRest &&
           _lowSpeedActive &&
           baseBehavior == AlertBehavior.continuousAction) {
         // 休憩へ移った直後から反復音を止める。5秒の確定待ちは
         // 同一脅威を完全に無音表示へ落とすためにだけ使う。
         behavior = _quieter(behavior, AlertBehavior.singleAction);
-        repeating = false;
-      }
-      if (canSuppressAtRest && (_stableStopped || _lowSpeedActive)) {
-        // 岸際で休憩している間は断続音も止める。
-        repeating = false;
       }
       final presented = context.present(
         candidate,
         behavior: behavior,
         evaluatedAt: evaluatedAt,
-        repeatInterval:
-            repeating ? presentationConfig.intermittentRepeatInterval : null,
+        // 衝突警告は鳴らし直さない。繰り返しは continuousAction のループが担う。
+        repeatInterval: null,
         nextEventId: () => _nextAudioEventId(candidate.alertId, 'risk'),
         stableStopped: _stableStopped,
         extraReasonCodes: extraReasonCodes,
@@ -859,20 +848,13 @@ class SafetyOrchestrator {
     final steadyOverlap = candidate.currentOverlap
         ? _overlapUrgency(candidate, context: context, evaluatedAt: evaluatedAt)
         : null;
-    var urgency = candidate.currentOverlap
-        ? steadyOverlap!.urgency
-        : deadline == null
-            ? AlertUrgency.monitoring
-            : deadline <= presentationConfig.continuousAudioDeadline
-                ? AlertUrgency.imminent
-                : deadline <= presentationConfig.intermittentAudioDeadline
-                    ? AlertUrgency.approaching
-                    : AlertUrgency.monitoring;
 
-    // GPS帯込みでのみ重なる「不確実」な候補は1段下げる。
-    // 連続音が本当に切迫しているときだけ鳴るようにする。
+    // 確度の低い候補は、鳴り方を変えずに**鳴り始めを遅らせる**。
+    // 確度の低い警報が長く鳴ると警報全体が無視されるようになる(原則4)。
+    // 以前は「1段下げて断続音にする」で表していたが、衝突警告の鳴り方を
+    // 1種類にした(2026-10-23)ので、確度は鳴り始めの早さだけで表す。
     //
-    // **ただし他艇の `gps_guard_entry` は下げない。**
+    // **ただし他艇の `gps_guard_entry` は確度が低いとみなさない。**
     //
     // 静的危険区域では、この降格は今も正しい。区域は絶対座標に固定なので、
     // 自艇のGNSS誤差ぶんだけ広げた帯で「だけ」重なる候補は、本当に確度が低い。
@@ -889,18 +871,34 @@ class SafetyOrchestrator {
     final skipUncertaintyDemotion = candidate.category == 'other_boat' &&
         candidate.reasonCodes.contains('gps_guard_entry') &&
         !candidate.reasonCodes.contains('heading_uncertainty_entry');
-    if (candidate.confidence < 1.0 && !skipUncertaintyDemotion) {
-      urgency = urgency.oneStepDown;
+    final lowConfidence =
+        candidate.confidence < 1.0 && !skipUncertaintyDemotion;
+
+    final AlertUrgency urgency;
+    if (steadyOverlap != null) {
+      // すでに重なっている。到達までの時間は0なので、確度が低くても
+      // 鳴り始めの条件は満たしている。距離が縮まっていない猶予中の
+      // 「1回だけ読み上げ」だけは、確度が低いなら表示のみにする。
+      urgency =
+          lowConfidence && steadyOverlap.urgency == AlertUrgency.approaching
+              ? steadyOverlap.urgency.oneStepDown
+              : steadyOverlap.urgency;
+    } else {
+      final start = lowConfidence
+          ? presentationConfig.lowConfidenceAudioStartDeadline
+          : presentationConfig.audioStartDeadline;
+      urgency = deadline != null && deadline <= start
+          ? AlertUrgency.imminent
+          : AlertUrgency.monitoring;
     }
 
     final reasonCodes = steadyOverlap?.reasonCodes ?? const <String>[];
 
-    // 橋のように毎回通過する区域は連続音まで上げない。
+    // 毎回通過する区域を繰り返し音まで上げないための仕組み(現在は対象なし)。
     if (urgency == AlertUrgency.imminent &&
         bandCappedCategories.contains(candidate.category)) {
       return _PhysicalPresentation(
         behavior: AlertBehavior.singleAction,
-        repeating: false,
         reasonCodes: reasonCodes,
       );
     }
@@ -908,18 +906,14 @@ class SafetyOrchestrator {
     return switch (urgency) {
       AlertUrgency.imminent => _PhysicalPresentation(
           behavior: AlertBehavior.continuousAction,
-          repeating: false,
           reasonCodes: reasonCodes,
         ),
-      // 断続音: 同じ脅威が続く間、一定間隔で鳴らし直す。
       AlertUrgency.approaching => _PhysicalPresentation(
           behavior: AlertBehavior.singleAction,
-          repeating: true,
           reasonCodes: reasonCodes,
         ),
       AlertUrgency.monitoring => _PhysicalPresentation(
           behavior: AlertBehavior.visualOnly,
-          repeating: false,
           reasonCodes: reasonCodes,
         ),
     };
@@ -935,7 +929,7 @@ class SafetyOrchestrator {
   /// - 距離が [AlertPresentationConfig.staticOverlapClosingRateMetersPerSecond]
   ///   以上で縮まっている → 従来どおり連続音
   /// - 距離が取得できない → 接近中として扱い連続音(原則6)
-  /// - 縮まっていない → 断続音へ1段下げ、猶予を過ぎたら表示のみ
+  /// - 縮まっていない → 1回だけ読み上げ、猶予を過ぎたら表示のみ
   /// - 再び [AlertPresentationConfig.stableStopRealertApproachMeters] 縮まったら再武装
   ///
   /// 他艇は相手が接近してくるため対象外([_canSuppressAtRest])。
@@ -970,6 +964,8 @@ class SafetyOrchestrator {
         ['PRESENTATION_STEADY_OVERLAP_SILENT'],
       );
     }
+    // 理由コードの名前は過去の実機ログと照合できるよう据え置く。
+    // 2026-10-23 からは断続音ではなく「1回だけ読み上げ」である。
     return const _SteadyOverlapDecision(
       AlertUrgency.approaching,
       ['PRESENTATION_STEADY_OVERLAP_INTERMITTENT'],
@@ -984,7 +980,6 @@ class SafetyOrchestrator {
   }) {
     const visual = _PhysicalPresentation(
       behavior: AlertBehavior.visualOnly,
-      repeating: false,
     );
     if (!audibleProximityCategories.contains(candidate.category)) {
       return visual;
@@ -999,7 +994,6 @@ class SafetyOrchestrator {
     return approaching
         ? const _PhysicalPresentation(
             behavior: AlertBehavior.singleAction,
-            repeating: false,
           )
         : visual;
   }
@@ -1225,17 +1219,15 @@ class SafetyOrchestrator {
   }
 }
 
-/// 提示の決定結果。断続音かどうかは behavior だけでは表せないため分ける。
+/// 提示の決定結果(鳴らし方と、診断ログ用の理由コード)。
 class _PhysicalPresentation {
   final AlertBehavior behavior;
-  final bool repeating;
 
   /// 診断ログ用に候補へ足す理由コード。
   final List<String> reasonCodes;
 
   const _PhysicalPresentation({
     required this.behavior,
-    required this.repeating,
     this.reasonCodes = const [],
   });
 }

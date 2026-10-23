@@ -1,7 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
-import '../../config/alert_presentation_config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/hazard_palette.dart';
 import '../../theme/nav_palette.dart';
@@ -12,11 +11,6 @@ import '../../theme/nav_palette.dart';
 String formatGuideSeconds(double value) => value == value.roundToDouble()
     ? value.toStringAsFixed(0)
     : value.toStringAsFixed(1);
-
-/// 断続音の間隔(秒)。説明へ直書きせず提示ポリシーの既定値から出す。
-double get guideIntermittentIntervalSeconds =>
-    const AlertPresentationConfig().intermittentRepeatInterval.inMilliseconds /
-    1000;
 
 /// 見出し+短い説明+中身の1節。
 class GuideSection extends StatelessWidget {

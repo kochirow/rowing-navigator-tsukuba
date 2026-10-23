@@ -4,33 +4,39 @@
 ///
 /// - 内部レベル(lv0〜3)は「どれだけまずいか」= 停止距離内か・確度。
 ///   表示色・優先順位・ログにだけ使い、音の鳴り方には使わない。
-/// - 音の鳴り方は「どれだけ切迫しているか」= 到達までの時間だけで決める。
+/// - 音は「どれだけ切迫しているか」= 到達までの時間と、当たり判定の確度で
+///   **鳴り始め**を決める。鳴り方は1種類(読み上げの繰り返し)。
 ///
 /// 以前は lv2 が必ず単発音1回、lv3 でも到達3秒超なら単発音という具合に
 /// 2軸が混線しており、「レベル」と「音」の対応が直感と合わなかった。
+///
+/// **衝突警告の鳴り方は1種類である(2026-10-23 利用者決定)。**
+/// 以前は10秒以内=連続音、10〜13秒=3秒間隔の断続音の2段階だった。
+/// 漕手は「鳴っている/鳴っていない」しか聞き分けない(両手がオールで
+/// 塞がり、段階が変わってもすること=振り返って確認する、は同じ)うえ、
+/// 断続音の帯は3秒しかなく実質1回しか鳴らなかった。確度の違いは
+/// 鳴り方ではなく鳴り始めの早さで表す。経緯は DESIGN_PRINCIPLES 3.3.1。
 class AlertPresentationConfig {
-  /// この時間以内に到達する脅威は連続音にする。
-  ///
-  /// 8+の停止時間(約8.15秒)より余裕を取り、既定は10秒にする。
-  /// 漕手は後ろ向きで前を見ていないため、停止判断へ移るための余裕を残す。
-  /// 停止距離式(`boat_config.dart`)は `(0.5+2.0+1.0)·v + k·v` で速度に線形
-  /// なので、停止に必要な**時間**は速度によらず一定になる。
-  ///
-  /// 予告は [intermittentAudioDeadline] まで残す。連続音の余裕と
-  /// 段階的な予告を両立するため、予測地平を13秒へ伸ばしている。
-  final Duration continuousAudioDeadline;
-
-  /// この時間以内なら断続音で知らせる([continuousAudioDeadline]より先)。
+  /// 確実な当たり予測が、この時間以内に到達するなら鳴らす。
   ///
   /// 予測地平(`advanceWarningLeadSeconds` = 13秒)と一致させ、
   /// 「予測が届かない先では音が鳴らない」という不変条件にする。
-  final Duration intermittentAudioDeadline;
+  /// 設定画面・共有設定では `advanceWarningLeadSeconds` の名前で保存される。
+  final Duration audioStartDeadline;
 
-  /// 断続音を鳴らし直す間隔。
+  /// 確度の低い当たり予測は、この時間以内に到達するときだけ鳴らす。
   ///
-  /// 単発音1回では聞き逃す。連続音まで上げずに「継続して危ない」ことを
-  /// 伝えるための中間段階。
-  final Duration intermittentRepeatInterval;
+  /// 該当するのは、固定の危険区域に自艇のGPS誤差を足して初めて当たる候補と、
+  /// 回頭中の方位のブレで広げた領域で初めて当たる候補。鳴り方は確実な
+  /// 候補と同じで、鳴り始めだけを遅らせる。確度の低い警報が長く鳴ると
+  /// 警報全体が無視されるようになる(原則4)ため。
+  ///
+  /// 8+の停止時間(約8.15秒)より余裕を取り、既定は10秒にする。
+  /// 確度が低くても、止まりきれる時点では必ず鳴らす。
+  /// 停止距離式(`boat_config.dart`)は `(0.5+2.0+1.0)·v + k·v` で速度に線形
+  /// なので、停止に必要な**時間**は速度によらず一定になる。
+  /// 設定画面・共有設定では `primaryWarningLeadSeconds` の名前で保存される。
+  final Duration lowConfidenceAudioStartDeadline;
 
   /// 近接注意で単発音を鳴らしたあと、再武装するのに必要な離脱距離 [m]。
   /// 同じ場所で接近判定が揺れて鳴り続けるのを防ぐ。
@@ -128,9 +134,8 @@ class AlertPresentationConfig {
   final Duration closingRateWindow;
 
   const AlertPresentationConfig({
-    this.continuousAudioDeadline = const Duration(seconds: 10),
-    this.intermittentAudioDeadline = const Duration(seconds: 13),
-    this.intermittentRepeatInterval = const Duration(seconds: 3),
+    this.audioStartDeadline = const Duration(seconds: 13),
+    this.lowConfidenceAudioStartDeadline = const Duration(seconds: 10),
     this.proximityAudioRearmMeters = 3,
     this.stableStopSpeedMetersPerSecond = 0.4,
     this.stableStopExitSpeedMetersPerSecond = 0.8,
@@ -155,7 +160,7 @@ class AlertPresentationConfig {
         assert(approachingObservationMeters >= 0),
         assert(proximityAudioRearmMeters > 0),
         assert(staticOverlapClosingRateMetersPerSecond > 0),
-        // 「区域進入の周期 > 衝突警告の断続音の周期」は不変条件だが、
+        // 「確度の低い候補の鳴り始め <= 確実な候補の鳴り始め」は不変条件だが、
         // Duration は const 式で比較できないため assert にできない。
         // `test/services/alert_presentation_config_test.dart` で担保する。
         assert(guidanceRepeatMaxCount == null || guidanceRepeatMaxCount > 0);
@@ -163,18 +168,19 @@ class AlertPresentationConfig {
 
 const defaultAlertPresentationConfig = AlertPresentationConfig();
 
-/// 音の緊急度バンド。到達までの時間だけで決まる。
+/// 衝突警告の鳴らし方。到達までの時間と確度で決まる。
 enum AlertUrgency {
   /// 表示のみ。
   monitoring,
 
-  /// 断続音。
+  /// 1回だけ読み上げる。静的区域と重なっているが距離が縮まっていない
+  /// (岸との並走・桟橋への係留)ときの猶予中だけに使う。
   approaching,
 
-  /// 連続音。
+  /// 繰り返し読み上げる。衝突警告の鳴り方はこれ1種類。
   imminent;
 
-  /// 確度が低い候補を1段下げる。連続音の信頼性を守るため。
+  /// 確度が低い候補を1段下げる。
   AlertUrgency get oneStepDown => switch (this) {
         AlertUrgency.imminent => AlertUrgency.approaching,
         AlertUrgency.approaching => AlertUrgency.monitoring,

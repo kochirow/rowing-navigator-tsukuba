@@ -569,7 +569,7 @@ void main() {
     expect(result.snapshot.audioDirective?.eventId, isNotNull);
   });
 
-  test('固定障害物の音は到達時間で決まる(表示のみ/断続/連続)', () {
+  test('固定障害物の音は到達時間で決まる(表示のみ/鳴る)', () {
     // 以前は内部レベル(lv1/lv2/lv3)で音を決めていたため、
     // 「レベル」と「切迫度」が混線していた。現在は到達時間だけで決める。
     AlertBehavior behaviorFor(double entrySeconds) {
@@ -600,35 +600,43 @@ void main() {
       return active.snapshot.activeAlerts.single.candidate.behavior;
     }
 
-    // 断続音の予告地平(13秒)より先は表示のみ。
+    // 鳴り始め(13秒 = 予測地平)より先は表示のみ。
     expect(behaviorFor(14), AlertBehavior.visualOnly);
-    // 主警告(10秒)の外側、13秒以内は断続音。
-    expect(behaviorFor(12), AlertBehavior.singleAction);
-    // 主警告の10秒以内は連続音。
+    // 13秒以内は鳴る。鳴り方は1種類(繰り返し)で、10秒の内外で変えない。
+    // 以前は10〜13秒が3秒間隔の断続音だった(2026-10-23 廃止)。
+    expect(behaviorFor(12), AlertBehavior.continuousAction);
     expect(behaviorFor(9), AlertBehavior.continuousAction);
   });
-  test('連続音・断続音のバンド境界を設定で変えられる', () {
-    // 到達までの時間だけで音を決める。内部レベルは参照しない。
+  test('鳴り始めを設定で変えられる(確実なとき/確度が低いとき)', () {
+    // 到達までの時間と確度だけで音を決める。内部レベルは参照しない。
     final orchestrator = SafetyOrchestrator(
       sessionId: 'session-thresholds',
       sessionGeneration: 1,
       presentationConfig: const AlertPresentationConfig(
-        continuousAudioDeadline: Duration(seconds: 2),
-        intermittentAudioDeadline: Duration(seconds: 8),
+        lowConfidenceAudioStartDeadline: Duration(seconds: 2),
+        audioStartDeadline: Duration(seconds: 8),
       ),
     );
     final risks = assessment([
-      // 到達1秒 → 連続音バンド
+      // 到達1秒 → 鳴る
       boatThreat(
         'boat-imminent',
         entrySeconds: 1,
         level: CollisionRiskLevel.lv3,
       ),
-      // 到達5秒 → 断続音バンド
+      // 確実・到達5秒 → 鳴り始め8秒以内なので鳴る
       staticThreat(
         'shore-approaching',
         level: CollisionRiskLevel.lv3,
         entrySeconds: 5,
+      ),
+      // 確度が低い・到達5秒 → 確度が低いときの鳴り始め2秒より先なので表示のみ
+      staticThreat(
+        'pile-uncertain',
+        level: CollisionRiskLevel.lv3,
+        entrySeconds: 5,
+        kind: StaticObstacleKind.pile,
+        confidence: ThreatConfidence.uncertain,
       ),
     ]);
     orchestrator.processAssessment(
@@ -652,15 +660,12 @@ void main() {
       byCategory['other_boat']?.behavior,
       AlertBehavior.continuousAction,
     );
-    expect(byCategory['shore']?.behavior, AlertBehavior.singleAction);
-    expect(
-      byCategory['shore']?.reasonCodes,
-      contains('PRESENTATION_ACTION_INTERMITTENT'),
-    );
+    expect(byCategory['shore']?.behavior, AlertBehavior.continuousAction);
+    expect(byCategory['pile']?.behavior, AlertBehavior.visualOnly);
   });
 
   test('内部レベルではなく到達時間で音を決める', () {
-    // 同じ lv2 でも、到達が近ければ連続音、遠ければ表示のみになる。
+    // 同じ lv2 でも、到達が鳴り始め(13秒)以内なら鳴り、遠ければ表示のみになる。
     AlertBehavior behaviorFor(double entrySeconds) {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-band-$entrySeconds',
@@ -689,7 +694,7 @@ void main() {
     }
 
     expect(behaviorFor(5), AlertBehavior.continuousAction);
-    expect(behaviorFor(11), AlertBehavior.singleAction);
+    expect(behaviorFor(11), AlertBehavior.continuousAction);
     expect(behaviorFor(14), AlertBehavior.visualOnly);
   });
 
@@ -724,17 +729,18 @@ void main() {
     );
   });
 
-  test('確度が低い候補は1バンド下げて連続音の信頼性を守る', () {
-    AlertBehavior behaviorFor(double confidence) {
+  test('確度が低い候補は鳴り方を変えず、鳴り始めを10秒まで遅らせる', () {
+    // 以前は1段下げて断続音にしていた(2026-10-23 廃止)。
+    AlertBehavior behaviorFor(double confidence, {required double entry}) {
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'session-confidence-$confidence',
+        sessionId: 'session-confidence-$confidence-$entry',
         sessionGeneration: 1,
       );
       final risks = assessment([
         staticThreat(
           'shore-confidence',
           level: CollisionRiskLevel.lv3,
-          entrySeconds: 4,
+          entrySeconds: entry,
           confidence: confidence == 1.0
               ? ThreatConfidence.definite
               : ThreatConfidence.uncertain,
@@ -755,8 +761,11 @@ void main() {
       return active.snapshot.activeAlerts.single.candidate.behavior;
     }
 
-    expect(behaviorFor(1.0), AlertBehavior.continuousAction);
-    expect(behaviorFor(0.7), AlertBehavior.singleAction);
+    // 確実: 13秒以内なら鳴る。
+    expect(behaviorFor(1.0, entry: 12), AlertBehavior.continuousAction);
+    // 確度が低い: 10〜13秒は表示のみ、10秒以内で同じ音が鳴る。
+    expect(behaviorFor(0.7, entry: 12), AlertBehavior.visualOnly);
+    expect(behaviorFor(0.7, entry: 9), AlertBehavior.continuousAction);
   });
 
   test('安定停止5秒後は同一固定障害物の反復音を止め表示を維持する', () {
@@ -1294,12 +1303,14 @@ void main() {
     expect(reapproach.audioEventId, isNot(firstEventId));
   });
 
-  test('断続音は間隔ごとに新しい音声イベントへ切り替わる', () {
+  test('鳴り始めた警告音は同じ音声イベントのまま繰り返す', () {
+    // 断続音(3秒ごとに新しいイベントで鳴らし直す)は 2026-10-23 に廃止した。
+    // 衝突警告は continuousAction のループ1種類で、鳴らし直しは要らない。
     final orchestrator = SafetyOrchestrator(
-      sessionId: 'session-intermittent',
+      sessionId: 'session-single-band',
       sessionGeneration: 1,
     );
-    // 到達12秒 = 断続音バンド（主警告10秒・予告13秒）。
+    // 到達12秒 = 以前の断続音の帯。いまは鳴り始め13秒以内なので鳴る。
     final risk = assessment([
       staticThreat('shore-rep',
           level: CollisionRiskLevel.lv2, entrySeconds: 12),
@@ -1318,15 +1329,8 @@ void main() {
     eventAt(0);
     final first = eventAt(1);
     expect(first, isNotNull);
-    // 間隔(3秒)未満では同じイベントのまま = 鳴り直さない。
-    expect(eventAt(2), first);
-    // 最初の提示から3秒で鳴らし直す。
-    final second = eventAt(3);
-    expect(second, isNotNull);
-    expect(second, isNot(first));
-    expect(eventAt(4), second);
-    expect(eventAt(5), second);
-    // さらに3秒でもう一度。
-    expect(eventAt(6), isNot(second));
+    for (var second = 2; second <= 7; second++) {
+      expect(eventAt(second), first, reason: '$second秒');
+    }
   });
 }

@@ -11,11 +11,11 @@ import '../../../theme/hazard_palette.dart';
 /// - 2行目: 残り秒数(「5秒」)だけ。**方向は出さない**(下記 `_detailLabel`)。
 ///
 /// 切迫度([NavigationWarning.urgency])で見た目を変える。風・後ろ向き・
-/// イヤホン無しでは音が届かないことがあり、そのとき「連続音が鳴っている」のか
+/// イヤホン無しでは音が届かないことがあり、そのとき「警告音が鳴っている」のか
 /// 「表示だけ」なのかを目で区別できないと、鳴っていない警告と同じ重みで
 /// 扱ってしまう。
-/// - `imminent`(連続音): 太枠 + 白い脈動。周辺視野でも気づける。
-/// - `action`(単発・断続音): 濃色。
+/// - `imminent`(繰り返し鳴る警告音): 太枠 + 白い脈動。周辺視野でも気づける。
+/// - `action`(1回だけの読み上げ): 濃色。
 /// - `monitoring`(表示のみ): 淡色。
 class SafetyBanner extends StatelessWidget {
   final NavigationWarning? warning;
@@ -112,7 +112,7 @@ class _WarningChip extends StatelessWidget {
     final baseColor = HazardPalette.colorOf(context, warning.category);
     final urgency = warning.urgency;
     // 音が鳴らない段階(表示のみ)だけを淡色にする。以前は「予測かどうか」で
-    // 淡色にしていたが、8秒先の予測でも断続音は鳴っているため、
+    // 淡色にしていたが、8秒先の予測でも音は鳴っているため、
     // 淡色 = 静か、という読み方ができなかった。
     final isQuiet = urgency == WarningDisplayUrgency.monitoring;
     final background =
