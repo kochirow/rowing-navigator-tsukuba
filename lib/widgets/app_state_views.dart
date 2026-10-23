@@ -11,10 +11,14 @@ class AppLoadingView extends StatelessWidget {
   final IconData icon;
   final String? message;
 
+  /// アイコンの上に添えるもの(起動画面の標語など)。
+  final Widget? header;
+
   const AppLoadingView({
     super.key,
     this.icon = Icons.rowing,
     this.message,
+    this.header,
   });
 
   @override
@@ -27,6 +31,10 @@ class AppLoadingView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (header != null) ...[
+              header!,
+              SizedBox(height: dimens.space6),
+            ],
             Icon(icon, size: 56, color: colors.primary),
             SizedBox(height: dimens.space5),
             CircularProgressIndicator(color: colors.primary),

@@ -204,8 +204,8 @@ Stream<LicenseEntry> _appLicenses() async* {
     '$voiceCredit\n\n警告の読み上げ音声は VOICEVOX(ずんだもん)で作成しています。',
   );
   try {
-    final text = await rootBundle.loadString('assets/fonts/YujiBoku-OFL.txt');
-    yield LicenseEntryWithLineBreaks(['Yuji Boku(標語の毛筆フォント)'], text);
+    final text = await rootBundle.loadString('assets/fonts/YujiSyuku-OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Yuji Syuku(標語の毛筆フォント)'], text);
   } catch (error) {
     debugPrint('Font license is unavailable: $error');
   }
