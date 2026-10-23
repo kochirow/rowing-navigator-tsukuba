@@ -91,7 +91,9 @@ class NavSettingModal extends HookConsumerWidget {
     // 名前の札のプレビューを、打つたびに更新する。
     useListenable(nameController);
     final nameError = useState<String?>(null);
-    final strokeRateEnabled = useState(true);
+    // レート(SPM)は常に計測する(2026-10-23 利用者決定。切替は廃止)。
+    // 以前「オフ」で保存した端末でも、前回設定から戻さない。
+    const strokeRateEnabled = true;
     final isStarting = useState(false);
     final defaultsService = useMemoized(NavigationDefaultsService.new);
     final accountNameService = useMemoized(AccountDisplayNameService.new);
@@ -149,7 +151,6 @@ class NavSettingModal extends HookConsumerWidget {
             break;
           }
         }
-        strokeRateEnabled.value = defaults.strokeRateEnabled;
         ref.read(boatTypeProvider.notifier).state = defaults.boatType;
         ref.read(seatPositionProvider.notifier).state = seat;
         restoredSummary.value = '${name ?? defaults.displayName}・'
@@ -184,7 +185,7 @@ class NavSettingModal extends HookConsumerWidget {
             displayName: displayName,
             boatType: boatType,
             seatPosition: seatPosision.position,
-            strokeRateEnabled: strokeRateEnabled.value,
+            strokeRateEnabled: strokeRateEnabled,
           )
               .catchError((Object error) {
             debugPrint('Failed to save navigation defaults: $error');
@@ -192,7 +193,7 @@ class NavSettingModal extends HookConsumerWidget {
         );
         await onPressStartNav(
           displayName,
-          strokeRateEnabled.value,
+          strokeRateEnabled,
         );
       } finally {
         if (context.mounted) isStarting.value = false;
@@ -376,7 +377,7 @@ class NavSettingModal extends HookConsumerWidget {
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                    _sectionTitle(context, '端末の位置'),
+                    _sectionTitle(context, '端末の位置（シート番号）'),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 10,
@@ -394,32 +395,6 @@ class NavSettingModal extends HookConsumerWidget {
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                    // 見出しとスイッチ名で同じ語を2回出さない。スイッチの行を
-                    // 見出しにする。電池との関係は左のアイコン(速度計/節電)が示す。
-                    Material(
-                      color: Colors.transparent,
-                      child: SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'レート(SPM)',
-                          style: TextStyle(
-                              fontSize: 19, fontWeight: FontWeight.bold),
-                        ),
-                        // 艇速変化の波形もここで一緒に計測している。航行中の画面には
-                        // 出さない(2026-08-13に廃止)が、監視端末では見られるので、
-                        // 何が止まるのかを書いておく。
-                        subtitle: const Text('オフにすると監視端末の艇速変化も止まります'),
-                        secondary: Icon(
-                          strokeRateEnabled.value
-                              ? Icons.speed
-                              : Icons.battery_saver_outlined,
-                        ),
-                        value: strokeRateEnabled.value,
-                        onChanged: isStarting.value
-                            ? null
-                            : (value) => strokeRateEnabled.value = value,
-                      ),
-                    ),
                     const SizedBox(height: 16),
                     // 安全上の注意(アプリの位置づけを毎回リマインドする)
                     Container(
