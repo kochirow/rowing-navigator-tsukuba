@@ -484,8 +484,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(submittedName, '後藤');
-    // 保存済みのSPM設定(オフ)がそのまま引き継がれる。
-    expect(submittedStrokeRate, isFalse);
+    // レートは常にオン(2026-10-23 切替を廃止)。保存済みの「オフ」は引き継がない。
+    expect(submittedStrokeRate, isTrue);
   });
 
   testWidgets('前回設定がなければ近道は出さない', (tester) async {
@@ -666,8 +666,12 @@ void main() {
     expect(submittedName, '後藤');
   });
 
-  testWidgets('レート計測は既定ONで航行開始へ渡せる', (tester) async {
+  testWidgets('レート計測は常にONで航行開始へ渡し、切替は出さない', (tester) async {
     useNavigationSettingsViewport(tester);
+    // 切替があった頃に「オフ」で保存した端末でも、オンで始める。
+    SharedPreferences.setMockInitialValues({
+      'navigation_stroke_rate_enabled_v1': false,
+    });
     bool? submittedStrokeRateEnabled;
     await tester.pumpWidget(
       ProviderScope(
@@ -683,11 +687,13 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
-    await tester.ensureVisible(find.text('レート(SPM)'));
     await tester.pumpAndSettle();
-    // 見出しとスイッチ名で同じ語を2回出さない。
-    expect(find.text('レート(SPM)'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '名前'), '後藤');
+    await tester.pumpAndSettle();
+    // レートの切替は廃止した(2026-10-23)。
+    expect(find.text('レート(SPM)'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.text('端末の位置（シート番号）'), findsOneWidget);
     // 名前を入れると、地図に出る札をそのまま見せる。
     expect(find.text('1x 後藤'), findsOneWidget);
     // 航行中の艇速変化グラフは廃止した(2026-08-13)。表示の切替も出さない。
