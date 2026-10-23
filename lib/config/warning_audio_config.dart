@@ -144,3 +144,50 @@ String defaultWarningAudioAssetFor(StaticObstacleKind? kind) {
 /// **画面へ出すだけにする。** 音量が小さいことを音で知らせるのは矛盾している。
 /// 閾値は暫定で、実機で聞こえ方を確認できたら調整する。
 const audioLowOutputVolumeThreshold = 0.5;
+
+/// アプリ内の警告音量 [0.0〜1.0]。実際の音量は「端末の音量 × これ」になる。
+///
+/// ## 何のためか
+///
+/// トランシーバー(Buddycom など)と同じ端末で使うとき、トランシーバーは
+/// 大きく、このアプリは少し小さく聞きたいことがある(2026-10-24 利用者要望)。
+/// 端末の音量は1つしかないので、アプリの側で絞れるようにする。
+/// 音声セッションは `mixWithOthers` なので、ここを下げてもトランシーバーの
+/// 音量は変わらない。
+///
+/// ## 上限は 100%(既定)
+///
+/// 100% を超えて大きくはできない。音源は歪まずに出せる上限
+/// (-10 LUFS・ピーク 0.89)まで既に上げてあり(`tool/normalize_warning_audio.sh`)、
+/// 再生側(iOS の AVPlayer・Android の MediaPlayer)の音量も 1.0 が上限である。
+/// 音源を持ち上げてもリミッタで潰れて聞き取りにくくなるだけで、大きくはならない。
+///
+/// ## 下限は 30%(0 にはしない)
+///
+/// 0 にできると、警告経路を設定で無効化できてしまう(CLAUDE.md「してはいけないこと」)。
+/// 30% は 2026-08-06 の実機で端末音量 0.30 のまま運用されていた例と同じ水準で、
+/// 屋外で聞こえるかどうかの境目として選んだ暫定値。実機で聞こえ方を確かめて調整する。
+/// 全ファイルに同じ倍率がかかるので、ファイル間の音圧の揃い(2.5 LU 以内)は崩れない。
+///
+/// 端末ごとの設定で、艇どうしで共有しない(端末の置き場所も、トランシーバーとの
+/// 兼ね合いも端末ごとに違う)。
+const warningAudioAppVolumeMin = 0.3;
+const warningAudioAppVolumeMax = 1.0;
+const warningAudioAppVolumeDefault = 1.0;
+
+/// 音量の刻み。スライダーの目盛と保存値の丸めに使う。
+const warningAudioAppVolumeStep = 0.1;
+
+/// 保存値・入力値を設定範囲と刻みへ収める。
+///
+/// 範囲外は端へ寄せ、壊れた値(null・NaN)は既定(100%)へ戻す。
+/// 壊れた値を下限へ倒さないのは、聞こえない警告は警告漏れと同じだから。
+double normalizeWarningAudioAppVolume(double? value) {
+  if (value == null || !value.isFinite) return warningAudioAppVolumeDefault;
+  final clamped = value
+      .clamp(warningAudioAppVolumeMin, warningAudioAppVolumeMax)
+      .toDouble();
+  final steps = (clamped / warningAudioAppVolumeStep).round();
+  // 0.1 刻みの浮動小数誤差(0.30000000000000004 など)を保存値に残さない。
+  return double.parse((steps * warningAudioAppVolumeStep).toStringAsFixed(2));
+}
