@@ -7,6 +7,9 @@ import '../../../services/workout_engine.dart';
 import 'nav_lower_drums.dart';
 import 'nav_status_card.dart';
 
+/// 「元に戻す」付きの通知(RESET・ワークアウトの停止)を出しておく時間。
+const undoSnackBarDuration = Duration(seconds: 5);
+
 /// 時刻による1秒更新を地図画面全体から切り離すためのパネル。
 class NavigationStatusPanel extends StatefulWidget {
   final int paceSeconds;
@@ -111,6 +114,10 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       content: const Text('下の計器を0にしました'),
       action:
           undo == null ? null : SnackBarAction(label: '元に戻す', onPressed: undo),
+      // 「元に戻す」付きの通知は、Flutter の既定では押すまで消えない
+      // (persist)。漕手は航行中に画面を触れないので、自動で閉じる。
+      persist: false,
+      duration: undoSnackBarDuration,
     ));
   }
 
@@ -122,6 +129,10 @@ class _NavigationStatusPanelState extends State<NavigationStatusPanel> {
       content: const Text('ワークアウトを止めました'),
       action:
           undo == null ? null : SnackBarAction(label: '元に戻す', onPressed: undo),
+      // 「元に戻す」付きの通知は、Flutter の既定では押すまで消えない
+      // (persist)。漕手は航行中に画面を触れないので、自動で閉じる。
+      persist: false,
+      duration: undoSnackBarDuration,
     ));
   }
 
