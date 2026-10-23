@@ -42,6 +42,7 @@ import '../services/ashore_detector.dart';
 import '../services/collision_risk_evaluator_service.dart';
 import '../services/conservative_position_estimator.dart';
 import '../services/audio_route_diagnostics_service.dart';
+import '../services/warning_audio_volume_settings_service.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
 import '../services/danger_zone_settings_service.dart';
@@ -192,6 +193,15 @@ UseNavigator useNavigator() {
 
   /// 端末の出力音量が低く、読み上げが聞こえない恐れがある状態。表示のみ。
   final isAudioOutputVolumeLow = useState(false);
+
+  /// アプリ内の警告音量(端末の音量に掛け算)。端末内に保存する。
+  final warningAudioVolume = useState<double>(warningAudioAppVolumeDefault);
+  final warningAudioVolumeSettings =
+      useMemoized(WarningAudioVolumeSettingsService.new);
+
+  /// 最後にOSから取れた端末の出力音量。アプリ内音量を変えたときに
+  /// 「実際の音量が小さいか」を測り直すために持つ。
+  final lastOutputVolume = useRef<double?>(null);
   final sharingCapabilityMonitor = useRef(SharingCapabilityMonitor()).value;
   final publishingSetupRetryAttempt = useRef(0);
   final publishingSetupFailureKind = useRef<SharingFailureKind?>(null);
@@ -501,6 +511,24 @@ UseNavigator useNavigator() {
 
   final audioRouteDiagnostics = AudioRouteDiagnosticsService();
 
+  // 判定は「端末の音量 × アプリ内音量」で行う。アプリ内音量を絞っていると、
+  // 端末の音量が最大でも実際の音は小さい。
+  void updateAudioOutputVolumeLow() {
+    final outputVolume = lastOutputVolume.value;
+    if (outputVolume == null) return;
+    final effectiveVolume = outputVolume * warningAudioVolume.value;
+    final low = effectiveVolume < audioLowOutputVolumeThreshold;
+    if (low == isAudioOutputVolumeLow.value) return;
+    isAudioOutputVolumeLow.value = low;
+    appendRuntimeDiagnostic('audio_output_volume_changed', {
+      'outputVolume': outputVolume,
+      'appVolume': warningAudioVolume.value,
+      'effectiveVolume': effectiveVolume,
+      'isLow': low,
+      'threshold': audioLowOutputVolumeThreshold,
+    });
+  }
+
   void scheduleAudioRouteSnapshot(String triggerType) {
     if (mode.value != NavMode.navigator || sessionStartedAt.value == null) {
       return;
@@ -515,6 +543,7 @@ UseNavigator useNavigator() {
         details: {
           'triggerType': triggerType,
           ...snapshot,
+          'appVolume': warningAudioVolume.value,
         },
       ));
       // 端末の出力音量が小さいと、読み上げが鳴っていても聞こえない。
@@ -527,15 +556,8 @@ UseNavigator useNavigator() {
       // 矛盾しているうえ、本当に鳴るべき衝突警告を覆い隠す。
       final volume = snapshot['outputVolume'];
       if (volume is num) {
-        final low = volume < audioLowOutputVolumeThreshold;
-        if (low != isAudioOutputVolumeLow.value) {
-          isAudioOutputVolumeLow.value = low;
-          appendRuntimeDiagnostic('audio_output_volume_changed', {
-            'outputVolume': volume.toDouble(),
-            'isLow': low,
-            'threshold': audioLowOutputVolumeThreshold,
-          });
-        }
+        lastOutputVolume.value = volume.toDouble();
+        updateAudioOutputVolumeLow();
       }
     }));
   }
@@ -744,6 +766,14 @@ UseNavigator useNavigator() {
 
   Future<bool> testAudio() async {
     return alert.test();
+  }
+
+  Future<void> setWarningAudioVolume(double volume) async {
+    final next = normalizeWarningAudioAppVolume(volume);
+    warningAudioVolume.value = next;
+    updateAudioOutputVolumeLow();
+    await alert.setAppVolume(next);
+    await warningAudioVolumeSettings.save(next);
   }
 
   Future<bool> checkAudio() async {
@@ -5103,6 +5133,10 @@ UseNavigator useNavigator() {
   useEffect(() {
     unawaited(reloadDefaultObstaclesForMap());
     loadWarningTime();
+    unawaited(warningAudioVolumeSettings.load().then((volume) async {
+      warningAudioVolume.value = volume;
+      await alert.setAppVolume(volume);
+    }));
     unawaited(probeRecoverableSession());
     return () {
       final boatId = config.value?.boatId;
@@ -5271,6 +5305,8 @@ UseNavigator useNavigator() {
     startNavigation: startNavigation,
     checkAudio: checkAudio,
     testAudio: testAudio,
+    warningAudioVolume: warningAudioVolume,
+    setWarningAudioVolume: setWarningAudioVolume,
     playCoachAnomalyAlert: playCoachAnomalyAlert,
     isAshore: isAshore,
     overrideAshoreToWater: overrideAshoreToWater,
@@ -5355,6 +5391,10 @@ class UseNavigator {
   final Future<bool> Function() checkAudio;
   final Future<bool> Function() testAudio;
 
+  /// アプリ内の警告音量 [0.3〜1.0]。実際の音量は端末の音量との掛け算。
+  final ValueNotifier<double> warningAudioVolume;
+  final Future<void> Function(double volume) setWarningAudioVolume;
+
   /// 監視モードで異常を検知したときに鳴らす通知音。
   final Future<void> Function() playCoachAnomalyAlert;
   final Future<void> Function() stopNavigation;
@@ -5422,6 +5462,8 @@ class UseNavigator {
     required this.startNavigation,
     required this.checkAudio,
     required this.testAudio,
+    required this.warningAudioVolume,
+    required this.setWarningAudioVolume,
     required this.playCoachAnomalyAlert,
     required this.stopNavigation,
     required this.startWatching,

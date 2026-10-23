@@ -314,6 +314,10 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
   // 再生ウォッチドッグ)を一切触らない。現行ポリシーは読み上げを重ねない
   // ためcueを発行しないが、将来の短いチャイム等に備えて機構だけ残す。
   final cuePlayer = useMemoized(AudioPlayer.new);
+
+  /// アプリ内の警告音量。端末の音量に掛け算で効く。
+  /// 再生の都度ここから `setVolume` するので、プレイヤーを作り直しても引き継がれる。
+  final appVolume = useRef<double>(warningAudioAppVolumeDefault);
   final cueQueue = useMemoized(AlertCueQueue.new);
   final cueInitialization = useRef<Future<void>?>(null);
   final cueDraining = useRef(false);
@@ -884,7 +888,7 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
         'setReleaseMode',
         () => target.setReleaseMode(ReleaseMode.stop),
       );
-      await platformCall('setVolume', () => target.setVolume(1.0));
+      await platformCall('setVolume', () => target.setVolume(appVolume.value));
       await platformCall(
         'setSource',
         () => target.setSource(AssetSource(assetPath)),
@@ -1083,7 +1087,7 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
       // 持続音のプレイヤーには触れない。
       await cuePlayer.stop();
       await cuePlayer.setReleaseMode(ReleaseMode.stop);
-      await cuePlayer.setVolume(1.0);
+      await cuePlayer.setVolume(appVolume.value);
       await cuePlayer.setSource(AssetSource(request.assetPath));
       if (isDisposed.value || generation != cueGeneration.value) {
         emitDiagnostic('audio_cue_skipped', {
@@ -1282,6 +1286,24 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
     }
   }
 
+  /// アプリ内の警告音量を変える。範囲外は [normalizeWarningAudioAppVolume] で収める。
+  ///
+  /// 鳴っている音にもすぐ効かせる(試し鳴らし中にスライダーを動かす場面)。
+  /// 失敗しても次の再生で必ず当て直すので、ここでは握りつぶす。
+  Future<void> setAppVolume(double volume) async {
+    final next = normalizeWarningAudioAppVolume(volume);
+    if (next == appVolume.value) return;
+    appVolume.value = next;
+    emitDiagnostic('audio_app_volume_changed', {'appVolume': next});
+    if (isDisposed.value) return;
+    try {
+      await platformCall('setVolume', () => player.value.setVolume(next));
+    } catch (_) {}
+    try {
+      await cuePlayer.setVolume(next);
+    } catch (_) {}
+  }
+
   /// 航行開始前に短い警告音を再生し、端末から音が出せる状態か確認する。
   Future<bool> test() async {
     emitDiagnostic('audio_test_started', {'asset': genericWarningAudioAsset});
@@ -1332,6 +1354,8 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
     test: test,
     stop: stop,
     dispose: dispose,
+    setAppVolume: setAppVolume,
+    appVolume: () => appVolume.value,
   );
 }
 
@@ -1352,6 +1376,12 @@ class UseAlert {
   final Future<void> Function() stop;
   final Future<void> Function() dispose;
 
+  /// アプリ内の警告音量(端末の音量に掛け算)を変える。
+  final Future<void> Function(double volume) setAppVolume;
+
+  /// いまのアプリ内の警告音量。
+  final double Function() appVolume;
+
   UseAlert({
     required this.isPlaying,
     required this.error,
@@ -1362,5 +1392,7 @@ class UseAlert {
     required this.test,
     required this.stop,
     required this.dispose,
+    required this.setAppVolume,
+    required this.appVolume,
   });
 }

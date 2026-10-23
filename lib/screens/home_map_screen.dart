@@ -1982,6 +1982,12 @@ class HomeMapScreen extends HookConsumerWidget {
                                                         workout.prepared,
                                                     onWorkoutChanged:
                                                         workout.prepare,
+                                                    warningAudioVolume:
+                                                        navigator
+                                                            .warningAudioVolume,
+                                                    onWarningAudioVolumeChanged:
+                                                        navigator
+                                                            .setWarningAudioVolume,
                                                     onPressTestAudio: () async {
                                                       final ok = await navigator
                                                           .testAudio();

@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/config/boat_config.dart';
 import 'package:rowing_navigator/config/display_name_config.dart';
 import 'package:rowing_navigator/features/home_map/widgets/rounded_button.dart';
+import 'package:rowing_navigator/features/home_map/widgets/warning_audio_volume_control.dart';
 
 import '../../../models/workout_plan.dart';
 import '../../../providers/nav_config_providers.dart';
@@ -28,6 +29,11 @@ class NavSettingModal extends HookConsumerWidget {
   ) onPressStartNav;
   final Future<void> Function()? onPressTestAudio;
 
+  /// アプリ内の警告音量。[onWarningAudioVolumeChanged] と一緒に渡したときだけ、
+  /// 「音声を確認する」の上に音量の欄を出す(確かめながら合わせられるように)。
+  final ValueNotifier<double>? warningAudioVolume;
+  final Future<void> Function(double volume)? onWarningAudioVolumeChanged;
+
   /// 開いた時点で決めてある、この航行で使うワークアウト。無ければ null。
   final WorkoutPlan? preparedWorkout;
 
@@ -40,6 +46,8 @@ class NavSettingModal extends HookConsumerWidget {
     super.key,
     required this.onPressStartNav,
     this.onPressTestAudio,
+    this.warningAudioVolume,
+    this.onWarningAudioVolumeChanged,
     this.preparedWorkout,
     this.onWorkoutChanged,
   });
@@ -423,6 +431,14 @@ class NavSettingModal extends HookConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    if (warningAudioVolume != null &&
+                        onWarningAudioVolumeChanged != null) ...[
+                      WarningAudioVolumeControl(
+                        volume: warningAudioVolume!,
+                        onChanged: onWarningAudioVolumeChanged!,
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     if (onPressTestAudio != null) ...[
                       SizedBox(
                         width: double.infinity,
