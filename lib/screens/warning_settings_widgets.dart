@@ -215,14 +215,23 @@ class ValueStepper extends StatelessWidget {
             icon: const Icon(Icons.remove),
             tooltip: '減らす',
           ),
+          // 値は必ず1行で出す。「10.0秒前」が84幅では「秒前」だけ次の行へ
+          // 落ちていた(2026-10-23 シミュレーターで確認)。幅を広げたうえで、
+          // 文字サイズを大きくした端末でも折り返さず縮めて収める。
           SizedBox(
-            width: 84,
-            child: Text(value,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: [FontFeature.tabularFigures()])),
+            width: 100,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value,
+                  key: keyPrefix == null ? null : ValueKey('$keyPrefix-value'),
+                  maxLines: 1,
+                  softWrap: false,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: [FontFeature.tabularFigures()])),
+            ),
           ),
           IconButton.outlined(
             key: keyPrefix == null ? null : ValueKey('$keyPrefix-plus'),
