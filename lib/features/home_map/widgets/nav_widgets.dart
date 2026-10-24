@@ -8,3 +8,4 @@ export 'end_navigation_button.dart';
 export 'nav_capability_badges.dart';
 export 'previous_nav_settings_label.dart';
 export 'workout_quick_sheet.dart';
+export 'warning_audio_volume_sheet.dart';
