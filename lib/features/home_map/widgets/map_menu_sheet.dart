@@ -25,7 +25,7 @@ class MapMenuAction {
   /// 出艇前は行き先が9つ前後になるため、平らに並べると元の混在状態に
   /// 戻ってしまう。塊に分けると、全部を読まなくても目的の物がどのあたりに
   /// あるかを当てられる。塊の順番は固定なので、覚えた位置はずれない。
-  /// 航行中は5項目しかないので `null` のままにして見出しを出さない。
+  /// 航行中は6項目しかないので `null` のままにして見出しを出さない。
   final String? section;
 
   const MapMenuAction({
@@ -67,7 +67,7 @@ class MapMenuSheet extends StatelessWidget {
     // DecoratedBox ではなく Material をルートにする(色が隠れる警告を防ぐ)。
     //
     // 高さは中身に合わせ、[heightFactor] は上限としてだけ使う。固定高だと
-    // 航行中の5項目でシートの下半分が空白になり、項目が途中で切れている
+    // 航行中の6項目でシートの下半分が空白になり、項目が途中で切れている
     // ように見える。項目が増えたときだけスクロールする。
     return ConstrainedBox(
       constraints: BoxConstraints(
