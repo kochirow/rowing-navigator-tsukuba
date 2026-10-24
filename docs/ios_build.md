@@ -61,25 +61,17 @@
   `flutter build ios --release --no-codesign` が SwiftPM 有効のまま通ることを確認した。
   以前は FlutterFire の Swift Package が日本語パスを解決できず、そのため SwiftPM を
   無効にしていた(いつの版で直ったかは確認していない)。
-- それでも**配布ビルドは英数字パスの複製で作ることを勧める。**
-  - Android の `flutter build apk` は日本語パスで失敗する(`app.dill` のコピー)。
-    iOS と Android を同じ複製で作れば手順が1つで済む。
-  - 複製を `git clone` で作ると、未コミットの変更が配布物へ混ざらない。
-  - 日本語パスの問題が再発しても(Flutter・FlutterFire の更新で起こりうる)、複製なら影響を受けない。
+- **iOS の配布ビルドは本体フォルダで作る。** 以前は英数字パスの複製(`~/dev/rowing-navigator`)を
+  勧めていたが、2026-10-24 に廃止した。
+  - Android 用の複製(`~/dev/rowing-navigator-android`)とは別になっていて、手順を1つにする利点が無かった。
+  - 本体フォルダは main に保ち、エージェントの作業は worktree で行うので、作業途中の変更は混ざりにくい。
+    Archive の前に `git status` で、追跡済みファイルに変更が無いことだけ確かめる。
+  - 複製は 5GB を使い、最新に合わせる手間が増える。ビルド番号の取り違えは複製でも起きる(6章)。
+- 日本語パスの問題が再発したら(Flutter・FlutterFire の更新で起こりうる)、そのとき英数字パスへ
+  `git clone` して `ios/Flutter/Secrets.xcconfig` をコピーすればよい。
+- Android の `flutter build apk` は日本語パスで失敗する(`app.dill` のコピー)ので、Android だけは複製で作る。
 - `flutter analyze` は日本語パスでは引き続きクラッシュする(Dart analysis server の LSP の問題。
   SwiftPM とは無関係)。本体では `dart analyze lib test tool` を使う。
-
-### 英数字パスの複製を作る
-
-```bash
-git clone <このリポジトリ> ~/dev/rowing-navigator
-cd ~/dev/rowing-navigator
-cp <本体>/ios/Flutter/Secrets.xcconfig ios/Flutter/
-# Android も作るなら
-cp <本体>/android/key.properties <本体>/android/secret.properties <本体>/android/local.properties android/
-```
-
-GitHub の `main` に合わせてからビルドする(`git fetch origin && git checkout -B main origin/main`)。
 
 ## 5. 確認用ビルド(署名なし)
 
@@ -102,7 +94,7 @@ flutter build ios --release --no-codesign
 
 ```bash
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-zsh tool/flutter_with_provenance.sh build ipa --release --build-number <前回より大きい整数>
+zsh tool/flutter_with_provenance.sh build ipa --release
 ```
 
 - `build/ios/ipa/*.ipa` ができる。署名には Xcode に登録した Apple Developer アカウントと
@@ -119,7 +111,10 @@ zsh tool/flutter_with_provenance.sh build ipa --release --build-number <前回�
 4. Organizer が開いたら Distribute App → App Store Connect → Upload。
 5. App Store Connect の TestFlight 画面で処理が終わるのを待ち、テスターへ配る。
 
-ビルド番号は `pubspec.yaml` の `version:` の `+` の後ろ、または `--build-number` で上げる。
+ビルド番号は `pubspec.yaml` の `version:` の `+` の後ろで上げる(Android と共通の番号。`--build-number` は使わない)。
+**pubspec を変えたら、Archive の前に必ず手順1の `--config-only` を実行する。** `flutter pub get` だけでは
+`ios/Flutter/Generated.xcconfig` の番号が古いまま残り、Info.plist はそれを読むので古い番号でアップロードされる
+(2026-10-24 に 19 にしたのに 18 のままだった)。
 App Store Connect は同じビルド番号の再アップロードを受け付けない。
 
 **版(`+` の前の `1.2.1` の部分)は利用者の指示がない限り上げない。ビルド番号だけを上げる。**
@@ -147,7 +142,7 @@ App Store Connect は同じビルド番号の再アップロードを受け付�
 | 「concurrent builds」で失敗する | 途中で止めた flutter の xcodebuild が残っている。`pkill -f "xcodebuild -clonedSourcePackagesDirPath"` |
 | Swift Package の解決で失敗する | `flutter clean` の後に再ビルド。直らなければ `~/Library/Caches/org.swift.swiftpm` と `~/Library/Developer/Xcode/DerivedData` の該当フォルダを消す |
 | `No such module 'GoogleMaps'` など | `Runner.xcodeproj` を開いている。`Runner.xcworkspace` を開く |
-| 日本語パスで Swift Package が解決できない | 4章の英数字パスの複製でビルドする |
+| 日本語パスで Swift Package が解決できない | 英数字パスへ `git clone` してビルドする(4章) |
 | 診断ログの `gitCommitSha` が `unknown` | Git 管理外のフォルダでビルドした。`git clone` した複製でやり直す |
 | シミュレーターで ▶ Run すると長いビルドの最後に「release/profile builds are only supported for physical devices」 | 共有スキームの Run は実機用に Release。シミュレーターは Edit Scheme → Run → Build Configuration を Debug にする(スキームは変えない) |
 | `flutter build ios --simulator` が「does not contain architectures "arm64 x86_64"」で失敗する | Xcode 27 の lipo の仕様変更(flutter/flutter#188461、Flutter 3.47 系で修正)。機種を指定して Debug でビルドする: `xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Debug -destination 'id=<UDID>' build` |
