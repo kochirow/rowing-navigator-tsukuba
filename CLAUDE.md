@@ -89,6 +89,11 @@ flutter run
 
 起動には Firebase 設定と Google Maps API キーが必要(README参照)。
 
+> **版(`pubspec.yaml` の `version:` の `+` の前)は利用者の指示なしに上げない。**
+> 配布のたびに上げるのは `+` の後ろのビルド番号だけ(Android・iOS 共通)。版を上げると
+> iOS は審査の出し直しになるため、なるべく同じ版を使う(2026-10-24 利用者決定。
+> 経緯は [docs/ios_build.md](docs/ios_build.md) 6章末)。
+
 > **配布ビルドには必ず Git SHA を入れる。** 実機ログの `gitCommitSha` が
 > `unknown` だと、どのコードの挙動か確定できない(2026-09-26 に実際に起きた)。
 > - Android: `zsh tool/flutter_with_provenance.sh build apk --release`(appbundle も同様)。

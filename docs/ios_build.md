@@ -122,6 +122,13 @@ zsh tool/flutter_with_provenance.sh build ipa --release --build-number <前回�
 ビルド番号は `pubspec.yaml` の `version:` の `+` の後ろ、または `--build-number` で上げる。
 App Store Connect は同じビルド番号の再アップロードを受け付けない。
 
+**版(`+` の前の `1.2.1` の部分)は利用者の指示がない限り上げない。ビルド番号だけを上げる。**
+版を上げると iOS は App Store の審査へ出し直しになるため、なるべく同じ版を使い続ける方針である
+(2026-10-24 利用者決定)。機能追加があっても、エージェントの判断で版を上げてはいけない。
+同日、エージェントが無断で 1.2.2 に上げて指摘を受け、1.2.1 へ戻した
+(Android のビルド19だけは 1.2.2 の表示名で配布済み。Android は versionCode だけで更新を判定するので、
+次の 1.2.1+20 もそのまま上書きで入る)。
+
 ## 7. Firebase SDK を更新するとき
 
 1. `pubspec.yaml` の firebase_* パッケージを上げて `flutter pub get`。
