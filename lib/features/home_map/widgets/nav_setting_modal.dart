@@ -8,7 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/config/boat_config.dart';
 import 'package:rowing_navigator/config/display_name_config.dart';
 import 'package:rowing_navigator/features/home_map/widgets/rounded_button.dart';
-import 'package:rowing_navigator/features/home_map/widgets/warning_audio_volume_control.dart';
+import 'package:rowing_navigator/features/home_map/widgets/warning_audio_volume_sheet.dart';
 
 import '../../../models/workout_plan.dart';
 import '../../../providers/nav_config_providers.dart';
@@ -30,7 +30,7 @@ class NavSettingModal extends HookConsumerWidget {
   final Future<void> Function()? onPressTestAudio;
 
   /// アプリ内の警告音量。[onWarningAudioVolumeChanged] と一緒に渡したときだけ、
-  /// 「音声を確認する」の上に音量の欄を出す(確かめながら合わせられるように)。
+  /// 「音声を確認する」の下に音量の小さな入口を出す。
   final ValueNotifier<double>? warningAudioVolume;
   final Future<void> Function(double volume)? onWarningAudioVolumeChanged;
 
@@ -431,14 +431,6 @@ class NavSettingModal extends HookConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    if (warningAudioVolume != null &&
-                        onWarningAudioVolumeChanged != null) ...[
-                      WarningAudioVolumeControl(
-                        volume: warningAudioVolume!,
-                        onChanged: onWarningAudioVolumeChanged!,
-                      ),
-                      const SizedBox(height: 4),
-                    ],
                     if (onPressTestAudio != null) ...[
                       SizedBox(
                         width: double.infinity,
@@ -448,6 +440,15 @@ class NavSettingModal extends HookConsumerWidget {
                           onPressed: onPressTestAudio,
                         ),
                       ),
+                      // 音量は控えめな入口だけ置き、押すとシートを開く
+                      // (2026-10-24 利用者要望: 開始画面では目立たせない)。
+                      if (warningAudioVolume != null &&
+                          onWarningAudioVolumeChanged != null)
+                        WarningAudioVolumeLink(
+                          volume: warningAudioVolume!,
+                          onChanged: onWarningAudioVolumeChanged!,
+                          onTest: onPressTestAudio,
+                        ),
                       const SizedBox(height: 12),
                     ],
                     Center(

@@ -1867,6 +1867,16 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 ),
                                               ),
                                             ),
+                                          // 航行中・監視中は1回押せば音量が出る(2026-10-24 利用者要望)
+                                          if (navigator.mode.value ==
+                                                  NavMode.navigator ||
+                                              navigator.isWatching.value)
+                                            WarningAudioVolumeMapButton(
+                                              volume:
+                                                  navigator.warningAudioVolume,
+                                              onChanged: navigator
+                                                  .setWarningAudioVolume,
+                                            ),
                                           // その他の操作はメニューへ集約(過密・オーバーフロー回避)
                                           Container(
                                             margin:

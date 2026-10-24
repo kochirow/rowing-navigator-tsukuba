@@ -4,9 +4,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import '../../../config/warning_audio_config.dart';
 import '../../../theme/app_theme.dart';
 
-/// 警告音の音量(アプリ内)。実際の音量は端末の音量との掛け算になる。
+/// 警告音の音量(アプリ内)のスライダー。実際の音量は端末の音量との掛け算になる。
 ///
-/// トランシーバーは大きく、このアプリは小さく聞きたいときに使う。
 /// 範囲と下限の理由は `warningAudioAppVolumeMin` を参照。
 class WarningAudioVolumeControl extends HookWidget {
   const WarningAudioVolumeControl({
@@ -27,10 +26,7 @@ class WarningAudioVolumeControl extends HookWidget {
         .round();
     return Row(
       children: [
-        const Text(
-          '警告音',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        Icon(Icons.volume_down, color: context.colors.textSecondary),
         Expanded(
           child: Slider(
             value: current,
@@ -47,12 +43,12 @@ class WarningAudioVolumeControl extends HookWidget {
           ),
         ),
         SizedBox(
-          width: 56,
+          width: 60,
           child: Text(
             '$percent%',
             textAlign: TextAlign.right,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               color: context.colors.textPrimary,
               fontFeatures: const [FontFeature.tabularFigures()],
