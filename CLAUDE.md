@@ -105,8 +105,9 @@ flutter run
 > Firebase iOS SDK は CocoaPods での配布を 12.19.0 で終えた)。Google Maps だけ
 > CocoaPods に残る混在構成。`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` を付けないと
 > `pod install` が固まる。Xcode では `ios/Runner.xcworkspace` を開く。
-> 日本語パスでも iOS ビルドは通るが(2026-10-20 確認)、配布ビルドは Android と同じく
-> 英数字パスの `git clone` 複製で作る。手順は [docs/ios_build.md](docs/ios_build.md)。
+> iOS の配布ビルドは**本体フォルダ(日本語パス)の main で作る**(2026-10-20 に通ることを確認。
+> 2026-10-24 に iOS 用の複製を廃止)。Archive の前に `flutter build ios --config-only --release --no-codesign`
+> を一度実行し、ビルド番号を Xcode へ渡す。手順は [docs/ios_build.md](docs/ios_build.md)。
 >
 > Firebase Rules の Emulator テスト(`firebase_rules_test/`)は CI の
 > `firebase-rules` ジョブで毎回走る。

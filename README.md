@@ -69,7 +69,7 @@ CI の `flutter analyze` だけが落ちます。
 
 iOS は Firebase を Swift Package Manager で、Google Maps を CocoaPods で取り込む混在構成です。
 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` を付けてビルドし、Xcode では `ios/Runner.xcworkspace` を開いてください。
-配布ビルドは英数字パスへ `git clone` した複製で作ります。Archive と TestFlight へのアップロードまでの手順は
+配布ビルドは本体フォルダの `main` で作ります(Android だけは英数字パスの複製が必要)。Archive と TestFlight へのアップロードまでの手順は
 [docs/ios_build.md](docs/ios_build.md) にあります。
 
 ### サポートバージョン
