@@ -1106,9 +1106,9 @@ class CollisionRiskEvaluatorService {
         laneResolver: laneResolver,
       );
       final reverseLane = laneResolver?.resolveLane(myPosition);
-      // 開水面のレーンでは逆走判定を出さない。
-      // レーンが「越えない取り決め」として成立する水域だけで使う。
-      // 根拠と実測は [reverseGuidanceDisabledLaneIds]。
+      // レーン単位で逆走判定を外す口。現在は開水面(霞ヶ浦)も含めて
+      // 全レーンで有効(一度外したが撤回した)。外すのは誤発報が実測された
+      // ときだけ。根拠と経緯は [reverseGuidanceDisabledLaneIds]。
       final reverseGuidanceAllowed = reverseLane != null &&
           reverseLane.reverseGuidanceEnabled &&
           !reverseGuidanceDisabledLaneIds.contains(reverseLane.id);

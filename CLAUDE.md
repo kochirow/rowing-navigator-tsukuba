@@ -32,6 +32,7 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 
 このファイル(CLAUDE.md)は AI 作業ガイドであり、設計原則の要約と実装の地図である。
 両者が食い違ったら DESIGN_PRINCIPLES.md が優先する。
+どの文書がいま有効で、どれが過去の記録かは [docs/README.md](docs/README.md) にまとめてある。
 
 要約:
 
@@ -97,6 +98,8 @@ flutter run
 > **配布ビルドには必ず Git SHA を入れる。** 実機ログの `gitCommitSha` が
 > `unknown` だと、どのコードの挙動か確定できない(2026-09-26 に実際に起きた)。
 > - Android: `zsh tool/flutter_with_provenance.sh build apk --release`(appbundle も同様)。
+>   **Android だけは英数字パスの複製で作る**(日本語パスでは `app.dill` のコピーで失敗する。
+>   [docs/ios_build.md](docs/ios_build.md) 4章)。
 >   `flutter build` を直接呼ぶと release は Gradle が止める。
 > - iOS: Xcode の Archive でもよい。Runner の Run Script が
 >   `tool/xcode_provenance_env.sh` で SHA を自動で足す。
@@ -145,13 +148,13 @@ flutter run
 | `lib/services/alert_state_machine.dart` | 警告のライフサイクル(candidate→alerting→clearing→safe) |
 | `lib/hooks/use_alert.dart` | 警告音の再生と、OS割込みからの自動復旧。**再生要求は直列キューで1本ずつ実行する**(並行実行すると、段階が上がる瞬間に古い要求が新しい音を止める)。2本目のプレイヤー(`playCue`)は現在未使用(読み上げを重ねると両方聞き取れないため) |
 | `lib/services/ashore_detector.dart` | 陸上判定(純Dart)。岸の基準線の陸側にいるかで判定し、**音だけ**を止める |
-| `lib/services/receive_fault_debouncer.dart` | 能力劣化を system fault へ昇格させるヒステリシス(純Dart)。受信劣化は両側15秒、GPS途絶・評価停止は確定10秒・解除0秒の非対称 |
+| `lib/services/receive_fault_debouncer.dart` | 他艇の受信劣化を system fault へ昇格させるヒステリシス(純Dart)。確定・解除とも15秒(`dynamicReceiveFaultConfirmSec` / `ClearSec`)。GPS途絶は `gps_health_monitor.dart`(10秒で unusable、復帰は3観測かつ2秒)、評価停止は `safety_evaluation_liveness.dart`(`safetyEvaluationStallSeconds` = 3秒)が受け持つ |
 
 ### 周辺
 
 | 場所 | 役割 |
 | ---- | ---- |
-| `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過で音とバナーを出す。**監視中はWakelockを保持しない**(下記) |
+| `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過でバナーを出す。**音は既定で出さない**(`coachAudibleAnomalyKindNames` が空。DESIGN_PRINCIPLES 3.5-3)。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
 | `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
 | `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
@@ -194,7 +197,7 @@ flutter run
 設定で無効化させないため。根拠は `warningAudioAppVolumeMin`(`lib/config/warning_audio_config.dart`)。
 
 各ファイルは語句を1回読み上げるだけの 0.5〜1.4 秒。衝突警告は繰り返し(ループ)、
-カーブ・逆走は5秒間隔で鳴らす。緊急版のような別録りは持たない。
+カーブ・逆走は「5秒あけて2回」を1組にして鳴らす(下記)。緊急版のような別録りは持たない。
 末尾 0.15 秒の無音がループ時の語句どうしの間隔になる。
 
 ## 衝突警告の仕組み
@@ -256,8 +259,12 @@ flutter run
 - 近接注意で鳴らすのは流木・中州・杭・橋脚だけ(`audibleProximityCategories`)。
   岸は川幅40mでは常に近く、鳴らすと確実に形骸化する。
   鳴らす場合も接近エピソードごとに1回で、最接近点から3m離れるまで鳴り直さない。
-- カーブ/逆走は `entryEvent`。**区域内にいる間 `guidanceRepeatInterval`(5秒)ごとに
-  読み上げ直す**(1回では聞き逃す)。退出後5秒で再武装、逆走は60秒。
+- カーブ/逆走は `entryEvent`。**区域内にいる間は読み上げ直す**(1回では聞き逃す)。
+  `guidanceRepeatInterval`(5秒)あけて2回(`guidanceBurstCount`)を1組とし、
+  組と組の間は15秒から倍々に伸ばして60秒で頭打ちにする
+  (`guidanceBurstIdleInterval` / `guidanceBurstMaxIdleInterval`)。回数の上限は設けない
+  (逆走は是正されるまで続く状態なので、黙ると警告漏れになる)。
+  逆走は6秒続いてから鳴らす(`reverseGuidanceConfirmSeconds`)。退出後5秒で再武装、逆走は60秒。
   衝突警告(band 0/1)に対して band 3 なので、**衝突警告が鳴っている間は無音**になり、
   消えれば次の周期から戻る。2本目のプレイヤーへは回さない
   (重ねると「他艇に注意」と「カーブに注意」が混ざって両方聞き取れない)。
