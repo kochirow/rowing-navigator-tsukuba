@@ -8,8 +8,10 @@
 何を優先して作るか」を書く。設定値を変える・機能を足す・警告の出し方を変える判断は、
 すべてここに書かれた前提と原則から導く。
 
-`design_notes/` の各文書は、その時点の要件定義であって現在有効な方針ではない。
-過去の判断理由を辿るときだけ参照する。
+`design_notes/` の各文書、および `docs/` 直下の日付付き文書(要件定義・実装計画・改善計画)、
+`docs/review/`・`docs/reviews/`・`safety_reviews/`・`docs/work_logs/` は、その時点の記録であって
+現在有効な方針ではない。過去の判断理由を辿るときだけ参照する。
+いま有効な文書の一覧は [README.md](README.md) にある。
 
 ---
 
@@ -209,12 +211,12 @@ GPSや位置共有などのsystem faultは、対象名にできないため「GP
 | 設定値 | 現在値 | 根拠となる前提 |
 | --- | --- | --- |
 | `shoreProximityCautionDistanceMeters` | 3.0m | 1.4「岸から数mを走るのは正常」。岸を大きく取ると常時鳴る |
-| `bridgeProximityCautionDistanceMeters` | 5.0m | 橋脚衝突の帰結が大きい。ただし毎回くぐる |
+| `bridgeProximityCautionDistanceMeters` | 6.0m | 橋脚衝突の帰結が大きい。ただし毎回くぐる(近接注意の音は鳴らさない対象なので、距離を広げても音は増えない) |
 | `bridgePierProximityCautionDistanceMeters` | 6.0m | 水中に立つ実体への衝突は最悪。局所的なので流木と同じ距離でも形骸化しない |
 | `driftwoodProximityCautionDistanceMeters` | 6.0m | 水面下で見えず帰結が最悪。桜川で実際に発生する |
 | `audibleProximityCategories` | `{driftwood, island, pile, bridgePier}` | 1.4「岸際走行は正常」。岸を鳴らすと形骸化する。杭・橋脚は水中に立つ局所的な実体 |
 | `bandCappedCategories` | `{}`(空) | 橋脚を別の区域として描けるようになったため、橋も橋脚も当たる予測なら同じく鳴らす。橋の下で休むことは低速静音(下の行)が受け持つ |
-| `lowSpeedAudioMuteSpeedMetersPerSecond` | 1.667m/s（分速100m） | 1.3「休憩は橋の下・航路の端」。橋脚・岸・逆走・未移行の橋だけ音を止め、表示・記録は続ける |
+| `lowSpeedAudioMuteSpeedMetersPerSecond` | 1.667m/s（分速100m） | 1.3「休憩は橋の下・航路の端」。3秒続いたら、橋脚・橋・岸・逆走だけ音を止め、表示・記録は続ける |
 | `defaultStaticSweepClearanceMeters` | 1.5m | 排他領域の横幅と全艇種で一致(= 従来動作) |
 | `shoreStaticSweepClearanceMeters` | 0.0m | 1.4 + 1.2 狭所レーン中央11.25m。下記の実測を参照 |
 
@@ -293,8 +295,8 @@ GPS帯1.5mと合わせて**岸の基準線から11mで発報**していた。
 従来は「区域内に現在地があるか」だけで判定しており、進行方向を見ていなかった。
 実機ログでは77分で16回この区域へ出入りしており、正常に漕いでいるだけで
 16回鳴ることになる。航路中心線と右側通行から規定方位を求め、
-方位差が120度以上のときだけ発報する。中心線が作れない・カバー範囲外の
-ときは従来どおり区域内で発報する(原則1: 縮退運転)。
+方位差が120度以上のときだけ発報する。中心線が作れないときは、方向を確かめられない
+まま従来どおり区域内で発報する(原則1: 縮退運転。理由コード `reverse_direction_unverified`)。
 
 ### 3.3.1 警告音は1種類(2026-10-23 利用者決定)
 
