@@ -513,13 +513,13 @@ class HomeMapScreen extends HookConsumerWidget {
     // 決めるのは「その姿勢で操作できるのはどれか」であり、無効表示が
     // 消えるのはその結果である。
     //
-    // 航行中は漕ぎながらチラ見して押せる5項目だけにし、見出しも出さない。
+    // 航行中は漕ぎながらチラ見して押せる6項目だけにし、見出しも出さない。
     // 出艇前・監視中は行き先が増えるので、平らに並べず塊へ分ける
     // (`MapMenuAction.section`)。塊の順番は固定なので覚えた位置はずれない。
     void openMapMenu() {
       final isObserver = navigator.mode.value == NavMode.observer;
       final isAshore = phase == HomePhase.ashore;
-      // 出艇前・監視中だけ見出しを出す。航行中は5項目なので付けない。
+      // 出艇前・監視中だけ見出しを出す。航行中は6項目なので付けない。
       final String? prepare = isObserver ? '準備' : null;
       final String? records = isObserver ? '記録' : null;
       final String? device = isObserver ? 'この端末' : null;
@@ -673,6 +673,18 @@ class HomeMapScreen extends HookConsumerWidget {
               );
             },
           ),
+        // どの場面でも同じ位置に置く(航行中は地図のボタンを置かず、ここが入口)。
+        MapMenuAction(
+          icon: Icons.volume_up_outlined,
+          title: '警告音の音量',
+          subtitle: 'いま ${(navigator.warningAudioVolume.value * 100).round()}%',
+          section: device,
+          onTap: () => showWarningAudioVolumeSheet(
+            context,
+            volume: navigator.warningAudioVolume,
+            onChanged: navigator.setWarningAudioVolume,
+          ),
+        ),
         // 端末とデータ・使い方は航行中でも開ける。航行を止めず、
         // 安全経路へは何も書き込まない。
         //
@@ -1867,10 +1879,9 @@ class HomeMapScreen extends HookConsumerWidget {
                                                 ),
                                               ),
                                             ),
-                                          // 航行中・監視中は1回押せば音量が出る(2026-10-24 利用者要望)
-                                          if (navigator.mode.value ==
-                                                  NavMode.navigator ||
-                                              navigator.isWatching.value)
+                                          // 監視中は1回押せば音量が出る(2026-10-24 利用者要望)。
+                                          // 航行中はボタンが多く見づらくなったのでメニューへ移した。
+                                          if (navigator.isWatching.value)
                                             WarningAudioVolumeMapButton(
                                               volume:
                                                   navigator.warningAudioVolume,

@@ -6,7 +6,8 @@ import 'warning_audio_volume_control.dart';
 
 /// 警告音の音量(アプリ内)を合わせるシート。
 ///
-/// 航行開始画面の小さなリンク、航行中・監視中の地図の「音量」ボタンから開く。
+/// 航行開始画面の小さなリンク、メニューの「警告音の音量」、監視中の地図の
+/// 「音量」ボタンから開く。
 /// どこから開いても同じ中身にする(覚える場所を1つにする)。
 ///
 /// [onTest] は航行開始前だけ渡す。航行中・監視中に試し鳴らしをすると、
@@ -69,7 +70,8 @@ Future<void> showWarningAudioVolumeSheet(
   );
 }
 
-/// 航行中・監視中の地図に置く「音量」ボタン。1回押すとスライダーが出る。
+/// 監視中の地図に置く「音量」ボタン。1回押すとスライダーが出る。
+/// 航行中は置かない(ボタンが多く見づらくなるため、メニューから開く)。
 class WarningAudioVolumeMapButton extends StatelessWidget {
   const WarningAudioVolumeMapButton({
     super.key,

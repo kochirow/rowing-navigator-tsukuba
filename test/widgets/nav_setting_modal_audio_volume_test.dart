@@ -98,7 +98,7 @@ void main() {
     expect(find.textContaining('警告音の音量'), findsNothing);
   });
 
-  testWidgets('地図の「音量」ボタンは1回でスライダーを出し、試し鳴らしは出さない', (tester) async {
+  testWidgets('監視中の地図の「音量」ボタンは1回でスライダーを出し、試し鳴らしは出さない', (tester) async {
     setView(tester);
     final volume = ValueNotifier<double>(0.8);
     await tester.pumpWidget(
@@ -118,7 +118,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(Slider), findsOneWidget);
     expect(find.text('80%'), findsOneWidget);
-    // 航行中・監視中の試し鳴らしは、鳴っている本物の警告を止めてしまう。
+    // 監視中・航行中の試し鳴らしは、鳴っている本物の警告を止めてしまう。
     expect(find.text('この音量で鳴らす'), findsNothing);
   });
 }
