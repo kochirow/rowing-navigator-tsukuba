@@ -94,6 +94,18 @@ void main() {
     expect(find.text('地図の色（航行中）'), findsOneWidget);
   });
 
+  testWidgets('カーブ・逆走の読み直しは、2回1組で間を広げる実際の鳴り方で説明する', (tester) async {
+    // 以前は「区域にいる間、5秒ごとに読み上げます」とあり、実際の
+    // 「5秒あけて2回 → 組の間を15秒から60秒まで広げる」と食い違っていた。
+    await tester.pumpWidget(_app(const MapAndAlertsGuidePage(
+      primaryWarningLeadSeconds: 10,
+      advanceWarningLeadSeconds: 13,
+    )));
+    expect(find.textContaining('5秒あけて2回読み上げ'), findsOneWidget);
+    expect(find.textContaining('最長60秒'), findsOneWidget);
+    expect(find.textContaining('5秒ごとに読み上げます'), findsNothing);
+  });
+
   testWidgets('故障かな？の秒数・速度は設定値から出す', (tester) async {
     await tester.pumpWidget(_app(const TroubleshootingGuidePage()));
     expect(find.textContaining('分速100mより遅い間'), findsOneWidget);

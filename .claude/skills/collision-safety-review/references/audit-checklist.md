@@ -7,12 +7,15 @@
 総合監査では次の警告経路一式を対象にする:
 
 - `lib/services/collision_risk_evaluator_service.dart`(リスク評価本体)
-- `lib/services/ship_domain_service.dart`(船体・排他領域)
-- `lib/services/send_policy.dart`(適応送信)
-- `lib/config/risk_evaluator_config.dart` / `navigator_config.dart` / `boat_config.dart`(しきい値・停止距離式)
+- `lib/services/continuous_collision_service.dart`(等速直線掃引の連続SAT)・`channel_path_predictor.dart` / `channel_centerline.dart`(川なりの予測経路)
+- `lib/services/ship_domain_service.dart`(船体・排他領域)・`bounded_position_set.dart`(自艇の位置集合)
+- `lib/services/gps_position_filter.dart` / `gps_health_monitor.dart` / `robust_position_estimator.dart`(測位の選別・推定)
+- `lib/services/other_boat_track_store.dart`(他艇の鮮度)・`dynamic_obstacle_service.dart`(異常値の除外)・`send_policy.dart`(適応送信)
+- `lib/services/static_obstacle_index.dart`(危険区域の空間索引)
+- `lib/services/safety_orchestrator.dart` / `alert_state_machine.dart` / `suppression_rule.dart`(提示ポリシー・音声の対象選択・抑制)
+- `lib/config/risk_evaluator_config.dart` / `alert_presentation_config.dart` / `navigator_config.dart` / `boat_config.dart`(しきい値・停止距離式)
 - `lib/utils/sat_algorithm.dart` / `triangulation.dart` / `geo_proximity.dart` / `geo_math.dart` / `winding_algorithm.dart`(幾何計算)
-- `lib/services/dynamic_obstacle_service.dart`(幽霊艇フィルタ)
-- `lib/hooks/use_navigator.dart`(GPS入力の加工・評価の呼び出し・警告の提示/抑制)
+- `lib/hooks/use_navigator.dart`(GPS入力の加工・評価の呼び出し)・`use_alert.dart`(再生)
 
 変更ファイルがこのリスト外でも、「GPS入力 → 自艇情報構築 → 送受信 → 鮮度フィルタ → 外挿 → リスク評価 → レベル変換 → 警告提示」の経路に影響するなら対象に加える。
 
@@ -31,14 +34,15 @@
 ### A. 数値比較・浮動小数点の境界
 - **A1** しきい値比較の等号の向き(`<=` vs `<`)は安全側か。境界値「ちょうど」で警告が出るか。
 - **A2** 浮動小数点の完全一致比較(`== 0.0` 等)はないか。微小速度・負値・NaNで分岐が意図どおり動くか。NaNは全ての比較がfalseになることに注意(NaNが「条件を満たさない=脅威なし」に落ちる経路を探す)。
-- **A3** 先読みループの終了条件が最終評価点を取りこぼさないか(警告距離ちょうどの地点が評価されるか)。
+- **A3** 予測経路の最後の区間(予測地平ちょうど)と、時刻区間の端点が評価から漏れないか。
 - **A4** 単位([m]・[s]・[m/s]・度・ラジアン)とint/double混在の取り違え。
 
 ### B. 予測・時間軸の境界
-- **B1** 先読みの時間刻みで**すり抜け(tunneling)**が起きないか。刻みは自艇速度基準だが、1ステップあたりの**相対**移動量(自艇+相手艇)が最小ドメイン寸法を超えると、交差の瞬間を飛ばして「衝突なし」になる。最悪ケース(最速艇種同士の正面接近)で検算する。
-- **B2** 先読みの範囲(停止距離+警告時間)が最高速度で十分か。
+- **B1** 連続掃引(`continuous_collision_service`)が予測経路の**各区間の継ぎ目**で重なりを取りこぼさないか。他艇は相対速度で掃引しているか。点サンプリングに戻っている箇所がないか。
+- **B2** 予測地平(`advanceWarningLeadSeconds` = 13秒)が最高速度・最長の停止時間(8+ 8.15秒)を覆うか。予測地平と確実な当たりの鳴り始めが一致しているか(「予測が届かない先では鳴らない」)。
 - **B3** 受信データの外挿(`extrapolateToNow`)の上限・下限。他端末の時計ズレ(timestampが未来/過去)で外挿が止まる・過剰になる条件。
 - **B4** 「停止」判定(速度しきい値)と実際の漂流の乖離。停止扱いの艇が漂流して接近するケース。
+- **B5** 中心線予測が使えない(中心線が作れない・レーン外)ときに直線予測へ縮退し、警告が止まらないか(不変条件4)。
 
 ### C. 幾何計算の頑健性
 - **C1** 頂点数<3・自己交差・重複頂点のポリゴンが入力されたとき、判定が例外→「衝突なし」に落ちないか。
@@ -62,26 +66,29 @@
 - **F3** 受信間隔が空いた間の相手位置の不確実性(最大 送信間隔×速度+加減速分)がマージンでカバーされるか。
 - **F4** リスク上昇時に送信間隔が即時短縮されるか(前回評価結果を使うことによるラグは何秒か)。
 
-### G. 警告提示の抑制・降格
-- **G1** リスクレベル→SafetyLevel→アラート種別の写像で段階が落ちないか。
-- **G2** 「レベル上昇時のみ読み上げ」等の抑制が、継続中の脅威・一旦離れて再接近する脅威を隠さないか。
-- **G3** primaryThreat の選択が実際の最重大脅威と一致するか(レベルを上げた脅威と表示される脅威のずれ)。
+### G. 警告提示(鳴り始め・抑制・音声の取り合い)
+- **G1** 内部レベル(lv0〜3)を鳴り方に使っていないか(原則5)。鳴り始めは「確実な当たり = 13秒、確度の低い当たり(固定区域への GPS 帯込み・回頭中の方位のブレ) = 10秒」で、他艇の GPS 帯込みは13秒のままか(CLAUDE.md「提示ポリシー」)。
+- **G2** 抑制規則(陸上判定・低速静音・安定停止・桟橋エリア・不確かさのみ)が**下げるだけ**で、規則の順番で鳴らし直したり消したりしないか。速度が取れないときに静音していないか(原則6)。他艇を「相手も止まっている」と確認できないまま黙らせていないか。
+- **G3** 音声の対象選択(`compareForAudio`)で、同時に鳴りうる組み合わせを列挙し、負けるのがより切迫した衝突警告に対してだけか。岸・橋(桁)への重なり以外の重なりが最優先のままか。
+- **G4** 再武装・反復(区域退出後5秒、逆走60秒、近接注意は最接近点から3m)が、一旦離れて再接近する脅威を隠さないか。
+- **G5** system fault が表示のみで、`AlertDataQuality.unusable` による3秒の打ち切りと同時に必ず立つか(不変条件3)。
+- **G6** 表示 primary と音声の対象のずれが、画面の縁の点滅の方角を誤らせないか(方角は `headingIsReliable` のときだけ。不変条件10)。
 
 ### H. 設定値の整合性(数値検算必須)
 - **H1** 各艇種の停止距離式の出力を代表速度(2, 3.5, 5 m/s)で計算し、直感・実測と乖離がないか(過小評価はFN)。
-- **H2** `evalIntervalDistance` vs 最小ドメイン寸法(B1と併せて)。
-- **H3** `obstacleProximityCautionDistance` vs 想定GPS誤差。
-- **H4** `warningTime` / `cautionTime` が回避操作に要する時間として妥当か。
+- **H2** 位置の不確かさ(GPS帯・`BoundedPositionSet`)の幅と船体・排他領域の寸法の関係。`boundingRadius` が領域の実寸を下回らないか(不変条件8)。
+- **H3** 種類ごとの近接注意距離(`StaticObstacleKind.defaultProximityCautionMeters`)vs 想定GPS誤差。0にして警告を止めていないか(不変条件11)。
+- **H4** `advanceWarningLeadSeconds` / `primaryWarningLeadSeconds`(設定画面での範囲を含む)が回避操作に要する時間として妥当か。確度の低い当たりの鳴り始めが最長の停止時間8.15秒を上回るか。
 
 ## 定番境界シナリオ（総合監査では全件、差分監査では関連項目を数値で確認）
 
 1. 微速(0.3 m/s)で危険区域へ横向きに漂流(予測は進行方向のみ・近接判定が効くか)。
-2. 最速艇種(8+、約5.5 m/s)と低速の1x(0.6 m/s)の交差 — B1のすり抜け検算を兼ねる。
+2. 最速艇種(8+、約5.5 m/s)と低速の1x(0.6 m/s)の交差 — B1の区間の継ぎ目の検算を兼ねる。
 3. 2艇が並走、双方のGPS誤差が10mずつ内側に寄って見えている(実際は接触寸前なのに画面上は離れている)。
 4. 停止中(送信間隔最大)の艇に、別の艇が背後から接近。
 5. 相手端末の時計が±5秒ずれている状態での外挿と鮮度フィルタ。
 6. 頂点2点しかない・自己交差している危険区域ポリゴンのすぐそば。
-7. 障害物が警告距離の境界ちょうど(warningDistance ± evalIntervalDistance)にある。
+7. 到達予測がちょうど10秒・13秒になる接近(鳴り始めの境界)と、近接注意距離の境界ちょうどにある障害物。
 
 ## 報告書フォーマット
 

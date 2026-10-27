@@ -108,7 +108,7 @@ MapKitのトークン問題はブラウザの開発者ツールConsoleで確認�
 - `constants/`: SHA-256、校正対象の定数・Rules断片
 - `verify.sh`: 反映後の検証コマンド
 
-これはアプリ・Firestoreを自動更新しません。Codexへ「最新の変更適用パッケージを確認して反映して」と依頼し、差分と検証を確認してからアプリ資産へ反映します。特にFirestore Rulesの変更は、レビュー後にFirebase ConsoleまたはCLIで別途デプロイする必要があります。
+これはアプリ・Firestoreを自動更新しません。エージェント(Claude Code / codex)へ「最新の変更適用パッケージを確認して反映して」と依頼し、差分と検証を確認してからアプリ資産へ反映します。Firestore Rulesの変更を含む場合は、PRを main へマージした後にエージェントが本番へ反映します([AGENTS.md](../../AGENTS.md)「Firebase Rules の本番反映」)。
 
 ## 開発時の検証
 

@@ -45,9 +45,13 @@ class MapAndAlertsGuidePage extends StatelessWidget {
     final dimens = context.dimens;
     final primary = formatGuideSeconds(primaryWarningLeadSeconds);
     final advance = formatGuideSeconds(advanceWarningLeadSeconds);
+    const presentation = AlertPresentationConfig();
     final guidanceSeconds = formatGuideSeconds(
-      const AlertPresentationConfig().guidanceRepeatInterval.inMilliseconds /
-          1000,
+      presentation.guidanceRepeatInterval.inMilliseconds / 1000,
+    );
+    final guidanceBurstCount = presentation.guidanceBurstCount;
+    final guidanceMaxIdleSeconds = formatGuideSeconds(
+      presentation.guidanceBurstMaxIdleInterval.inMilliseconds / 1000,
     );
 
     return Scaffold(
@@ -95,7 +99,8 @@ class MapAndAlertsGuidePage extends StatelessWidget {
                           '画面の右下が光ったら、体の右後ろに相手がいます。',
                       '艇の向きが確かでないとき(回頭中や低速時)は、向きを出さず縁の全体が光ります。',
                       'カーブと逆走は案内なので縁は光りません。'
-                          '区域にいる間、$guidanceSeconds秒ごとに読み上げます。'
+                          '区域にいる間は、$guidanceSeconds秒あけて$guidanceBurstCount回読み上げ、'
+                          'そのあとは間を広げて(最長$guidanceMaxIdleSeconds秒)読み直します。'
                           '衝突の警告音が鳴っている間は、そちらを優先します。',
                     ],
                   ),
