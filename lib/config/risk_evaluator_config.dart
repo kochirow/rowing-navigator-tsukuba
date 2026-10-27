@@ -82,7 +82,7 @@ const shoreProximityCautionDistanceMeters = 3.0;
 const bridgeProximityCautionDistanceMeters = 6.0;
 
 /// 橋脚は水中に立つ実体で、正面衝突の帰結が大きい。一方で局所的なので、
-/// 流木と同じ6mなら岸のような常時警告にはならない(DESIGN_PRINCIPLES 1.3)。
+/// 流木と同じ6mなら岸のような常時警告にはならない(DESIGN_PRINCIPLES 1.4)。
 const bridgePierProximityCautionDistanceMeters = 6.0;
 
 /// 中州。

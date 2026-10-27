@@ -143,7 +143,7 @@ class TeamRestoreErrorPolicy {
       code == 'unauthenticated';
 }
 
-/// 約59bitの固定招待コード。
+/// 約59bitの招待コード。
 ///
 /// 読み間違いを防ぐため 0/1/I/L/O/U を使わない。チーム作成時に
 /// RTDB transactionで衝突を検査し、作成後は変更しない。既存チームの

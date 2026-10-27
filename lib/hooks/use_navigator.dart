@@ -5331,7 +5331,8 @@ class UseNavigator {
   final ValueNotifier<int> activeWarningCount;
   final ValueNotifier<SafetyRunMode> safetyRunMode;
 
-  /// 連続音へ上げる残り時間(本警告)。いま効いている値で、チーム共有の値も反映済み。
+  /// 確度の低い当たり予測を鳴らし始める残り時間(保存名は旧来の「本警告」)。
+  /// いま効いている値で、チーム共有の値も反映済み。
   /// 使い方画面の説明文を実際の設定と一致させるために公開する(読むだけ)。
   final ValueNotifier<double> primaryWarningLeadTimeSeconds;
 

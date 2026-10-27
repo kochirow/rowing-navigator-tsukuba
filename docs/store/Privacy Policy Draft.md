@@ -24,7 +24,7 @@ For navigation safety support, boat-to-boat position sharing, practice records, 
 6. The location, shape, and timestamps of hazards registered or updated by users.
 7. Practice records stored on the device, including location, speed, heading, stroke rate, warning status, distance, and split times.
 8. Device, interaction, performance, diagnostic, or similar technical information handled by Google Maps and Firebase SDKs for service delivery, abuse prevention, and diagnostics.
-9. Team name, fixed invitation code, team membership, and the time of joining.
+9. Team name, invitation code, team membership, and the time of joining.
 10. Error records stored on the device (the type of an error the App could not handle, the first 300 characters of its message, and hints about where it occurred). They are not sent to a server; they are passed on only when the user shares diagnostic data.
 
 The App does not collect email addresses, telephone numbers, postal addresses, contacts, photos, microphone audio, advertising IDs, or payment information as part of its app features. Users may use a nickname instead of their real name.
@@ -50,7 +50,7 @@ Before requesting the operating system's location permission, the App explains t
 
 ## 5. Sharing with Other Users
 
-During navigation, the user's name, location, heading, speed, boat type, battery level, and related information are displayed only on App devices that joined the same team using the fixed invitation code. The registered name is also shown in the team's member list. Hazard information is also shared within the same team. Team members may add, edit, and delete shared temporary hazards according to the App's rules.
+During navigation, the user's name, location, heading, speed, boat type, battery level, and related information are displayed only on App devices that joined the same team using the invitation code. The registered name is also shown in the team's member list. Hazard information is also shared within the same team. Team members may add, edit, and delete shared temporary hazards according to the App's rules.
 
 The invitation code does not automatically change and has no automatic expiration (the team administrator can renew it). Anyone who knows the code may join the team, so users must not disclose it outside the team.
 
@@ -76,7 +76,7 @@ These services may send information necessary to provide their services to Googl
 - Fixed-driftwood update information is retained while operationally necessary as shared safety information.
 - Practice records are stored on the user's device until the user deletes them or uninstalls the App.
 - Up to 50 error records are stored on the user's device and are erased when they are written into the next navigation's diagnostic data or when the user deletes their account and data.
-- The team name and fixed invitation code may remain after an individual account is deleted so that other team members can continue using the team. The deleted account's ownership identifier is anonymized where applicable.
+- The team name and invitation code may remain after an individual account is deleted so that other team members can continue using the team. The deleted account's ownership identifier is anonymized where applicable.
 - The anonymous authentication identifier may be retained until the account and related data are deleted or organized.
 
 ## 8. Support Form Information
@@ -95,7 +95,7 @@ The App uses encrypted communications provided by Firebase and Google Maps Platf
 
 From the App's “Privacy and Data” screen, users can delete their Firebase anonymous account, team membership, real-time shared position and boat profile, temporary hazards they created, practice records, and device settings.
 
-The team itself and its fixed invitation code may remain for other team members. The current state of fixed-driftwood information may remain as shared safety information, while the updater's anonymous identifier is anonymized. For temporary hazards created by other users, the deleted user's identifier as an editor or deleter is anonymized. Error records on the device are also deleted.
+The team itself and its invitation code may remain for other team members. The current state of fixed-driftwood information may remain as shared safety information, while the updater's anonymous identifier is anonymized. For temporary hazards created by other users, the deleted user's identifier as an editor or deleter is anonymized. Error records on the device are also deleted.
 
 If deletion cannot be completed in the App, or if you have questions about data handling, contact:
 

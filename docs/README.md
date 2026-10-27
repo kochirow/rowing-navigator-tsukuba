@@ -8,7 +8,7 @@
 ## 読む順番(初めての人)
 
 1. [../README.md](../README.md) — アプリの概要、セットアップ、使い方
-2. [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) — 運用前提と設計原則。**最上位規範**
+2. [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) — 運用前提と設計原則(第1・2章が**最上位の規範**)。第3章は設定値の根拠
 3. [../CLAUDE.md](../CLAUDE.md) — 実装の地図(安全経路のファイルと役割)、警告の鳴り方、守るべき不変条件13項目
 4. [../AGENTS.md](../AGENTS.md) — ブランチ・コミット・PR・マージ・Rules 反映の規約
 5. [DESIGN.md](DESIGN.md) — 全体の構成、画面、データの置き場所
@@ -17,16 +17,20 @@ CLAUDE.md と AGENTS.md は AI エージェント向けに書いてあるが、�
 
 ## 食い違いを見つけたら
 
-- 正本どうしが食い違ったら **DESIGN_PRINCIPLES.md が優先**する。次に CLAUDE.md。
-- 記録と正本が食い違ったら、**正本が優先**する。記録は直さない(当時の記録として残す)。
-- 正本とコードが食い違ったら、**コードで確かめてから正本を直す**。文書のほうが古いことが多い。
-- 不変条件13項目(CLAUDE.md)は利用者が承認した規範である。変えるときは利用者の判断を仰ぐ。
+優先の順番(2026-10-27 利用者決定。詳しくは [../CLAUDE.md](../CLAUDE.md)「設計原則」):
+
+1. **最上位の規範**: DESIGN_PRINCIPLES.md の第1章(運用前提)・第2章(設計原則)と、CLAUDE.md の不変条件13項目。
+   両者は同格。変える・緩めるときは利用者の判断を仰ぐ。
+2. **いまの値・挙動**: コード。文書(DESIGN_PRINCIPLES 第3章の数値を含む)とずれていたら、
+   **コードで確かめてから文書を直す**。文書のほうが古いことが多い(2026-10-23 利用者の方針)。
+3. **運用**(Git・PR・Rules 反映・ストア): AGENTS.md。
+4. 記録と正本が食い違ったら、正本が優先する。記録は直さない(当時の記録として残す)。
 
 ## 正本(いま有効な文書)
 
 | 文書 | 中身 |
 | --- | --- |
-| [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) | 運用前提・設計原則・設定値の根拠 |
+| [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) | 運用前提・設計原則(最上位)・設定値の根拠(値はコードが正) |
 | [DESIGN.md](DESIGN.md) | 全体構成・画面・データの置き場所 |
 | [ios_build.md](ios_build.md) | iOS の配布ビルド手順(Android の作業パスの注意も4章) |
 | [review_guide/](review_guide/README.md) | レビュー・動作確認の手順(Claude Code と codex の共通) |

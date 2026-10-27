@@ -22,7 +22,7 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 - 静的危険区域(橋脚・浅瀬・岸など)と艇を Google Maps 上に表示
 - 衝突リスクを段階評価(lv0〜lv3)し、音声+画面バナーで警告
 
-## 設計原則(最上位規範)
+## 設計原則(最上位の規範)
 
 **安全・航行・共有・警告に関わる設計や設定を変更するときは、
 [docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) の運用前提と関連節を読む。**
@@ -31,7 +31,17 @@ Rowing Navigator は、ローイング(ボート競技)の安全航行を支援�
 そこから導かれる設計原則・設定値の根拠がそこにある。判断はすべてそこから導く。
 
 このファイル(CLAUDE.md)は AI 作業ガイドであり、設計原則の要約と実装の地図である。
-両者が食い違ったら DESIGN_PRINCIPLES.md が優先する。
+
+**何が何より優先するか(2026-10-27 利用者決定):**
+
+1. **最上位の規範** = DESIGN_PRINCIPLES.md の第1章(運用前提)・第2章(設計原則)と、
+   このファイルの「重要な不変条件」13項目。両者は同格で、照合して食い違いは無い。
+   変える・緩めるときは利用者の判断を仰ぐ。
+2. **いまの値・挙動** = コード(`lib/config/` の設定値、実装)。DESIGN_PRINCIPLES 第3章の表や
+   このファイルの説明とずれていたら、コードで確かめてから文書を直す。
+3. **運用**(Git・PR・マージ・Rules 反映・ストア) = [AGENTS.md](AGENTS.md)。
+4. それ以外の説明(このファイルの残りの部分、README、DESIGN.md)は、上の3つに合わせて直す。
+
 どの文書がいま有効で、どれが過去の記録かは [docs/README.md](docs/README.md) にまとめてある。
 
 要約:
@@ -154,7 +164,7 @@ flutter run
 
 | 場所 | 役割 |
 | ---- | ---- |
-| `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、新規・`anomalyReannounceSec` 経過でバナーを出す。**音は既定で出さない**(`coachAudibleAnomalyKindNames` が空。DESIGN_PRINCIPLES 3.5-3)。**監視中はWakelockを保持しない**(下記) |
+| `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、地図上の件数の印(`ObserverStatusIcon`)と艇一覧で示す。**音は既定で出さない**(`coachAudibleAnomalyKindNames` が空。DESIGN_PRINCIPLES 3.5-3)。音を鳴らすのは、そこへ入れた種類の新規と `anomalyReannounceSec` 経過時だけ。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
 | `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
 | `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
