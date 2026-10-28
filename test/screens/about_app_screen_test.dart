@@ -39,4 +39,18 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('このアプリについての最後に版・クレジット・ライセンスがある', (tester) async {
+    tester.view.physicalSize = const Size(400, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MaterialApp(home: AboutAppScreen()));
+    await tester.pumpAndSettle();
+    final info = find.byKey(const Key('about-app-info'));
+    expect(info, findsOneWidget);
+    for (final label in ['版', 'クレジット', 'オープンソースライセンス']) {
+      expect(find.descendant(of: info, matching: find.text(label)),
+          findsOneWidget);
+    }
+  });
 }

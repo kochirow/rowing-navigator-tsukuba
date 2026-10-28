@@ -13,8 +13,5 @@
 enum HomePhase {
   ashore,
   navigating,
-  watching;
-
-  /// 出艇前だけタブを出す。航行中・監視中は地図を全画面で使う。
-  bool get showsTabs => this == HomePhase.ashore;
+  watching,
 }

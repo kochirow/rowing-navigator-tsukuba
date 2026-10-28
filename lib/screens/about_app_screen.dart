@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
+import '../config/credits_config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/startup_motto_view.dart';
 
@@ -98,6 +100,80 @@ class AboutAppScreen extends StatelessWidget {
               ),
             ],
           ],
+          SizedBox(height: dimens.space6),
+          const AppInfoCard(),
+        ],
+      ),
+    );
+  }
+}
+
+/// 版・クレジット・オープンソースライセンス。
+///
+/// 以前は「端末とデータ」の中にあり、その副題(GPS・安全機能の状態・
+/// プライバシー)から想像できなかった。多くのアプリと同じく
+/// 「このアプリについて」の最後に置く(2026-10-28)。
+class AppInfoCard extends StatelessWidget {
+  const AppInfoCard({super.key});
+
+  static Future<String?> _version() async {
+    try {
+      final info =
+          await PackageInfo.fromPlatform(); // 返ってこなければ「—」のまま(時間切れの Timer は置かない)
+      return '${info.version}(${info.buildNumber})';
+    } catch (_) {
+      // 版が読めなくても、クレジットとライセンスは出す。
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const Key('about-app-info'),
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          FutureBuilder<String?>(
+            future: _version(),
+            builder: (context, snap) => ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('版'),
+              trailing: Text(snap.data ?? '—'),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.badge_outlined),
+            title: const Text('クレジット'),
+            subtitle: const Text('警告音声: $voiceCredit'),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('クレジット'),
+                content: const Text(
+                  '$originalDeveloperCredit\n\n警告音声: $voiceCredit',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('閉じる'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('オープンソースライセンス'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: 'Rowing Navigator',
+              applicationLegalese: applicationLegalese,
+            ),
+          ),
         ],
       ),
     );

@@ -141,4 +141,34 @@ void main() {
         restored.diagnosticEvents.single.details['orientation'], 'landscape');
     expect(restored.alertEpisodeRatings['bridge-1@0'], 'tooEarly');
   });
+
+  test('まとめて送る対象(15分・2km以上・未送信)の件数を数える', () async {
+    Session practice(String id, {DateTime? sharedAt, double distance = 3000}) =>
+        Session(
+          id: id,
+          startedAt: DateTime.utc(2026, 10, 1),
+          endedAt: DateTime.utc(2026, 10, 1, 0, 30),
+          boatTypeName: '1x',
+          seatPosLabel: 'bow',
+          points: const [],
+          summary: SessionSummary(
+            totalDistanceMeters: distance,
+            durationSec: 1800,
+            movingTimeSec: 1500,
+            maxSpeed: 4,
+            avgSpeed: 3,
+            splits: const [],
+            pieces: const [],
+            alertCounts: const {},
+          ),
+          diagnosticsSharedAt: sharedAt,
+        );
+    await store.saveSession(practice('a'));
+    await store.saveSession(practice('b'));
+    await store
+        .saveSession(practice('sent', sharedAt: DateTime.utc(2026, 10, 2)));
+    await store.saveSession(practice('short', distance: 500));
+
+    expect(await store.countPendingBulkLogExports(), 2);
+  });
 }

@@ -59,22 +59,36 @@ class MapMenuSheet extends StatelessWidget {
       ? action.subtitle
       : (action.disabledReason ?? action.subtitle);
 
+  /// 続いて同じ見出しを持つ項目を1つの塊にまとめる。
+  static List<List<MapMenuAction>> _groups(List<MapMenuAction> actions) {
+    final groups = <List<MapMenuAction>>[];
+    for (final (index, action) in actions.indexed) {
+      if (index == 0 || actions[index - 1].section != action.section) {
+        groups.add([action]);
+      } else {
+        groups.last.add(action);
+      }
+    }
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final dimens = context.dimens;
-    // ListTile はインク/背景を最近傍の Material に描くため、色付き
-    // DecoratedBox ではなく Material をルートにする(色が隠れる警告を防ぐ)。
-    //
     // 高さは中身に合わせ、[heightFactor] は上限としてだけ使う。固定高だと
     // 航行中の6項目でシートの下半分が空白になり、項目が途中で切れている
     // ように見える。項目が増えたときだけスクロールする。
+    //
+    // 塊は見た目でも塊にする(iOS の設定画面と同じ形)。以前は小さな灰色の
+    // 見出しと背景に近い色の線だけで、13項目が1本の長い列に見えた
+    // (2026-10-28)。塊ごとに角の丸い面へ入れ、見出しは面の外の左上に置く。
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * heightFactor,
       ),
       child: Material(
-        color: colors.card,
+        color: colors.canvas,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
@@ -84,92 +98,115 @@ class MapMenuSheet extends StatelessWidget {
         child: SafeArea(
           top: false,
           child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                dimens.space3, 0, dimens.space3, dimens.space3),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // つまみ(シートであることを示す)
-                Container(
-                  width: 36,
-                  height: 4,
-                  margin: EdgeInsets.only(
-                    top: dimens.space3,
-                    bottom: dimens.space2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.textDisabled,
-                    borderRadius: dimens.borderSm,
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: EdgeInsets.only(
+                      top: dimens.space3,
+                      bottom: dimens.space2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.textDisabled,
+                      borderRadius: dimens.borderSm,
+                    ),
                   ),
                 ),
                 // 見出し「メニュー」は置かない(押したボタンの名前の繰り返し)。
-                for (final (index, action) in actions.indexed) ...[
-                  // 塊が変わったところにだけ見出しを出す。
-                  if (action.section != null &&
-                      (index == 0 ||
-                          actions[index - 1].section != action.section))
+                for (final group in _groups(actions)) ...[
+                  if (group.first.section != null)
                     Padding(
                       padding: EdgeInsets.fromLTRB(
-                        dimens.space5,
-                        dimens.space4,
-                        dimens.space5,
+                        dimens.space3,
+                        dimens.space3,
+                        dimens.space3,
                         dimens.space1,
                       ),
-                      child: Row(
-                        children: [
-                          Text(
-                            action.section!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                              color: colors.textSecondary,
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          group.first.section!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(height: dimens.space2),
+                  Material(
+                    key: ValueKey('map-menu-group-${group.first.title}'),
+                    color: colors.card,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(dimens.radiusLg),
+                    ),
+                    child: Column(
+                      children: [
+                        for (final (i, action) in group.indexed) ...[
+                          // 面の中の区切りは文字の頭から引く(塊の切れ目と区別する)。
+                          if (i > 0)
+                            Divider(
+                              height: 1,
+                              thickness: 1,
+                              indent: 64,
+                              color: colors.canvas,
                             ),
-                          ),
-                          SizedBox(width: dimens.space3),
-                          Expanded(
-                            child: Divider(height: 1, color: colors.canvas),
-                          ),
+                          _tile(context, action),
                         ],
-                      ),
+                      ],
                     ),
-                  ListTile(
-                    enabled: action.enabled,
-                    minVerticalPadding: dimens.space3,
-                    leading: Icon(
-                      action.icon,
-                      color: action.enabled
-                          ? (action.iconColor ?? colors.primary)
-                          : colors.textDisabled,
-                      size: 26,
-                    ),
-                    title: Text(
-                      action.title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: action.enabled ? null : colors.textDisabled,
-                      ),
-                    ),
-                    subtitle: _subtitleOf(action) == null
-                        ? null
-                        : Text(_subtitleOf(action)!),
-                    trailing: Icon(
-                      action.enabled ? Icons.chevron_right : Icons.lock_outline,
-                      color: action.enabled ? null : colors.textDisabled,
-                    ),
-                    onTap: action.enabled
-                        ? () {
-                            Navigator.of(context).pop();
-                            action.onTap();
-                          }
-                        : null,
                   ),
                 ],
-                SizedBox(height: dimens.space2),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _tile(BuildContext context, MapMenuAction action) {
+    final colors = context.colors;
+    final dimens = context.dimens;
+    return ListTile(
+      enabled: action.enabled,
+      minVerticalPadding: dimens.space3,
+      leading: Icon(
+        action.icon,
+        color: action.enabled
+            ? (action.iconColor ?? colors.primary)
+            : colors.textDisabled,
+        size: 26,
+      ),
+      title: Text(
+        action.title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: action.enabled ? null : colors.textDisabled,
+        ),
+      ),
+      subtitle: _subtitleOf(action) == null ? null : Text(_subtitleOf(action)!),
+      trailing: Icon(
+        action.enabled ? Icons.chevron_right : Icons.lock_outline,
+        color: action.enabled ? null : colors.textDisabled,
+      ),
+      onTap: action.enabled
+          ? () {
+              Navigator.of(context).pop();
+              action.onTap();
+            }
+          : null,
     );
   }
 }

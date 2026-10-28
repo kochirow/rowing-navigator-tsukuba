@@ -22,10 +22,4 @@ void main() {
       expect(find.text(label), findsOneWidget, reason: '$phase');
     }
   });
-
-  testWidgets('出艇前だけタブを出す', (tester) async {
-    expect(HomePhase.ashore.showsTabs, isTrue);
-    expect(HomePhase.navigating.showsTabs, isFalse);
-    expect(HomePhase.watching.showsTabs, isFalse);
-  });
 }

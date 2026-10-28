@@ -179,6 +179,7 @@ flutter run
 | `lib/services/session_analyzer_service.dart` | 練習ログ解析(距離・スプリット・ピース検出)。純Dart |
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
 | `lib/services/gpx_export_service.dart` | GPX/CSV/診断ZIP出力 |
+| `lib/features/home_map/map_menu_layout.dart` | 地図のメニューの並び(純Dart)。姿勢ごとに、何をどの順・どの見出しで出すかをここだけで決める。見出しは中身を名詞で言う(練習・警告と危険区域・チーム・使い方と情報)。**航行中の6項目の順番は変えない**(漕ぎながら覚えた位置)。導線はこのメニュー1本で、出艇前のタブは戻さない(`bba5711`) |
 | `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(15分・2km以上)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` に端末内でだけ記録する。自動送信はしない。条件は `lib/config/log_export_config.dart` |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
 | `lib/theme/map_layer_spec.dart` | 地図の層(中央線＝白い破線／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。**実線＝実在するもの、破線＝越えない取り決め。** 航路は中央線1本だけを描き、レーンの外側の辺は描かない(往路・復路の帯を廃止した経緯も同ファイル) |
