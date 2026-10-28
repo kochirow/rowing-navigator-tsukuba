@@ -25,6 +25,7 @@ import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
 import '../features/home_map/widgets/map_display_panel.dart';
 import '../features/home_map/map_menu_layout.dart';
+import '../hooks/use_pending_log_count.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
@@ -69,7 +70,6 @@ import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
 import 'device_status_screen.dart';
 import 'fixed_obstacle_calibration_screen.dart';
-import '../services/session_store_service.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
 import 'first_run_guide_screen.dart';
@@ -212,8 +212,6 @@ class HomeMapScreen extends HookConsumerWidget {
     final initAttempt = useState(0);
     final locationPermissionGranted = useState(false);
     final showInfo = useState(false);
-    // メニューの「練習記録」に出す、未送信のログの件数。表示だけに使う。
-    final pendingLogCount = useState(0);
     final showBoatList = useState(false);
     final shipDomains = useState<Set<Polygon>>({});
     // 停止距離の輪。ポリラインなので、監視モードの航跡と1つの集合へまとめて
@@ -435,8 +433,7 @@ class HomeMapScreen extends HookConsumerWidget {
       return cancelGestureAutoRecenter;
     }, const []);
 
-    // 端末とデータ画面の組み立て。メニューからも準備タブからも同じ値を
-    // 出すため、組み立ては1か所に置いてシェルへ関数ごと渡す。
+    // 端末とデータ画面の組み立て。地図の値を渡すため、ここに置く。
     DeviceStatusScreen buildDeviceStatusScreen() {
       final boat = navigator.myBoat.value;
       return DeviceStatusScreen(
@@ -520,26 +517,7 @@ class HomeMapScreen extends HookConsumerWidget {
     // 航行中は漕ぎながらチラ見して押せる6項目だけにし、見出しも出さない。
     // 出艇前・監視中は行き先が増えるので、平らに並べず塊へ分ける
     // (`MapMenuAction.section`)。塊の順番は固定なので覚えた位置はずれない。
-    Future<void> refreshPendingLogCount() async {
-      try {
-        final n = await SessionStoreService().countPendingBulkLogExports();
-        if (context.mounted) pendingLogCount.value = n;
-      } catch (error) {
-        debugPrint('Pending log count unavailable: $error');
-      }
-    }
-
-    // 地図を開いたとき・陸に戻ったとき・練習記録から戻ったときに数え直す。
-    // メニューを開くたびには数えない(記録を全部読むので時間がかかる)。
-    // 数えられなくても副題が出ないだけで、メニューは開ける。
-    useEffect(() {
-      if (phase != HomePhase.ashore) return null;
-      // 航行の終わりの保存より先に数えないよう、少し待つ。
-      final timer = Timer(const Duration(seconds: 3), () {
-        unawaited(refreshPendingLogCount());
-      });
-      return timer.cancel;
-    }, [phase]);
+    final pendingLogs = usePendingLogCount(phase);
 
     void openMapMenu() {
       final isObserver = navigator.mode.value == NavMode.observer;
@@ -547,7 +525,6 @@ class HomeMapScreen extends HookConsumerWidget {
       // ここは id ごとに中身(名前・副題・押したときの処理)を作るだけ。
       final layout = mapMenuLayout(phase, showDeveloper: !kReleaseMode);
       final sectionOf = {for (final s in layout) s.id: s.section};
-      final pendingLogs = pendingLogCount.value;
       final items = <MapMenuItemId, MapMenuAction>{
         // 先頭は無害な表示切替にする。艇上で誤って押しても地図の見え方が
         // 変わるだけで、危険区域の登録画面が開いたりはしない。
@@ -634,7 +611,6 @@ class HomeMapScreen extends HookConsumerWidget {
             await navigator.reloadDefaultObstacles();
             // 開発者トグルは設定画面の最下部で変更する。判定そのものを
             // 変更しない表示設定なので、戻ったときに復元すればよい。
-            // 準備タブから開いたときも同じ処理を通る(シェル経由)。
             await reloadDeveloperSafetyShapeOverlay();
           },
         ),
@@ -672,7 +648,8 @@ class HomeMapScreen extends HookConsumerWidget {
           icon: Icons.timeline_outlined,
           title: '練習記録',
           // 名前で分かるので説明は付けない。未送信のログがあるときだけ件数(状態)を出す。
-          subtitle: pendingLogs > 0 ? '未送信のログ $pendingLogs件' : null,
+          subtitle:
+              pendingLogs.value > 0 ? '未送信のログ ${pendingLogs.value}件' : null,
           section: sectionOf[MapMenuItemId.practiceRecords],
           onTap: () async {
             await Navigator.push(
@@ -680,7 +657,7 @@ class HomeMapScreen extends HookConsumerWidget {
               MaterialPageRoute(builder: (_) => const RecordListScreen()),
             );
             // 送った・送信済みにした分を反映する。
-            await refreshPendingLogCount();
+            await pendingLogs.refresh();
           },
         ),
         MapMenuItemId.practiceLog: MapMenuAction(
