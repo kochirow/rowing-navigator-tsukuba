@@ -130,6 +130,15 @@ void main() {
     // 塊に属さない項目には見出しを出さない。
     expect(find.text('表示'), findsOneWidget);
     expect(find.byType(ListTile), findsNWidgets(4));
+
+    // 塊ごとに別の面に入る。同じ塊の項目は同じ面の中にある。
+    final prepare = find.byKey(const ValueKey('map-menu-group-警告の設定'));
+    expect(prepare, findsOneWidget);
+    expect(find.descendant(of: prepare, matching: find.text('チーム')),
+        findsOneWidget);
+    expect(find.descendant(of: prepare, matching: find.text('練習記録')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('map-menu-group-練習記録')), findsOneWidget);
   });
 
   testWidgets('航行中のように塊が無ければ見出しを一切出さない', (tester) async {
@@ -154,8 +163,10 @@ void main() {
       ),
     );
 
-    // 見出し用の Divider は1本も出ない(ListTile 自体は罫線を持たない)。
-    expect(find.byType(Divider), findsNothing);
+    // 見出しは出さず、2項目は1枚の面に入る(間の区切りは1本だけ)。
+    expect(find.bySemanticsLabel('準備'), findsNothing);
+    expect(find.byType(Divider), findsOneWidget);
+    expect(find.byKey(const ValueKey('map-menu-group-表示')), findsOneWidget);
     expect(find.byType(ListTile), findsNWidgets(2));
   });
 }

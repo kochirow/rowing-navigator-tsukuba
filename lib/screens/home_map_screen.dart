@@ -24,6 +24,7 @@ import '../features/home_map/widgets/ashore_notice.dart';
 import '../features/home_map/widgets/observer_priority_banner.dart';
 import '../features/home_map/widgets/observer_status_icon.dart';
 import '../features/home_map/widgets/map_display_panel.dart';
+import '../features/home_map/map_menu_layout.dart';
 import '../features/home_map/widgets/map_menu_sheet.dart';
 import '../features/home_map/widgets/nav_phase_chip.dart';
 import '../features/home_map/widgets/navigation_status_panel.dart';
@@ -68,6 +69,7 @@ import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
 import 'device_status_screen.dart';
 import 'fixed_obstacle_calibration_screen.dart';
+import '../services/session_store_service.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
 import 'first_run_guide_screen.dart';
@@ -210,6 +212,8 @@ class HomeMapScreen extends HookConsumerWidget {
     final initAttempt = useState(0);
     final locationPermissionGranted = useState(false);
     final showInfo = useState(false);
+    // メニューの「練習記録」に出す、未送信のログの件数。表示だけに使う。
+    final pendingLogCount = useState(0);
     final showBoatList = useState(false);
     final shipDomains = useState<Set<Polygon>>({});
     // 停止距離の輪。ポリラインなので、監視モードの航跡と1つの集合へまとめて
@@ -516,30 +520,51 @@ class HomeMapScreen extends HookConsumerWidget {
     // 航行中は漕ぎながらチラ見して押せる6項目だけにし、見出しも出さない。
     // 出艇前・監視中は行き先が増えるので、平らに並べず塊へ分ける
     // (`MapMenuAction.section`)。塊の順番は固定なので覚えた位置はずれない。
+    Future<void> refreshPendingLogCount() async {
+      try {
+        final n = await SessionStoreService().countPendingBulkLogExports();
+        if (context.mounted) pendingLogCount.value = n;
+      } catch (error) {
+        debugPrint('Pending log count unavailable: $error');
+      }
+    }
+
+    // 地図を開いたとき・陸に戻ったとき・練習記録から戻ったときに数え直す。
+    // メニューを開くたびには数えない(記録を全部読むので時間がかかる)。
+    // 数えられなくても副題が出ないだけで、メニューは開ける。
+    useEffect(() {
+      if (phase != HomePhase.ashore) return null;
+      // 航行の終わりの保存より先に数えないよう、少し待つ。
+      final timer = Timer(const Duration(seconds: 3), () {
+        unawaited(refreshPendingLogCount());
+      });
+      return timer.cancel;
+    }, [phase]);
+
     void openMapMenu() {
       final isObserver = navigator.mode.value == NavMode.observer;
-      final isAshore = phase == HomePhase.ashore;
-      // 出艇前・監視中だけ見出しを出す。航行中は6項目なので付けない。
-      final String? prepare = isObserver ? '準備' : null;
-      final String? records = isObserver ? '記録' : null;
-      final String? device = isObserver ? 'この端末' : null;
-      final actions = <MapMenuAction>[
+      // 何をどの順・どの見出しで出すかは `mapMenuLayout` が決める。
+      // ここは id ごとに中身(名前・副題・押したときの処理)を作るだけ。
+      final layout = mapMenuLayout(phase, showDeveloper: !kReleaseMode);
+      final sectionOf = {for (final s in layout) s.id: s.section};
+      final pendingLogs = pendingLogCount.value;
+      final items = <MapMenuItemId, MapMenuAction>{
         // 先頭は無害な表示切替にする。艇上で誤って押しても地図の見え方が
         // 変わるだけで、危険区域の登録画面が開いたりはしない。
         // 塊には入れず、見出し無しで一番上に置く。
-        MapMenuAction(
+        MapMenuItemId.display: MapMenuAction(
           icon: Icons.layers_outlined,
           title: '表示',
           subtitle: '地図種別・航路の中央線・高コントラスト',
           onTap: openDisplayPanel,
         ),
         // 航行前のワークアウトの準備。航行中は地図右のボタンが入口。
-        if (isObserver)
-          workoutPrepareMenuAction(context, workout, section: prepare),
-        MapMenuAction(
+        MapMenuItemId.workout: workoutPrepareMenuAction(context, workout,
+            section: sectionOf[MapMenuItemId.workout]),
+        MapMenuItemId.addHazard: MapMenuAction(
           icon: Icons.add_location_alt_outlined,
           title: '危険区域を追加',
-          section: prepare,
+          section: sectionOf[MapMenuItemId.addHazard],
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
             // 背景の位置共有・警告処理は継続する。
@@ -562,14 +587,14 @@ class HomeMapScreen extends HookConsumerWidget {
         // 航行中のシートは共有安全設定の保留版を持ち、「確認して反映」を
         // 押すまで足元の危険区域を変えない。監視中の設定画面にはこの
         // 仕組みがない。同名にすると同じものだと誤解させる。
-        MapMenuAction(
+        MapMenuItemId.warningSettings: MapMenuAction(
           icon: Icons.shield_outlined,
           title: isObserver ? '警告の設定' : '航行中の警告設定',
           // 副題は、名前だけでは中身が分からない項目にだけ付け、
           // 中身を短く並べる(2026-10-23 利用者決定)。名前で分かる項目
           // (チーム・練習記録・使い方など)には付けない。
           subtitle: isObserver ? '時間・当たり判定・対象' : '時間・区域の幅・対象・逆走の音',
-          section: prepare,
+          section: sectionOf[MapMenuItemId.warningSettings],
           onTap: () async {
             if (!isObserver) {
               await showModalBottomSheet<void>(
@@ -616,69 +641,69 @@ class HomeMapScreen extends HookConsumerWidget {
         // 位置合わせは出艇前だけ。成功するとチーム全員の警告位置が動くので、
         // 艇を出している最中(自分の監視対象が水上にいる最中)には出さない。
         // 「危険区域を追加」とは別の操作なので、名前もまとめない。
-        if (isAshore)
-          MapMenuAction(
-            icon: Icons.straighten,
-            title: '既設危険区域の位置の調整',
-            section: prepare,
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const FixedObstacleCalibrationScreen(),
-                ),
-              );
-              await navigator.reloadDefaultObstacles();
-            },
-          ),
-        if (isObserver)
-          MapMenuAction(
-            icon: Icons.groups_outlined,
-            title: 'チーム',
-            section: prepare,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TeamScreen()),
-              );
-            },
-          ),
+        MapMenuItemId.calibrateFixedHazards: MapMenuAction(
+          icon: Icons.straighten,
+          title: '既設危険区域の位置の調整',
+          section: sectionOf[MapMenuItemId.calibrateFixedHazards],
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const FixedObstacleCalibrationScreen(),
+              ),
+            );
+            await navigator.reloadDefaultObstacles();
+          },
+        ),
+        MapMenuItemId.team: MapMenuAction(
+          icon: Icons.groups_outlined,
+          title: 'チーム',
+          section: sectionOf[MapMenuItemId.team],
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TeamScreen()),
+            );
+          },
+        ),
         // 記録は読むだけなので、監視中でも開ける。航行中は艇の上で
         // 過去の記録を読む場面がないので出さない。
-        if (isObserver)
-          MapMenuAction(
-            icon: Icons.timeline_outlined,
-            title: '練習記録',
-            section: records,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const RecordListScreen()),
-              );
-            },
-          ),
-        if (isObserver)
-          MapMenuAction(
-            icon: Icons.folder_zip_outlined,
-            title: '練習一括ログ',
-            // 「練習記録」と名前が近いので、何の記録かだけ添える。
-            subtitle: '監視中に記録した全艇の位置',
-            section: records,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const PracticeLogListScreen(),
-                ),
-              );
-            },
-          ),
+        MapMenuItemId.practiceRecords: MapMenuAction(
+          icon: Icons.timeline_outlined,
+          title: '練習記録',
+          // 名前で分かるので説明は付けない。未送信のログがあるときだけ件数(状態)を出す。
+          subtitle: pendingLogs > 0 ? '未送信のログ $pendingLogs件' : null,
+          section: sectionOf[MapMenuItemId.practiceRecords],
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RecordListScreen()),
+            );
+            // 送った・送信済みにした分を反映する。
+            await refreshPendingLogCount();
+          },
+        ),
+        MapMenuItemId.practiceLog: MapMenuAction(
+          icon: Icons.folder_zip_outlined,
+          title: '練習一括ログ',
+          // 「練習記録」と名前が近いので、何の記録かだけ添える。
+          subtitle: '監視中に記録した全艇の位置',
+          section: sectionOf[MapMenuItemId.practiceLog],
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PracticeLogListScreen(),
+              ),
+            );
+          },
+        ),
         // どの場面でも同じ位置に置く(航行中は地図のボタンを置かず、ここが入口)。
-        MapMenuAction(
+        MapMenuItemId.warningVolume: MapMenuAction(
           icon: Icons.volume_up_outlined,
           title: '警告音の音量',
           subtitle: 'いま ${(navigator.warningAudioVolume.value * 100).round()}%',
-          section: device,
+          section: sectionOf[MapMenuItemId.warningVolume],
           onTap: () => showWarningAudioVolumeSheet(
             context,
             volume: navigator.warningAudioVolume,
@@ -690,11 +715,11 @@ class HomeMapScreen extends HookConsumerWidget {
         //
         // リリースでも見られるようにする。現地で「鳴らない」と言われたとき、
         // 何が落ちているのかを開発ビルド無しで確かめられる必要がある。
-        MapMenuAction(
+        MapMenuItemId.deviceStatus: MapMenuAction(
           icon: Icons.monitor_heart_outlined,
           title: '端末とデータ',
           subtitle: 'GPS・安全機能の状態・プライバシー',
-          section: device,
+          section: sectionOf[MapMenuItemId.deviceStatus],
           onTap: () {
             Navigator.push(
               context,
@@ -702,10 +727,10 @@ class HomeMapScreen extends HookConsumerWidget {
             );
           },
         ),
-        MapMenuAction(
+        MapMenuItemId.usageGuide: MapMenuAction(
           icon: Icons.help_outline,
           title: '使い方',
-          section: device,
+          section: sectionOf[MapMenuItemId.usageGuide],
           onTap: () {
             Navigator.push(
               context,
@@ -720,29 +745,28 @@ class HomeMapScreen extends HookConsumerWidget {
           },
         ),
         // 読み物なので、漕ぎながら開く場面のない航行中には出さない。
-        if (isObserver)
-          MapMenuAction(
-            icon: Icons.info_outline,
-            title: AboutAppScreen.title,
-            section: device,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AboutAppScreen()),
-              );
-            },
-          ),
-        if (!kReleaseMode)
-          MapMenuAction(
-            icon: Icons.article_outlined,
-            title: '詳細（開発用）',
-            subtitle: '緯度経度・処理時刻などの内部情報',
-            section: device,
-            onTap: () {
-              showInfo.value = !showInfo.value;
-            },
-          ),
-      ];
+        MapMenuItemId.aboutApp: MapMenuAction(
+          icon: Icons.info_outline,
+          title: AboutAppScreen.title,
+          section: sectionOf[MapMenuItemId.aboutApp],
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutAppScreen()),
+            );
+          },
+        ),
+        MapMenuItemId.developerDetails: MapMenuAction(
+          icon: Icons.article_outlined,
+          title: '詳細（開発用）',
+          subtitle: '緯度経度・処理時刻などの内部情報',
+          section: sectionOf[MapMenuItemId.developerDetails],
+          onTap: () {
+            showInfo.value = !showInfo.value;
+          },
+        ),
+      };
+      final actions = [for (final s in layout) items[s.id]!];
       showModalBottomSheet<void>(
         context: context,
         backgroundColor: Colors.transparent,

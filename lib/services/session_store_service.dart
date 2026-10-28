@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/session_model.dart';
+import 'diagnostic_bundle_service.dart';
 
 /// 練習セッションの永続化(端末内JSONファイル)。
 /// サーバー不要のため費用はかからない。
@@ -81,6 +82,15 @@ class SessionStoreService {
     }
   }
 
+  /// 「まとめて送る」の対象(15分・2km以上で未送信)の件数。
+  ///
+  /// メニューの「練習記録」に出すためだけに使う。記録を全部読むので、
+  /// 別 isolate で数えて画面を止めない。読めない記録は数えない。
+  Future<int> countPendingBulkLogExports() async {
+    final dir = await _sessionsDir();
+    return compute(_countPendingInDirectory, dir.path);
+  }
+
   /// アカウント・データ削除用に、端末内の全練習記録を削除する。
   Future<void> deleteAllSessions() async {
     final docs = await _documentsDirectoryProvider();
@@ -89,4 +99,19 @@ class SessionStoreService {
       await dir.delete(recursive: true);
     }
   }
+}
+
+Future<int> _countPendingInDirectory(String path) async {
+  var count = 0;
+  await for (final entity in Directory(path).list()) {
+    if (entity is! File || !entity.path.endsWith('.json')) continue;
+    try {
+      final data = json.decode(await entity.readAsString());
+      final session = Session.fromJson(Map<String, dynamic>.from(data));
+      if (isBulkLogExportTarget(session)) count++;
+    } catch (_) {
+      // 壊れた記録は一覧でも出さないので、ここでも数えない。
+    }
+  }
+  return count;
 }
