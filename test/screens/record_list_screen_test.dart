@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/models/session_model.dart';
 import 'package:rowing_navigator/screens/record_list_screen.dart';
+import 'package:rowing_navigator/services/session_store_service.dart';
 import 'package:rowing_navigator/screens/record_replay/record_replay_screen.dart';
 
 void main() {
@@ -234,24 +235,127 @@ void main() {
     expect(find.text('1本目'), findsNothing, reason: '内訳は既定で畳む');
   });
 
-  testWidgets('警告エピソードと診断データの共有を旧画面から引き継ぐ', (tester) async {
+  testWidgets('診断ログは見出しのボタンからスクロールせずに送れる', (tester) async {
     await pumpReplay(tester, intervalSession(DateTime(2026, 8, 6, 6)));
-    final scrollable =
-        find.descendant(of: list, matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.text('診断データを共有'), 300,
-        scrollable: scrollable);
-    expect(find.text('警告エピソード'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('診断データを共有'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('診断データを共有'));
+    // 見出しのボタンは地図の上にあり、最初から見えている。
+    final header = find.byKey(const Key('record-replay-send-log'));
+    expect(header.hitTestable(), findsOneWidget);
+    expect(find.text('ログを送る'), findsOneWidget);
+    await tester.tap(header);
     await tester.pumpAndSettle();
     expect(find.textContaining('診断ZIPには正確な航路'), findsOneWidget);
     expect(find.text('共有先を選ぶ'), findsOneWidget);
+    await tester.tap(find.text('キャンセル'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('共有カードは警告の振り返りより上にあり、振り返りは件数の要約で始まる', (tester) async {
+    await pumpReplay(tester, intervalSession(DateTime(2026, 8, 6, 6)));
+    final scrollable =
+        find.descendant(of: list, matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('警告の振り返り'), 300,
+        scrollable: scrollable);
+    expect(find.text('橋 1回'), findsOneWidget);
+    expect(find.textContaining('地図で見る'), findsNothing, reason: '場面は既定で閉じる');
+    final send = find.byKey(const Key('record-tools-send-log'));
+    expect(send, findsOneWidget);
+    expect(tester.getTopLeft(send).dy,
+        lessThan(tester.getTopLeft(find.text('警告の振り返り')).dy));
+
+    await tester.ensureVisible(send);
+    await tester.pumpAndSettle();
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('診断ZIPには正確な航路'), findsOneWidget);
   });
 
   testWidgets('航跡の無い記録でも詳細画面が落ちない', (tester) async {
     await pumpReplay(tester, session('empty', DateTime(2026, 8, 6, 6)));
     expect(find.text('この日の練習'), findsOneWidget);
   });
+
+  Session eligible(String id, DateTime startedAt, {DateTime? sharedAt}) =>
+      Session(
+        id: id,
+        startedAt: startedAt,
+        endedAt: startedAt.add(const Duration(minutes: 40)),
+        boatTypeName: '1x',
+        seatPosLabel: 'ストローク',
+        points: const [],
+        summary: SessionSummary(
+          totalDistanceMeters: 6000,
+          durationSec: 2400,
+          movingTimeSec: 2000,
+          maxSpeed: 4,
+          avgSpeed: 3,
+          splits: const [],
+          pieces: const [],
+          alertCounts: const {},
+        ),
+        diagnosticsSharedAt: sharedAt,
+      );
+
+  testWidgets('未送信のログのカードは、15分・2km以上の未送信があるときだけ出る', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: RecordListScreen(
+          sessionsLoader: () async => [
+            session('short', DateTime(2026, 7, 5)), // 10分・1km
+            eligible('sent', DateTime(2026, 7, 6),
+                sharedAt: DateTime(2026, 7, 6, 12)),
+          ],
+          clock: () => DateTime(2026, 7, 22),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pending-log-card')), findsNothing);
+    expect(find.text('ログ未送信'), findsNothing);
+  });
+
+  testWidgets('送らずに送信済みにすると、保存してカードが消える', (tester) async {
+    final store = _MemoryStore([
+      eligible('a', DateTime(2026, 7, 5)),
+      eligible('b', DateTime(2026, 7, 6)),
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: RecordListScreen(
+          sessionStore: store,
+          clock: () => DateTime(2026, 7, 22),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('未送信のログ 2件'), findsOneWidget);
+    expect(find.text('ログ未送信'), findsWidgets);
+
+    await tester.tap(find.text('まとめて送る'));
+    await tester.pumpAndSettle();
+    expect(find.text('2件を送る(共有先を選ぶ)'), findsOneWidget);
+    // 1件を外すと、送る件数も減る。
+    await tester.tap(find.byKey(const Key('bulk-log-b')));
+    await tester.pump();
+    expect(find.text('1件を送る(共有先を選ぶ)'), findsOneWidget);
+
+    await tester.tap(find.text('送らずに送信済みにする'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1件を送信済みにしました'), findsOneWidget);
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(store.byId['b']!.isDiagnosticsShared, isFalse);
+  });
+}
+
+class _MemoryStore extends SessionStoreService {
+  final Map<String, Session> byId;
+  _MemoryStore(List<Session> sessions)
+      : byId = {for (final s in sessions) s.id: s};
+
+  @override
+  Future<void> saveSession(Session session) async => byId[session.id] = session;
+
+  @override
+  Future<List<Session>> listSessions() async =>
+      byId.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
 }

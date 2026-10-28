@@ -7,13 +7,18 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../models/session_model.dart';
+import '../services/diagnostic_bundle_service.dart';
+import '../services/gpx_export_service.dart';
 import '../services/session_aggregator.dart';
 import '../services/session_list_grouping.dart';
 import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
 import '../types/boat_type.dart';
 import '../widgets/app_state_views.dart';
+import '../widgets/share_delivery_prompt.dart';
+import '../widgets/share_origin.dart';
 import 'record_replay/record_replay_screen.dart';
+import 'record_replay/widgets/diagnostic_share_flow.dart';
 import 'record_replay/replay_analysis.dart';
 import 'record_replay/replay_format.dart';
 
@@ -54,11 +59,15 @@ String formatDateTime(DateTime dt) {
 class RecordListScreen extends HookConsumerWidget {
   final Future<List<Session>> Function()? sessionsLoader;
   final DateTime Function()? clock;
+  final SessionStoreService? sessionStore;
+  final DiagnosticBundleService? bundleService;
 
   const RecordListScreen({
     super.key,
     this.sessionsLoader,
     this.clock,
+    this.sessionStore,
+    this.bundleService,
   });
 
   @override
@@ -66,13 +75,18 @@ class RecordListScreen extends HookConsumerWidget {
     final sessions = useState<List<Session>>([]);
     final loading = useState(true);
     final period = useState(SessionAggregationPeriod.thisMonth);
+    final store = useMemoized(
+        () => sessionStore ?? SessionStoreService(), [sessionStore]);
+    final bundles = useMemoized(
+        () => bundleService ?? DiagnosticBundleService(), [bundleService]);
 
     Future<void> loadSessions() async {
       loading.value = true;
-      sessions.value = await (sessionsLoader?.call() ??
-          SessionStoreService().listSessions());
+      sessions.value = await (sessionsLoader?.call() ?? store.listSessions());
       loading.value = false;
     }
+
+    final pending = pendingBulkLogExports(sessions.value);
 
     useEffect(() {
       loadSessions();
@@ -104,6 +118,25 @@ class RecordListScreen extends HookConsumerWidget {
               : ListView(
                   padding: EdgeInsets.all(context.dimens.space3),
                   children: [
+                    if (pending.isNotEmpty) ...[
+                      _PendingLogCard(
+                        count: pending.length,
+                        onOpen: () async {
+                          await showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            builder: (_) => BulkLogSendSheet(
+                              sessions: pending,
+                              store: store,
+                              bundleService: bundles,
+                            ),
+                          );
+                          await loadSessions();
+                        },
+                      ),
+                      SizedBox(height: context.dimens.space3),
+                    ],
                     _PeriodSummaryCard(
                       period: period.value,
                       aggregate: aggregate,
@@ -409,6 +442,17 @@ class _SessionListCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ],
+                    if (isBulkLogExportTarget(session)) ...[
+                      SizedBox(height: dimens.space1),
+                      Row(children: [
+                        Icon(Icons.outgoing_mail,
+                            size: 14, color: colors.textSecondary),
+                        SizedBox(width: dimens.space1),
+                        Text('ログ未送信',
+                            style: TextStyle(
+                                fontSize: 12, color: colors.textSecondary)),
+                      ]),
                     ],
                     SizedBox(height: dimens.space2),
                     Row(
@@ -752,4 +796,204 @@ class _ThumbPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ThumbPainter old) => old.points != points;
+}
+
+/// 未送信の診断ログがあることを知らせ、まとめて送る画面を開くカード。
+class _PendingLogCard extends StatelessWidget {
+  final int count;
+  final VoidCallback onOpen;
+  const _PendingLogCard({required this.count, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final dimens = context.dimens;
+    return Card(
+      key: const Key('pending-log-card'),
+      elevation: dimens.elevationSm,
+      shape: RoundedRectangleBorder(borderRadius: dimens.borderLg),
+      child: Padding(
+        padding: EdgeInsets.all(dimens.space3),
+        child: Row(children: [
+          Icon(Icons.outgoing_mail, color: colors.primary),
+          SizedBox(width: dimens.space2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('未送信のログ $count件',
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+                Text('15分・2km以上の練習',
+                    style:
+                        TextStyle(fontSize: 12, color: colors.textSecondary)),
+              ],
+            ),
+          ),
+          FilledButton(onPressed: onOpen, child: const Text('まとめて送る')),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 未送信の記録を選んで、診断ログを1つのZIPにまとめて送る。
+///
+/// 外した記録は今回送らない。過去に別の方法で送った分は
+/// 「送らずに送信済みにする」で片付ける。
+class BulkLogSendSheet extends StatefulWidget {
+  final List<Session> sessions;
+  final SessionStoreService store;
+  final DiagnosticBundleService bundleService;
+
+  const BulkLogSendSheet({
+    super.key,
+    required this.sessions,
+    required this.store,
+    required this.bundleService,
+  });
+
+  @override
+  State<BulkLogSendSheet> createState() => _BulkLogSendSheetState();
+}
+
+class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
+  late final Set<String> _selected = {for (final s in widget.sessions) s.id};
+  String? _busy; // 'send' / 'mark'
+
+  List<Session> get _chosen => [
+        for (final s in widget.sessions)
+          if (_selected.contains(s.id)) s
+      ];
+
+  Future<int> _markShared(List<Session> sessions) async {
+    final now = DateTime.now();
+    var saved = 0;
+    for (final s in sessions) {
+      try {
+        await widget.store
+            .saveSession(s.copyWith(diagnosticsSharedAt: () => now));
+        saved++;
+      } catch (_) {
+        // 1件の保存失敗で残りを止めない。保存できなかった分は未送信のまま残る。
+      }
+    }
+    return saved;
+  }
+
+  void _finish(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _send(Rect origin) async {
+    final chosen = _chosen;
+    setState(() => _busy = 'send');
+    try {
+      final bundles =
+          await widget.bundleService.buildBundlesInBackground(chosen);
+      final result = await widget.bundleService
+          .share(bundles, sharePositionOrigin: origin);
+      if (!mounted) return;
+      final delivered = await confirmShareDelivered(context, result);
+      if (!delivered) {
+        if (mounted) {
+          setState(() => _busy = null);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(shareResultMessage(result, what: '診断ログ'))));
+        }
+        return;
+      }
+      final saved = await _markShared(chosen);
+      _finish('$saved件を送信済みにしました。');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error is SessionExportException
+              ? error.message
+              : '共有ファイルを作成できませんでした。')));
+    }
+  }
+
+  Future<void> _markWithoutSending() async {
+    setState(() => _busy = 'mark');
+    final saved = await _markShared(_chosen);
+    _finish('$saved件を送信済みにしました(送信はしていません)。');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final dimens = context.dimens;
+    final none = _selected.isEmpty;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(dimens.space3, dimens.space3, dimens.space3,
+          dimens.space3 + MediaQuery.paddingOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('未送信のログをまとめて送る',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          SizedBox(height: dimens.space1),
+          Text(diagnosticShareNotice,
+              style: TextStyle(fontSize: 12, color: colors.textSecondary)),
+          SizedBox(height: dimens.space2),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final s in widget.sessions)
+                  CheckboxListTile(
+                    key: Key('bulk-log-${s.id}'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: _selected.contains(s.id),
+                    onChanged: _busy != null
+                        ? null
+                        : (on) => setState(() => on == true
+                            ? _selected.add(s.id)
+                            : _selected.remove(s.id)),
+                    title: Text(formatDateTime(s.startedAt)),
+                    subtitle: Text('${boatTypeDisplayLabel(s.boatTypeName)} ・ '
+                        '${(s.summary.totalDistanceMeters / 1000).toStringAsFixed(1)} km ・ '
+                        '練習 ${formatDuration(practiceSecOf(s))}'),
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(height: dimens.space2),
+          Builder(
+            builder: (b) => FilledButton.icon(
+              key: const Key('bulk-log-send'),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48)),
+              icon: _busy == 'send'
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.outgoing_mail),
+              label: Text(_busy == 'send'
+                  ? 'ZIPを作成中…'
+                  : '${_selected.length}件を送る(共有先を選ぶ)'),
+              onPressed:
+                  none || _busy != null ? null : () => _send(shareOriginOf(b)),
+            ),
+          ),
+          TextButton(
+            onPressed: none || _busy != null ? null : _markWithoutSending,
+            child: const Text('送らずに送信済みにする'),
+          ),
+        ],
+      ),
+    );
+  }
 }

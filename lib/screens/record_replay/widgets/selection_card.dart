@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../../services/record/training_set_detector.dart';
 import '../../../theme/record_palette.dart';
+import '../../../widgets/share_origin.dart';
 import '../replay_controller.dart';
 import '../replay_format.dart';
 
 /// 選択区間の名前と範囲・操作。「全体」のときは時間の内訳も出す。
 class SelectionCard extends StatelessWidget {
   final ReplayController controller;
-  final VoidCallback onShare;
+
+  /// 押したボタンの位置(共有シートの起点)を受け取る。
+  final ValueChanged<Rect> onShare;
   const SelectionCard(
       {super.key, required this.controller, required this.onShare});
 
@@ -104,9 +107,29 @@ class SelectionCard extends StatelessWidget {
                             color: p.textSub)),
                   ]),
             ),
-            _Pill(label: '絞る', palette: p, onTap: c.zoomTimelineToSelection),
-            const SizedBox(width: 6),
-            _Pill(label: '共有', palette: p, accent: true, onTap: onShare),
+          ]),
+          // 操作は名前の下に1行で置く。横に並べると、文字の大きい設定や
+          // 狭い端末で名前が折り返す。
+          const SizedBox(height: 10),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            // 全体を選んでいるときは拡大しても変わらないので出さない。
+            if (!c.isAll) ...[
+              _Pill(
+                  label: '時間軸を拡大',
+                  icon: Icons.zoom_in,
+                  palette: p,
+                  onTap: c.zoomTimelineToSelection),
+              const SizedBox(width: 6),
+            ],
+            // 数値の文章を送る。診断ログの共有(下の共有カード)とは別。
+            Builder(
+              builder: (b) => _Pill(
+                  label: '結果を共有',
+                  icon: Icons.ios_share,
+                  palette: p,
+                  accent: true,
+                  onTap: () => onShare(shareOriginOf(b))),
+            ),
           ]),
           // 4つの数字(/500m・SR・DPS・距離と時間)は、地図の下端の「答え」
           // (AnswerOverlay)が同じ選択区間について大きく出している。
@@ -225,6 +248,7 @@ class _Overview extends StatelessWidget {
 
 class _Pill extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final RecordPalette palette;
   final bool accent;
   final VoidCallback onTap;
@@ -232,6 +256,7 @@ class _Pill extends StatelessWidget {
       {required this.label,
       required this.palette,
       required this.onTap,
+      this.icon,
       this.accent = false});
 
   @override
@@ -246,14 +271,18 @@ class _Pill extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 40, minWidth: 48),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Center(
-              child: Text(label,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: accent ? p.onAccent : p.text),
+                const SizedBox(width: 4),
+              ],
+              Text(label,
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: accent ? p.onAccent : p.text)),
-            ),
+            ]),
           ),
         ),
       ),
