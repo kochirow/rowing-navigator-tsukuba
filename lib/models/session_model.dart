@@ -376,6 +376,26 @@ enum AlertEpisodeRating {
   }
 }
 
+/// 練習全体の警告への一言評価。個別の評価(1練習で数十〜数百件)より答えやすい。
+enum AlertOverallRating {
+  justRight,
+  tooMany,
+  tooFew;
+
+  String get displayLabel => switch (this) {
+        AlertOverallRating.justRight => 'ちょうどよい',
+        AlertOverallRating.tooMany => '多すぎた',
+        AlertOverallRating.tooFew => '足りなかった',
+      };
+
+  static AlertOverallRating? fromName(String? value) {
+    for (final rating in values) {
+      if (rating.name == value) return rating;
+    }
+    return null;
+  }
+}
+
 /// 500mごとのスプリット
 class Split {
   final int index; // 1始まり
@@ -523,6 +543,15 @@ class Session {
   /// `AlertEpisode.id` → `AlertEpisodeRating.name`。
   final Map<String, String> alertEpisodeRatings;
 
+  /// この練習の警告全体への一言評価(`AlertOverallRating.name`)。未評価は null。
+  final String? alertOverallRating;
+
+  /// 診断ログを共有した時刻。未送信は null。
+  ///
+  /// 「未送信のログをまとめて送る」の対象を決めるためだけに使う。
+  /// 過去の記録には項目が無いので、未送信として読む。
+  final DateTime? diagnosticsSharedAt;
+
   /// falseの場合は、航行中のチェックポイントから回復した記録。
   ///
   /// 過去バージョンのJSONにはフィールドがないため、省略時は
@@ -543,8 +572,14 @@ class Session {
     this.alertEvents = const [],
     this.diagnosticEvents = const [],
     this.alertEpisodeRatings = const {},
+    this.alertOverallRating,
+    this.diagnosticsSharedAt,
   });
 
+  bool get isDiagnosticsShared => diagnosticsSharedAt != null;
+
+  /// [alertOverallRating] と [diagnosticsSharedAt] は null へ戻せるよう、
+  /// 関数で渡す(`() => null` で消す)。
   Session copyWith({
     SessionSummary? summary,
     bool? isComplete,
@@ -552,6 +587,8 @@ class Session {
     List<AlertDiagnosticEvent>? alertEvents,
     List<SessionDiagnosticEvent>? diagnosticEvents,
     Map<String, String>? alertEpisodeRatings,
+    String? Function()? alertOverallRating,
+    DateTime? Function()? diagnosticsSharedAt,
   }) =>
       Session(
         schemaVersion: schemaVersion,
@@ -567,6 +604,12 @@ class Session {
         alertEvents: alertEvents ?? this.alertEvents,
         diagnosticEvents: diagnosticEvents ?? this.diagnosticEvents,
         alertEpisodeRatings: alertEpisodeRatings ?? this.alertEpisodeRatings,
+        alertOverallRating: alertOverallRating != null
+            ? alertOverallRating()
+            : this.alertOverallRating,
+        diagnosticsSharedAt: diagnosticsSharedAt != null
+            ? diagnosticsSharedAt()
+            : this.diagnosticsSharedAt,
       );
 
   Map<String, dynamic> toJson() => {
@@ -588,6 +631,10 @@ class Session {
               diagnosticEvents.map((event) => event.toJson()).toList(),
         if (alertEpisodeRatings.isNotEmpty)
           'alertEpisodeRatings': alertEpisodeRatings,
+        if (alertOverallRating != null)
+          'alertOverallRating': alertOverallRating,
+        if (diagnosticsSharedAt != null)
+          'diagnosticsSharedAt': diagnosticsSharedAt!.millisecondsSinceEpoch,
       };
 
   factory Session.fromJson(Map<String, dynamic> json) => Session(
@@ -620,5 +667,10 @@ class Session {
                 .toList(growable: false),
         alertEpisodeRatings: Map<String, String>.from(
             json['alertEpisodeRatings'] as Map? ?? const {}),
+        alertOverallRating: json['alertOverallRating'] as String?,
+        diagnosticsSharedAt: json['diagnosticsSharedAt'] is num
+            ? DateTime.fromMillisecondsSinceEpoch(
+                (json['diagnosticsSharedAt'] as num).toInt())
+            : null,
       );
 }

@@ -8,11 +8,13 @@ import '../../services/preset_obstacle_service.dart';
 import '../../services/session_store_service.dart';
 import '../../theme/record_palette.dart';
 import '../../types/boat_type.dart';
+import '../../widgets/share_origin.dart';
 import 'bout_direction.dart';
 import 'replay_analysis.dart';
 import 'replay_controller.dart';
 import 'replay_format.dart';
 import 'widgets/detail_sections.dart';
+import 'widgets/diagnostic_share_flow.dart';
 import 'widgets/metric_chart.dart';
 import 'widgets/answer_overlay.dart';
 import 'widgets/record_tools.dart';
@@ -80,7 +82,27 @@ class RecordReplayScreen extends HookWidget {
     void scrollToTop() => scroll.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
 
-    Future<void> shareText() async {
+    // 診断ログの共有は、見出しのボタンと下の共有カードのどちらからでも1本ずつ。
+    final sharingDiagnostics = useState(false);
+    final diagnosticsFlowOpen = useRef(false);
+    Future<void> shareDiagnostics(Rect origin) async {
+      if (diagnosticsFlowOpen.value) return;
+      diagnosticsFlowOpen.value = true;
+      try {
+        final updated = await shareSessionDiagnostics(context,
+            session: current.value,
+            exporter: exporter,
+            store: store,
+            origin: origin, onBusyChanged: (v) {
+          if (context.mounted) sharingDiagnostics.value = v;
+        });
+        if (updated != null) current.value = updated;
+      } finally {
+        diagnosticsFlowOpen.value = false;
+      }
+    }
+
+    Future<void> shareText(Rect origin) async {
       final c = controller;
       final st = c.selectionStats;
       final s = current.value;
@@ -107,7 +129,17 @@ class RecordReplayScreen extends HookWidget {
             ' SR${st.averageSpm?.round() ?? '--'} DPS ${st.averageDps?.toStringAsFixed(1) ?? '--'}m'
             '${laps.isEmpty ? '' : '\n250mラップ: $laps'}';
       }
-      await SharePlus.instance.share(ShareParams(text: text));
+      // 起点(押したボタンの位置)が無いと、iPad と iOS 26 以降では
+      // 共有シートが出ず、押しても何も起きなかった(2026-10-28)。
+      try {
+        await SharePlus.instance
+            .share(ShareParams(text: text, sharePositionOrigin: origin));
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('共有シートを開けませんでした。')));
+      }
     }
 
     final s = current.value;
@@ -160,6 +192,37 @@ class RecordReplayScreen extends HookWidget {
                   ]),
             ),
           ),
+          // スクロールしなくても届く場所に置く(ログの回収が最優先のため)。
+          Builder(
+            builder: (b) => Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                key: const Key('record-replay-send-log'),
+                style: TextButton.styleFrom(
+                  foregroundColor: p.text,
+                  backgroundColor: p.surface.withValues(alpha: 0.9),
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: StadiumBorder(side: BorderSide(color: p.line)),
+                ),
+                icon: sharingDiagnostics.value
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        s.isDiagnosticsShared
+                            ? Icons.mark_email_read_outlined
+                            : Icons.outgoing_mail,
+                        size: 18),
+                label: Text(s.isDiagnosticsShared ? '送信済み' : 'ログを送る',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+                onPressed: sharingDiagnostics.value
+                    ? null
+                    : () => shareDiagnostics(shareOriginOf(b)),
+              ),
+            ),
+          ),
         ]),
       ),
     );
@@ -205,6 +268,8 @@ class RecordReplayScreen extends HookWidget {
                 onSessionChanged: (v) => current.value = v,
                 exporter: exporter,
                 store: store,
+                onShareDiagnostics: shareDiagnostics,
+                sharingDiagnostics: sharingDiagnostics.value,
                 onSeekTo: (t) {
                   controller.seek(t);
                   scrollToTop();

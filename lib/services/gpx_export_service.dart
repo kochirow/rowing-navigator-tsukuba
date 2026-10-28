@@ -144,6 +144,7 @@ class GpxExportService {
             },
       'settings': settings,
       'alertEpisodeRatings': session.alertEpisodeRatings,
+      'alertOverallRating': session.alertOverallRating,
       'privacy': {
         'containsPreciseRoute': true,
         'containsDeviceInformation': true,

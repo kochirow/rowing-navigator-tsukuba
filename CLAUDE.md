@@ -178,7 +178,8 @@ flutter run
 | `lib/services/send_policy.dart` | 適応送信の間隔決定 |
 | `lib/services/session_analyzer_service.dart` | 練習ログ解析(距離・スプリット・ピース検出)。純Dart |
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
-| `lib/services/gpx_export_service.dart` | GPX/CSV出力 |
+| `lib/services/gpx_export_service.dart` | GPX/CSV/診断ZIP出力 |
+| `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(15分・2km以上)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` に端末内でだけ記録する。自動送信はしない。条件は `lib/config/log_export_config.dart` |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
 | `lib/theme/map_layer_spec.dart` | 地図の層(中央線＝白い破線／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。**実線＝実在するもの、破線＝越えない取り決め。** 航路は中央線1本だけを描き、レーンの外側の辺は描かない(往路・復路の帯を廃止した経緯も同ファイル) |
 | `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |
