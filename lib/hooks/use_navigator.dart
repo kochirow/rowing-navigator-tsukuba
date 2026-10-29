@@ -1581,6 +1581,10 @@ UseNavigator useNavigator() {
   }
 
   Future<void> reloadDefaultObstaclesForMap() async {
+    // 航行中は読み直さない。固定区域を最新キャッシュで作り直すと、別端末の
+    // 共有設定を「確認して反映」まで保留する仕組みを迂回し、陸上判定も
+    // 初期化される(2026-10-29 監査 F10)。臨時区域は購読で届く。
+    if (mode.value == NavMode.navigator) return;
     await loadDefaultObstacles();
     await refreshTemporaryObstaclesForMap();
   }
