@@ -4850,6 +4850,9 @@ UseNavigator useNavigator() {
       currentWarning.value = null;
       audioDirective.value = null;
       audioDirectiveCategory.value = null;
+      // 停止要求は待たずに先に出す。後ろの工程が終了の時間枠を使い切ると、
+      // 最後の停止要求が省かれて警告音が鳴り続けた(2026-10-29 監査 F08)。
+      unawaited(attempt('Alert audio stop (early)', alert.stop));
       isAshore.value = false;
       ashoreDetector.value?.reset();
       lastAshoreState.value = AshoreState.initial;

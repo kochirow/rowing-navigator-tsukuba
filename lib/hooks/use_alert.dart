@@ -263,6 +263,9 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
   final requestGeneration = useRef(0);
   final recoveryInFlight = useRef(false);
   final consecutiveRecoveryFailures = useRef(0);
+  // ループ警告がactiveなのに paused/stopped のままになった最初の時刻。
+  // 再生要求の途中(stop→resume)の一瞬では復旧しないよう、続いた時間で見る。
+  final loopNotPlayingSince = useRef<DateTime?>(null);
   final consecutivePlatformTimeouts = useRef(0);
   final isDisposed = useRef(false);
   final progressWatchdog = useMemoized(AudioPlaybackProgressWatchdog.new);
@@ -447,8 +450,12 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
           target.onPlayerStateChanged.listen((next) {
         if (isDisposed.value || !identical(target, player.value)) return;
         updatePlayerState(next, reason: 'player_event');
-        if (next == PlayerState.playing) {
-          consecutiveRecoveryFailures.value = 0;
+        // playing の通知だけでは「鳴っている」と言えない(位置が進まないまま
+        // playing を返すことがある)。復旧の失敗が続いている間は数え直さず、
+        // 故障表示も消さない。数え直しは位置が進んだと確かめた復旧成功と、
+        // 新しい再生要求で行う(2026-10-29 監査 F06)。
+        if (next == PlayerState.playing &&
+            consecutiveRecoveryFailures.value == 0) {
           error.value = null;
         }
         // completedは故障ではない。自前ループの次周を要求する正常通知として
@@ -599,6 +606,25 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
       final now = DateTime.now();
       final playbackStalled =
           state.value == PlayerState.playing && progressWatchdog.isStalled(now);
+      // ループ警告が鳴っているはずなのに paused/stopped で止まっている。
+      // OS割込み(電話・他アプリ・Bluetooth切替)や、下の復旧が pause の後で
+      // 失敗した場合にこうなる。以前は「playingなのに進まない」だけを
+      // 故障とみなしていたため、この状態は二度と復旧されず無音が続いた
+      // (2026-10-29 監査 F06)。意図した停止は先に activeAsset を null にするので
+      // ここへは来ない。completed は次周の開始通知なので含めない。
+      final loopNotPlaying = !isDisposed.value &&
+          asset != null &&
+          mode == _AlertPlaybackMode.loop &&
+          (state.value == PlayerState.paused ||
+              state.value == PlayerState.stopped);
+      if (!loopNotPlaying) {
+        loopNotPlayingSince.value = null;
+      } else {
+        loopNotPlayingSince.value ??= now;
+      }
+      final loopHalted = loopNotPlaying &&
+          now.difference(loopNotPlayingSince.value!) >=
+              progressWatchdog.stallThreshold;
       if (isDisposed.value ||
           asset == null ||
           mode == null ||
@@ -608,8 +634,10 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
         return;
       }
       // loopのcompletedはonPlayerCompleteで次周を開始する正常な通知である。
-      // playingのまま位置が止まった場合だけ、故障としてここへ来る。
-      if (mode == _AlertPlaybackMode.loop && !playbackStalled) return;
+      if (mode == _AlertPlaybackMode.loop && !playbackStalled && !loopHalted) {
+        return;
+      }
+      loopNotPlayingSince.value = null;
       emitDiagnostic(
         'audio_playback_stalled',
         {
@@ -617,6 +645,7 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
           'mode': mode.name,
           'playerState': state.value.name,
           'stalledForMs': progressWatchdog.stallThreshold.inMilliseconds,
+          'reason': playbackStalled ? 'no_progress' : 'not_playing',
         },
       );
       recoveryInFlight.value = true;
@@ -673,6 +702,7 @@ UseAlert useAlert({AlertDiagnosticCallback? onDiagnosticEvent}) {
             throw StateError('player did not make playback progress');
           }
           consecutiveRecoveryFailures.value = 0;
+          error.value = null;
           emitDiagnostic('audio_recovery_succeeded', {
             'asset': asset,
             'mode': mode.name,
