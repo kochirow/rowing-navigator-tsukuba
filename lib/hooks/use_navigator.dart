@@ -1938,7 +1938,13 @@ UseNavigator useNavigator() {
     SessionSummary? reuseSummary,
   }) {
     final startedAt = sessionStartedAt.value;
-    if (startedAt == null || sessionPoints.value.isEmpty) return null;
+    if (startedAt == null) return null;
+    // 測位0件でも、1分以上続いた航行は診断だけの記録として残す(監査 F09)。
+    if (sessionPoints.value.isEmpty &&
+        DateTime.now().difference(startedAt) <
+            navigationNoFixSessionMinDuration) {
+      return null;
+    }
     updateDiagnosticMetadataCounts();
     // JSON変換前のawait中に1Hz記録が追記されても、保存対象の
     // Listは変化しないようスナップショットを渡す。
