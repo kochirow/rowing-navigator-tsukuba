@@ -959,6 +959,23 @@ class TeamService {
       throw const CannotRemoveTeamAdministratorException();
     }
 
+    // 除名は、位置を読む権限の正本である RTDB の所属を先に外す。以前は
+    // Firestore を確定してから RTDB を更新しており、後者が失敗すると
+    // 除名済みの端末が位置を読めるまま残り、再操作も対象が消えていて
+    // やり直せなかった(2026-10-29 監査 F07)。先に外せば、途中で失敗しても
+    // 残るのは「Firestore にはまだいるが位置は読めない」安全側の状態で、
+    // 同じ操作をもう一度行えば完了する。
+    if (memberUidToRemove != null) {
+      try {
+        await _revokeRtdbMember(
+          teamId: active.teamId,
+          memberUid: memberUidToRemove,
+        );
+      } on FirebaseException {
+        throw const TeamManagementSyncException();
+      }
+    }
+
     for (var attempt = 0; attempt < 8; attempt++) {
       final nextInviteCode = TeamInviteCode.generate(_random);
       final teamReference = _firestore.collection('teams').doc(active.teamId);
@@ -1054,12 +1071,11 @@ class TeamService {
       // Firestoreでアクセスを先に失効させる。RTDB側の更新が失敗した場合は
       // 成功として画面遷移せず、管理者に再試行を促す。
       try {
-        await _replaceRtdbInviteAndRevokeMember(
+        await _replaceRtdbInvite(
           teamId: active.teamId,
           previousInviteCode: active.inviteCode,
           nextInviteCode: nextInviteCode,
           administratorUid: user.uid,
-          memberUidToRemove: memberUidToRemove,
         );
       } on FirebaseException {
         throw const TeamManagementSyncException();
@@ -1069,14 +1085,13 @@ class TeamService {
     throw StateError('招待コードを安全に更新できませんでした。');
   }
 
-  Future<void> _replaceRtdbInviteAndRevokeMember({
+  Future<void> _replaceRtdbInvite({
     required String teamId,
     required String previousInviteCode,
     required String nextInviteCode,
     required String administratorUid,
-    required String? memberUidToRemove,
   }) {
-    final changes = <String, Object?>{
+    return _database.ref().update({
       'team_meta/$teamId/inviteCode': nextInviteCode,
       'team_invites/$previousInviteCode': null,
       'team_invites/$nextInviteCode': {
@@ -1084,16 +1099,34 @@ class TeamService {
         'ownerUid': administratorUid,
         'createdAt': ServerValue.timestamp,
       },
-    };
-    if (memberUidToRemove != null) {
-      changes.addAll({
-        'teams/$teamId/live_positions/$memberUidToRemove': null,
-        'teams/$teamId/boat_profiles/$memberUidToRemove': null,
-        'team_users/$memberUidToRemove': null,
-        'team_members/$teamId/$memberUidToRemove': null,
-      });
+    });
+  }
+
+  /// RTDB からメンバーの所属と共有データを外す。何度呼んでも同じ結果になる。
+  ///
+  /// Rules は管理者による所属の削除を「まだ存在する」ときだけ許すため、
+  /// 前回の操作で既に消えていれば permission-denied になる。それは
+  /// 「既に外れている」ので成功として扱う。所属(`team_members`)が位置を
+  /// 読む権限の正本なので、最初に単独で外す。
+  Future<void> _revokeRtdbMember({
+    required String teamId,
+    required String memberUid,
+  }) async {
+    Future<void> removeIfPresent(String path) async {
+      try {
+        await _database.ref(path).remove();
+      } on FirebaseException catch (error) {
+        if (error.code != 'permission-denied') rethrow;
+      }
     }
-    return _database.ref().update(changes);
+
+    await removeIfPresent('team_members/$teamId/$memberUid');
+    await _database.ref().update({
+      'teams/$teamId/live_positions/$memberUid': null,
+      'teams/$teamId/boat_profiles/$memberUid': null,
+      'teams/$teamId/stroke_traces/$memberUid': null,
+    });
+    await removeIfPresent('team_users/$memberUid');
   }
 
   Future<TeamMembership> _activate(TeamMembership membership) async {
