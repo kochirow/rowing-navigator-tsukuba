@@ -51,7 +51,7 @@ import '../services/env_service.dart';
 import '../services/estimator_clock.dart';
 import '../services/fixed_obstacle_calibration_service.dart';
 import '../services/geo_service.dart';
-import '../services/gnss_motion_validity.dart';
+import '../services/motion_fusion_base.dart';
 import '../services/fix_batch_collector.dart';
 import '../services/fix_ingress_policy.dart';
 import '../services/gps_position_filter.dart';
@@ -3096,6 +3096,22 @@ UseNavigator useNavigator() {
 
     // ######## Update MyBoat Status ########
     preProcessTime.value = now;
+    // 保守側の推定(安全判定に使う解)を先に更新する。加速度センサー側の
+    // 基準速度に、ここで判定・置換した速度を渡すため。
+    final conservativeFix = ConservativeFix(
+      position: LatLng(rawPos.latitude, rawPos.longitude),
+      timestamp: rawPos.timestamp,
+      elapsed: processTick,
+      accuracyMeters: rawPos.accuracy,
+      speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+      headingDegrees: _finiteOrNull(rawPos.heading),
+      // 精度が無い(0以下)端末では今までどおり値を使う(GnssMotionValidity)。
+      speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+      headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+    );
+    var conservativeResult =
+        conservativePositionEstimator.update(fix: conservativeFix);
+    var conservativeNeedsReseed = false;
     RobustPositionEstimate? estimate;
     var estimatorDurationMs = 0;
     if (enableRobustPositionFilter) {
@@ -3113,12 +3129,25 @@ UseNavigator useNavigator() {
                     (rawSpeed ?? 0) >= stoppedSpeedThreshold
                 ? rawPos.heading
                 : null;
-        if (rawSpeed != null) {
+        // 加速度センサー側の基準速度・方位も、判定済みの値を使う。
+        // iOSの速度精度±3.75m/sの値(実際の約1/4)を基準にすると、融合結果が
+        // 高い信頼度のまま実際と違う速度を出す(2026-10-27 6:36)。
+        final fusionBase = FusionBase.select(
+          speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+          speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+          headingDegrees: _finiteOrNull(rawPos.heading),
+          headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+          conservativeResult: conservativeResult,
+        );
+        if (fusionBase != null) {
           strokeRate.observeGnss(
             timestamp: rawPos.timestamp,
-            speedMetersPerSecond: rawSpeed,
+            speedMetersPerSecond: fusionBase.speedMetersPerSecond,
             accuracyMeters: rawPos.accuracy,
-            headingDegrees: rawHeading,
+            headingDegrees: fusionBase.headingDegrees,
+            baseSource: fusionBase.source,
+            speedAccuracyMetersPerSecond:
+                fusionBase.speedAccuracyMetersPerSecond,
           );
         }
         final motion = strokeRate.motion.value;
@@ -3184,6 +3213,7 @@ UseNavigator useNavigator() {
         } else if (candidate != null) {
           positionEstimator.reset();
           conservativePositionEstimator.reset();
+          conservativeNeedsReseed = true;
           estimatorClock.reset();
           lastDeadReckoningPredictionTick.value = null;
           debugPrint('Position estimator produced an unusable result; reset.');
@@ -3200,6 +3230,7 @@ UseNavigator useNavigator() {
         // 推定器の問題で警告処理全体を止めず、このfixだけGNSS値へ戻す。
         positionEstimator.reset();
         conservativePositionEstimator.reset();
+        conservativeNeedsReseed = true;
         estimatorClock.reset();
         lastDeadReckoningPredictionTick.value = null;
         debugPrint('Position estimator failed and was reset: $error');
@@ -3211,19 +3242,13 @@ UseNavigator useNavigator() {
       estimatorDurationMs =
           (processingStopwatch.elapsed - estimatorStartedAt).inMilliseconds;
     }
-    final conservativeResult = conservativePositionEstimator.update(
-      fix: ConservativeFix(
-        position: LatLng(rawPos.latitude, rawPos.longitude),
-        timestamp: rawPos.timestamp,
-        elapsed: processTick,
-        accuracyMeters: rawPos.accuracy,
-        speedMetersPerSecond: _finiteOrNull(rawPos.speed),
-        headingDegrees: _finiteOrNull(rawPos.heading),
-        // 精度が無い(0以下)端末では今までどおり値を使う(GnssMotionValidity)。
-        speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
-        headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
-      ),
-    );
+    if (conservativeNeedsReseed) {
+      // Kalmanの破棄に合わせて保守側も作り直した。従来どおり、この測位を
+      // 最初の1点として入れ直す。
+      conservativeResult = conservativePositionEstimator.update(
+        fix: conservativeFix,
+      );
+    }
     final conservative = conservativeResult.output;
     final selectedEstimate =
         primarySolution == PrimarySolution.conservative && conservative != null

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import '../config/stroke_rate_config.dart';
 import '../models/shared_stroke_trace.dart';
+import 'gnss_motion_validity.dart';
 import 'stroke_rate_analyzer.dart';
 import 'stroke_speed_trace.dart';
 
@@ -127,6 +128,8 @@ class RowingMotionFusion {
   DateTime? _lastGnssAt;
   double? _baseSpeed;
   double? _baseHeading;
+  GnssMotionSource _baseSource = GnssMotionSource.gnss;
+  double? _baseSpeedAccuracy;
   double? _lastReliableRelativeVelocity;
   DateTime? _lastAnalyzedStrokeBoundary;
 
@@ -142,6 +145,8 @@ class RowingMotionFusion {
     _lastGnssAt = null;
     _baseSpeed = null;
     _baseHeading = null;
+    _baseSource = GnssMotionSource.gnss;
+    _baseSpeedAccuracy = null;
     _lastReliableRelativeVelocity = null;
     _lastAnalyzedStrokeBoundary = null;
     _trace.reset();
@@ -221,13 +226,26 @@ class RowingMotionFusion {
   }
 
   /// 新しいGNSS艇速・進行方位をドリフトしない基準として取り込む。
+  ///
+  /// GNSSの速度が使えない間(iOSの速度精度±3.75m/sの状態)は、呼び出し側が
+  /// 位置の変化から求めた速度を [baseSource] = position で渡す。そのあいだは
+  /// 融合結果の信頼度を [imuFusionNonGnssBaseConfidenceCap] で抑え、速度精度を
+  /// [speedAccuracyMetersPerSecond] より良く見せない。
   void observeGnss({
     required DateTime timestamp,
     required double speedMetersPerSecond,
     required double accuracyMeters,
     double? headingDegrees,
+    GnssMotionSource baseSource = GnssMotionSource.gnss,
+    double? speedAccuracyMetersPerSecond,
   }) {
     if (!speedMetersPerSecond.isFinite || speedMetersPerSecond < 0) return;
+    _baseSource = baseSource;
+    _baseSpeedAccuracy = speedAccuracyMetersPerSecond != null &&
+            speedAccuracyMetersPerSecond.isFinite &&
+            speedAccuracyMetersPerSecond > 0
+        ? speedAccuracyMetersPerSecond
+        : null;
     final safeAccuracy =
         accuracyMeters.isFinite && accuracyMeters > 0 ? accuracyMeters : 25.0;
     // 精度が良いほど速く追従するが、ストローク内のGNSS速度揺れを基準へ
@@ -380,15 +398,24 @@ class RowingMotionFusion {
             !sample.timestamp.isBefore(start) && !sample.timestamp.isAfter(end))
         .length;
     final gyroCoverage = (gyroCount / (duration * 50)).clamp(0.0, 1.0);
-    final confidence = (estimate.confidence * 0.78 +
+    final strokeConfidence = (estimate.confidence * 0.78 +
             sampleCoverage * 0.14 +
             gyroCoverage * 0.08)
         .clamp(0.0, 1.0)
         .toDouble();
+    final baseFromGnss = _baseSource == GnssMotionSource.gnss;
+    // 信頼度はストロークの検出の質だけでなく、基準速度の出どころでも上限を持つ。
+    final confidence = baseFromGnss
+        ? strokeConfidence
+        : math.min(strokeConfidence, imuFusionNonGnssBaseConfidenceCap);
     final quality = confidence >= 0.72 && sampleCoverage >= 0.75
         ? RowingMotionQuality.good
         : RowingMotionQuality.degraded;
-    final speedAccuracy = (1.45 - confidence).clamp(0.45, 1.4).toDouble();
+    final strokeSpeedAccuracy =
+        (1.45 - confidence).clamp(0.45, 1.4).toDouble();
+    final speedAccuracy = baseFromGnss || _baseSpeedAccuracy == null
+        ? strokeSpeedAccuracy
+        : math.max(strokeSpeedAccuracy, _baseSpeedAccuracy!);
     final heading = _fusedHeading(calculatedAt);
     _lastAnalyzedStrokeBoundary = end;
 

@@ -6,6 +6,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../config/stroke_rate_config.dart';
 import '../models/shared_stroke_trace.dart';
+import '../services/gnss_motion_validity.dart';
 import '../services/rowing_motion_fusion.dart';
 import '../services/stroke_rate_analyzer.dart';
 
@@ -169,12 +170,16 @@ UseStrokeRate useStrokeRate({
       required speedMetersPerSecond,
       required accuracyMeters,
       headingDegrees,
+      baseSource = GnssMotionSource.gnss,
+      speedAccuracyMetersPerSecond,
     }) {
       fusion.observeGnss(
         timestamp: timestamp,
         speedMetersPerSecond: speedMetersPerSecond,
         accuracyMeters: accuracyMeters,
         headingDegrees: headingDegrees,
+        baseSource: baseSource,
+        speedAccuracyMetersPerSecond: speedAccuracyMetersPerSecond,
       );
       final estimate = fusion.analyze(now: timestamp);
       if (estimate != null) {
@@ -198,6 +203,8 @@ class UseStrokeRate {
     required double speedMetersPerSecond,
     required double accuracyMeters,
     double? headingDegrees,
+    GnssMotionSource baseSource,
+    double? speedAccuracyMetersPerSecond,
   }) observeGnss;
 
   UseStrokeRate({
