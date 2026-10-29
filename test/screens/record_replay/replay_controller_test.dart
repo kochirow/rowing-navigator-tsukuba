@@ -128,4 +128,44 @@ void main() {
     c.nudge(start: true, seconds: 1);
     expect(c.mapFitRequest, before + 1);
   });
+
+  // 2026-10-29 監査 F20: 最小幅2秒より短い記録で clamp の上下限が逆転し、
+  // ArgumentError になっていた。
+  test('2秒未満の記録でも区間の微調整で例外にならない', () {
+    final t0 = DateTime.utc(2026, 10, 29);
+    final short = Session(
+      id: 'short',
+      startedAt: t0,
+      endedAt: t0.add(const Duration(seconds: 1)),
+      boatTypeName: 'r_1x',
+      seatPosLabel: '1',
+      points: [
+        for (var i = 0; i < 2; i++)
+          TrackPoint(
+            t: t0.add(Duration(seconds: i)),
+            lat: 36 + i * .00001,
+            lng: 140,
+            speed: 3,
+            heading: 0,
+            safetyLevel: 'safe',
+          ),
+      ],
+      summary: SessionSummary(
+        totalDistanceMeters: 1,
+        durationSec: 1,
+        maxSpeed: 3,
+        avgSpeed: 3,
+        splits: [],
+        pieces: [],
+        alertCounts: {},
+      ),
+    );
+    final c = ReplayController(ReplayAnalysis.compute(short));
+    addTearDown(c.dispose);
+    for (final (start, seconds) in [(true, 1.0), (false, -1.0), (true, -1.0)]) {
+      c.nudge(start: start, seconds: seconds);
+      expect(c.selection.start, inInclusiveRange(0, c.duration));
+      expect(c.selection.end, inInclusiveRange(c.selection.start, c.duration));
+    }
+  });
 }
