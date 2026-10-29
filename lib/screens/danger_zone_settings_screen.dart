@@ -73,13 +73,18 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       setState(() {
         _sharedRevision = shared?.revision ?? 0;
         if (shared != null) {
-          _settings = shared.dangerZoneSettings;
-          _warningLeadTimes = WarningLeadTimes(
+          final sharedLeadTimes = WarningLeadTimes(
             primaryWarningLeadSeconds: shared.primaryWarningLeadSeconds,
             advanceWarningLeadSeconds: shared.advanceWarningLeadSeconds,
           );
-          _savedSettings = _settings;
-          _savedLeadTimes = _warningLeadTimes;
+          // 取得を待つ間に触った入力は消さない。比べる基準だけ共有版にする
+          // (2026-10-29 監査 F12)。
+          if (_unsavedCount == 0) {
+            _settings = shared.dangerZoneSettings;
+            _warningLeadTimes = sharedLeadTimes;
+          }
+          _savedSettings = shared.dangerZoneSettings;
+          _savedLeadTimes = sharedLeadTimes;
         }
       });
     } catch (_) {

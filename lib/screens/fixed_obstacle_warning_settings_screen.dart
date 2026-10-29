@@ -66,10 +66,13 @@ class _FixedObstacleWarningSettingsScreenState
         setState(() {
           _sharedRevision = shared?.revision ?? 0;
           if (shared != null) {
-            _settings = FixedObstacleWarningSettings(
+            final sharedSettings = FixedObstacleWarningSettings(
               disabledSourceIds: shared.disabledWarningSourceIds,
             );
-            _initialSettings = _settings;
+            // 取得を待つ間に触った入力は消さない。比べる基準だけ共有版にする
+            // (2026-10-29 監査 F12)。
+            if (!_changed) _settings = sharedSettings;
+            _initialSettings = sharedSettings;
           }
         });
       } catch (_) {
