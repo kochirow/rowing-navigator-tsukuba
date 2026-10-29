@@ -9,6 +9,7 @@ import '../hooks/use_coach_watch.dart';
 import '../models/message_model.dart';
 import '../models/practice_log_model.dart';
 import '../services/geo_service.dart';
+import 'use_observer_warning_alerts.dart';
 import '../services/practice_log_recorder.dart';
 import '../services/practice_log_store_service.dart';
 
@@ -27,7 +28,10 @@ UsePracticeLogRecording usePracticeLogRecording({
   required String? recordedBy,
   required List<Message> messages,
   required List<BoatAnomaly> anomalies,
+  UseObserverWarningAlerts? observerWarnings,
 }) {
+  final warningNotifications =
+      observerWarnings?.notifications.value ?? const [];
   final log = useState<PracticeLog?>(null);
   final error = useState<String?>(null);
   final store = useMemoized(PracticeLogStoreService.new);
@@ -38,6 +42,7 @@ UsePracticeLogRecording usePracticeLogRecording({
   final eventCount = useRef(0);
   final lastCheckpoint = useRef<DateTime?>(null);
   final lastAnomalies = useRef<Set<String>>({});
+  final lastWarningNotificationAt = useRef<DateTime?>(null);
   final latestObserver = useRef<Position?>(null);
   final observerUnavailableReported = useRef(false);
   final timer = useRef<Timer?>(null);
@@ -216,6 +221,31 @@ UsePracticeLogRecording usePracticeLogRecording({
     lastAnomalies.value = next;
     return null;
   }, [enabled, anomalies]);
+
+  // 監視端末で漕手の警告を知らせた記録。実練習での通知回数が過剰でないかを
+  // 後から確かめるために残す(原則4)。
+  useEffect(() {
+    final r = recorder.value;
+    if (!enabled || r == null) return null;
+    final since = lastWarningNotificationAt.value;
+    for (final vibration in warningNotifications) {
+      if (since != null && !vibration.at.isAfter(since)) continue;
+      r.recordEvent(vibration.at, 'observer_warning_notified', {
+        'vibrated': observerWarnings?.vibrationEnabled.value ?? false,
+        'band': vibration.band.name,
+        'boats': [
+          for (final warning in vibration.warnings)
+            {
+              'boatId': warning.boatId,
+              'category': warning.categoryCode,
+              'band': warning.band.name,
+            },
+        ],
+      });
+      lastWarningNotificationAt.value = vibration.at;
+    }
+    return null;
+  }, [enabled, warningNotifications]);
 
   useOnAppLifecycleStateChange((previous, current) {
     final r = recorder.value;

@@ -181,6 +181,10 @@ class GpxExportService {
         'recovery_speed_retention',
         'spm',
         'safety_level',
+        // 2026-10-30 追加。列名で読む前提で末尾に足す。
+        'raw_course_deg',
+        'speed_source',
+        'heading_source',
       ].join(','));
     for (final point in session.points) {
       track.writeln([
@@ -210,6 +214,9 @@ class GpxExportService {
         point.recoverySpeedRetention ?? '',
         point.spm ?? '',
         point.safetyLevel,
+        point.rawCourseDegrees ?? '',
+        point.speedSource ?? '',
+        point.headingSource ?? '',
       ].map(_csvCell).join(','));
     }
 

@@ -49,3 +49,29 @@ const anomalyReannounceSec = 120;
 /// ここは名前で持ち、突き合わせは `isAudibleCoachAnomalyKind()` が行う。
 /// 綴り誤りは `test/hooks/use_coach_watch_test.dart` が検出する。
 const coachAudibleAnomalyKindNames = <String>{};
+
+// ---------------- 監視端末への警告通知(バイブ) ----------------
+// 2026-10-30 利用者決定: 航行中の艇で漕手に警告の音が鳴ったら(単発・連続音)、
+// 監視端末をバイブさせる。表示のみ(band 0)と system fault は通知しない。
+// 画面が表示されている間だけ鳴らす(画面OFF時のローカル通知は次の段階)。
+
+/// 監視端末へのバイブ通知の既定。端末内に保存した選択がなければこれを使う。
+const observerWarningVibrationDefaultEnabled = true;
+
+/// これより古い受信メッセージの警告状態は使わない。
+///
+/// 送信間隔は最長10秒(`sendIntervalStoppedSec`)。警告中は2秒間隔で送るので、
+/// 10秒届かない警告状態は終わっているか、届いていない。
+const observerWarningMaxMessageAge = Duration(seconds: 10);
+
+/// 同じ艇で、音なしがこの時間続いてから次の音ありで再びバイブさせる。
+///
+/// 逆走・カーブは5秒あけて2回の読み上げを1組として繰り返す
+/// (`guidanceRepeatInterval`)。その間の無音で毎回鳴らさないよう、5秒より長くする。
+const observerWarningRearmSilence = Duration(seconds: 10);
+
+/// 複数の艇が同時に変わっても、バイブはこの間隔に1回にまとめる。
+const observerWarningMinVibrationInterval = Duration(seconds: 2);
+
+/// 連続音(band 2)の警告で、2回目の振動までの間隔。
+const observerWarningSecondVibrationDelay = Duration(milliseconds: 600);

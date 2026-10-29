@@ -25,6 +25,19 @@ class TactileFeedback {
     unawaited(HapticFeedback.heavyImpact());
   }
 
+  /// 監視端末で、航行中の艇の漕手に警告の音が鳴ったことを知らせる振動。
+  ///
+  /// 単発の読み上げは1回、連続音は長めの振動を2回。監視者は陸上で端末を
+  /// 持っている(DESIGN_PRINCIPLES 1.4)ので、選択の手応えより強い振動を使う。
+  static void observerWarning({
+    required bool continuous,
+    Duration secondDelay = const Duration(milliseconds: 600),
+  }) {
+    unawaited(HapticFeedback.vibrate());
+    if (!continuous) return;
+    unawaited(Future<void>.delayed(secondDelay, HapticFeedback.vibrate));
+  }
+
   static void unawaited(Future<void> future) {
     future.catchError((Object _) {});
   }

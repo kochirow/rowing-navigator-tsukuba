@@ -55,6 +55,7 @@ import '../hooks/use_navigator.dart';
 import '../hooks/use_lap_metrics.dart';
 import '../hooks/use_workout.dart';
 import '../hooks/use_nav_map.dart';
+import '../hooks/use_observer_warning_alerts.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/map_display_settings_service.dart';
@@ -190,20 +191,24 @@ class HomeMapScreen extends HookConsumerWidget {
     final navMap = useNavMap();
     final tracking = useTracking();
     final auth = AuthService();
+    final coachWatchEnabled =
+        navigator.mode.value == NavMode.observer && navigator.isWatching.value;
     final coachWatch = useCoachWatch(
       otherBoats: navigator.otherBoats.value,
-      enabled: navigator.mode.value == NavMode.observer &&
-          navigator.isWatching.value,
+      enabled: coachWatchEnabled,
       channelCenterline: navigator.channelCenterline.value,
       channelLaneResolver: navigator.channelLaneResolver.value,
     );
+    final observerWarnings = useObserverWarningAlerts(
+        enabled: coachWatchEnabled,
+        messages: navigator.receivedPracticeLogMessages.value);
     final practiceLogRecording = usePracticeLogRecording(
-      enabled: navigator.mode.value == NavMode.observer &&
-          navigator.isWatching.value,
+      enabled: coachWatchEnabled,
       teamId: TeamService.activeMembership?.teamId,
       recordedBy: auth.currentUser?.uid,
       messages: navigator.receivedPracticeLogMessages.value,
       anomalies: coachWatch.anomalies.value,
+      observerWarnings: observerWarnings,
     );
     // State
     final loading = useState(true);
@@ -1141,6 +1146,7 @@ class HomeMapScreen extends HookConsumerWidget {
             // 監視モードだけ航跡と同じ識別色にする。航行中は色分けしない
             // (`BoatPalette.otherBoat` の説明を参照)。
             color: coachWatch.boatColors.value[boat.boatId],
+            warningLabel: observerWarnings.mapLabelFor(boat.boatId), // 監視中だけ
           ));
         }
         final rendered = await navMap.renderBoatMarkers(markerSpecs);
@@ -1194,6 +1200,7 @@ class HomeMapScreen extends HookConsumerWidget {
       navigator.otherBoats.value,
       coachWatch.boatStatuses.value, // 観察者モードでも定期的に再描画する
       coachWatch.boatColors.value, // 識別色が決まったら艇印を描き直す
+      observerWarnings.active.value, // 漕手に鳴った警告の札
       tracking.mode.value,
       navMap.isReady.value,
       navigator.warningTimeSeconds.value,
@@ -1664,6 +1671,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   coachWatch.boatStatuses.value,
                                               boatColors:
                                                   coachWatch.boatColors.value,
+                                              observerWarnings:
+                                                  observerWarnings,
                                               onTapBoat: (boatId) => unawaited(
                                                 focusOnWatchedBoat(boatId),
                                               ),

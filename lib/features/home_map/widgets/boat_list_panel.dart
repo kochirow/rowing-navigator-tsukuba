@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../hooks/use_coach_watch.dart';
+import '../../../hooks/use_observer_warning_alerts.dart';
 import '../../../widgets/app_state_views.dart';
 
 /// コーチ(観察者)モードで表示する艇一覧パネル。
@@ -36,13 +37,45 @@ class BoatListPanel extends StatelessWidget {
   /// 一覧と地図を色で対応づけるためだけに使う。渡さなくても一覧は成立する。
   final Map<String, Color> boatColors;
 
+  /// いま漕手に音が鳴っている警告(受信した `w` から作る)と、
+  /// 「警告をバイブで知らせる」の切替。null なら、どちらも出さない。
+  ///
+  /// **表示専用。** 監視端末自身の対向・逆走の判定(`ObserverPriorityBanner`)
+  /// とは別物で、行の中に「警告：…」として出す。艇が `w` を送らない古い版でも
+  /// 「安全」とは表示しない(何も出さないだけ)。
+  final UseObserverWarningAlerts? observerWarnings;
+
   const BoatListPanel({
     super.key,
     required this.statuses,
     this.onTapBoat,
     this.onShowStrokeTrace,
     this.boatColors = const {},
+    this.observerWarnings,
   });
+
+  static String _durationLabel(Duration d) {
+    final seconds = d.inSeconds < 0 ? 0 : d.inSeconds;
+    if (seconds < 60) return '$seconds秒';
+    return '${seconds ~/ 60}分${seconds % 60}秒';
+  }
+
+  Widget _vibrationSwitch(BuildContext context) {
+    final colors = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '警告をバイブで知らせる',
+          style: TextStyle(fontSize: 13, color: colors.textSecondary),
+        ),
+        Switch(
+          value: observerWarnings!.vibrationEnabled.value,
+          onChanged: observerWarnings!.setVibrationEnabled,
+        ),
+      ],
+    );
+  }
 
   Widget _row(BuildContext context, BoatStatus status, {required bool showId}) {
     final colors = context.colors;
@@ -53,7 +86,8 @@ class BoatListPanel extends StatelessWidget {
     final hasAnomaly = anomaly != null;
     // 日常的に起こる異常(更新途絶)は強調しない。表示は残す。
     final isRoutineAnomaly = anomaly?.isRoutine ?? false;
-    final emphasized = hasAnomaly && !isRoutineAnomaly;
+    final warning = observerWarnings?.active.value[boat.boatId];
+    final emphasized = (hasAnomaly && !isRoutineAnomaly) || warning != null;
     final lowBattery = boat.battery != null && boat.battery! <= 20;
 
     final onTapBoat = this.onTapBoat;
@@ -122,6 +156,25 @@ class BoatListPanel extends StatelessWidget {
                       color: colors.textSecondary,
                     ),
                     overflow: TextOverflow.ellipsis,
+                  ),
+                if (warning != null)
+                  Row(
+                    children: [
+                      Icon(Icons.campaign, size: 16, color: colors.danger),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          // 漕手に鳴っている音。継続時間で様子見か対応かを決める。
+                          '${warning.listLabel}  '
+                          '${_durationLabel(DateTime.now().difference(warning.since))}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: colors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 if (hasAnomaly)
                   Text(
@@ -218,28 +271,35 @@ class BoatListPanel extends StatelessWidget {
           ),
         ],
       ),
-      child: statuses.isEmpty
-          ? const AppEmptyView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (observerWarnings != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: _vibrationSwitch(context),
+            ),
+          if (statuses.isEmpty)
+            const AppEmptyView(
               icon: Icons.rowing,
               title: '航行中の艇はありません',
             )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${statuses.length}隻',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ...statuses.map((status) => _row(context, status,
-                    showId: duplicateLabels.contains(status.boat.label))),
-              ],
+          else ...[
+            Text(
+              '${statuses.length}隻',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: colors.textSecondary,
+              ),
             ),
+            const SizedBox(height: 4),
+            ...statuses.map((status) => _row(context, status,
+                showId: duplicateLabels.contains(status.boat.label))),
+          ],
+        ],
+      ),
     );
   }
 }

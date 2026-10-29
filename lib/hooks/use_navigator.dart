@@ -51,6 +51,7 @@ import '../services/env_service.dart';
 import '../services/estimator_clock.dart';
 import '../services/fixed_obstacle_calibration_service.dart';
 import '../services/geo_service.dart';
+import '../services/motion_fusion_base.dart';
 import '../services/fix_batch_collector.dart';
 import '../services/fix_ingress_policy.dart';
 import '../services/gps_position_filter.dart';
@@ -272,6 +273,7 @@ UseNavigator useNavigator() {
   final gpsRecoveryProbeAttempted = useRef(false);
   final gpsRecoveryProbeInFlight = useRef(false);
   final lastAcceptedGpsSpeedMetersPerSecond = useRef<double?>(null);
+  final lastGnssMotionValidity = useRef<GnssMotionValidity?>(null);
   // 無通知とみなす時間を状況で切り替えるために、直前の測位精度も覚える。
   final lastAcceptedGpsAccuracyMeters = useRef<double?>(null);
   // 受理した測位そのものの時刻。ポーリングが stream と同じ測位を
@@ -1209,6 +1211,13 @@ UseNavigator useNavigator() {
       'gpsStreamRecovering': isGpsStreamRecovering.value,
       'imuFusionQuality': strokeRate.motion.value?.quality.name,
       'imuFusionConfidence': strokeRate.motion.value?.confidence,
+      // 直近の速度・方位の判定(位置の品質 gpsQuality とは別物)。
+      ...?lastGnssMotionValidity.value?.toDiagnosticDetails().map(
+            (key, value) => MapEntry('gnssMotion.$key', value),
+          ),
+      'speedSource': conservativePositionEstimator.lastOutput?.speedSource.name,
+      'headingSource':
+          conservativePositionEstimator.lastOutput?.headingSource.name,
       'distancePerStrokeMeters':
           strokeRate.motion.value?.distancePerStrokeMeters,
       'lastGpsAgeMs':
@@ -2983,9 +2992,13 @@ UseNavigator useNavigator() {
         LatLng(rawPos.latitude, rawPos.longitude),
       );
     } else if (rawSpeed >= stoppedSpeedThreshold &&
-        rawPos.heading.isFinite &&
-        rawPos.heading >= 0 &&
-        rawPos.heading < 360) {
+        GnssMotionValidity.evaluate(
+          speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+          speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+          headingDegrees: _finiteOrNull(rawPos.heading),
+          headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+        ).headingUsable) {
+      // 推定が無いときだけの最後の手段。方位精度180°の止まった方位は使わない。
       measuredHeading = rawPos.heading;
     }
     if (measuredHeading != null) {
@@ -3091,6 +3104,22 @@ UseNavigator useNavigator() {
 
     // ######## Update MyBoat Status ########
     preProcessTime.value = now;
+    // 保守側の推定(安全判定に使う解)を先に更新する。加速度センサー側の
+    // 基準速度に、ここで判定・置換した速度を渡すため。
+    final conservativeFix = ConservativeFix(
+      position: LatLng(rawPos.latitude, rawPos.longitude),
+      timestamp: rawPos.timestamp,
+      elapsed: processTick,
+      accuracyMeters: rawPos.accuracy,
+      speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+      headingDegrees: _finiteOrNull(rawPos.heading),
+      // 精度が無い(0以下)端末では今までどおり値を使う(GnssMotionValidity)。
+      speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+      headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+    );
+    var conservativeResult =
+        conservativePositionEstimator.update(fix: conservativeFix);
+    var conservativeNeedsReseed = false;
     RobustPositionEstimate? estimate;
     var estimatorDurationMs = 0;
     if (enableRobustPositionFilter) {
@@ -3108,12 +3137,25 @@ UseNavigator useNavigator() {
                     (rawSpeed ?? 0) >= stoppedSpeedThreshold
                 ? rawPos.heading
                 : null;
-        if (rawSpeed != null) {
+        // 加速度センサー側の基準速度・方位も、判定済みの値を使う。
+        // iOSの速度精度±3.75m/sの値(実際の約1/4)を基準にすると、融合結果が
+        // 高い信頼度のまま実際と違う速度を出す(2026-10-27 6:36)。
+        final fusionBase = FusionBase.select(
+          speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+          speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+          headingDegrees: _finiteOrNull(rawPos.heading),
+          headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+          conservativeResult: conservativeResult,
+        );
+        if (fusionBase != null) {
           strokeRate.observeGnss(
             timestamp: rawPos.timestamp,
-            speedMetersPerSecond: rawSpeed,
+            speedMetersPerSecond: fusionBase.speedMetersPerSecond,
             accuracyMeters: rawPos.accuracy,
-            headingDegrees: rawHeading,
+            headingDegrees: fusionBase.headingDegrees,
+            baseSource: fusionBase.source,
+            speedAccuracyMetersPerSecond:
+                fusionBase.speedAccuracyMetersPerSecond,
           );
         }
         final motion = strokeRate.motion.value;
@@ -3179,6 +3221,7 @@ UseNavigator useNavigator() {
         } else if (candidate != null) {
           positionEstimator.reset();
           conservativePositionEstimator.reset();
+          conservativeNeedsReseed = true;
           estimatorClock.reset();
           lastDeadReckoningPredictionTick.value = null;
           debugPrint('Position estimator produced an unusable result; reset.');
@@ -3195,6 +3238,7 @@ UseNavigator useNavigator() {
         // 推定器の問題で警告処理全体を止めず、このfixだけGNSS値へ戻す。
         positionEstimator.reset();
         conservativePositionEstimator.reset();
+        conservativeNeedsReseed = true;
         estimatorClock.reset();
         lastDeadReckoningPredictionTick.value = null;
         debugPrint('Position estimator failed and was reset: $error');
@@ -3206,17 +3250,32 @@ UseNavigator useNavigator() {
       estimatorDurationMs =
           (processingStopwatch.elapsed - estimatorStartedAt).inMilliseconds;
     }
-    final conservativeResult = conservativePositionEstimator.update(
-      fix: ConservativeFix(
-        position: LatLng(rawPos.latitude, rawPos.longitude),
-        timestamp: rawPos.timestamp,
-        elapsed: processTick,
-        accuracyMeters: rawPos.accuracy,
-        speedMetersPerSecond: _finiteOrNull(rawPos.speed),
-        headingDegrees: _finiteOrNull(rawPos.heading),
-      ),
-    );
+    if (conservativeNeedsReseed) {
+      // Kalmanの破棄に合わせて保守側も作り直した。従来どおり、この測位を
+      // 最初の1点として入れ直す。
+      conservativeResult = conservativePositionEstimator.update(
+        fix: conservativeFix,
+      );
+    }
     final conservative = conservativeResult.output;
+    final motionValidity =
+        conservativeResult.accepted ? conservative?.motionValidity : null;
+    if (motionValidity != null) {
+      for (final change in motionValidity.diagnosticChangesFrom(
+        lastGnssMotionValidity.value,
+        context: {
+          'rawSpeedMetersPerSecond': _finiteOrNull(rawPos.speed),
+          'speedAccuracyMetersPerSecond': _finiteOrNull(rawPos.speedAccuracy),
+          'rawCourseDegrees': _finiteOrNull(rawPos.heading),
+          'headingAccuracyDegrees': _finiteOrNull(rawPos.headingAccuracy),
+          'speedSource': conservative!.speedSource.name,
+          'headingSource': conservative.headingSource.name,
+        },
+      )) {
+        appendRuntimeDiagnostic('gnss_motion_validity_changed', change);
+      }
+      lastGnssMotionValidity.value = motionValidity;
+    }
     final selectedEstimate =
         primarySolution == PrimarySolution.conservative && conservative != null
             ? RobustPositionEstimate(
@@ -3470,6 +3529,9 @@ UseNavigator useNavigator() {
         lateDriveSpeedGainMetersPerSecond:
             motion?.lateDriveSpeedGainMetersPerSecond,
         recoverySpeedRetention: motion?.recoverySpeedRetention,
+        rawCourseDegrees: _finiteOrNull(rawPos.heading),
+        speedSource: conservative?.speedSource.name,
+        headingSource: conservative?.headingSource.name,
       ));
       // 初回fixはすぐ、以後は60秒ごとに保存。ファイルI/Oは
       // awaitせず、衝突判定と次のGPS fixをブロックしない。
@@ -4706,6 +4768,7 @@ UseNavigator useNavigator() {
       gpsRecoveryProbeAttempted.value = false;
       gpsRecoveryProbeInFlight.value = false;
       lastAcceptedGpsSpeedMetersPerSecond.value = null;
+      lastGnssMotionValidity.value = null;
       lastAcceptedGpsAccuracyMeters.value = null;
       lastValidGpsTimestamp.value = null;
       gpsPollInFlight.value = false;
@@ -5011,6 +5074,7 @@ UseNavigator useNavigator() {
         gpsRecoveryProbeAttempted.value = false;
         gpsRecoveryProbeInFlight.value = false;
         lastAcceptedGpsSpeedMetersPerSecond.value = null;
+        lastGnssMotionValidity.value = null;
         lastAcceptedGpsAccuracyMeters.value = null;
         lastValidGpsTimestamp.value = null;
         gpsPollInFlight.value = false;

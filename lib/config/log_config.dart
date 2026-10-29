@@ -245,6 +245,8 @@ const diagnosticEventCatalog = <String, dynamic>{
     'dynamic_receive_access_probe_completed': '他艇位置バックエンドの読取り成功を確認した。',
     'dynamic_receive_access_probe_failed': '他艇位置バックエンドの読取り確認がタイムアウトまたはエラーになった。',
     'final_session_save_started': '航行終了時の最終セッション保存を開始した。',
+    'gnss_motion_validity_changed':
+        'GNSSの速度または方位を「使える/使えない」とする判定が切り替わった(field=speed/heading)。使えない間は位置の変化から求めた値を使う。',
     'gps_bootstrap_unusable': '航行開始時に使える精度のGNSS fixを確立できなかった。',
     'position_processing_sample': 'GPS受信から警告評価・記録・位置共有までの処理時間内訳。',
     'position_processing_gap': '新しいGNSS位置処理の間隔が許容値を超えた。',

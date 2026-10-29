@@ -58,8 +58,9 @@ class DynamicObstacleService {
     required DateTime now,
   }) {
     final List<Boat> boats = [];
-    // 記録専用の提示状態は Boat に入れない。地図描画・衝突評価と混ざる
-    // 経路を作らず、監視ログのフックだけへ Message のまま渡す。
+    // 提示状態は Boat に入れない。航行中の地図描画・衝突評価と混ざる
+    // 経路を作らず、監視ログと監視端末の通知のフックへ Message のまま渡す
+    // (不変条件12)。
     final List<Message> logMessages = [];
     // 受信層が報告した障害。これだけをストリーム障害として扱う。
     var transportFaultCount = 0;

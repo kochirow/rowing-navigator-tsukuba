@@ -56,7 +56,8 @@ class RemoteBoatMessage {
   final String? navigationState;
   final List<String> capabilities;
 
-  /// 記録専用の提示状態。Boatや衝突評価へは渡さない。
+  /// 提示状態。記録と監視端末での通知・表示にだけ使い、Boatや衝突評価へは
+  /// 渡さない(不変条件12)。
   final String? presentationState;
   final String? safetyRunMode;
   final bool audioSuppressedAshore;

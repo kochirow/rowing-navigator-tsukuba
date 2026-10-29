@@ -65,5 +65,14 @@ const enableInertialNavigationFusion = true;
 /// 従来のGNSS速度へ即座に戻す。
 const imuNavigationMinimumConfidence = 0.68;
 
+/// 基準速度がGNSSの値でない(位置の変化から求めた)間の、融合結果の信頼度の上限。
+///
+/// iOSが方位を出せない状態(速度精度±3.75m/s)では、基準をGNSSの値から
+/// 位置の変化から求めた値へ切り替える。位置由来の値はGNSSより粗いため、
+/// [imuNavigationMinimumConfidence](0.68)と品質 `good`(0.72)より下に
+/// 抑え、間違い得る基準を高い信頼度で安全経路へ流さない。
+/// 2026-10-27 には、誤った基準のまま信頼度0.91・品質 good が出ていた。
+const imuFusionNonGnssBaseConfidenceCap = 0.6;
+
 /// 安全経路へ使えるIMU解析結果の最大鮮度。
 const imuNavigationMaximumAge = Duration(seconds: 2);

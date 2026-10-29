@@ -193,6 +193,46 @@ void main() {
     expect(files['alerts.jsonl'], contains('boat-1'));
   });
 
+  test('track.csvにOSの生の方位と、速度・方位の出どころを列名つきで残す', () {
+    final base = makeSession();
+    final point = TrackPoint(
+      t: base.startedAt,
+      lat: 36.067,
+      lng: 140.2045,
+      speed: 2.6,
+      heading: 1.5,
+      safetyLevel: 'safe',
+      headingAccuracyDegrees: 180,
+      rawCourseDegrees: 271.25,
+      speedSource: 'position',
+      headingSource: 'held',
+    );
+    final roundTrip = TrackPoint.fromJson(point.toJson());
+    expect(roundTrip.rawCourseDegrees, 271.25);
+    expect(roundTrip.speedSource, 'position');
+    expect(roundTrip.headingSource, 'held');
+
+    final session = Session(
+      id: base.id,
+      startedAt: base.startedAt,
+      endedAt: base.endedAt,
+      boatTypeName: base.boatTypeName,
+      seatPosLabel: base.seatPosLabel,
+      points: [roundTrip],
+      summary: base.summary,
+    );
+    final lines = const LineSplitter()
+        .convert(exporter.buildDiagnosticFiles(session)['track.csv']!);
+    final header = lines.first.split(',');
+    final row = lines[1].split(',');
+    String cell(String name) => row[header.indexOf(name)];
+    expect(cell('raw_course_deg'), '271.25');
+    expect(cell('speed_source'), 'position');
+    expect(cell('heading_source'), 'held');
+    expect(cell('heading_deg'), '1.5');
+    expect(header.length, row.length);
+  });
+
   test('GPX共有は非空ファイル・MIME・共有元矩形を渡し結果を返す', () async {
     final temp = await Directory.systemTemp.createTemp('rowing-export-');
     addTearDown(() async {

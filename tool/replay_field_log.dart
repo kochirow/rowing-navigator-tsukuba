@@ -13,6 +13,7 @@
 //
 //   --dart-define=SCENARIO=/path/to/scenario.json   他艇を注入する(下記)
 //   --dart-define=OUT=/path/to/result.json          機械可読の結果を書き出す
+//   --dart-define=REESTIMATE=true                   自艇の速度・方位を推定し直す(下記)
 //
 // LOG_DIR が無い場合はスキップする(CIでは走らない)。
 // 診断パッケージは個人の航跡を含むためリポジトリには入れない。
@@ -32,6 +33,22 @@
 // (`use_navigator.dart` の `runGpsWatchdogTick`)。ここでも1行につき1回だけ
 // `processAssessment` を呼ぶ。2回呼ぶと、候補のある評価と候補のない評価が
 // 同じティックで衝突し、実機には無い alerting⇄clearing の往復が生まれる。
+//
+// ## 速度・方位の推定し直し(REESTIMATE)
+//
+// `track.csv` の `speed_mps` / `heading_deg` は、**その時のアプリが採用した値**
+// である。推定の修正前後を比べるには、生の測位から推定し直す必要がある。
+// `REESTIMATE=true` では、`raw_lat` / `raw_lng`・`raw_gnss_speed_mps`・
+// 速度精度・方位精度を [ConservativePositionEstimator] へ流し、出てきた
+// 速度・方位で自艇を作る(位置は従来どおり `filtered_lat` / `filtered_lng`)。
+//
+// OSの生の方位は 2026-10-30 より前のログに無い(`raw_course_deg` 列)。
+// 無い場合は `heading_deg` を代わりに渡す。方位精度が179°以上の行では
+// どちらにしても使われないので、問題の状態の再現には影響しない。
+//
+// どちらのモードでも、`speed_accuracy_mps` が3.0以上の行について、
+// 前後2秒(計5秒)の生の位置の変化から求めた速度との差を集計する
+// (`stuckSpeedTracking`)。
 //
 // ## シナリオJSON(他艇の注入)
 //
@@ -75,7 +92,12 @@ import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/models/danger_zone_settings.dart';
 import 'package:rowing_navigator/models/safety_snapshot.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
+import 'package:rowing_navigator/config/alert_presentation_config.dart';
+import 'package:rowing_navigator/config/navigator_config.dart';
 import 'package:rowing_navigator/services/ashore_detector.dart';
+import 'package:rowing_navigator/services/channel_lane_resolver.dart';
+import 'package:rowing_navigator/services/conservative_position_estimator.dart';
+import 'package:rowing_navigator/utils/geo_math.dart';
 import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
 import 'package:rowing_navigator/services/legacy_danger_zone_generator.dart';
 import 'package:rowing_navigator/services/preset_obstacle_service.dart';
@@ -85,6 +107,7 @@ import 'package:rowing_navigator/types/boat_type.dart';
 const _logDir = String.fromEnvironment('LOG_DIR');
 const _scenarioPath = String.fromEnvironment('SCENARIO');
 const _outPath = String.fromEnvironment('OUT');
+const _reestimate = bool.fromEnvironment('REESTIMATE');
 const _defaultScenarioPath = 'test/replay/mooring_scenario.json';
 
 void main() {
@@ -137,6 +160,13 @@ void main() {
       ...await _polygonZones(),
     ];
 
+    // アプリと同じく、レーン(逆走判定)を読み込む。2026-10-30 まで再生には
+    // 入っておらず、逆走の表示・音が再生に現れなかった。
+    final laneResolver = ChannelLaneResolver(
+      await service.loadChannelLanes(),
+      centerlines: await service.loadChannelCenterlines(),
+    );
+
     final ashoreAreas = await service.loadAshoreAreas();
     final mooringAreas = await service.loadMooringAreas();
     final ashoreDetector = AshoreDetector(
@@ -183,6 +213,30 @@ void main() {
       return;
     }
     final iQuality = header.indexOf('gnss_quality');
+    final iRawLat = header.indexOf('raw_lat');
+    final iRawLng = header.indexOf('raw_lng');
+    final iRawSpeed = header.indexOf('raw_gnss_speed_mps');
+    final iSpeedAccuracy = header.indexOf('speed_accuracy_mps');
+    final iHeadingAccuracy = header.indexOf('heading_accuracy_deg');
+    final iRawCourse = header.indexOf('raw_course_deg');
+    if (_reestimate && (iRawLat < 0 || iRawLng < 0)) {
+      markTestSkipped('REESTIMATE には raw_lat / raw_lng が必要です');
+      return;
+    }
+    double? cell(List<String> f, int index) =>
+        index >= 0 && index < f.length ? double.tryParse(f[index]) : null;
+    final estimator = ConservativePositionEstimator();
+    // 問題の状態(速度精度3.0m/s以上)の行で、5秒窓の位置由来速度と比べる。
+    final rawRows = rows
+        .skip(1)
+        .where((line) => line.trim().isNotEmpty)
+        .map((line) => line.split(','))
+        .toList(growable: false);
+    final speedErrors = <double>[];
+    var stuckMovingRows = 0;
+    var stuckWrongLowSpeedRows = 0;
+    final displayedSamples = <String, int>{};
+    var rowIndex = -1;
 
     final origin = DateTime.utc(2026, 1, 1);
     DateTime? legacyOrigin;
@@ -242,13 +296,63 @@ void main() {
         _ => AlertDataQuality.unusable,
       };
       if (!gpsUsable) unusableSamples++;
+      rowIndex++;
+      var speed = double.parse(f[iSpeed]);
+      var heading = double.parse(f[iHeading]);
+      if (_reestimate) {
+        final rawLat = cell(f, iRawLat);
+        final rawLng = cell(f, iRawLng);
+        if (rawLat != null && rawLng != null) {
+          final output = estimator
+              .update(
+                fix: ConservativeFix(
+                  position: LatLng(rawLat, rawLng),
+                  timestamp: at,
+                  elapsed: Duration(milliseconds: elapsedMs),
+                  accuracyMeters: cell(f, iAccuracy) ?? 5,
+                  speedMetersPerSecond: cell(f, iRawSpeed),
+                  headingDegrees: cell(f, iRawCourse) ?? heading,
+                  speedAccuracyMetersPerSecond: cell(f, iSpeedAccuracy),
+                  headingAccuracyDegrees: cell(f, iHeadingAccuracy),
+                ),
+              )
+              .output;
+          if (output != null) {
+            speed = output.speedMetersPerSecond;
+            // アプリ(buildMyBoat)と同じく、停止中は直前の方位を保つ。
+            if (speed >= stoppedSpeedThreshold) {
+              heading = output.headingDegrees;
+            }
+          }
+        }
+      }
+      final speedAccuracy = cell(f, iSpeedAccuracy);
+      if (speedAccuracy != null &&
+          speedAccuracy >= gnssSpeedUnusableAccuracyMetersPerSecond) {
+        final reference = _windowSpeed(
+          rawRows,
+          rowIndex,
+          iRawLat: iRawLat,
+          iRawLng: iRawLng,
+          iTimestamp: iTimestamp,
+          iElapsed: iElapsed,
+        );
+        if (reference != null && reference >= 1.0) {
+          stuckMovingRows++;
+          speedErrors.add((speed - reference).abs());
+          if (reference >= lowSpeedAudioMuteSpeedMetersPerSecond &&
+              speed < lowSpeedAudioMuteSpeedMetersPerSecond) {
+            stuckWrongLowSpeedRows++;
+          }
+        }
+      }
       final boat = Boat(
         boatId: 'own',
         boatType: boatType,
         lat: double.parse(f[iLat]),
         lng: double.parse(f[iLng]),
-        heading: double.parse(f[iHeading]),
-        speed: double.parse(f[iSpeed]),
+        heading: heading,
+        speed: speed,
         timestamp: at,
         accuracy: double.tryParse(f[iAccuracy]),
       );
@@ -269,6 +373,7 @@ void main() {
         // 鳴り始める警告が再生に現れない(2026-10-23 まで10秒固定だった)。
         warningTimeSeconds: advanceWarningLeadSeconds,
         centerline: centerline,
+        laneResolver: laneResolver,
       );
       final result = orchestrator.processAssessment(
         assessment: assessment,
@@ -348,6 +453,10 @@ void main() {
           presentationSamples[key] = (presentationSamples[key] ?? 0) + 1;
         }
       }
+      for (final alert in result.snapshot.activeAlerts) {
+        final category = alert.candidate.category;
+        displayedSamples[category] = (displayedSamples[category] ?? 0) + 1;
+      }
       for (final cue in result.snapshot.oneShotAudioCues) {
         cuesByCategory[cue.category] = (cuesByCategory[cue.category] ?? 0) + 1;
       }
@@ -372,6 +481,14 @@ void main() {
       'presentationSamples': presentationSamples,
       'oneShotCues': cuesByCategory,
       'mutedByAshore': mutedByAshore,
+      'reestimate': _reestimate,
+      'displayedSamples': displayedSamples,
+      'stuckSpeedTracking': {
+        'movingRows': stuckMovingRows,
+        'medianAbsErrorMetersPerSecond': _median(speedErrors),
+        'p90AbsErrorMetersPerSecond': _percentile(speedErrors, .9),
+        'wronglyBelowLowSpeedMuteRows': stuckWrongLowSpeedRows,
+      },
     };
     if (_outPath.isNotEmpty) {
       File(_outPath).writeAsStringSync(
@@ -402,8 +519,70 @@ ${_format(cuesByCategory)}
 陸上判定だったサンプル: $ashoreSamples / ${rows.length - 1}
 陸上判定で無音化した提示 (合計 ${total(mutedByAshore)}):
 ${_format(mutedByAshore)}
+表示された候補の測位数 (合計 ${total(displayedSamples)}):
+${_format(displayedSamples)}
+速度・方位の推定し直し: $_reestimate
+速度精度3.0m/s以上で動いていた行: $stuckMovingRows
+  5秒窓の位置由来速度との差 中央値 ${_median(speedErrors)?.toStringAsFixed(2)} / 90% ${_percentile(speedErrors, .9)?.toStringAsFixed(2)} m/s
+  実際は${lowSpeedAudioMuteSpeedMetersPerSecond.toStringAsFixed(2)}m/s以上なのに速度がそれ未満だった行: $stuckWrongLowSpeedRows
 ''');
   }, timeout: const Timeout(Duration(minutes: 10)));
+}
+
+double? _median(List<double> values) => _percentile(values, .5);
+
+double? _percentile(List<double> values, double fraction) {
+  if (values.isEmpty) return null;
+  final sorted = [...values]..sort();
+  return sorted[((sorted.length - 1) * fraction).round()];
+}
+
+/// [index] の行の前後2秒(計5秒)の生の位置の変化から求めた速度 [m/s]。
+double? _windowSpeed(
+  List<List<String>> rows,
+  int index, {
+  required int iRawLat,
+  required int iRawLng,
+  required int iTimestamp,
+  required int iElapsed,
+}) {
+  if (iRawLat < 0 || iRawLng < 0) return null;
+  int? millis(List<String> f) {
+    if (iElapsed >= 0) return int.tryParse(f[iElapsed].trim());
+    if (iTimestamp >= 0) {
+      return DateTime.tryParse(f[iTimestamp].trim())?.millisecondsSinceEpoch;
+    }
+    return null;
+  }
+
+  final center = millis(rows[index]);
+  if (center == null) return null;
+  var start = index;
+  while (start > 0) {
+    final t = millis(rows[start - 1]);
+    if (t == null || center - t > 2000) break;
+    start--;
+  }
+  var end = index;
+  while (end < rows.length - 1) {
+    final t = millis(rows[end + 1]);
+    if (t == null || t - center > 2000) break;
+    end++;
+  }
+  final t0 = millis(rows[start]);
+  final t1 = millis(rows[end]);
+  if (t0 == null || t1 == null || t1 - t0 < 3000) return null;
+  final a = rows[start];
+  final b = rows[end];
+  final lat0 = double.tryParse(a[iRawLat]);
+  final lng0 = double.tryParse(a[iRawLng]);
+  final lat1 = double.tryParse(b[iRawLat]);
+  final lng1 = double.tryParse(b[iRawLng]);
+  if (lat0 == null || lng0 == null || lat1 == null || lng1 == null) {
+    return null;
+  }
+  return distanceMeters(LatLng(lat0, lng0), LatLng(lat1, lng1)) /
+      ((t1 - t0) / 1000);
 }
 
 String _formatList(List<String> lines) {

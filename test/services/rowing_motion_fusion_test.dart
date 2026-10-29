@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/config/stroke_rate_config.dart';
+import 'package:rowing_navigator/services/gnss_motion_validity.dart';
 import 'package:rowing_navigator/services/rowing_motion_fusion.dart';
 import 'package:rowing_navigator/services/stroke_rate_analyzer.dart';
 
@@ -223,5 +225,63 @@ void main() {
         accuracyMeters: 5,
         headingDegrees: 90);
     expect(fusion.analyze(now: later), isNull);
+  });
+
+  group('基準速度の出どころ', () {
+    RowingMotionMetrics analyzeWith({
+      required GnssMotionSource source,
+      double? speedAccuracy,
+    }) {
+      final fusion = RowingMotionFusion();
+      final samples = fixedBoatSamples();
+      fusion.observeGnss(
+        timestamp: samples.last.timestamp,
+        speedMetersPerSecond: 2.6,
+        accuracyMeters: 5,
+        headingDegrees: 90,
+        baseSource: source,
+        speedAccuracyMetersPerSecond: speedAccuracy,
+      );
+      feedMotion(fusion, samples);
+      return fusion.analyze(now: samples.last.timestamp)!;
+    }
+
+    test('位置由来の基準では信頼度が上限を超えず、航行推定へ流れない', () {
+      final gnss = analyzeWith(source: GnssMotionSource.gnss);
+      final position = analyzeWith(
+        source: GnssMotionSource.position,
+        speedAccuracy: 1.0,
+      );
+      expect(gnss.confidence, greaterThan(imuFusionNonGnssBaseConfidenceCap));
+      expect(position.confidence,
+          lessThanOrEqualTo(imuFusionNonGnssBaseConfidenceCap));
+      expect(position.confidence, lessThan(imuNavigationMinimumConfidence));
+      expect(position.quality, RowingMotionQuality.degraded);
+      expect(position.fusedSpeedAccuracyMetersPerSecond,
+          greaterThanOrEqualTo(1.0));
+      // 基準の値そのものは使う(捨てて0にしない)
+      expect(position.fusedSpeedMetersPerSecond, inInclusiveRange(1.5, 4));
+    });
+
+    test('GNSSの基準へ戻れば上限は外れる', () {
+      final fusion = RowingMotionFusion();
+      final samples = fixedBoatSamples();
+      fusion.observeGnss(
+        timestamp: samples.first.timestamp,
+        speedMetersPerSecond: 2.6,
+        accuracyMeters: 5,
+        baseSource: GnssMotionSource.position,
+        speedAccuracyMetersPerSecond: 1.0,
+      );
+      fusion.observeGnss(
+        timestamp: samples.last.timestamp,
+        speedMetersPerSecond: 2.6,
+        accuracyMeters: 5,
+      );
+      feedMotion(fusion, samples);
+      final metrics = fusion.analyze(now: samples.last.timestamp)!;
+      expect(
+          metrics.confidence, greaterThan(imuFusionNonGnssBaseConfidenceCap));
+    });
   });
 }
