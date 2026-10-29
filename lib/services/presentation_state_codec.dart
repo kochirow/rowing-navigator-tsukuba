@@ -2,10 +2,11 @@ import '../models/alert_candidate.dart';
 import '../models/presentation_state_protocol.dart';
 import '../models/safety_snapshot.dart';
 
-/// 位置共有に載せる、記録専用の提示状態を符号化する。
+/// 位置共有に載せる提示状態を符号化する。受信側は記録と、監視端末での
+/// 通知・表示にだけ使う(不変条件12)。
 ///
-/// このクラスは SafetySnapshot だけを読み、受信値を安全判定や地図表示へ
-/// 戻す経路を持たない。protocolVersionを上げずに後方互換で追加するため、
+/// このクラスは SafetySnapshot だけを読み、受信値を安全判定や航行中の
+/// 地図表示へ戻す経路を持たない。protocolVersionを上げずに後方互換で追加するため、
 /// 警告が無いときの `w` は null (省略) にする。
 class PresentationStateCodec {
   static const _categoryCodes = <String, String>{

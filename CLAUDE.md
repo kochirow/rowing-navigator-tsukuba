@@ -149,7 +149,9 @@ flutter run
 | `lib/hooks/use_navigator.dart` | 全体の中核。GPSストリーム→品質選別→Kalman推定→リスク評価→提示→記録→適応送信 |
 | `lib/services/gps_position_filter.dart` | 測位の妥当性選別(座標・精度・時刻・速度飛び) |
 | `lib/services/gps_health_monitor.dart` | 単発ノイズと本当の途絶を分ける good/degraded/unusable 判定 |
-| `lib/services/robust_position_estimator.dart` | 4状態ロバストKalman。**surge/sway非等方プロセスノイズ**・soft/hard gate・再捕捉 |
+| `lib/services/conservative_position_estimator.dart` | **安全判定に使う解(S2)。** 代表点は生fix、速度・方位だけ平滑化。精度の悪いGNSS速度・方位は位置の変化から求め直し、方位が3秒更新できなければ `headingReliable` を落とす |
+| `lib/services/gnss_motion_validity.dart` | 測位ごとにGNSSの速度・方位を「使える/使えない」と判定(純Dart)。速度精度3.0m/s以上・方位精度179°以上・負の方位は使わない。精度0以下(不明)は従来どおり使う。位置の品質 `gnss_quality` とは別物 |
+| `lib/services/robust_position_estimator.dart` | 4状態ロバストKalman(比較用の解S1)。**surge/sway非等方プロセスノイズ**・soft/hard gate・再捕捉 |
 | `lib/services/estimator_clock.dart` | KalmanのdtをGNSS測位時刻基準にする単調時計(純Dart) |
 | `lib/services/channel_centerline.dart` | 航路中心線と曲線座標(along/cross)の相互変換(純Dart) |
 | `lib/services/channel_path_predictor.dart` | 予測経路を直線または川なりの折れ線として生成(純Dart) |
@@ -168,7 +170,8 @@ flutter run
 | 場所 | 役割 |
 | ---- | ---- |
 | `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、地図上の件数の印(`ObserverStatusIcon`)と艇一覧で示す。**音は既定で出さない**(`coachAudibleAnomalyKindNames` が空。DESIGN_PRINCIPLES 3.5-3)。音を鳴らすのは、そこへ入れた種類の新規と `anomalyReannounceSec` 経過時だけ。**監視中はWakelockを保持しない**(下記) |
-| `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す |
+| `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す。基準速度はGNSSが使えなければ位置由来の値で、その間は融合の信頼度を0.6までに抑える(`imuFusionNonGnssBaseConfidenceCap`) |
+| `lib/hooks/use_observer_warning_alerts.dart` | 監視端末で、航行中の艇の漕手に警告の音(band 1・2)が鳴ったら、画面表示中だけバイブで1回知らせる。地図の札(赤)と艇一覧に種類・鳴り方・継続時間を出す。判定は `observer_warning_notifier.dart`(純Dart。種類が変わるまで繰り返さない・10秒の無音で再武装・2秒に1回へまとめる)。オン・オフは艇一覧の上(既定オン)。通知は監視ログに `observer_warning_notified` で残る。**音は鳴らさない**(DESIGN_PRINCIPLES 3.5-3) |
 | `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
 | `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
 | `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側。**波形を見る口はここ(監視端末の `stroke_trace_sheet.dart`)だけ**で、艇側は送るだけ |
@@ -219,7 +222,12 @@ flutter run
 ## 衝突警告の仕組み
 
 1. GPSストリームから測位を受け、`GpsPositionFilter` で明らかに使えないものを落とす
-2. `RobustPositionEstimator` が位置・速度・方位を推定(dtはGNSS測位時刻基準)
+2. `ConservativePositionEstimator`(保守側の推定。`PrimarySolution.conservative`)が
+   安全判定・表示・共有に使う位置・速度・方位を出す。代表点は生の測位そのもので、
+   速度・方位だけを平滑化する。**GNSSの速度・方位は `GnssMotionValidity` で
+   「使える」と判定したときだけ使い**、使えない間(iOSの方位精度±180°・速度精度±3.75m/s)は
+   位置の変化から求め直す。`RobustPositionEstimator`(Kalman、dtはGNSS測位時刻基準)は
+   並行して動く比較用の解(S1)で、解の食い違いの監視に使う
 3. **適応送信**: 停止中10秒/他艇なし5秒/近傍・リスク時2秒でRTDBへ送信。
    受信側は推測航法(`extrapolateToNow`)で最大6秒まで現在位置を外挿。
    **他艇を受信できない間は2秒を維持する**(`receiveUnavailable`)。
@@ -383,11 +391,13 @@ flutter run
 11. **近接注意距離を0にして警告を止めてはいけない。** 種類ごとの既定値は
    `StaticObstacleKind.defaultProximityCautionMeters`。特定の区域を対象外に
    するのは `FixedObstacleWarningSettings`(`isWarningEnabled`)の役割
-12. **受信した他艇の警告状態(`w`/`m`/`a`)は記録専用。** 地図描画にも衝突評価にも
-   渡さない。`Boat` には持たせず、`RemoteBoatMessage` / `Message` で止めて
-   `PracticeLogRecorder` だけが読む。他艇の警告は自艇の判断材料にならず、
-   表示すれば画面が混み(原則4)、安全経路へ入れれば他艇のアプリの不具合が
-   自艇の警告を汚染する
+12. **受信した他艇の警告状態(`w`/`m`/`a`)は、記録と、監視端末での通知(バイブ)・表示に
+   だけ使う。** 航行中の端末の地図描画・衝突評価には渡さない。`Boat` には持たせず、
+   `RemoteBoatMessage` / `Message` で止めて、`PracticeLogRecorder` と
+   監視端末の `useObserverWarningAlerts` だけが読む。他艇の警告は自艇の判断材料にならず、
+   航行中に表示すれば画面が混み(原則4)、安全経路へ入れれば他艇のアプリの不具合が
+   自艇の警告を汚染する。監視端末は衝突評価をしないので、この理由に当たらない
+   (2026-10-30 利用者決定)
 13. **1ストロークの艇速波形は表示専用で、位置payloadへ混ぜない。** 衝突評価にも
    地図描画にも渡さない(不変条件12と同じ理由)。共有の書込を位置の atomic update へ
    入れると、波形側の validation 失敗で位置の書込ごと拒否され安全経路が巻き添えになる。
