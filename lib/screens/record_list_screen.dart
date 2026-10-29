@@ -6,9 +6,12 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 /* spellchecker: disable */
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../models/practice_log_model.dart';
 import '../models/session_model.dart';
 import '../services/diagnostic_bundle_service.dart';
 import '../services/gpx_export_service.dart';
+import '../services/practice_log_export_service.dart';
+import '../services/practice_log_store_service.dart';
 import '../services/session_aggregator.dart';
 import '../services/session_list_grouping.dart';
 import '../services/session_store_service.dart';
@@ -62,12 +65,18 @@ class RecordListScreen extends HookConsumerWidget {
   final SessionStoreService? sessionStore;
   final DiagnosticBundleService? bundleService;
 
+  /// 監視ログ(監視端末の記録)。まとめて送る対象を数えて送るために使う。
+  final PracticeLogStoreService? practiceLogStore;
+  final PracticeLogExportService? practiceLogExport;
+
   const RecordListScreen({
     super.key,
     this.sessionsLoader,
     this.clock,
     this.sessionStore,
     this.bundleService,
+    this.practiceLogStore,
+    this.practiceLogExport,
   });
 
   @override
@@ -79,14 +88,58 @@ class RecordListScreen extends HookConsumerWidget {
         () => sessionStore ?? SessionStoreService(), [sessionStore]);
     final bundles = useMemoized(
         () => bundleService ?? DiagnosticBundleService(), [bundleService]);
+    final practiceStore = useMemoized(
+        () => practiceLogStore ?? PracticeLogStoreService(),
+        [practiceLogStore]);
+    final practiceExport = useMemoized(
+        () => practiceLogExport ?? PracticeLogExportService(),
+        [practiceLogExport]);
+    // まとめて送る対象の監視ログ。読めなくても練習記録の一覧は開く。
+    final pendingPracticeLogs = useState<List<PracticeLog>>([]);
 
     Future<void> loadSessions() async {
       loading.value = true;
       sessions.value = await (sessionsLoader?.call() ?? store.listSessions());
       loading.value = false;
+      // 監視ログは練習記録の一覧を待たせずに後から足す。読めなくても一覧は開く。
+      try {
+        pendingPracticeLogs.value =
+            pendingBulkPracticeLogs(await practiceStore.list());
+      } catch (error) {
+        debugPrint('Practice logs unavailable: $error');
+        pendingPracticeLogs.value = [];
+      }
     }
 
     final pending = pendingBulkLogExports(sessions.value);
+    final pendingLogs = pendingPracticeLogs.value;
+
+    Future<void> openBulkSend() async {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => BulkLogSendSheet(
+          sessions: pending,
+          practiceLogs: pendingLogs,
+          store: store,
+          practiceStore: practiceStore,
+          practiceExport: practiceExport,
+          bundleService: bundles,
+        ),
+      );
+      await loadSessions();
+    }
+
+    // 記録が無くても、送っていない監視ログがあればカードを出す。
+    // 監視だけに使う端末には練習記録が無いため、空の画面で隠さない。
+    final pendingCard = pending.isEmpty && pendingLogs.isEmpty
+        ? null
+        : _PendingLogCard(
+            sessionCount: pending.length,
+            practiceLogCount: pendingLogs.length,
+            onOpen: openBulkSend,
+          );
 
     useEffect(() {
       loadSessions();
@@ -110,31 +163,31 @@ class RecordListScreen extends HookConsumerWidget {
       body: loading.value
           ? const AppLoadingView(message: '練習記録を読み込んでいます…')
           : sessions.value.isEmpty
-              ? const AppEmptyView(
-                  icon: Icons.rowing,
-                  title: 'まだ記録がありません',
-                  message: '航行を終了すると自動で保存されます',
-                )
+              ? pendingCard == null
+                  ? const AppEmptyView(
+                      icon: Icons.rowing,
+                      title: 'まだ記録がありません',
+                      message: '航行を終了すると自動で保存されます',
+                    )
+                  : ListView(
+                      padding: EdgeInsets.all(context.dimens.space3),
+                      children: [
+                        pendingCard,
+                        SizedBox(height: context.dimens.space3),
+                        Text(
+                          'まだ練習記録がありません。航行を終了すると自動で保存されます。',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    )
               : ListView(
                   padding: EdgeInsets.all(context.dimens.space3),
                   children: [
-                    if (pending.isNotEmpty) ...[
-                      _PendingLogCard(
-                        count: pending.length,
-                        onOpen: () async {
-                          await showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            useSafeArea: true,
-                            builder: (_) => BulkLogSendSheet(
-                              sessions: pending,
-                              store: store,
-                              bundleService: bundles,
-                            ),
-                          );
-                          await loadSessions();
-                        },
-                      ),
+                    if (pendingCard != null) ...[
+                      pendingCard,
                       SizedBox(height: context.dimens.space3),
                     ],
                     _PeriodSummaryCard(
@@ -800,9 +853,23 @@ class _ThumbPainter extends CustomPainter {
 
 /// 未送信の診断ログがあることを知らせ、まとめて送る画面を開くカード。
 class _PendingLogCard extends StatelessWidget {
-  final int count;
+  final int sessionCount;
+  final int practiceLogCount;
   final VoidCallback onOpen;
-  const _PendingLogCard({required this.count, required this.onOpen});
+  const _PendingLogCard({
+    required this.sessionCount,
+    required this.practiceLogCount,
+    required this.onOpen,
+  });
+
+  int get count => sessionCount + practiceLogCount;
+
+  /// 練習記録だけのときは従来の文。監視ログが入るときは内訳を出す。
+  String get _detail => practiceLogCount == 0
+      ? '15分・2km以上の練習'
+      : sessionCount == 0
+          ? '15分以上の監視ログ'
+          : '練習記録 $sessionCount件・監視ログ $practiceLogCount件';
 
   @override
   Widget build(BuildContext context) {
@@ -824,7 +891,7 @@ class _PendingLogCard extends StatelessWidget {
                 Text('未送信のログ $count件',
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.bold)),
-                Text('15分・2km以上の練習',
+                Text(_detail,
                     style:
                         TextStyle(fontSize: 12, color: colors.textSecondary)),
               ],
@@ -837,19 +904,25 @@ class _PendingLogCard extends StatelessWidget {
   }
 }
 
-/// 未送信の記録を選んで、診断ログを1つのZIPにまとめて送る。
+/// 未送信の記録(練習記録の診断ログと監視ログ)を選んで、1つのZIPにまとめて送る。
 ///
 /// 外した記録は今回送らない。過去に別の方法で送った分は
 /// 「送らずに送信済みにする」で片付ける。
 class BulkLogSendSheet extends StatefulWidget {
   final List<Session> sessions;
+  final List<PracticeLog> practiceLogs;
   final SessionStoreService store;
+  final PracticeLogStoreService practiceStore;
+  final PracticeLogExportService practiceExport;
   final DiagnosticBundleService bundleService;
 
   const BulkLogSendSheet({
     super.key,
     required this.sessions,
+    this.practiceLogs = const [],
     required this.store,
+    required this.practiceStore,
+    required this.practiceExport,
     required this.bundleService,
   });
 
@@ -859,14 +932,29 @@ class BulkLogSendSheet extends StatefulWidget {
 
 class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
   late final Set<String> _selected = {for (final s in widget.sessions) s.id};
+  late final Set<String> _selectedLogs = {
+    for (final l in widget.practiceLogs) l.id
+  };
   String? _busy; // 'send' / 'mark'
+
+  /// 監視ログの艇名を伏せるか。外へ出しても安全な側(伏せる)を既定にする。
+  bool _anonymize = true;
 
   List<Session> get _chosen => [
         for (final s in widget.sessions)
           if (_selected.contains(s.id)) s
       ];
 
-  Future<int> _markShared(List<Session> sessions) async {
+  List<PracticeLog> get _chosenLogs => [
+        for (final l in widget.practiceLogs)
+          if (_selectedLogs.contains(l.id)) l
+      ];
+
+  int get _chosenCount => _selected.length + _selectedLogs.length;
+
+  /// 送信済みの時刻を保存し、保存できた件数を返す。
+  Future<int> _markShared(
+      List<Session> sessions, List<PracticeLog> practiceLogs) async {
     final now = DateTime.now();
     var saved = 0;
     for (final s in sessions) {
@@ -876,6 +964,14 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
         saved++;
       } catch (_) {
         // 1件の保存失敗で残りを止めない。保存できなかった分は未送信のまま残る。
+      }
+    }
+    for (final l in practiceLogs) {
+      try {
+        await widget.practiceStore.markDiagnosticsShared(l.id, now);
+        saved++;
+      } catch (_) {
+        // 同上。
       }
     }
     return saved;
@@ -892,10 +988,28 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
 
   Future<void> _send(Rect origin) async {
     final chosen = _chosen;
+    final chosenLogs = _chosenLogs;
     setState(() => _busy = 'send');
     try {
-      final bundles =
-          await widget.bundleService.buildBundlesInBackground(chosen);
+      final inputs = <PracticeLogBundleInput>[];
+      for (final l in chosenLogs) {
+        try {
+          final data = await widget.practiceStore.read(l.id);
+          inputs.add(PracticeLogBundleInput(
+            log: data.log,
+            files: widget.practiceExport.buildFiles(
+                data.log, data.points, data.events,
+                anonymized: _anonymize),
+          ));
+        } catch (_) {
+          // 黙って外して送ると、送ったつもりで残りが消える。理由を出して止める。
+          throw SessionExportException(
+              '監視ログ(${formatDateTime(l.startedAt.toLocal())})を読み込めませんでした。'
+              'チェックを外して送ってください。');
+        }
+      }
+      final bundles = await widget.bundleService
+          .buildBundlesInBackground(chosen, practiceLogs: inputs);
       final result = await widget.bundleService
           .share(bundles, sharePositionOrigin: origin);
       if (!mounted) return;
@@ -908,8 +1022,8 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
         }
         return;
       }
-      final saved = await _markShared(chosen);
-      _finish('$saved件を送信済みにしました。');
+      final saved = await _markShared(chosen, chosenLogs);
+      _finish(_sentMessage(saved, chosen.length + chosenLogs.length));
     } catch (error) {
       if (!mounted) return;
       setState(() => _busy = null);
@@ -922,15 +1036,26 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
 
   Future<void> _markWithoutSending() async {
     setState(() => _busy = 'mark');
-    final saved = await _markShared(_chosen);
-    _finish('$saved件を送信済みにしました(送信はしていません)。');
+    final chosenLogs = _chosenLogs;
+    final chosen = _chosen;
+    final saved = await _markShared(chosen, chosenLogs);
+    _finish(
+        _sentMessage(saved, chosen.length + chosenLogs.length, sent: false));
+  }
+
+  /// 保存できなかった分は未送信のまま残るので、その件数も伝える。
+  String _sentMessage(int saved, int total, {bool sent = true}) {
+    final base = '$saved件を送信済みにしました${sent ? '' : '(送信はしていません)'}';
+    return saved == total
+        ? '$base。'
+        : '$base。${total - saved}件は記録できず、未送信のままです。';
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final dimens = context.dimens;
-    final none = _selected.isEmpty;
+    final none = _chosenCount == 0;
     return Padding(
       padding: EdgeInsets.fromLTRB(dimens.space3, dimens.space3, dimens.space3,
           dimens.space3 + MediaQuery.paddingOf(context).bottom),
@@ -944,7 +1069,10 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.bold)),
           SizedBox(height: dimens.space1),
-          Text(diagnosticShareNotice,
+          Text(
+              widget.practiceLogs.isEmpty
+                  ? diagnosticShareNotice
+                  : '$diagnosticShareNotice 監視ログには、チーム全艇の正確な航路が含まれます。',
               style: TextStyle(fontSize: 12, color: colors.textSecondary)),
           SizedBox(height: dimens.space2),
           Flexible(
@@ -967,9 +1095,35 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
                         '${(s.summary.totalDistanceMeters / 1000).toStringAsFixed(1)} km ・ '
                         '練習 ${formatDuration(practiceSecOf(s))}'),
                   ),
+                for (final l in widget.practiceLogs)
+                  CheckboxListTile(
+                    key: Key('bulk-practice-${l.id}'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: _selectedLogs.contains(l.id),
+                    onChanged: _busy != null
+                        ? null
+                        : (on) => setState(() => on == true
+                            ? _selectedLogs.add(l.id)
+                            : _selectedLogs.remove(l.id)),
+                    title: Text(formatDateTime(l.startedAt.toLocal())),
+                    subtitle: Text(
+                        '監視ログ ・ 記録 ${formatDuration(practiceLogSecOf(l))}'),
+                  ),
               ],
             ),
           ),
+          if (widget.practiceLogs.isNotEmpty)
+            SwitchListTile(
+              key: const Key('bulk-log-anonymize'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('監視ログの艇名を伏せる'),
+              value: _anonymize,
+              onChanged: _busy != null
+                  ? null
+                  : (on) => setState(() => _anonymize = on),
+            ),
           SizedBox(height: dimens.space2),
           Builder(
             builder: (b) => FilledButton.icon(
@@ -981,9 +1135,8 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
                       dimension: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.outgoing_mail),
-              label: Text(_busy == 'send'
-                  ? 'ZIPを作成中…'
-                  : '${_selected.length}件を送る(共有先を選ぶ)'),
+              label: Text(
+                  _busy == 'send' ? 'ZIPを作成中…' : '$_chosenCount件を送る(共有先を選ぶ)'),
               onPressed:
                   none || _busy != null ? null : () => _send(shareOriginOf(b)),
             ),

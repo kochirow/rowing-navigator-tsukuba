@@ -4,9 +4,11 @@ import 'dart:ui';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/models/practice_log_model.dart';
 import 'package:rowing_navigator/models/session_model.dart';
 import 'package:rowing_navigator/services/diagnostic_bundle_service.dart';
 import 'package:rowing_navigator/services/gpx_export_service.dart';
+import 'package:rowing_navigator/services/practice_log_export_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 Session _session(
@@ -50,7 +52,56 @@ Session _session(
   );
 }
 
+PracticeLog _practiceLog(
+  String id, {
+  int minutes = 40,
+  bool complete = true,
+  DateTime? sharedAt,
+  DateTime? startedAt,
+}) {
+  final start = startedAt ?? DateTime.utc(2026, 10, 1, 6);
+  return PracticeLog(
+    id: id,
+    teamId: 'team',
+    recordedBy: 'observer',
+    startedAt: start,
+    endedAt: complete ? start.add(Duration(minutes: minutes)) : null,
+    isComplete: complete,
+    diagnosticsSharedAt: sharedAt,
+  );
+}
+
+PracticeLogBundleInput _practiceInput(PracticeLog log) =>
+    PracticeLogBundleInput(
+      log: log,
+      files: PracticeLogExportService().buildFiles(log, [
+        PracticeLogPoint(
+          t: log.startedAt,
+          source: PracticeLogSource.live,
+          boatId: 'b1',
+          displayName: '一号艇',
+          lat: 36.07,
+          lng: 140.2,
+          ageSec: 1,
+        ),
+      ], const []),
+    );
+
 void main() {
+  group('まとめて送る監視ログの対象', () {
+    test('完了していて15分以上の未送信だけが入り、古い順に並ぶ', () {
+      final list = pendingBulkPracticeLogs([
+        _practiceLog('new', startedAt: DateTime.utc(2026, 10, 3)),
+        _practiceLog('sent', sharedAt: DateTime.utc(2026, 10, 4)),
+        _practiceLog('short', minutes: 14),
+        _practiceLog('recording', complete: false),
+        _practiceLog('exact',
+            minutes: 15, startedAt: DateTime.utc(2026, 10, 2)),
+      ]);
+      expect(list.map((l) => l.id), ['exact', 'new']);
+    });
+  });
+
   group('まとめて送る対象', () {
     test('練習時間15分・距離2km ちょうどは入り、どちらかが足りなければ外れる', () {
       expect(
@@ -114,6 +165,62 @@ void main() {
           as Map<String, dynamic>;
       expect((manifest['sessions'] as List).length, 2);
       expect(manifest['privacy']['automaticUpload'], isFalse);
+    });
+
+    test('監視ログは練習記録と同じZIPに、記録ごとのフォルダで入る', () {
+      final log = _practiceLog('practice_20261001_060000');
+      final bundles = DiagnosticBundleService.buildBundles(
+        [_session('a')],
+        practiceLogs: [_practiceInput(log)],
+        createdAt: DateTime(2026, 10, 28, 18, 2),
+      );
+      expect(bundles, hasLength(1));
+      expect(bundles.single.sessionIds, ['a']);
+      expect(bundles.single.practiceLogIds, [log.id]);
+      expect(bundles.single.fileName,
+          'rowing_diagnostics_bundle_20261028-1802_2.zip');
+
+      final archive = ZipDecoder().decodeBytes(bundles.single.bytes);
+      final names = archive.files.map((f) => f.name).toSet();
+      for (final f in [
+        'practice_manifest.json',
+        'boats.csv',
+        'tracks.csv',
+        'events.jsonl'
+      ]) {
+        expect(names, contains('${log.id}/$f'));
+      }
+      expect(names, contains('rowing_diagnostics_a/track.csv'));
+      final manifest = jsonDecode(utf8.decode(
+              archive.findFile('bundle_manifest.json')!.content as List<int>))
+          as Map<String, dynamic>;
+      expect((manifest['sessions'] as List).single['id'], 'a');
+      final logs = manifest['practiceLogs'] as List;
+      expect(logs.single['id'], log.id);
+      expect(logs.single['folder'], log.id);
+      expect(logs.single['durationSec'], 40 * 60);
+    });
+
+    test('練習記録が無く監視ログだけでもZIPを作れる。何も無ければ作らない', () {
+      final bundles = DiagnosticBundleService.buildBundles(
+        const [],
+        practiceLogs: [
+          _practiceInput(_practiceLog('practice_20261001_060000'))
+        ],
+        createdAt: DateTime(2026, 10, 28),
+      );
+      expect(bundles, hasLength(1));
+      expect(bundles.single.sessionIds, isEmpty);
+      expect(bundles.single.practiceLogIds, ['practice_20261001_060000']);
+      final archive = ZipDecoder().decodeBytes(bundles.single.bytes);
+      final manifest = jsonDecode(utf8.decode(
+              archive.findFile('bundle_manifest.json')!.content as List<int>))
+          as Map<String, dynamic>;
+      expect(manifest['sessions'], isEmpty);
+      expect(
+          DiagnosticBundleService.buildBundles(const [],
+              createdAt: DateTime(2026, 10, 28)),
+          isEmpty);
     });
 
     test('上限を超えると記録単位で複数のZIPに分ける', () {

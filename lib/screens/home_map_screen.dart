@@ -662,8 +662,8 @@ class HomeMapScreen extends HookConsumerWidget {
         ),
         MapMenuItemId.practiceLog: MapMenuAction(
           icon: Icons.folder_zip_outlined,
-          title: '練習一括ログ',
-          // 「練習記録」と名前が近いので、何の記録かだけ添える。
+          title: '監視ログ',
+          // 航行後の「練習記録」とは別物なので、何の記録かだけ添える。
           subtitle: '監視中に記録した全艇の位置',
           section: sectionOf[MapMenuItemId.practiceLog],
           onTap: () {

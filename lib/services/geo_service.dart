@@ -112,7 +112,7 @@ class GeoService {
         intervalDuration: const Duration(seconds: observerTrackIntervalSec),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'Rowing Navigator が監視記録中',
-          notificationText: '練習一括ログを記録中です。画面を消すと記録が途切れることがあります。',
+          notificationText: '監視ログを記録中です。画面を消すと記録が途切れることがあります。',
           notificationChannelName: '監視中の位置情報',
           enableWakeLock: false,
           setOngoing: true,
