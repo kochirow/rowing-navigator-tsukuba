@@ -191,4 +191,37 @@ void main() {
       );
     });
   });
+
+  // 2026-10-29 監査 F13: センサーが止まっても過去のキューを解析し続け、
+  // 5分前のストロークに新しい計算時刻・品質goodが付いていた。
+  test('加速度が2秒以上届かなければ、古いストロークからSPMを出さない', () {
+    final fusion = RowingMotionFusion();
+    final start = DateTime.utc(2026, 10, 29);
+    for (var i = 0; i < 750; i++) {
+      final phase = 2 * pi * 24 / 60 * (i / 50);
+      final surge = .75 * (sin(phase) + .28 * sin(2 * phase + .35));
+      final at = start.add(Duration(milliseconds: i * 20));
+      fusion.addUserAcceleration(StrokeRateSample(
+          timestamp: at, x: surge * .30, y: surge * -.80, z: surge * .52));
+      fusion
+          .addGravity(RowingGravitySample(timestamp: at, x: 0, y: 0, z: 9.81));
+      fusion
+          .addGyroscope(RowingGyroscopeSample(timestamp: at, x: 0, y: 0, z: 0));
+    }
+    final fresh = start.add(const Duration(seconds: 15));
+    fusion.observeGnss(
+        timestamp: fresh,
+        speedMetersPerSecond: 4,
+        accuracyMeters: 5,
+        headingDegrees: 90);
+    expect(fusion.analyze(now: fresh), isNotNull);
+
+    final later = fresh.add(const Duration(minutes: 5));
+    fusion.observeGnss(
+        timestamp: later,
+        speedMetersPerSecond: 4,
+        accuracyMeters: 5,
+        headingDegrees: 90);
+    expect(fusion.analyze(now: later), isNull);
+  });
 }

@@ -252,6 +252,11 @@ class RowingMotionFusion {
 
   RowingMotionMetrics? analyze({DateTime? now}) {
     final calculatedAt = now ?? DateTime.now();
+    if (_accelerometer.isEmpty ||
+        calculatedAt.difference(_accelerometer.last.timestamp) >
+            const Duration(milliseconds: spmSensorStaleAfterMs)) {
+      return null;
+    }
     final estimate = _strokeAnalyzer.estimate(_accelerometer.toList());
     final baseSpeed = _baseSpeed;
     if (estimate == null || baseSpeed == null) return null;
