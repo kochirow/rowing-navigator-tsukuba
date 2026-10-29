@@ -125,7 +125,12 @@ Future<BitmapDescriptor> getBitmapDescriptorFromAssetBytes(
 
 /// 地図上へ常時表示する名前ラベルを生成する。
 /// 下側を透明に空け、同じ座標に置いた艇アイコンの上へ表示する。
-Future<BitmapDescriptor> getNameLabelBitmapDescriptor(String label) async {
+/// [warning] が true のときは赤地・太い白枠にする。監視端末で、漕手に警告の
+/// 音が鳴っている艇の札だけに使う(表示専用。不変条件12)。
+Future<BitmapDescriptor> getNameLabelBitmapDescriptor(
+  String label, {
+  bool warning = false,
+}) async {
   final textPainter = TextPainter(
     text: TextSpan(
       text: label,
@@ -152,13 +157,17 @@ Future<BitmapDescriptor> getNameLabelBitmapDescriptor(String label) async {
     Rect.fromLTWH(0, 0, width.toDouble(), labelHeight),
     const Radius.circular(14),
   );
-  canvas.drawRRect(labelRect, Paint()..color = const Color(0xD9002E4D));
   canvas.drawRRect(
-    labelRect.deflate(1),
+    labelRect,
+    Paint()
+      ..color = warning ? const Color(0xF2C62828) : const Color(0xD9002E4D),
+  );
+  canvas.drawRRect(
+    labelRect.deflate(warning ? 2 : 1),
     Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2,
+      ..strokeWidth = warning ? 4 : 2,
   );
   textPainter.paint(canvas, const Offset(horizontalPadding, verticalPadding));
 

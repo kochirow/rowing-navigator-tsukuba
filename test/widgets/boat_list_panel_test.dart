@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/features/home_map/widgets/boat_list_panel.dart';
 import 'package:rowing_navigator/hooks/use_coach_watch.dart';
+import 'package:rowing_navigator/hooks/use_observer_warning_alerts.dart';
+import 'package:rowing_navigator/services/observer_warning_notifier.dart';
 import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
@@ -204,5 +206,69 @@ void main() {
       tester.getSize(find.byType(InkWell)).height,
       greaterThanOrEqualTo(44),
     );
+  });
+
+  group('漕手に鳴った警告(監視端末)', () {
+    UseObserverWarningAlerts alerts({
+      Map<String, ObserverBoatWarning> active = const {},
+      bool vibration = true,
+      void Function(bool)? onChanged,
+    }) =>
+        UseObserverWarningAlerts(
+          active: ValueNotifier(active),
+          notifications: ValueNotifier(const []),
+          vibrationEnabled: ValueNotifier(vibration),
+          setVibrationEnabled: onChanged ?? (_) {},
+        );
+
+    Future<void> pump(WidgetTester tester, UseObserverWarningAlerts w) =>
+        tester.pumpWidget(MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: BoatListPanel(
+              statuses: [
+                BoatStatus(boat: makeBoat(), ageSec: 2),
+                BoatStatus(
+                    boat: makeBoat(boatId: 'boat-9999', displayName: '大牧'),
+                    ageSec: 2),
+              ],
+              observerWarnings: w,
+            ),
+          ),
+        ));
+
+    testWidgets('音が鳴っている艇だけに種類・鳴り方・継続時間を出して強調する', (tester) async {
+      await pump(
+        tester,
+        alerts(active: {
+          'boat-1234': ObserverBoatWarning(
+            boatId: 'boat-1234',
+            categoryCode: 'o',
+            band: ObserverWarningBand.continuous,
+            since: DateTime.now().subtract(const Duration(seconds: 12)),
+          ),
+        }),
+      );
+      expect(find.textContaining('警告：他艇に注意（連続音）'), findsOneWidget);
+      expect(find.textContaining('12秒'), findsOneWidget);
+      // 警告の無い艇に「安全」と出さない
+      expect(find.textContaining('安全'), findsNothing);
+      expect(rowBorderColor(tester), isNotNull);
+    });
+
+    testWidgets('「警告をバイブで知らせる」を切り替えられる', (tester) async {
+      final changes = <bool>[];
+      await pump(tester, alerts(onChanged: changes.add));
+      expect(find.text('警告をバイブで知らせる'), findsOneWidget);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(changes, [false]);
+    });
+
+    testWidgets('監視の情報を渡さなければ切替も警告も出さない', (tester) async {
+      await pumpPanel(tester, [BoatStatus(boat: makeBoat(), ageSec: 2)]);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.textContaining('警告：'), findsNothing);
+    });
   });
 }

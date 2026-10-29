@@ -196,10 +196,18 @@ UseNavMap useNavMap() {
     String markerId,
     double lat,
     double lng,
-    String displayName,
-  ) async {
-    final icon = nameLabelIcons.value[displayName] ??=
-        await getNameLabelBitmapDescriptor(displayName);
+    String displayName, {
+    String? warningLabel,
+  }) async {
+    // 監視端末で漕手に警告の音が鳴っている艇は、種類を添えた赤い札にする。
+    final label =
+        warningLabel == null ? displayName : '$warningLabel｜$displayName';
+    final icon = nameLabelIcons
+            .value[warningLabel == null ? label : 'warning:$label'] ??=
+        await getNameLabelBitmapDescriptor(
+      label,
+      warning: warningLabel != null,
+    );
     return Marker(
       markerId: MarkerId('${markerId}_name'),
       position: LatLng(lat, lng),
@@ -272,6 +280,7 @@ UseNavMap useNavMap() {
               spec.lat,
               spec.lng,
               nameLabel,
+              warningLabel: spec.warningLabel,
             ));
           }
           return MapEntry(
@@ -537,6 +546,12 @@ class BoatMarkerRenderSpec {
   /// 使うことで、地図上の線と艇が対応する。
   final Color? color;
 
+  /// 監視端末で、漕手に警告の音が鳴っている種類の短い名前(「他艇」など)。
+  ///
+  /// **表示専用。** 受信した警告状態から作り、監視中だけ渡す。航行中の地図には
+  /// 渡さない(不変条件12)。[nameLabel] があるときだけ札に添える。
+  final String? warningLabel;
+
   const BoatMarkerRenderSpec({
     required this.markerId,
     required this.type,
@@ -548,6 +563,7 @@ class BoatMarkerRenderSpec {
     required this.snippet,
     this.nameLabel,
     this.color,
+    this.warningLabel,
   });
 
   @override
@@ -562,7 +578,8 @@ class BoatMarkerRenderSpec {
         title == other.title &&
         snippet == other.snippet &&
         nameLabel == other.nameLabel &&
-        color == other.color;
+        color == other.color &&
+        warningLabel == other.warningLabel;
   }
 
   @override
@@ -577,6 +594,7 @@ class BoatMarkerRenderSpec {
         snippet,
         nameLabel,
         color,
+        warningLabel,
       );
 }
 
