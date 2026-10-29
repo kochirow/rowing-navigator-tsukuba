@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createMapKitToken, type TokenConfig } from './token';
 import { writeChangeset } from './changeset';
 import { readBundledProfile, readFirebaseWebConfig } from './repoRead';
+import { defaultTrackLogRoot, readFieldTracks } from './trackLogs';
 import type { Project } from '../src/model/types';
 
 const toolRoot = process.cwd();
@@ -46,6 +47,11 @@ const server = createServer(async (request, response) => {
       return response.end(profile);
     }
     if (request.method === 'GET' && url.pathname === '/api/firebase-config') return json(response, 200, await readFirebaseWebConfig(repoRoot));
+    if (request.method === 'GET' && url.pathname === '/api/field-tracks') {
+      // 実機ログの航跡を読むだけ。ログのフォルダへは書かない。
+      const root = (await envFile()).TRACK_LOG_DIR || process.env.TRACK_LOG_DIR || defaultTrackLogRoot(repoRoot);
+      return json(response, 200, await readFieldTracks(root));
+    }
     if (request.method === 'POST' && url.pathname === '/api/changeset') {
       const project = JSON.parse(await body(request)) as Project;
       return json(response, 201, { path: await writeChangeset(repoRoot, project) });

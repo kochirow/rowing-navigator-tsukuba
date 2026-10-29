@@ -12,6 +12,8 @@ import { useProjectStore } from '../store/projectStore';
 import { download } from './download';
 import { prepareTemporaryObstacleImport, readTeamSafety } from '../io/firestore';
 import { promoteTemporaryObject, temporaryObstacleObjects } from '../io/temporaryObstacles';
+import { FieldTrackPanel, loadVisibleTrackDates } from './FieldTrackPanel';
+import { visibleFieldTrackLines, type FieldTrackSet } from '../model/fieldTracks';
 
 const kinds: Array<[ObjectKind, string]> = [
   ['shore', '岸（向きのある基準線）'], ['bridge', '橋（閉じた基準線）'], ['island', '中州（閉じた基準線）'],
@@ -74,6 +76,10 @@ export default function App() {
   const [importingTemporary, setImportingTemporary] = useState(false);
   const [creatingChangeset, setCreatingChangeset] = useState(false);
   const issues = useMemo(() => validateProject(project), [project]);
+  const [fieldTracks, setFieldTracks] = useState<FieldTrackSet>();
+  const [visibleTrackDates, setVisibleTrackDates] = useState<Set<string>>(loadVisibleTrackDates);
+  const [fitFieldTracksRequest, setFitFieldTracksRequest] = useState(0);
+  const fieldTrackLines = useMemo(() => visibleFieldTrackLines(fieldTracks, visibleTrackDates), [fieldTracks, visibleTrackDates]);
 
   useEffect(() => { void store.loadLast(); }, []);
   useEffect(() => {
@@ -239,12 +245,13 @@ export default function App() {
           <button className="map-tools-finish" onClick={() => setMapMode('pan')} disabled={mapMode === 'pan'}>操作を終了</button>
           <p className="map-tools-help">追加は地図をクリック、移動は番号付き頂点をドラッグ。「操作を終了」で通常の地図操作へ戻ります。</p>
         </div>
+        <FieldTrackPanel visibleDates={visibleTrackDates} onVisibleDatesChange={setVisibleTrackDates} onLoaded={setFieldTracks} onFitRequest={() => setFitFieldTracksRequest((count) => count + 1)} />
         <h2>オブジェクト</h2>
         <ObjectTree folders={project.folders} objects={project.objects} selectedId={selectedFolderId ? null : current?.id ?? null} selectedFolderId={selectedFolderId} onSelect={(id) => { setSelectedFolderId(null); store.select(id); }} onSelectFolder={(id) => { setSelectedFolderId(id); setMapMode('pan'); }} onToggleFolder={(id) => store.updateFolder(id, (folder) => ({ ...folder, expanded: !folder.expanded }), false)} onAddChildFolder={createFolder} />
         <h2>検証</h2>
         <div className="issues">{issues.map((item, index) => <p className={item.level} key={`${item.code}-${index}`}>{item.level === 'error' ? '⛔' : '⚠'} {item.message}</p>)}</div>
       </aside>
-      <section className="map-panel"><MapCanvas project={project} selected={current} mode={mapMode} onAddPoint={addPoint} onMovePoint={movePoint} onFinishInteraction={() => setMapMode('pan')} /></section>
+      <section className="map-panel"><MapCanvas project={project} selected={current} mode={mapMode} fieldTracks={fieldTrackLines} fitFieldTracksRequest={fitFieldTracksRequest} onAddPoint={addPoint} onMovePoint={movePoint} onFinishInteraction={() => setMapMode('pan')} /></section>
       <aside className="inspector">{currentFolder ? <FolderInspector folder={currentFolder} folders={project.folders} onChange={(folder) => store.updateFolder(folder.id, () => folder)} /> : <Inspector object={current} objects={project.objects} folders={project.folders} onChange={(object) => store.updateObject(object.id, () => object)} onSelect={store.select} onDrawing={() => setMapMode('add')} onMoving={() => setMapMode('move')} onPromote={promote} />}</aside>
     </section>
     {serverMessage && <div className="action-notice" role="status" aria-live="polite"><span>{serverMessage}</span><button onClick={() => setServerMessage('')} aria-label="通知を閉じる">×</button></div>}
