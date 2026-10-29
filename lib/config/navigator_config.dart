@@ -190,6 +190,13 @@ const navigationStopStepTimeout = Duration(seconds: 5);
 /// 航行終了処理全体の時間予算。超えた工程は実行せず、画面復帰を優先する。
 const navigationStopTotalBudget = Duration(seconds: 15);
 
+/// 測位が一度も届かなかった航行でも、診断だけの記録を残す最短の長さ。
+///
+/// GPSが取れない故障こそ実機ログで原因を調べたい(2026-10-29 監査 F09)。
+/// ただし開始してすぐ止めた試行まで残すと記録一覧が空の記録で埋まるので、
+/// 測位を待って諦めるまでの目安として1分とした。
+const navigationNoFixSessionMinDuration = Duration(minutes: 1);
+
 /// 航行開始前にチーム共有安全設定を最新化する待機上限。
 ///
 /// 同じチームの次回航行では設定を揃えるためサーバー取得を試みるが、圏外や

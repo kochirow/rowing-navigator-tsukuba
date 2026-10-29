@@ -158,13 +158,22 @@ class ReplayController extends ChangeNotifier {
   }
 
   /// 選択区間の端を [seconds] 秒動かす（区間の微調整）。
+  ///
+  /// 区間の最小幅は2秒。記録や選択区間がそれより短いときに clamp の
+  /// 上下限が逆転して例外にならないよう、両端を記録の範囲に収める
+  /// (2026-10-29 監査 F20)。
   void nudge({required bool start, required double seconds}) {
+    const minWidth = 2.0;
     final a = start
-        ? (_selection.start + seconds).clamp(0.0, _selection.end - 2)
+        ? (_selection.start + seconds)
+            .clamp(0.0, math.max(0.0, _selection.end - minWidth))
+            .toDouble()
         : _selection.start;
     final b = start
         ? _selection.end
-        : (_selection.end + seconds).clamp(_selection.start + 2, duration);
+        : (_selection.end + seconds)
+            .clamp(math.min(_selection.start + minWidth, duration), duration)
+            .toDouble();
     select(ReplayRange(a, b), fitMap: false, cursorAt: start ? a : b);
   }
 

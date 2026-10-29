@@ -231,22 +231,34 @@ class SessionAnalyzerService {
     return List.unmodifiable(result);
   }
 
-  /// 1Hzで記録された警告状態を、利用者が評価できる連続エピソードへ束ねる。
+  /// 記録された警告状態を、利用者が評価できる連続エピソードへ束ねる。
+  ///
+  /// 変化の無い警告の観測は記録時に5秒ごとへ間引かれる。空白が3秒を超えたら
+  /// 別件とすると、続いている1件が長さ0秒の数件に割れていた
+  /// (2026-10-29 監査 F18)。そこで区切りは「間引き周期より長い空白」か
+  /// 「その警告が safe へ戻った遷移」にする。
   List<AlertEpisode> detectAlertEpisodes(
     List<AlertDiagnosticEvent> events, {
-    Duration maximumGap = const Duration(seconds: 3),
+    Duration maximumGap = const Duration(seconds: 7),
   }) {
-    final observations = events
+    final relevant = events
         .where((event) =>
-            event.event == 'observation' &&
-            (event.phase == 'alerting' || event.phase == 'clearing'))
+            (event.event == 'observation' &&
+                (event.phase == 'alerting' || event.phase == 'clearing')) ||
+            (event.event == 'transition' && event.phase == 'safe'))
         .toList()
       ..sort((a, b) => a.t.compareTo(b.t));
-    if (observations.isEmpty) return const [];
+    if (!relevant.any((event) => event.event == 'observation')) {
+      return const [];
+    }
 
     final builders = <_AlertEpisodeBuilder>[];
     final activeByAlertId = <String, _AlertEpisodeBuilder>{};
-    for (final event in observations) {
+    for (final event in relevant) {
+      if (event.event == 'transition') {
+        activeByAlertId.remove(event.alertId);
+        continue;
+      }
       var builder = activeByAlertId[event.alertId];
       if (builder == null || event.t.difference(builder.endedAt) > maximumGap) {
         builder = _AlertEpisodeBuilder(event);

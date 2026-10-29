@@ -346,6 +346,8 @@ const diagnosticEventCatalog = <String, dynamic>{
     'stroke_trace_share': 'ストローク波形の共有試行と成功・失敗を記録した。',
     'temporary_obstacle_stream_error': '一時障害物の購読ストリームで障害を検出した。',
     'temporary_obstacle_stream_recovered': '一時障害物の購読が障害から回復した。',
+    'temporary_obstacles_truncated':
+        '臨時危険区域の取得件数が上限に達した。削除済みが枠を使い、有効な区域を読み落としている可能性がある。',
     'wakelock_state_changed': '画面消灯防止の要求状態または適用結果が変化した。',
   },
 };

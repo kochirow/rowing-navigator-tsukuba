@@ -335,29 +335,17 @@ void main() {
     });
   });
 
-  group('既知の縮退: 辺が共線のときの最接近距離', () {
-    // `_polygonDistance` が使う `_segmentsIntersect` は、外積の符号だけで
-    // 交差を判定する。**共線だが重なっていない**辺の組(平行かつ同一直線上)は
-    // 外積が全て0になるため「交差」と判定され、距離0が返る。
-    //
-    // 帰結は `minimumSeparationMeters` が実際より小さく(0に)出ること。
-    // これは `intersects` の判定には一切使われず(SATの軸判定が決める)、
-    // 効くのは `nearMissSeparationMeters`(2.0m)によるlv1(表示のみ)と
-    // 記録上のすれ違い余裕だけである。すなわち**過剰警告側**であり、
-    // 警告漏れにはならない。
-    //
-    // 実データでは、艇の六角形領域は針路に応じて回転し、区域は任意形状なので
-    // 厳密な共線(1e-9 m²)はまず起きない。上の各テストが自艇(半幅2m)と
-    // 区域(半幅3m)で寸法を変えているのは、この縮退を踏まないためである。
-    //
-    // `_segmentsIntersect` を直す場合は、このテストの期待値を実距離
-    // (下の例では 46.0m)へ更新すること。
-    test('自艇と同寸の区域(辺が共線)では最接近距離が0に潰れる', () {
+  group('辺が共線のときの最接近距離', () {
+    // 以前は `_segmentsIntersect` が外積の符号だけで交差を判定し、
+    // **共線だが重なっていない**辺の組を「交差」として距離0を返していた
+    // (2026-10-29 監査 F14)。`intersects` はSATが決めるので警告漏れでは
+    // なかったが、すれ違い余裕(nearMiss、表示のみ)と記録を汚していた。
+    test('自艇と同寸の区域(辺が共線)でも実距離を返す', () {
       final aligned = square(0, 100, 2); // 自艇と同じ半幅 → 左右の辺が共線
       final result = sweepNorth(aligned, horizonSeconds: 10);
 
-      expect(result.intersects, isFalse, reason: '検知そのものは正しい');
-      expect(result.minimumSeparationMeters, 0);
+      expect(result.intersects, isFalse);
+      expect(result.minimumSeparationMeters, closeTo(46.0, 0.01));
     });
   });
 }

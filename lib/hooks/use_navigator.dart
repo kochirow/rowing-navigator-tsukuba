@@ -1572,7 +1572,8 @@ UseNavigator useNavigator() {
       final temporary = List<StaticObstacle>.from(snapshot['obstacles'] ?? []);
       temporaryObstacles.value = temporary;
       obstacles.value = [...defaultObstacles.value, ...temporary];
-      isTemporaryObstacleReceiveUnavailable.value = false;
+      isTemporaryObstacleReceiveUnavailable.value =
+          snapshot['truncated'] == true;
     } catch (error) {
       // 通信失敗時も、直前の区域と固定危険区域を残して通常地図を継続する。
       isTemporaryObstacleReceiveUnavailable.value = true;
@@ -1581,6 +1582,10 @@ UseNavigator useNavigator() {
   }
 
   Future<void> reloadDefaultObstaclesForMap() async {
+    // 航行中は読み直さない。固定区域を最新キャッシュで作り直すと、別端末の
+    // 共有設定を「確認して反映」まで保留する仕組みを迂回し、陸上判定も
+    // 初期化される(2026-10-29 監査 F10)。臨時区域は購読で届く。
+    if (mode.value == NavMode.navigator) return;
     await loadDefaultObstacles();
     await refreshTemporaryObstaclesForMap();
   }
@@ -1938,7 +1943,13 @@ UseNavigator useNavigator() {
     SessionSummary? reuseSummary,
   }) {
     final startedAt = sessionStartedAt.value;
-    if (startedAt == null || sessionPoints.value.isEmpty) return null;
+    if (startedAt == null) return null;
+    // 測位0件でも、1分以上続いた航行は診断だけの記録として残す(監査 F09)。
+    if (sessionPoints.value.isEmpty &&
+        DateTime.now().difference(startedAt) <
+            navigationNoFixSessionMinDuration) {
+      return null;
+    }
     updateDiagnosticMetadataCounts();
     // JSON変換前のawait中に1Hz記録が追記されても、保存対象の
     // Listは変化しないようスナップショットを渡す。
@@ -2187,8 +2198,11 @@ UseNavigator useNavigator() {
         streamFactory: () => EnvService().getTemporaryObstaclesStream(),
         onData: (obstacles_) {
           final wasUnavailable = isTemporaryObstacleReceiveUnavailable.value;
-          isTemporaryObstacleReceiveUnavailable.value = false;
-          if (wasUnavailable) {
+          final truncated = obstacles_['truncated'] == true;
+          isTemporaryObstacleReceiveUnavailable.value = truncated;
+          if (truncated) {
+            appendRuntimeDiagnostic('temporary_obstacles_truncated');
+          } else if (wasUnavailable) {
             appendRuntimeDiagnostic('temporary_obstacle_stream_recovered');
           }
           final List<StaticObstacle> temporaryObs =

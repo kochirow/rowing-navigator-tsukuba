@@ -441,8 +441,25 @@ class ContinuousCollisionService {
     final abD = (b - a).cross(d - a);
     final cdA = (d - c).cross(a - c);
     final cdB = (d - c).cross(b - c);
+    // 4点が一直線に並ぶと外積がすべて0になり、離れた線分でも交差と判定して
+    // 最小距離を0mにしていた(2026-10-29 監査 F14)。この場合は範囲の重なりで見る。
+    // 外積は「線分の長さ×直線からの距離」なので、距離1µm以内を一直線とみなす。
+    final collinearTolerance = (b - a).length * 1e-6 + _epsilon;
+    if (abC.abs() <= collinearTolerance && abD.abs() <= collinearTolerance) {
+      return _withinBounds(c, a, b) ||
+          _withinBounds(d, a, b) ||
+          _withinBounds(a, c, d) ||
+          _withinBounds(b, c, d);
+    }
     return abC * abD <= _epsilon && cdA * cdB <= _epsilon;
   }
+
+  /// 一直線上にある点 [p] が線分 a-b の範囲内にあるか。
+  bool _withinBounds(_Point p, _Point a, _Point b) =>
+      p.x >= min(a.x, b.x) - _epsilon &&
+      p.x <= max(a.x, b.x) + _epsilon &&
+      p.y >= min(a.y, b.y) - _epsilon &&
+      p.y <= max(a.y, b.y) + _epsilon;
 
   double _pointSegmentDistance(_Point p, _Point a, _Point b) {
     final edge = b - a;

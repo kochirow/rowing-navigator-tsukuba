@@ -229,6 +229,39 @@ void main() {
       expect(episodes.first.id, contains('@'));
     });
 
+    // 2026-10-29 監査 F18: 5秒へ間引いた観測が3秒の空白で別件に割れていた。
+    test('5秒間隔に間引かれた観測は1件のまま、safeへ戻れば別件にする', () {
+      final continued = analyzer.detectAlertEpisodes([
+        event(0),
+        event(5),
+        event(10),
+      ]);
+      expect(continued, hasLength(1));
+      expect(continued.single.endedAt.difference(continued.single.startedAt),
+          const Duration(seconds: 10));
+
+      final cleared = AlertDiagnosticEvent(
+        t: DateTime(2026, 7, 23, 6).add(const Duration(seconds: 6)),
+        event: 'transition',
+        alertId: 'bridge-1',
+        detectorId: 'static_collision',
+        category: 'bridge',
+        phase: 'safe',
+        isPrimary: false,
+        riskLevel: 0,
+        currentOverlap: false,
+        confidence: 1,
+        dataQuality: 'good',
+      );
+      final reoccurred = analyzer.detectAlertEpisodes([
+        event(0),
+        event(5),
+        cleared,
+        event(8),
+      ]);
+      expect(reoccurred, hasLength(2));
+    });
+
     test('警告開始時刻に最も近い航跡点を返す', () {
       final start = DateTime(2026, 7, 23, 6);
       final points = makeStraightTrack(

@@ -91,7 +91,12 @@ class StaticObstacleService {
     }
     deleted.sort((a, b) =>
         (b.deletedAt ?? DateTime(0)).compareTo(a.deletedAt ?? DateTime(0)));
-    return {'obstacles': obstacles, 'deleted': deleted};
+    // 削除済みも同じ上限の枠を使うので、上限に達したら有効な区域を
+    // 読み落としている可能性がある。黙って続けず、呼出側が受信不良として
+    // 示せるようにする(2026-10-29 監査 F01)。
+    final truncated = snapshot.docs.length >=
+        FirebaseUsageBudget.maxTemporaryObstaclesPerSync;
+    return {'obstacles': obstacles, 'deleted': deleted, 'truncated': truncated};
   }
 
   /// 削除の印(`deletedAt`)が付いた文書かどうか。
