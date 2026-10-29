@@ -51,6 +51,7 @@ import '../services/env_service.dart';
 import '../services/estimator_clock.dart';
 import '../services/fixed_obstacle_calibration_service.dart';
 import '../services/geo_service.dart';
+import '../services/gnss_motion_validity.dart';
 import '../services/fix_batch_collector.dart';
 import '../services/fix_ingress_policy.dart';
 import '../services/gps_position_filter.dart';
@@ -2983,9 +2984,13 @@ UseNavigator useNavigator() {
         LatLng(rawPos.latitude, rawPos.longitude),
       );
     } else if (rawSpeed >= stoppedSpeedThreshold &&
-        rawPos.heading.isFinite &&
-        rawPos.heading >= 0 &&
-        rawPos.heading < 360) {
+        GnssMotionValidity.evaluate(
+          speedMetersPerSecond: _finiteOrNull(rawPos.speed),
+          speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+          headingDegrees: _finiteOrNull(rawPos.heading),
+          headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
+        ).headingUsable) {
+      // 推定が無いときだけの最後の手段。方位精度180°の止まった方位は使わない。
       measuredHeading = rawPos.heading;
     }
     if (measuredHeading != null) {
@@ -3214,6 +3219,9 @@ UseNavigator useNavigator() {
         accuracyMeters: rawPos.accuracy,
         speedMetersPerSecond: _finiteOrNull(rawPos.speed),
         headingDegrees: _finiteOrNull(rawPos.heading),
+        // 精度が無い(0以下)端末では今までどおり値を使う(GnssMotionValidity)。
+        speedAccuracyMetersPerSecond: _finiteOrNull(rawPos.speedAccuracy),
+        headingAccuracyDegrees: _finiteOrNull(rawPos.headingAccuracy),
       ),
     );
     final conservative = conservativeResult.output;

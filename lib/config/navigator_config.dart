@@ -62,6 +62,19 @@ const gnssHeadingFreshnessWindow = Duration(seconds: 3);
 /// 以内だった。余裕を持たせて1.0m/sとする。
 const positionDerivedSpeedAccuracyMetersPerSecond = 1.0;
 
+/// 位置の変化から方位を求める最小の移動量 [m]。
+///
+/// これ未満の移動はGNSSの位置の揺れと区別できない。1Hzでは約1.5m/s未満で
+/// 方位を更新できなくなり、[gnssHeadingFreshnessWindow] の後に方位を
+/// 「信頼できない」とする。従来から保守側の推定で使っていた値。
+const conservativeHeadingMinimumDisplacementMeters = 1.5;
+
+/// 位置の変化から速度を求めるときに、測位時刻の差を使う上限。
+///
+/// これを超える差(時計の飛び・長い欠測)は測位時刻が信用できないとみなし、
+/// 処理時刻の差へ戻す。[maxGpsTimestampAgeSeconds] と同じ10秒。
+const conservativePositionSpeedMaxFixInterval = Duration(seconds: 10);
+
 // ---------------- GPS品質・死活監視 ----------------
 
 /// 初回測位を待つ上限時間 [秒]。屋内やGPS無効時の無限待ちを防ぐ。

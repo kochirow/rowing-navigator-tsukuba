@@ -8,6 +8,7 @@ import '../models/protection_budget.dart';
 import '../utils/geo_math.dart';
 import '../utils/heading.dart';
 import 'bounded_position_set.dart';
+import 'gnss_motion_validity.dart';
 import 'motion_state_detector.dart';
 
 class ConservativeFix {
@@ -18,6 +19,12 @@ class ConservativeFix {
   final double? speedMetersPerSecond;
   final double? headingDegrees;
 
+  /// GNSSの速度精度 [m/s]。null・0以下は「精度不明」で、値をそのまま使う。
+  final double? speedAccuracyMetersPerSecond;
+
+  /// GNSSの方位精度 [度]。null・0以下は「精度不明」で、値をそのまま使う。
+  final double? headingAccuracyDegrees;
+
   const ConservativeFix({
     required this.position,
     required this.timestamp,
@@ -25,6 +32,8 @@ class ConservativeFix {
     required this.accuracyMeters,
     this.speedMetersPerSecond,
     this.headingDegrees,
+    this.speedAccuracyMetersPerSecond,
+    this.headingAccuracyDegrees,
   });
 }
 
@@ -39,6 +48,17 @@ class ConservativeSolutionOutput {
   final MotionState motionState;
   final DateTime timestamp;
 
+  /// この測位で採用した速度・方位の出どころ。
+  final GnssMotionSource speedSource;
+  final GnssMotionSource headingSource;
+
+  /// この測位1回ぶんの速度(平滑化前)。GNSSが使えればその値、使えなければ
+  /// 位置の変化から求めた値。[speedSource] が held のときは平滑化後の保持値。
+  final double observedSpeedMetersPerSecond;
+
+  /// この測位のGNSS速度・方位の判定結果。
+  final GnssMotionValidity? motionValidity;
+
   const ConservativeSolutionOutput({
     required this.representativePoint,
     required this.speedMetersPerSecond,
@@ -49,6 +69,10 @@ class ConservativeSolutionOutput {
     required this.uncertaintyMeters,
     required this.motionState,
     required this.timestamp,
+    this.speedSource = GnssMotionSource.gnss,
+    this.headingSource = GnssMotionSource.gnss,
+    this.observedSpeedMetersPerSecond = 0,
+    this.motionValidity,
   });
 }
 
@@ -64,11 +88,18 @@ class ConservativeUpdateResult {
 ///
 /// 表示・共有へ返す代表点は毎回の生fixそのもの。速度と方位だけを平滑化し、
 /// fixが古くなった時の到達可能性は位置を動かさず[BoundedPositionSet]へ残す。
+///
+/// GNSSの速度・方位は [GnssMotionValidity] で「使える」と判定したときだけ使う。
+/// iOSは漕いでいる最中にも方位精度±180°・速度精度±3.75m/sの状態に入り、
+/// 速度は実際の約1/4、方位は直前の値で止まる(2026-10-27・28 実機ログ)。
+/// 使えない間は、直前の測位からの位置の変化で速度・方位を求め直す。
 class ConservativePositionEstimator {
   final MotionStateDetector motionStateDetector;
   ConservativeSolutionOutput? _last;
   LatLng? _lastRawPosition;
   Duration? _lastElapsed;
+  DateTime? _lastTimestamp;
+  DateTime? _lastHeadingUpdateAt;
   double _speed = 0;
   double _headingDegrees = 0;
 
@@ -95,24 +126,53 @@ class ConservativePositionEstimator {
       }
     }
 
-    final rawSpeed = fix.speedMetersPerSecond != null &&
-            fix.speedMetersPerSecond!.isFinite &&
-            fix.speedMetersPerSecond! >= 0
-        ? fix.speedMetersPerSecond!
-        : dt > Duration.zero
-            ? displacement /
-                (dt.inMicroseconds / Duration.microsecondsPerSecond)
-            : 0.0;
-    _speed = previous == null ? rawSpeed : _speed * .7 + rawSpeed * .3;
-    final rawHeading = fix.headingDegrees;
-    if (rawHeading != null &&
-        rawHeading.isFinite &&
-        rawHeading >= 0 &&
-        rawHeading < 360) {
-      _headingDegrees = _blendHeading(_headingDegrees, rawHeading, .3);
-    } else if (_lastRawPosition != null && displacement >= 1.5) {
-      _headingDegrees = getHeading(_lastRawPosition!, fix.position);
+    final validity = GnssMotionValidity.evaluate(
+      speedMetersPerSecond: fix.speedMetersPerSecond,
+      speedAccuracyMetersPerSecond: fix.speedAccuracyMetersPerSecond,
+      headingDegrees: fix.headingDegrees,
+      headingAccuracyDegrees: fix.headingAccuracyDegrees,
+    );
+    // 位置の変化から速度を求める間隔は、処理時刻ではなく測位時刻で測る。
+    // OSが複数の測位をまとめて渡すと処理時刻の差は0に近づき、速度が跳ねる。
+    final positionDt = _positionDtSeconds(fix, dt);
+    final GnssMotionSource speedSource;
+    final double rawSpeed;
+    if (validity.speedUsable) {
+      speedSource = GnssMotionSource.gnss;
+      rawSpeed = fix.speedMetersPerSecond!;
+    } else if (_lastRawPosition != null && positionDt > 0) {
+      speedSource = GnssMotionSource.position;
+      rawSpeed = displacement / positionDt;
+    } else {
+      speedSource = GnssMotionSource.held;
+      rawSpeed = _speed;
     }
+    _speed = previous == null ? rawSpeed : _speed * .7 + rawSpeed * .3;
+
+    final lastHeadingUpdateAt = _lastHeadingUpdateAt;
+    final headingWasFresh = lastHeadingUpdateAt != null &&
+        fix.timestamp.difference(lastHeadingUpdateAt) <=
+            gnssHeadingFreshnessWindow;
+    final GnssMotionSource headingSource;
+    if (validity.headingUsable) {
+      headingSource = GnssMotionSource.gnss;
+      _headingDegrees = _updateHeading(fix.headingDegrees!, headingWasFresh);
+      _lastHeadingUpdateAt = fix.timestamp;
+    } else if (_lastRawPosition != null &&
+        displacement >= conservativeHeadingMinimumDisplacementMeters) {
+      headingSource = GnssMotionSource.position;
+      _headingDegrees = _updateHeading(
+        _normalize(getHeading(_lastRawPosition!, fix.position)),
+        headingWasFresh,
+      );
+      _lastHeadingUpdateAt = fix.timestamp;
+    } else {
+      headingSource = GnssMotionSource.held;
+    }
+    final headingUpdatedAt = _lastHeadingUpdateAt;
+    final headingIsFresh = headingUpdatedAt != null &&
+        fix.timestamp.difference(headingUpdatedAt) <=
+            gnssHeadingFreshnessWindow;
     final motion = motionStateDetector.update(
       rawGnssSpeedMetersPerSecond: rawSpeed,
       rawDisplacementMeters: displacement,
@@ -121,8 +181,12 @@ class ConservativePositionEstimator {
     );
     final uncertainty =
         math.max(1.0, fix.accuracyMeters.isFinite ? fix.accuracyMeters : 5.0);
+    // 方位は「使えるGNSSの値」か「位置の変化」で直近3秒以内に更新できて
+    // いるときだけ信頼する。保持しているだけの方位は、停止中の回頭などで
+    // 実際の向きから外れ得る。
     final reliable = _speed >= stoppedSpeedThreshold &&
         _headingDegrees.isFinite &&
+        headingIsFresh &&
         motion != MotionState.stopped;
     final output = ConservativeSolutionOutput(
       representativePoint: fix.position,
@@ -138,10 +202,15 @@ class ConservativePositionEstimator {
       uncertaintyMeters: uncertainty,
       motionState: motion,
       timestamp: fix.timestamp,
+      speedSource: speedSource,
+      headingSource: headingSource,
+      observedSpeedMetersPerSecond: rawSpeed,
+      motionValidity: validity,
     );
     _last = output;
     _lastRawPosition = fix.position;
     _lastElapsed = fix.elapsed;
+    _lastTimestamp = fix.timestamp;
     return ConservativeUpdateResult(output: output, accepted: true);
   }
 
@@ -176,6 +245,10 @@ class ConservativePositionEstimator {
       uncertaintyMeters: budget.totalMeters,
       motionState: previous.motionState,
       timestamp: previous.timestamp,
+      speedSource: previous.speedSource,
+      headingSource: previous.headingSource,
+      observedSpeedMetersPerSecond: previous.observedSpeedMetersPerSecond,
+      motionValidity: previous.motionValidity,
     );
   }
 
@@ -183,10 +256,34 @@ class ConservativePositionEstimator {
     _last = null;
     _lastRawPosition = null;
     _lastElapsed = null;
+    _lastTimestamp = null;
+    _lastHeadingUpdateAt = null;
     _speed = 0;
     _headingDegrees = 0;
     motionStateDetector.reset();
   }
+
+  /// 方位が新しければ平滑化(前回0.7・今回0.3)し、古ければ(初回・停止後の
+  /// 回頭など)そのまま採る。古い方位から少しずつ寄せると、数秒間
+  /// 実際と違う向きを使い続けることになる。
+  double _updateHeading(double next, bool previousIsFresh) =>
+      previousIsFresh ? _blendHeading(_headingDegrees, next, .3) : next;
+
+  double _positionDtSeconds(ConservativeFix fix, Duration elapsedDt) {
+    final lastTimestamp = _lastTimestamp;
+    if (lastTimestamp != null) {
+      final fixDt = fix.timestamp.difference(lastTimestamp);
+      if (fixDt > Duration.zero &&
+          fixDt <= conservativePositionSpeedMaxFixInterval) {
+        return fixDt.inMicroseconds / Duration.microsecondsPerSecond;
+      }
+    }
+    return elapsedDt > Duration.zero
+        ? elapsedDt.inMicroseconds / Duration.microsecondsPerSecond
+        : 0;
+  }
+
+  static double _normalize(double degrees) => (degrees % 360 + 360) % 360;
 
   static double _blendHeading(double previous, double next, double weight) {
     final delta = ((next - previous + 540) % 360) - 180;
