@@ -1572,7 +1572,8 @@ UseNavigator useNavigator() {
       final temporary = List<StaticObstacle>.from(snapshot['obstacles'] ?? []);
       temporaryObstacles.value = temporary;
       obstacles.value = [...defaultObstacles.value, ...temporary];
-      isTemporaryObstacleReceiveUnavailable.value = false;
+      isTemporaryObstacleReceiveUnavailable.value =
+          snapshot['truncated'] == true;
     } catch (error) {
       // 通信失敗時も、直前の区域と固定危険区域を残して通常地図を継続する。
       isTemporaryObstacleReceiveUnavailable.value = true;
@@ -2197,8 +2198,11 @@ UseNavigator useNavigator() {
         streamFactory: () => EnvService().getTemporaryObstaclesStream(),
         onData: (obstacles_) {
           final wasUnavailable = isTemporaryObstacleReceiveUnavailable.value;
-          isTemporaryObstacleReceiveUnavailable.value = false;
-          if (wasUnavailable) {
+          final truncated = obstacles_['truncated'] == true;
+          isTemporaryObstacleReceiveUnavailable.value = truncated;
+          if (truncated) {
+            appendRuntimeDiagnostic('temporary_obstacles_truncated');
+          } else if (wasUnavailable) {
             appendRuntimeDiagnostic('temporary_obstacle_stream_recovered');
           }
           final List<StaticObstacle> temporaryObs =
