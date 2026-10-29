@@ -65,4 +65,30 @@ void main() {
       expect(v.headingAccuracyKnown, isFalse);
     }
   });
+
+  group('切り替わりの診断', () {
+    test('航行の最初から使えない項目だけを1件ずつ返す', () {
+      final stuck = evaluate(speedAccuracy: 3.75, headingAccuracy: 180);
+      final changes = stuck.diagnosticChangesFrom(null);
+      expect(changes.map((c) => c['field']), ['speed', 'heading']);
+      expect(changes.first['usable'], isFalse);
+      expect(changes.first['reason'], 'accuracy');
+      expect(evaluate().diagnosticChangesFrom(null), isEmpty);
+    });
+
+    test('変わらなければ何も返さず、片方だけ変われば片方だけ返す', () {
+      final normal = evaluate();
+      expect(evaluate().diagnosticChangesFrom(normal), isEmpty);
+      final headingLost = evaluate(headingAccuracy: 180);
+      final changes = headingLost.diagnosticChangesFrom(
+        normal,
+        context: {'rawCourseDegrees': 270.0},
+      );
+      expect(changes, hasLength(1));
+      expect(changes.single['field'], 'heading');
+      expect(changes.single['rawCourseDegrees'], 270.0);
+      expect(
+          normal.diagnosticChangesFrom(headingLost).single['usable'], isTrue);
+    });
+  });
 }

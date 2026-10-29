@@ -34,6 +34,13 @@ class TrackPoint {
   final double? lateDriveSpeedGainMetersPerSecond;
   final double? recoverySpeedRetention;
 
+  /// OSが返した生の進行方位 [度](負は無効)。[heading] はアプリが採用した方位。
+  final double? rawCourseDegrees;
+
+  /// 採用した速度・方位の出どころ(`gnss` / `position` / `held`)。
+  final String? speedSource;
+  final String? headingSource;
+
   TrackPoint({
     required this.t,
     this.elapsedMs,
@@ -61,6 +68,9 @@ class TrackPoint {
     this.catchSpeedLossMetersPerSecond,
     this.lateDriveSpeedGainMetersPerSecond,
     this.recoverySpeedRetention,
+    this.rawCourseDegrees,
+    this.speedSource,
+    this.headingSource,
   });
 
   Map<String, dynamic> toJson() => {
@@ -105,6 +115,9 @@ class TrackPoint {
               lateDriveSpeedGainMetersPerSecond,
         if (recoverySpeedRetention != null)
           'recoverySpeedRetention': recoverySpeedRetention,
+        if (rawCourseDegrees != null) 'rawCourseDegrees': rawCourseDegrees,
+        if (speedSource != null) 'speedSource': speedSource,
+        if (headingSource != null) 'headingSource': headingSource,
       };
 
   factory TrackPoint.fromJson(Map<String, dynamic> json) => TrackPoint(
@@ -144,6 +157,9 @@ class TrackPoint {
             (json['lateDriveSpeedGainMetersPerSecond'] as num?)?.toDouble(),
         recoverySpeedRetention:
             (json['recoverySpeedRetention'] as num?)?.toDouble(),
+        rawCourseDegrees: (json['rawCourseDegrees'] as num?)?.toDouble(),
+        speedSource: json['speedSource'] as String?,
+        headingSource: json['headingSource'] as String?,
       );
 }
 

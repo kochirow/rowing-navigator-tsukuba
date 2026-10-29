@@ -92,6 +92,34 @@ class GnssMotionValidity {
   static bool _known(double? accuracy) =>
       accuracy != null && accuracy.isFinite && accuracy > 0;
 
+  /// [previous] から「使える/使えない」が切り替わった項目ごとの診断の詳細。
+  ///
+  /// 速度・方位を別々に1件ずつ返す。[previous] が null(航行の最初)のときは
+  /// 「使える」から始まったものとみなし、最初から使えない項目だけを返す。
+  List<Map<String, Object?>> diagnosticChangesFrom(
+    GnssMotionValidity? previous, {
+    Map<String, Object?> context = const {},
+  }) {
+    final changes = <Map<String, Object?>>[];
+    if (speedUsable != (previous?.speedUsable ?? true)) {
+      changes.add({
+        'field': 'speed',
+        'usable': speedUsable,
+        'reason': speedReason.name,
+        ...context,
+      });
+    }
+    if (headingUsable != (previous?.headingUsable ?? true)) {
+      changes.add({
+        'field': 'heading',
+        'usable': headingUsable,
+        'reason': headingReason.name,
+        ...context,
+      });
+    }
+    return changes;
+  }
+
   Map<String, Object?> toDiagnosticDetails() => {
         'speedUsable': speedUsable,
         'headingUsable': headingUsable,

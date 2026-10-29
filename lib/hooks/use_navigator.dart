@@ -273,6 +273,7 @@ UseNavigator useNavigator() {
   final gpsRecoveryProbeAttempted = useRef(false);
   final gpsRecoveryProbeInFlight = useRef(false);
   final lastAcceptedGpsSpeedMetersPerSecond = useRef<double?>(null);
+  final lastGnssMotionValidity = useRef<GnssMotionValidity?>(null);
   // 無通知とみなす時間を状況で切り替えるために、直前の測位精度も覚える。
   final lastAcceptedGpsAccuracyMeters = useRef<double?>(null);
   // 受理した測位そのものの時刻。ポーリングが stream と同じ測位を
@@ -1210,6 +1211,13 @@ UseNavigator useNavigator() {
       'gpsStreamRecovering': isGpsStreamRecovering.value,
       'imuFusionQuality': strokeRate.motion.value?.quality.name,
       'imuFusionConfidence': strokeRate.motion.value?.confidence,
+      // 直近の速度・方位の判定(位置の品質 gpsQuality とは別物)。
+      ...?lastGnssMotionValidity.value?.toDiagnosticDetails().map(
+            (key, value) => MapEntry('gnssMotion.$key', value),
+          ),
+      'speedSource': conservativePositionEstimator.lastOutput?.speedSource.name,
+      'headingSource':
+          conservativePositionEstimator.lastOutput?.headingSource.name,
       'distancePerStrokeMeters':
           strokeRate.motion.value?.distancePerStrokeMeters,
       'lastGpsAgeMs':
@@ -3250,6 +3258,24 @@ UseNavigator useNavigator() {
       );
     }
     final conservative = conservativeResult.output;
+    final motionValidity =
+        conservativeResult.accepted ? conservative?.motionValidity : null;
+    if (motionValidity != null) {
+      for (final change in motionValidity.diagnosticChangesFrom(
+        lastGnssMotionValidity.value,
+        context: {
+          'rawSpeedMetersPerSecond': _finiteOrNull(rawPos.speed),
+          'speedAccuracyMetersPerSecond': _finiteOrNull(rawPos.speedAccuracy),
+          'rawCourseDegrees': _finiteOrNull(rawPos.heading),
+          'headingAccuracyDegrees': _finiteOrNull(rawPos.headingAccuracy),
+          'speedSource': conservative!.speedSource.name,
+          'headingSource': conservative.headingSource.name,
+        },
+      )) {
+        appendRuntimeDiagnostic('gnss_motion_validity_changed', change);
+      }
+      lastGnssMotionValidity.value = motionValidity;
+    }
     final selectedEstimate =
         primarySolution == PrimarySolution.conservative && conservative != null
             ? RobustPositionEstimate(
@@ -3503,6 +3529,9 @@ UseNavigator useNavigator() {
         lateDriveSpeedGainMetersPerSecond:
             motion?.lateDriveSpeedGainMetersPerSecond,
         recoverySpeedRetention: motion?.recoverySpeedRetention,
+        rawCourseDegrees: _finiteOrNull(rawPos.heading),
+        speedSource: conservative?.speedSource.name,
+        headingSource: conservative?.headingSource.name,
       ));
       // 初回fixはすぐ、以後は60秒ごとに保存。ファイルI/Oは
       // awaitせず、衝突判定と次のGPS fixをブロックしない。
@@ -4739,6 +4768,7 @@ UseNavigator useNavigator() {
       gpsRecoveryProbeAttempted.value = false;
       gpsRecoveryProbeInFlight.value = false;
       lastAcceptedGpsSpeedMetersPerSecond.value = null;
+      lastGnssMotionValidity.value = null;
       lastAcceptedGpsAccuracyMeters.value = null;
       lastValidGpsTimestamp.value = null;
       gpsPollInFlight.value = false;
@@ -5044,6 +5074,7 @@ UseNavigator useNavigator() {
         gpsRecoveryProbeAttempted.value = false;
         gpsRecoveryProbeInFlight.value = false;
         lastAcceptedGpsSpeedMetersPerSecond.value = null;
+        lastGnssMotionValidity.value = null;
         lastAcceptedGpsAccuracyMeters.value = null;
         lastValidGpsTimestamp.value = null;
         gpsPollInFlight.value = false;
