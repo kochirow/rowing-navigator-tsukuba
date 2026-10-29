@@ -26,6 +26,7 @@ const {
 const {
   get,
   ref,
+  remove,
   set,
   update,
 } = require("firebase/database");
@@ -1286,6 +1287,28 @@ async function run() {
         }),
       );
 
+      // アプリ(TeamService._revokeRtdbMember)と同じ順: 所属を単独で外し、
+      // 共有データ、team_users の順に消してから招待コードを差し替える。
+      await assertSucceeds(remove(ref(u1.database(), `team_members/${teamA}/u2`)));
+      // 既に外れた所属をもう一度消すのは拒否される。アプリはこの
+      // permission-denied を「既に外れている」として扱い、再操作を完了させる。
+      await assertFails(remove(ref(u1.database(), `team_members/${teamA}/u2`)));
+      await assertSucceeds(
+        update(ref(u1.database()), {
+          [`teams/${teamA}/live_positions/u2`]: null,
+          [`teams/${teamA}/boat_profiles/u2`]: null,
+          [`teams/${teamA}/stroke_traces/u2`]: null,
+        }),
+      );
+      // 共有データの削除は何度行っても通る(再操作で止まらない)。
+      await assertSucceeds(
+        update(ref(u1.database()), {
+          [`teams/${teamA}/live_positions/u2`]: null,
+          [`teams/${teamA}/boat_profiles/u2`]: null,
+          [`teams/${teamA}/stroke_traces/u2`]: null,
+        }),
+      );
+      await assertSucceeds(remove(ref(u1.database(), "team_users/u2")));
       await assertSucceeds(
         update(ref(u1.database()), {
           [`team_meta/${teamA}/inviteCode`]: rotatedInviteA,
@@ -1295,10 +1318,6 @@ async function run() {
             ownerUid: "u1",
             createdAt: Date.now(),
           },
-          [`teams/${teamA}/live_positions/u2`]: null,
-          [`teams/${teamA}/boat_profiles/u2`]: null,
-          "team_users/u2": null,
-          [`team_members/${teamA}/u2`]: null,
         }),
       );
       await assertFails(get(ref(u2.database(), `teams/${teamA}/live_positions`)));

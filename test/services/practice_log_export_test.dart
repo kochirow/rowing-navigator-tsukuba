@@ -93,6 +93,44 @@ void main() {
     expect(manifest['anonymized'], isTrue);
   });
 
+  // 2026-10-29 監査 F11: 許可された表示名「=1+1」がそのままCSVに入っていた。
+  test('数式として読まれうる表示名は先頭に引用符を付けて出す', () {
+    final files = service.buildFiles(
+      logFor(),
+      [livePoint(boatId: 'a', displayName: '=1+1')],
+      const [],
+    );
+    for (final name in ['boats.csv', 'tracks.csv']) {
+      expect(files[name], contains("'=1+1"), reason: name);
+      expect(
+          files[name], isNot(contains(RegExp(r'(^|,)=1\+1', multiLine: true))),
+          reason: name);
+    }
+  });
+
+  test('匿名化するとイベントの艇IDも航跡と同じ別名にし、記録者IDを出さない', () {
+    const uid = 'synthetic-persistent-uid';
+    final files = service.buildFiles(
+      logFor(),
+      [livePoint(boatId: uid, displayName: '一号艇')],
+      [
+        PracticeLogEvent(
+          t: start.add(const Duration(seconds: 30)),
+          elapsedMs: 30000,
+          type: 'boat_lost',
+          details: const {'boatId': uid, 'ageSec': 12},
+        ),
+      ],
+      anonymized: true,
+    );
+    expect(files['events.jsonl'], isNot(contains(uid)));
+    expect(files['events.jsonl'], contains('boat-1'));
+    final manifest =
+        jsonDecode(files['practice_manifest.json']!) as Map<String, dynamic>;
+    expect(manifest.containsKey('recordedBy'), isFalse);
+    expect((manifest['boats'] as List).single['lostCount'], 1);
+  });
+
   test('欠測秒数をgapイベントから積算し、受信途絶は件数で併記する', () {
     final files = service.buildFiles(
       logFor(),

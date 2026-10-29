@@ -825,6 +825,7 @@ UseNavigator useNavigator() {
         ? null
         : '${diagnosticAlertRef(directiveCandidate)}:${directive.mode.name}';
     final previousAudioKey = lastDiagnosticAudioKey.value;
+    final primaryCandidate = candidateById[result.snapshot.primaryAlertId];
     if (previousAudioKey != audioKey) {
       appendDiagnosticEvent(SessionDiagnosticEvent(
         t: result.snapshot.evaluatedAt,
@@ -833,10 +834,16 @@ UseNavigator useNavigator() {
           'source': 'safety_orchestrator',
           'previous': previousAudioKey,
           'next': audioKey,
-          'directiveAlertId': directive?.alertId,
+          // 警告IDは他艇のUIDを含むので、生の値ではなくセッション内の別名で
+          // 残す(manifest の約束どおり。2026-10-29 監査 F17)。
+          'directiveAlertId': directiveCandidate == null
+              ? null
+              : diagnosticAlertRef(directiveCandidate),
           'directiveCandidateFound': directiveCandidate != null,
           'directiveMode': directive?.mode.name,
-          'primaryAlertId': result.snapshot.primaryAlertId,
+          'primaryAlertId': primaryCandidate == null
+              ? null
+              : diagnosticAlertRef(primaryCandidate),
           'activeAlertCount': result.snapshot.activeAlerts.length,
         },
       ));
