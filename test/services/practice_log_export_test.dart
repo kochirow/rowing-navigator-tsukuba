@@ -108,6 +108,29 @@ void main() {
     }
   });
 
+  test('匿名化するとイベントの艇IDも航跡と同じ別名にし、記録者IDを出さない', () {
+    const uid = 'synthetic-persistent-uid';
+    final files = service.buildFiles(
+      logFor(),
+      [livePoint(boatId: uid, displayName: '一号艇')],
+      [
+        PracticeLogEvent(
+          t: start.add(const Duration(seconds: 30)),
+          elapsedMs: 30000,
+          type: 'boat_lost',
+          details: const {'boatId': uid, 'ageSec': 12},
+        ),
+      ],
+      anonymized: true,
+    );
+    expect(files['events.jsonl'], isNot(contains(uid)));
+    expect(files['events.jsonl'], contains('boat-1'));
+    final manifest =
+        jsonDecode(files['practice_manifest.json']!) as Map<String, dynamic>;
+    expect(manifest.containsKey('recordedBy'), isFalse);
+    expect((manifest['boats'] as List).single['lostCount'], 1);
+  });
+
   test('欠測秒数をgapイベントから積算し、受信途絶は件数で併記する', () {
     final files = service.buildFiles(
       logFor(),

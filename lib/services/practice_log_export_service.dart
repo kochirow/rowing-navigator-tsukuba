@@ -90,7 +90,10 @@ class PracticeLogExportService {
       };
     }).toList();
     final manifest = {
-      ...log.toJson()..remove('diagnosticsSharedAt'),
+      ...log.toJson()
+        ..remove('diagnosticsSharedAt')
+        // 匿名化した書き出しに、記録した端末の利用者IDを残さない。
+        ..removeWhere((key, _) => anonymized && key == 'recordedBy'),
       'endedAt': log.endedAt?.toUtc().toIso8601String(),
       'app': {'version': Message.currentAppVersion, 'buildNumber': 'unknown'},
       'device': {
@@ -154,7 +157,10 @@ class PracticeLogExportService {
             '${_csv(b['alias'])},${b['sessionCount']},${b['pointCount']}')
       ].join('\n')}\n',
       'tracks.csv': tracks.toString(),
-      'events.jsonl': eventList.map((e) => jsonEncode(e.toJson())).join('\n') +
+      'events.jsonl': eventList
+              .map((e) => jsonEncode(
+                  anonymized ? _anonymizedEvent(e, alias) : e.toJson()))
+              .join('\n') +
           (eventList.isEmpty ? '' : '\n')
     };
   }
@@ -204,6 +210,21 @@ class PracticeLogExportService {
       if (seconds > 0) total += seconds;
     }
     return total;
+  }
+
+  /// 匿名化した書き出しでは、イベントの艇ID(利用者ID)も航跡と同じ別名へ
+  /// 置き換える。航跡だけ別名にしても、イベントに生のIDが残ると艇を
+  /// 特定できてしまう(2026-10-29 監査 F17 と同じ問題)。
+  static Map<String, dynamic> _anonymizedEvent(
+    PracticeLogEvent event,
+    String Function(String id, String? displayName) alias,
+  ) {
+    final json = event.toJson();
+    final boatId = event.details['boatId'];
+    if (boatId is String) {
+      json['details'] = {...event.details, 'boatId': alias(boatId, null)};
+    }
+    return json;
   }
 
   static String _csv(Object? value) {
