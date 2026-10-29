@@ -44,8 +44,7 @@ class ObserverBoatWarning {
   /// 種類の短い名前(地図の艇印に添える)。
   String get categoryLabel => observerWarningCategoryLabel(categoryCode);
 
-  String get bandLabel =>
-      band == ObserverWarningBand.continuous ? '連続音' : '単発';
+  String get bandLabel => band == ObserverWarningBand.continuous ? '連続音' : '単発';
 
   /// 艇一覧の行(「警告：他艇に注意(連続音)」)。
   String get listLabel => '警告：$categoryLabelに注意（$bandLabel）';

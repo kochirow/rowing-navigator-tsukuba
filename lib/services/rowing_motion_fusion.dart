@@ -411,8 +411,7 @@ class RowingMotionFusion {
     final quality = confidence >= 0.72 && sampleCoverage >= 0.75
         ? RowingMotionQuality.good
         : RowingMotionQuality.degraded;
-    final strokeSpeedAccuracy =
-        (1.45 - confidence).clamp(0.45, 1.4).toDouble();
+    final strokeSpeedAccuracy = (1.45 - confidence).clamp(0.45, 1.4).toDouble();
     final speedAccuracy = baseFromGnss || _baseSpeedAccuracy == null
         ? strokeSpeedAccuracy
         : math.max(strokeSpeedAccuracy, _baseSpeedAccuracy!);
