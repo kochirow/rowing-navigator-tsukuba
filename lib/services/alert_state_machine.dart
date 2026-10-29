@@ -137,9 +137,12 @@ class AlertCandidateComparator {
     result = _boolRank(a.currentOverlap).compareTo(_boolRank(b.currentOverlap));
     if (result != 0) return result;
 
-    // 橋と橋脚が同時に重なったときは、距離やIDに関係なく
-    // より具体的な橋脚の表示・音声を優先する。
-    result = _bridgePierBridgeOrder(a, b);
+    // 重なっている候補どうしでは、岸・橋(桁)を後ろへ回す。橋と橋脚が
+    // 同時に重なれば、距離やIDに関係なくより具体的な橋脚が先になる。
+    // 「橋脚 > 橋」だけの一対の特例にすると、距離順と混ざって
+    // 橋脚 < 橋 < 他艇 < 橋脚 と循環する(2026-10-29 監査 F16)ため、
+    // 全候補に同じキーで段を付ける。
+    result = _passThroughOverlapRank(a).compareTo(_passThroughOverlapRank(b));
     if (result != 0) return result;
 
     result = _deadlineMicros(a).compareTo(_deadlineMicros(b));
@@ -190,7 +193,8 @@ class AlertCandidateComparator {
   /// 種類によらず同じ段にまとめた。結果として、橋をくぐる間に前方の
   /// 橋脚へ近づくときも「橋脚に注意」が先に流れる。
   ///
-  /// 表示primary([compare])は変えない。画面の縁の点滅は音声の対象に従う。
+  /// 表示primary([compare])は「いま重なっている」を先に見たまま、重なりの中で
+  /// 岸・橋を後ろへ回すだけ。画面の縁の点滅は音声の対象に従う。
   int compareForAudio(AlertCandidate a, AlertCandidate b) {
     var result = _behaviorBand(a.behavior).compareTo(_behaviorBand(b.behavior));
     if (result != 0) return result;
@@ -219,11 +223,16 @@ class AlertCandidateComparator {
       _selectWithLock(
         ordered(candidates),
         currentPrimaryAlertId: currentPrimaryAlertId,
+        tierOf: _passThroughOverlapRank,
       );
 
+  /// [tierOf] は並べ替えで behavior・重なりの次に見る段。段が上がる
+  /// 切替(岸・橋の重なり → 他の重なり)は、揺れ止めのロックで止めない。
+  /// ロックは同じ段の中の揺れ止めにだけ使う(2026-10-29 監査 F05)。
   AlertCandidate? _selectWithLock(
     List<AlertCandidate> sorted, {
     String? currentPrimaryAlertId,
+    required int Function(AlertCandidate) tierOf,
   }) {
     if (sorted.isEmpty) return null;
     final best = sorted.first;
@@ -240,11 +249,11 @@ class AlertCandidateComparator {
       }
     }
     if (current == null || !_lockCompatible(current, best)) return best;
+    if (tierOf(current) != tierOf(best)) return best;
 
     // 逆走注意はカーブ案内より常に優先する。通常の2秒ロックで
     // 割込みが遅れると、同時区域でカーブ音が鳴り続けてしまう。
     if (_reverseMustPreemptCurve(current, best)) return best;
-    if (_bridgePierMustPreemptBridge(current, best)) return best;
 
     final currentDeadline = _deadlineMicros(current);
     final bestDeadline = _deadlineMicros(best);
@@ -267,7 +276,11 @@ class AlertCandidateComparator {
         .where((candidate) => candidate.audioAsset != null)
         .toList()
       ..sort(compareForAudio);
-    return _selectWithLock(sorted, currentPrimaryAlertId: currentAudioAlertId);
+    return _selectWithLock(
+      sorted,
+      currentPrimaryAlertId: currentAudioAlertId,
+      tierOf: _audioOverlapTier,
+    );
   }
 
   bool _lockCompatible(AlertCandidate current, AlertCandidate challenger) {
@@ -289,21 +302,14 @@ class AlertCandidateComparator {
     return 0;
   }
 
-  static bool _bridgePierMustPreemptBridge(
-    AlertCandidate current,
-    AlertCandidate challenger,
-  ) =>
-      current.currentOverlap &&
-      challenger.currentOverlap &&
-      current.category == 'bridge' &&
-      challenger.category == 'bridgePier';
 
-  static int _bridgePierBridgeOrder(AlertCandidate a, AlertCandidate b) {
-    if (!a.currentOverlap || !b.currentOverlap) return 0;
-    if (a.category == 'bridgePier' && b.category == 'bridge') return -1;
-    if (a.category == 'bridge' && b.category == 'bridgePier') return 1;
-    return 0;
-  }
+  /// 重なっている岸・橋(桁)だけ 1。重なっていない候補は 0 で、
+  /// 重なりの有無は先に [compare] が見ている。
+  static int _passThroughOverlapRank(AlertCandidate candidate) =>
+      candidate.currentOverlap &&
+              _passThroughCategories.contains(candidate.category)
+          ? 1
+          : 0;
 
   static int _behaviorBand(AlertBehavior behavior) => switch (behavior) {
         AlertBehavior.continuousAction => 0,

@@ -568,6 +568,92 @@ void main() {
         bridgeOverlap.alertId,
       );
     });
+
+    // 2026-10-29 監査 F05: 岸・橋の読み上げが鳴っている最中に、既に重なった
+    // 状態の他艇が見つかると、2秒ロックが岸・橋を保持していた。
+    test('鳴っている岸・橋の音声から、重なった他艇へロックを待たずに切り替わる', () {
+      final boatOverlap = voiced(candidate(
+        'other_boat/b2',
+        0,
+        'fix',
+        overlap: true,
+        category: 'other_boat',
+      ));
+      for (final category in ['shore', 'bridge']) {
+        final passing = voiced(candidate(
+          '$category/x',
+          0,
+          'fix',
+          overlap: true,
+          category: category,
+        ));
+        expect(
+          comparator.selectAudioPrimary(
+            [passing, boatOverlap],
+            currentAudioAlertId: passing.alertId,
+          )?.alertId,
+          boatOverlap.alertId,
+          reason: category,
+        );
+        // 逆向き(他艇が鳴っている)では岸・橋へ戻らない。
+        expect(
+          comparator.selectAudioPrimary(
+            [passing, boatOverlap],
+            currentAudioAlertId: boatOverlap.alertId,
+          )?.alertId,
+          boatOverlap.alertId,
+          reason: category,
+        );
+      }
+    });
+
+    test('同じ段どうしの揺れ止めロックは残る', () {
+      final boatA = voiced(candidate(
+        'other_boat/a',
+        0,
+        'fix',
+        deadline: const Duration(seconds: 6),
+        category: 'other_boat',
+      ));
+      final boatB = voiced(candidate(
+        'other_boat/b',
+        0,
+        'fix',
+        deadline: const Duration(seconds: 5),
+        category: 'other_boat',
+      ));
+      expect(
+        comparator.selectAudioPrimary(
+          [boatA, boatB],
+          currentAudioAlertId: boatA.alertId,
+        )?.alertId,
+        boatA.alertId,
+      );
+    });
+  });
+
+  // 2026-10-29 監査 F16: 「橋脚 > 橋」の一対の特例と距離順が混ざり、
+  // 橋脚(3m) < 橋(1m) < 他艇(2m) < 橋脚 と循環していた。
+  test('重なっている橋脚・橋・他艇の表示順は入力順によらない', () {
+    const comparator = AlertCandidateComparator();
+    AlertCandidate overlapping(String category, double distance) =>
+        candidate('$category/x', 0, 'fix', overlap: true, category: category)
+            .copyWith(distanceMeters: distance);
+    final inputs = [
+      overlapping('bridgePier', 3),
+      overlapping('bridge', 1),
+      overlapping('other_boat', 2),
+    ];
+    final permutations = [
+      [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0], //
+    ];
+    for (final order in permutations) {
+      final sorted = comparator.ordered(order.map((i) => inputs[i]));
+      expect(
+        sorted.map((c) => c.alertId).toList(),
+        ['other_boat/x', 'bridgePier/x', 'bridge/x'],
+      );
+    }
   });
 
   test('反復、単発、異常、案内、表示のみの順で音声対象を調停する', () {
