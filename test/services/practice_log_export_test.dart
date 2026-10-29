@@ -93,6 +93,21 @@ void main() {
     expect(manifest['anonymized'], isTrue);
   });
 
+  // 2026-10-29 監査 F11: 許可された表示名「=1+1」がそのままCSVに入っていた。
+  test('数式として読まれうる表示名は先頭に引用符を付けて出す', () {
+    final files = service.buildFiles(
+      logFor(),
+      [livePoint(boatId: 'a', displayName: '=1+1')],
+      const [],
+    );
+    for (final name in ['boats.csv', 'tracks.csv']) {
+      expect(files[name], contains("'=1+1"), reason: name);
+      expect(
+          files[name], isNot(contains(RegExp(r'(^|,)=1\+1', multiLine: true))),
+          reason: name);
+    }
+  });
+
   test('欠測秒数をgapイベントから積算し、受信途絶は件数で併記する', () {
     final files = service.buildFiles(
       logFor(),

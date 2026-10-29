@@ -207,7 +207,13 @@ class PracticeLogExportService {
   }
 
   static String _csv(Object? value) {
-    final text = value?.toString() ?? '';
+    var text = value?.toString() ?? '';
+    // 表示名など利用者が書いた文字列は、表計算ソフトで数式として
+    // 読まれないよう先頭に ' を付ける(2026-10-29 監査 F11、OWASP CSV Injection)。
+    // 数値は負の値を壊さないよう対象にしない。
+    if (value is String && text.startsWith(RegExp(r'[=+\-@\t\r]'))) {
+      text = "'$text";
+    }
     return text.contains(RegExp('[,"\\r\\n]'))
         ? '"${text.replaceAll('"', '""')}"'
         : text;
