@@ -107,8 +107,7 @@ class _StalledPlatform extends AudioplayersPlatform {
 void main() {
   // 2026-10-29 監査 F06: 復旧が pause の後で1回失敗すると paused のまま残り、
   // 監視が「playingなのに進まない」にしか反応しないため二度と復旧されなかった。
-  testWidgets('ループ警告の復旧が1回失敗しても再試行し、続けば故障を表示する',
-      (tester) async {
+  testWidgets('ループ警告の復旧が1回失敗しても再試行し、続けば故障を表示する', (tester) async {
     final platform = _StalledPlatform();
     AudioplayersPlatformInterface.instance = platform;
     GlobalAudioplayersPlatformInterface.instance = _FakeGlobal();
@@ -132,8 +131,8 @@ void main() {
 
     // 監視は DateTime.now を直接使うので、実時間も進める。
     for (var i = 0; i < 20; i++) {
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(seconds: 1)));
+      await tester
+          .runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
       await tester.pump(const Duration(seconds: 1));
       for (var j = 0; j < 5; j++) {
         await tester.pump();

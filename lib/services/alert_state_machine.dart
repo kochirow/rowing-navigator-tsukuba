@@ -302,7 +302,6 @@ class AlertCandidateComparator {
     return 0;
   }
 
-
   /// 重なっている岸・橋(桁)だけ 1。重なっていない候補は 0 で、
   /// 重なりの有無は先に [compare] が見ている。
   static int _passThroughOverlapRank(AlertCandidate candidate) =>

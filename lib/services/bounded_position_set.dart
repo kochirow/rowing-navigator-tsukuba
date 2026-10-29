@@ -193,8 +193,7 @@ class CapsuleSet implements BoundedPositionSet {
   /// 長さの半分では中点中心の値になり、start 中心では終端を包まない
   /// (不変条件8。2026-10-29 監査 F15)。
   @override
-  double get boundingRadiusMeters =>
-      radiusMeters + _distanceMeters(start, end);
+  double get boundingRadiusMeters => radiusMeters + _distanceMeters(start, end);
 
   @override
   BoundedPositionSet grownBy({
