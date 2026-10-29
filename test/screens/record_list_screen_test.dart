@@ -354,7 +354,10 @@ void main() {
   });
 
   PracticeLog monitorLog(String id, DateTime startedAt,
-          {int minutes = 40, bool complete = true, DateTime? sharedAt}) =>
+          {int minutes = 40,
+          bool complete = true,
+          DateTime? sharedAt,
+          int live = 20}) =>
       PracticeLog(
         id: id,
         teamId: 'team',
@@ -362,6 +365,7 @@ void main() {
         startedAt: startedAt,
         endedAt: complete ? startedAt.add(Duration(minutes: minutes)) : null,
         isComplete: complete,
+        livePointCount: live,
         diagnosticsSharedAt: sharedAt,
       );
 
@@ -387,14 +391,16 @@ void main() {
       monitorLog('practice_20260706_060000', DateTime.utc(2026, 7, 6, 6),
           sharedAt: DateTime.utc(2026, 7, 7)), // 送信済み
       monitorLog('practice_20260707_060000', DateTime.utc(2026, 7, 7, 6),
-          minutes: 10), // 短い
+          minutes: 9), // 短い
+      monitorLog('practice_20260709_060000', DateTime.utc(2026, 7, 9, 6),
+          live: 0), // 航行した艇がいない
       monitorLog('practice_20260708_060000', DateTime.utc(2026, 7, 8, 6),
           complete: false), // 記録中
     ]);
     await tester.pumpWidget(screen(practiceStore: practiceStore));
     await tester.pumpAndSettle();
     expect(find.text('未送信のログ 1件'), findsOneWidget);
-    expect(find.text('15分以上の監視ログ'), findsOneWidget);
+    expect(find.text('10分以上の監視ログ'), findsOneWidget);
     expect(find.text('まだ記録がありません'), findsNothing);
   });
 
@@ -444,7 +450,7 @@ void main() {
     expect(practiceStore.shared.keys, ['practice_20260705_060000']);
     // 外した1件だけが未送信で残る。
     expect(find.text('未送信のログ 1件'), findsOneWidget);
-    expect(find.text('15分以上の監視ログ'), findsOneWidget);
+    expect(find.text('10分以上の監視ログ'), findsOneWidget);
   });
 
   testWidgets('送信済みの印を保存できなかった分は、そう伝えて未送信のまま残す', (tester) async {

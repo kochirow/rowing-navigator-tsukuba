@@ -868,7 +868,7 @@ class _PendingLogCard extends StatelessWidget {
   String get _detail => practiceLogCount == 0
       ? '15分・2km以上の練習'
       : sessionCount == 0
-          ? '15分以上の監視ログ'
+          ? '10分以上の監視ログ'
           : '練習記録 $sessionCount件・監視ログ $practiceLogCount件';
 
   @override

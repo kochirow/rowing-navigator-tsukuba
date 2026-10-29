@@ -115,6 +115,10 @@ class PracticeLog {
   final int pointCount;
   final int eventCount;
 
+  /// 記録中に受け取った艇の位置(`source: live`)の数。0 は、その間に航行した艇が
+  /// 1艇もいなかったこと。古い記録は項目が無いので null(中身を数え直して埋める)。
+  final int? livePointCount;
+
   /// 共有した時刻。未送信は null。
   ///
   /// 「未送信のログをまとめて送る」の対象を決めるためだけに使う。
@@ -130,6 +134,7 @@ class PracticeLog {
       required this.isComplete,
       this.pointCount = 0,
       this.eventCount = 0,
+      this.livePointCount,
       this.diagnosticsSharedAt});
 
   bool get isDiagnosticsShared => diagnosticsSharedAt != null;
@@ -140,6 +145,7 @@ class PracticeLog {
           bool? isComplete,
           int? pointCount,
           int? eventCount,
+          int? livePointCount,
           DateTime? Function()? diagnosticsSharedAt}) =>
       PracticeLog(
           id: id,
@@ -150,6 +156,7 @@ class PracticeLog {
           isComplete: isComplete ?? this.isComplete,
           pointCount: pointCount ?? this.pointCount,
           eventCount: eventCount ?? this.eventCount,
+          livePointCount: livePointCount ?? this.livePointCount,
           diagnosticsSharedAt: diagnosticsSharedAt != null
               ? diagnosticsSharedAt()
               : this.diagnosticsSharedAt);
@@ -163,6 +170,7 @@ class PracticeLog {
         'isComplete': isComplete,
         'pointCount': pointCount,
         'eventCount': eventCount,
+        if (livePointCount != null) 'livePointCount': livePointCount,
         if (diagnosticsSharedAt != null)
           'diagnosticsSharedAt': diagnosticsSharedAt!.millisecondsSinceEpoch,
         'automaticUpload': false
@@ -178,6 +186,7 @@ class PracticeLog {
       isComplete: json['isComplete'] as bool? ?? false,
       pointCount: (json['pointCount'] as num?)?.toInt() ?? 0,
       eventCount: (json['eventCount'] as num?)?.toInt() ?? 0,
+      livePointCount: (json['livePointCount'] as num?)?.toInt(),
       diagnosticsSharedAt: json['diagnosticsSharedAt'] is num
           ? DateTime.fromMillisecondsSinceEpoch(
               (json['diagnosticsSharedAt'] as num).toInt())

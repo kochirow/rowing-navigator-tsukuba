@@ -58,10 +58,12 @@ PracticeLog _practiceLog(
   bool complete = true,
   DateTime? sharedAt,
   DateTime? startedAt,
+  int? livePoints = 30,
 }) {
   final start = startedAt ?? DateTime.utc(2026, 10, 1, 6);
   return PracticeLog(
     id: id,
+    livePointCount: livePoints,
     teamId: 'team',
     recordedBy: 'observer',
     startedAt: start,
@@ -89,14 +91,16 @@ PracticeLogBundleInput _practiceInput(PracticeLog log) =>
 
 void main() {
   group('まとめて送る監視ログの対象', () {
-    test('完了していて15分以上の未送信だけが入り、古い順に並ぶ', () {
+    test('完了していて10分以上・航行ありの未送信だけが入り、古い順に並ぶ', () {
       final list = pendingBulkPracticeLogs([
         _practiceLog('new', startedAt: DateTime.utc(2026, 10, 3)),
         _practiceLog('sent', sharedAt: DateTime.utc(2026, 10, 4)),
-        _practiceLog('short', minutes: 14),
+        _practiceLog('short', minutes: 9),
         _practiceLog('recording', complete: false),
+        _practiceLog('nobody', livePoints: 0),
+        _practiceLog('unknown', livePoints: null),
         _practiceLog('exact',
-            minutes: 15, startedAt: DateTime.utc(2026, 10, 2)),
+            minutes: 10, startedAt: DateTime.utc(2026, 10, 2)),
       ]);
       expect(list.map((l) => l.id), ['exact', 'new']);
     });

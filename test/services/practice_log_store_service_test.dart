@@ -57,6 +57,33 @@ void main() {
     expect(await store.list(), isEmpty);
   });
 
+  test('艇の位置の数が無い古い完了済みの記録は、一覧で数えて meta に残す', () async {
+    const id = 'practice_20261001_060000';
+    await store.create(log(id));
+    final live = jsonEncode({'source': 'live', 'boatId': 'a'});
+    final observer = jsonEncode({'source': 'observer', 'boatId': 'o'});
+    await File('${docs.path}/practice_logs/$id/track.jsonl')
+        .writeAsString('$live\n$observer\n$live\n');
+
+    expect((await store.list()).single.livePointCount, 2);
+    final meta = jsonDecode(
+        await File('${docs.path}/practice_logs/$id/meta.json').readAsString());
+    expect(meta['livePointCount'], 2);
+  });
+
+  test('航跡が無い完了済みの記録は 0、記録中のログは数え直さない', () async {
+    await store.create(log('practice_20261001_060000'));
+    await store.create(PracticeLog(
+        id: 'practice_20261002_060000',
+        teamId: 'team',
+        recordedBy: 'observer',
+        startedAt: start,
+        isComplete: false));
+    final byId = {for (final l in await store.list()) l.id: l};
+    expect(byId['practice_20261001_060000']!.livePointCount, 0);
+    expect(byId['practice_20261002_060000']!.livePointCount, isNull);
+  });
+
   test('copyWith は印を保ち、関数で渡すと消せる', () {
     final shared = log('practice_20261001_060000')
         .copyWith(diagnosticsSharedAt: () => DateTime.utc(2026, 10, 2));

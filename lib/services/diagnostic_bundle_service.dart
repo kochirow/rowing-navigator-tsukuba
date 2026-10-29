@@ -52,12 +52,14 @@ double practiceLogSecOf(PracticeLog log) {
 
 /// 未送信でまとめて送る対象の監視ログか。
 ///
-/// 記録中・未完了のログは含めない。記録中のログは書き込みが続いており、
-/// 送信済みの印も記録側に上書きされる。時間の下限は練習記録と同じ15分。
+/// 完了していて、10分以上で、その間に1艇以上が航行していた(艇の位置を1点以上
+/// 受け取った)ものだけ。記録中・未完了のログは含めない。記録中のログは書き込みが
+/// 続いており、送信済みの印も記録側に上書きされる。艇の数が不明(null)なら入れない。
 bool isBulkPracticeLogTarget(PracticeLog log) =>
     log.isComplete &&
     !log.isDiagnosticsShared &&
-    practiceLogSecOf(log) >= bulkLogExportMinPracticeSec;
+    (log.livePointCount ?? 0) > 0 &&
+    practiceLogSecOf(log) >= bulkPracticeLogMinDurationSec;
 
 /// 未送信でまとめて送る対象の監視ログ(古い順)。
 List<PracticeLog> pendingBulkPracticeLogs(Iterable<PracticeLog> logs) =>
