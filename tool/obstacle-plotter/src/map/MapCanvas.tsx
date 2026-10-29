@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { dangerZonePreviews } from '../io/dangerZone';
 import type { Coordinate, MapObject, Project } from '../model/types';
 import { bearing, destination, distanceMeters, pointInPolygon } from '../io/geo';
 import { colorWithAlpha, objectColor } from './objectColor';
+import type { FieldTrackLine } from '../model/fieldTracks';
 
 export type MapInteractionMode = 'pan' | 'add' | 'move';
 type Props = {
   project: Project;
   selected: MapObject | undefined;
   mode: MapInteractionMode;
+  /** 実機ログの航跡(表示専用)。作図オブジェクトの下に描く。 */
+  fieldTracks?: FieldTrackLine[];
+  /** 増えるたびに、表示中の航跡が収まるよう地図を動かす。 */
+  fitFieldTracksRequest?: number;
   onAddPoint: (point: Coordinate) => void;
   onMovePoint: (index: number, point: Coordinate) => void;
   onFinishInteraction: () => void;
@@ -189,7 +194,7 @@ async function loadMapLibraries(mk: any, libraries: string[]): Promise<void> {
   });
 }
 
-export function MapCanvas({ project, selected, mode, onAddPoint, onMovePoint, onFinishInteraction }: Props) {
+export function MapCanvas({ project, selected, mode, fieldTracks = [], fitFieldTracksRequest = 0, onAddPoint, onMovePoint, onFinishInteraction }: Props) {
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<any>(undefined);
   const mapkit = useRef<any>(undefined);
@@ -248,6 +253,22 @@ export function MapCanvas({ project, selected, mode, onAddPoint, onMovePoint, on
     };
   }, []);
 
+  // 航跡は数万点あるので、作図を編集するたびに作り直さない。
+  // 表示する日付が変わったときだけオーバーレイを作り、編集時は同じものを使い回す。
+  const fieldTrackOverlays = useMemo(() => {
+    const mk = mapkit.current;
+    if (!mapReady || !mk) return [];
+    return fieldTracks.map((line) => new mk.PolylineOverlay(
+      line.points.map(([lat, lng]) => new mk.Coordinate(lat, lng)),
+      { style: new mk.Style({ strokeColor: line.color, strokeOpacity: 0.85, lineWidth: 2 }), enabled: false },
+    ));
+  }, [mapReady, fieldTracks]);
+
+  useEffect(() => {
+    if (!mapReady || fitFieldTracksRequest === 0 || !fieldTrackOverlays.length) return;
+    map.current?.showItems(fieldTrackOverlays, { animate: true, padding: new mapkit.current.Padding(40, 40, 40, 40) });
+  }, [fitFieldTracksRequest]);
+
   useEffect(() => {
     if (!mapReady) return;
     const current = map.current;
@@ -259,7 +280,8 @@ export function MapCanvas({ project, selected, mode, onAddPoint, onMovePoint, on
       // property as the supported way to update all overlays; it prevents
       // duplicate/re-entrant add calls while a coordinate field is edited.
       for (const annotation of current.annotations ?? []) current.removeAnnotation(annotation);
-      const overlays: any[] = [];
+      // 航跡を先に入れ、作図オブジェクトを上に重ねる(選択中の線や頂点を隠さない)。
+      const overlays: any[] = [...fieldTrackOverlays];
       for (const object of project.objects.filter((item) => item.visible)) {
         if (object.geometry.type === 'point') continue;
         const coordinates = object.geometry.points.map((point) => new mk.Coordinate(point.lat, point.lng));
@@ -338,7 +360,7 @@ export function MapCanvas({ project, selected, mode, onAddPoint, onMovePoint, on
     } catch (error) {
       setMessage(error instanceof Error ? `地図オーバーレイを更新できませんでした: ${error.message}` : '地図オーバーレイを更新できませんでした。');
     }
-  }, [mapReady, project, selected, mode]);
+  }, [mapReady, project, selected, mode, fieldTrackOverlays]);
 
   const fallbackPoint = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'add' || map.current) return;
