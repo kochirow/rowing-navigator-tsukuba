@@ -1,10 +1,17 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart' hide Split;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:rowing_navigator/models/practice_log_model.dart';
 import 'package:rowing_navigator/models/session_model.dart';
 import 'package:rowing_navigator/screens/record_list_screen.dart';
+import 'package:rowing_navigator/services/diagnostic_bundle_service.dart';
+import 'package:rowing_navigator/services/practice_log_store_service.dart';
 import 'package:rowing_navigator/services/session_store_service.dart';
 import 'package:rowing_navigator/screens/record_replay/record_replay_screen.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   Session session(String id, DateTime startedAt) => Session(
@@ -345,6 +352,185 @@ void main() {
     expect(store.byId['a']!.isDiagnosticsShared, isTrue);
     expect(store.byId['b']!.isDiagnosticsShared, isFalse);
   });
+
+  PracticeLog monitorLog(String id, DateTime startedAt,
+          {int minutes = 40,
+          bool complete = true,
+          DateTime? sharedAt,
+          int live = 20}) =>
+      PracticeLog(
+        id: id,
+        teamId: 'team',
+        recordedBy: 'observer',
+        startedAt: startedAt,
+        endedAt: complete ? startedAt.add(Duration(minutes: minutes)) : null,
+        isComplete: complete,
+        livePointCount: live,
+        diagnosticsSharedAt: sharedAt,
+      );
+
+  Widget screen({
+    List<Session> sessions = const [],
+    required _MemoryPracticeStore practiceStore,
+    SessionStoreService? store,
+  }) =>
+      ProviderScope(
+        child: MaterialApp(
+          home: RecordListScreen(
+            sessionsLoader: store == null ? () async => sessions : null,
+            sessionStore: store,
+            practiceLogStore: practiceStore,
+            clock: () => DateTime(2026, 7, 22),
+          ),
+        ),
+      );
+
+  testWidgets('練習記録が無くても、未送信の監視ログがあればカードを出す', (tester) async {
+    final practiceStore = _MemoryPracticeStore([
+      monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6)),
+      monitorLog('practice_20260706_060000', DateTime.utc(2026, 7, 6, 6),
+          sharedAt: DateTime.utc(2026, 7, 7)), // 送信済み
+      monitorLog('practice_20260707_060000', DateTime.utc(2026, 7, 7, 6),
+          minutes: 9), // 短い
+      monitorLog('practice_20260709_060000', DateTime.utc(2026, 7, 9, 6),
+          live: 0), // 航行した艇がいない
+      monitorLog('practice_20260708_060000', DateTime.utc(2026, 7, 8, 6),
+          complete: false), // 記録中
+    ]);
+    await tester.pumpWidget(screen(practiceStore: practiceStore));
+    await tester.pumpAndSettle();
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+    expect(find.text('10分以上の監視ログ'), findsOneWidget);
+    expect(find.text('まだ記録がありません'), findsNothing);
+  });
+
+  testWidgets('監視ログも練習記録も無いときは、これまでの空の画面のまま', (tester) async {
+    await tester.pumpWidget(screen(practiceStore: _MemoryPracticeStore([])));
+    await tester.pumpAndSettle();
+    expect(find.text('まだ記録がありません'), findsOneWidget);
+    expect(find.byKey(const Key('pending-log-card')), findsNothing);
+  });
+
+  testWidgets('監視ログの読み込みに失敗しても、練習記録の一覧とカードは出る', (tester) async {
+    final practiceStore = _MemoryPracticeStore([], failList: true);
+    await tester.pumpWidget(screen(
+      practiceStore: practiceStore,
+      sessions: [eligible('a', DateTime(2026, 7, 5))],
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+    expect(find.text('15分・2km以上の練習'), findsOneWidget);
+  });
+
+  testWidgets('練習記録と監視ログを合わせて数え、送らずに送信済みにすると両方に印が付く', (tester) async {
+    final practiceStore = _MemoryPracticeStore([
+      monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6)),
+      monitorLog('practice_20260706_060000', DateTime.utc(2026, 7, 6, 6)),
+    ]);
+    final store = _MemoryStore([eligible('a', DateTime(2026, 7, 5))]);
+    await tester.pumpWidget(screen(practiceStore: practiceStore, store: store));
+    await tester.pumpAndSettle();
+    expect(find.text('未送信のログ 3件'), findsOneWidget);
+    expect(find.text('練習記録 1件・監視ログ 2件'), findsOneWidget);
+
+    await tester.tap(find.text('まとめて送る'));
+    await tester.pumpAndSettle();
+    expect(find.text('3件を送る(共有先を選ぶ)'), findsOneWidget);
+    expect(find.byKey(const Key('bulk-log-anonymize')), findsOneWidget);
+    // 監視ログを1件外すと、送る件数も減る。
+    await tester
+        .tap(find.byKey(const Key('bulk-practice-practice_20260706_060000')));
+    await tester.pump();
+    expect(find.text('2件を送る(共有先を選ぶ)'), findsOneWidget);
+
+    await tester.tap(find.text('送らずに送信済みにする'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2件を送信済みにしました'), findsOneWidget);
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(practiceStore.shared.keys, ['practice_20260705_060000']);
+    // 外した1件だけが未送信で残る。
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+    expect(find.text('10分以上の監視ログ'), findsOneWidget);
+  });
+
+  testWidgets('送信済みの印を保存できなかった分は、そう伝えて未送信のまま残す', (tester) async {
+    final practiceStore = _MemoryPracticeStore(
+      [monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6))],
+      failMark: true,
+    );
+    await tester.pumpWidget(screen(practiceStore: practiceStore));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('まとめて送る'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送らずに送信済みにする'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('0件を送信済みにしました'), findsOneWidget);
+    expect(find.textContaining('1件は記録できず、未送信のままです'), findsOneWidget);
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+  });
+
+  testWidgets('送ると監視ログも同じZIPへ渡し、届いたら送信済みにする', (tester) async {
+    final practiceStore = _MemoryPracticeStore([
+      monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6)),
+    ]);
+    final store = _MemoryStore([eligible('a', DateTime(2026, 7, 5))]);
+    final bundles = _FakeBundleService();
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: RecordListScreen(
+          sessionStore: store,
+          practiceLogStore: practiceStore,
+          bundleService: bundles,
+          clock: () => DateTime(2026, 7, 22),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('まとめて送る'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bulk-log-send')));
+    await tester.pumpAndSettle();
+
+    expect(bundles.sessionIds, ['a']);
+    expect(bundles.practiceLogIds, ['practice_20260705_060000']);
+    // 既定では艇名を伏せて書き出す。
+    expect(bundles.practiceFiles.single['practice_manifest.json'],
+        contains('"anonymized": true'));
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(practiceStore.shared.keys, ['practice_20260705_060000']);
+    expect(find.textContaining('2件を送信済みにしました'), findsOneWidget);
+  });
+
+  testWidgets('読めない監視ログがあるときは、送らず・印も付けずに理由を出す', (tester) async {
+    final practiceStore = _MemoryPracticeStore(
+      [monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6))],
+      failRead: true,
+    );
+    final store = _MemoryStore([eligible('a', DateTime(2026, 7, 5))]);
+    final bundles = _FakeBundleService();
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: RecordListScreen(
+          sessionStore: store,
+          practiceLogStore: practiceStore,
+          bundleService: bundles,
+          clock: () => DateTime(2026, 7, 22),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('まとめて送る'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bulk-log-send')));
+    await tester.pumpAndSettle();
+
+    expect(bundles.shareCalls, 0);
+    expect(find.textContaining('を読み込めませんでした'), findsOneWidget);
+    expect(store.byId['a']!.isDiagnosticsShared, isFalse);
+    expect(practiceStore.shared, isEmpty);
+    // 外せば、残りは送れる(送る前の画面に戻っている)。
+    expect(find.byKey(const Key('bulk-log-send')), findsOneWidget);
+  });
 }
 
 class _MemoryStore extends SessionStoreService {
@@ -358,4 +544,78 @@ class _MemoryStore extends SessionStoreService {
   @override
   Future<List<Session>> listSessions() async =>
       byId.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+}
+
+class _MemoryPracticeStore extends PracticeLogStoreService {
+  final List<PracticeLog> logs;
+  final bool failList;
+  final bool failMark;
+  final bool failRead;
+  final Map<String, DateTime> shared = {};
+
+  _MemoryPracticeStore(this.logs,
+      {this.failList = false, this.failMark = false, this.failRead = false});
+
+  @override
+  Future<
+      ({
+        PracticeLog log,
+        List<PracticeLogPoint> points,
+        List<PracticeLogEvent> events
+      })> read(String id) async {
+    if (failRead) throw const FileSystemException('broken');
+    return (
+      log: logs.firstWhere((l) => l.id == id),
+      points: <PracticeLogPoint>[],
+      events: <PracticeLogEvent>[],
+    );
+  }
+
+  @override
+  Future<List<PracticeLog>> list() async {
+    if (failList) throw const FileSystemException('unreadable');
+    return [
+      for (final l in logs)
+        shared.containsKey(l.id)
+            ? l.copyWith(diagnosticsSharedAt: () => shared[l.id])
+            : l
+    ];
+  }
+
+  @override
+  Future<void> markDiagnosticsShared(String id, DateTime at) async {
+    if (failMark) throw const FileSystemException('read only');
+    shared[id] = at;
+  }
+}
+
+class _FakeBundleService extends DiagnosticBundleService {
+  List<String> sessionIds = [];
+  List<String> practiceLogIds = [];
+  List<Map<String, String>> practiceFiles = [];
+  int shareCalls = 0;
+
+  @override
+  Future<List<DiagnosticBundle>> buildBundlesInBackground(
+      List<Session> sessions,
+      {List<PracticeLogBundleInput> practiceLogs = const []}) async {
+    sessionIds = [for (final s in sessions) s.id];
+    practiceLogIds = [for (final p in practiceLogs) p.log.id];
+    practiceFiles = [for (final p in practiceLogs) p.files];
+    return [
+      DiagnosticBundle(
+        fileName: 'x.zip',
+        bytes: Uint8List(1),
+        sessionIds: sessionIds,
+        practiceLogIds: practiceLogIds,
+      ),
+    ];
+  }
+
+  @override
+  Future<ShareResult> share(List<DiagnosticBundle> bundles,
+      {required Rect sharePositionOrigin}) async {
+    shareCalls++;
+    return const ShareResult('', ShareResultStatus.success);
+  }
 }

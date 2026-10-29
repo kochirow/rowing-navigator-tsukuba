@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
+import '../services/diagnostic_bundle_service.dart';
+import '../services/practice_log_store_service.dart';
 import '../services/session_store_service.dart';
 import '../types/home_phase.dart';
 
-/// メニューの「練習記録」に出す、未送信のログ(15分・2km以上)の件数。表示だけに使う。
+/// メニューの「練習記録」に出す、未送信のログの件数。表示だけに使う。
+/// 練習記録(15分・2km以上)と監視ログ(15分以上)を合わせて数える。
 class PendingLogCount {
   final int value;
 
@@ -20,17 +23,25 @@ class PendingLogCount {
 /// メニューを開くたびには数えない(記録を全部読むので時間がかかる)。
 /// 数えられなくても副題が出ないだけで、メニューは開ける。
 PendingLogCount usePendingLogCount(HomePhase phase,
-    {SessionStoreService? store}) {
+    {SessionStoreService? store, PracticeLogStoreService? practiceStore}) {
   final count = useState(0);
   final context = useContext();
   Future<void> refresh() async {
+    // 片方が読めなくても、もう片方は数える(副題が欠けるより件数が合うほうがよい)。
+    var n = 0;
     try {
-      final n =
-          await (store ?? SessionStoreService()).countPendingBulkLogExports();
-      if (context.mounted) count.value = n;
+      n += await (store ?? SessionStoreService()).countPendingBulkLogExports();
     } catch (error) {
       debugPrint('Pending log count unavailable: $error');
     }
+    try {
+      n += pendingBulkPracticeLogs(
+              await (practiceStore ?? PracticeLogStoreService()).list())
+          .length;
+    } catch (error) {
+      debugPrint('Pending practice log count unavailable: $error');
+    }
+    if (context.mounted) count.value = n;
   }
 
   useEffect(() {

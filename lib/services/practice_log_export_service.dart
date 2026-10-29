@@ -90,7 +90,7 @@ class PracticeLogExportService {
       };
     }).toList();
     final manifest = {
-      ...log.toJson(),
+      ...log.toJson()..remove('diagnosticsSharedAt'),
       'endedAt': log.endedAt?.toUtc().toIso8601String(),
       'app': {'version': Message.currentAppVersion, 'buildNumber': 'unknown'},
       'device': {
@@ -170,7 +170,7 @@ class PracticeLogExportService {
     }
     final encoded = ZipEncoder().encode(archive);
     if (encoded == null || encoded.isEmpty) {
-      throw const PracticeLogExportException('練習一括ログZIPを作成できませんでした。');
+      throw const PracticeLogExportException('監視ログZIPを作成できませんでした。');
     }
     return Uint8List.fromList(encoded);
   }
@@ -185,7 +185,7 @@ class PracticeLogExportService {
         flush: true);
     return _share(ShareParams(
         files: [XFile(file.path, mimeType: 'application/zip')],
-        subject: '練習一括ログ ${log.id}',
+        subject: '監視ログ ${log.id}',
         sharePositionOrigin: sharePositionOrigin));
   }
 

@@ -124,6 +124,17 @@ void main() {
     expect(boat['lostCount'], 1);
   });
 
+  test('送信済みの印は書き出すmanifestへ混ぜない', () {
+    final files = service.buildFiles(
+      logFor().copyWith(diagnosticsSharedAt: () => DateTime.utc(2026, 7, 29)),
+      [livePoint(boatId: 'a', displayName: '一号艇')],
+      const [],
+    );
+    final manifest =
+        jsonDecode(files['practice_manifest.json']!) as Map<String, dynamic>;
+    expect(manifest, isNot(contains('diagnosticsSharedAt')));
+  });
+
   test('警告状態を送れない版が混ざったことをmanifestへ残す', () {
     final without = service.buildFiles(
       logFor(),

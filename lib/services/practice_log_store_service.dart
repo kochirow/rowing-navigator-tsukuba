@@ -56,6 +56,18 @@ class PracticeLogStoreService {
       _writeMeta(File('${(await _dir(log.id)).path}/meta.json'), log);
   Future<void> complete(PracticeLog log, DateTime endedAt) =>
       checkpoint(log.copyWith(endedAt: endedAt.toUtc(), isComplete: true));
+
+  /// 共有した時刻を meta.json へ書く。記録中のログには呼ばない
+  /// (記録側が持つ控えで meta.json を書き直すため、印が消える)。
+  /// 読めない・無いログは何もしない。
+  Future<void> markDiagnosticsShared(String id, DateTime at) async {
+    final file = File('${(await _dir(id)).path}/meta.json');
+    if (!await file.exists()) return;
+    final log = PracticeLog.fromJson(
+        Map<String, dynamic>.from(jsonDecode(await file.readAsString())));
+    await _writeMeta(file, log.copyWith(diagnosticsSharedAt: () => at));
+  }
+
   Future<List<PracticeLog>> list() async {
     final root = await _root();
     final result = <PracticeLog>[];
@@ -64,8 +76,19 @@ class PracticeLogStoreService {
       final file = File('${entity.path}/meta.json');
       if (!await file.exists()) continue;
       try {
-        result.add(PracticeLog.fromJson(
-            Map<String, dynamic>.from(jsonDecode(await file.readAsString()))));
+        var log = PracticeLog.fromJson(
+            Map<String, dynamic>.from(jsonDecode(await file.readAsString())));
+        // 艇の位置の数が無い古い完了済みの記録は、一度だけ中身から数えて meta へ残す。
+        // 記録中のログは書込が続き、記録側が meta を書き直すので触らない。
+        if (log.isComplete && log.livePointCount == null) {
+          try {
+            log = log.copyWith(
+                livePointCount:
+                    await _countLivePoints(File('${entity.path}/track.jsonl')));
+            await _writeMeta(file, log);
+          } catch (_) {/* 数えられなければ不明のまま。対象には入れない */}
+        }
+        result.add(log);
       } catch (_) {/* broken logs stay untouched */}
     }
     result.sort((a, b) => b.startedAt.compareTo(a.startedAt));
@@ -90,6 +113,18 @@ class PracticeLogStoreService {
           File('${dir.path}/events.jsonl'),
           (json) => PracticeLogEvent.fromJson(json))
     );
+  }
+
+  Future<int> _countLivePoints(File file) async {
+    if (!await file.exists()) return 0;
+    var count = 0;
+    await for (final line in file
+        .openRead()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      if (line.contains('"source":"live"')) count++;
+    }
+    return count;
   }
 
   Future<List<T>> _readLines<T>(

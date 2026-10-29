@@ -180,7 +180,7 @@ flutter run
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
 | `lib/services/gpx_export_service.dart` | GPX/CSV/診断ZIP出力 |
 | `lib/features/home_map/map_menu_layout.dart` | 地図のメニューの並び(純Dart)。姿勢ごとに、何をどの順・どの見出しで出すかをここだけで決める。見出しは中身を名詞で言う(練習・警告と危険区域・チーム・使い方と情報)。**航行中の6項目の順番は変えない**(漕ぎながら覚えた位置)。導線はこのメニュー1本で、出艇前のタブは戻さない(`bba5711`) |
-| `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(15分・2km以上)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` に端末内でだけ記録する。自動送信はしない。条件は `lib/config/log_export_config.dart` |
+| `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(練習記録は15分・2km以上)と監視ログ(完了済みで10分以上、その間に1艇以上が航行したもの)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` / `PracticeLog.diagnosticsSharedAt` に端末内でだけ記録する(記録中・未完了の監視ログは対象外)。自動送信はしない。条件は `lib/config/log_export_config.dart` |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
 | `lib/theme/map_layer_spec.dart` | 地図の層(中央線＝白い破線／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。**実線＝実在するもの、破線＝越えない取り決め。** 航路は中央線1本だけを描き、レーンの外側の辺は描かない(往路・復路の帯を廃止した経緯も同ファイル) |
 | `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |
@@ -390,7 +390,7 @@ flutter run
    入れると、波形側の validation 失敗で位置の書込ごと拒否され安全経路が巻き添えになる。
    `onDisconnect` も位置とは独立に登録する
 
-## 練習一括ログ(監視端末)
+## 監視ログ(監視端末。旧称: 練習一括ログ)
 
 - 監視中だけ `usePracticeLogRecording` が全艇+監視者を端末内へJSONL追記で記録し、
   ZIPで共有する。サーバー送信はしない。**記録はOFFにできない**(監視機能の一部)

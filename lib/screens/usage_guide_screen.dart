@@ -48,7 +48,7 @@ class UsageGuideScreen extends StatelessWidget {
       (
         Icons.visibility_outlined,
         WatchGuidePage.title,
-        '陸から全艇を見る人。航跡・異常の知らせ・練習一括ログ',
+        '陸から全艇を見る人。航跡・異常の知らせ・監視ログ',
         const WatchGuidePage(),
       ),
       (

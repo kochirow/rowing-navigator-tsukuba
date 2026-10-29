@@ -34,6 +34,7 @@ UsePracticeLogRecording usePracticeLogRecording({
   final geo = useMemoized(GeoService.new);
   final recorder = useRef<PracticeLogRecorder?>(null);
   final pointCount = useRef(0);
+  final livePointCount = useRef(0);
   final eventCount = useRef(0);
   final lastCheckpoint = useRef<DateTime?>(null);
   final lastAnomalies = useRef<Set<String>>({});
@@ -58,11 +59,16 @@ UsePracticeLogRecording usePracticeLogRecording({
         rethrow;
       }
       pointCount.value += drained.points.length;
+      livePointCount.value += drained.points
+          .where((p) => p.source == PracticeLogSource.live)
+          .length;
       eventCount.value += drained.events.length;
     }
     if (checkpoint) {
       final updated = current.copyWith(
-          pointCount: pointCount.value, eventCount: eventCount.value);
+          pointCount: pointCount.value,
+          eventCount: eventCount.value,
+          livePointCount: livePointCount.value);
       await store.checkpoint(updated);
       log.value = updated;
       lastCheckpoint.value = DateTime.now().toUtc();
@@ -84,7 +90,8 @@ UsePracticeLogRecording usePracticeLogRecording({
           endedAt: DateTime.now().toUtc(),
           isComplete: true,
           pointCount: pointCount.value,
-          eventCount: eventCount.value);
+          eventCount: eventCount.value,
+          livePointCount: livePointCount.value);
       await store.checkpoint(completed);
       await store.prune();
       log.value = null;
@@ -121,6 +128,7 @@ UsePracticeLogRecording usePracticeLogRecording({
         if (generation.value != run) return;
         recorder.value = PracticeLogRecorder(startedAt: now);
         pointCount.value = 0;
+        livePointCount.value = 0;
         eventCount.value = 0;
         lastCheckpoint.value = now;
         error.value = null;

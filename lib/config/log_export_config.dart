@@ -11,6 +11,13 @@
 /// 練習時間はアプリ内の定義(艇が動いていた時間 = `movingTimeSec`)で数える。
 const double bulkLogExportMinPracticeSec = 15 * 60;
 
+/// 「未送信のログをまとめて送る」の対象にする監視ログの長さの下限 [秒]。
+///
+/// 前提: 監視端末は動かないので、距離は使えない。代わりに「その間に1艇以上が
+/// 航行していた」ことを条件にする(2026-10-29 利用者決定)。艇が1艇も航行しない
+/// 監視は、解析に役立つ航跡が入っていない。10分あれば1往復の一部は入る。
+const double bulkPracticeLogMinDurationSec = 10 * 60;
+
 /// 同じく距離の下限 [m]。15分と同じ理由で、短い移動を除く(2026-10-28 利用者決定)。
 const double bulkLogExportMinDistanceMeters = 2000;
 

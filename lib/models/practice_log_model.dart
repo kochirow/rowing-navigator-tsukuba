@@ -115,6 +115,16 @@ class PracticeLog {
   final int pointCount;
   final int eventCount;
 
+  /// 記録中に受け取った艇の位置(`source: live`)の数。0 は、その間に航行した艇が
+  /// 1艇もいなかったこと。古い記録は項目が無いので null(中身を数え直して埋める)。
+  final int? livePointCount;
+
+  /// 共有した時刻。未送信は null。
+  ///
+  /// 「未送信のログをまとめて送る」の対象を決めるためだけに使う。
+  /// 過去の記録には項目が無いので、未送信として読む。
+  final DateTime? diagnosticsSharedAt;
+
   const PracticeLog(
       {required this.id,
       required this.teamId,
@@ -123,12 +133,20 @@ class PracticeLog {
       this.endedAt,
       required this.isComplete,
       this.pointCount = 0,
-      this.eventCount = 0});
+      this.eventCount = 0,
+      this.livePointCount,
+      this.diagnosticsSharedAt});
+
+  bool get isDiagnosticsShared => diagnosticsSharedAt != null;
+
+  /// [diagnosticsSharedAt] は null へ戻せるよう、関数で渡す(`() => null` で消す)。
   PracticeLog copyWith(
           {DateTime? endedAt,
           bool? isComplete,
           int? pointCount,
-          int? eventCount}) =>
+          int? eventCount,
+          int? livePointCount,
+          DateTime? Function()? diagnosticsSharedAt}) =>
       PracticeLog(
           id: id,
           teamId: teamId,
@@ -137,7 +155,11 @@ class PracticeLog {
           endedAt: endedAt ?? this.endedAt,
           isComplete: isComplete ?? this.isComplete,
           pointCount: pointCount ?? this.pointCount,
-          eventCount: eventCount ?? this.eventCount);
+          eventCount: eventCount ?? this.eventCount,
+          livePointCount: livePointCount ?? this.livePointCount,
+          diagnosticsSharedAt: diagnosticsSharedAt != null
+              ? diagnosticsSharedAt()
+              : this.diagnosticsSharedAt);
   Map<String, dynamic> toJson() => {
         'practiceLogSchemaVersion': 1,
         'practiceId': id,
@@ -148,6 +170,9 @@ class PracticeLog {
         'isComplete': isComplete,
         'pointCount': pointCount,
         'eventCount': eventCount,
+        if (livePointCount != null) 'livePointCount': livePointCount,
+        if (diagnosticsSharedAt != null)
+          'diagnosticsSharedAt': diagnosticsSharedAt!.millisecondsSinceEpoch,
         'automaticUpload': false
       };
   factory PracticeLog.fromJson(Map<String, dynamic> json) => PracticeLog(
@@ -160,7 +185,12 @@ class PracticeLog {
           : DateTime.parse(json['endedAt'] as String).toUtc(),
       isComplete: json['isComplete'] as bool? ?? false,
       pointCount: (json['pointCount'] as num?)?.toInt() ?? 0,
-      eventCount: (json['eventCount'] as num?)?.toInt() ?? 0);
+      eventCount: (json['eventCount'] as num?)?.toInt() ?? 0,
+      livePointCount: (json['livePointCount'] as num?)?.toInt(),
+      diagnosticsSharedAt: json['diagnosticsSharedAt'] is num
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['diagnosticsSharedAt'] as num).toInt())
+          : null);
 }
 
 String practiceLogJsonLine(Object value) => jsonEncode(value is PracticeLogPoint

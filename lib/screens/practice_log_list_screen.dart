@@ -4,6 +4,7 @@ import '../models/practice_log_model.dart';
 import '../services/practice_log_export_service.dart';
 import '../services/practice_log_store_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/share_delivery_prompt.dart';
 import 'record_list_screen.dart' show formatDateTime;
 
 class PracticeLogListScreen extends StatefulWidget {
@@ -29,7 +30,7 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
         builder: (dialog) => AlertDialog(
                 // 選択肢はボタンの名前が言う。外へ出しても安全な側
                 // (伏せる)を既定の塗りボタンにする。
-                title: const Text('練習一括ログを共有'),
+                title: const Text('監視ログを共有'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialog, false),
@@ -46,12 +47,19 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
       final origin = box == null
           ? const Rect.fromLTWH(0, 0, 1, 1)
           : box.localToGlobal(Offset.zero) & box.size;
-      await _export.share(data.log, data.points, data.events,
+      final result = await _export.share(data.log, data.points, data.events,
           anonymized: anonymized, sharePositionOrigin: origin);
+      // 届いたものは送信済みにする。まとめて送る対象から外れ、メニューの件数も減る。
+      // 記録中のログは書込が続き、送信済みの印も記録側に上書きされるので印を付けない。
+      if (!mounted || !data.log.isComplete) return;
+      if (await confirmShareDelivered(context, result)) {
+        await _store.markDiagnosticsShared(log.id, DateTime.now());
+        if (mounted) setState(_reload);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('練習一括ログを共有できませんでした。')));
+            .showSnackBar(const SnackBar(content: Text('監視ログを共有できませんでした。')));
       }
     }
   }
@@ -60,7 +68,7 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
     final ok = await showDialog<bool>(
         context: context,
         builder: (dialog) => AlertDialog(
-                title: const Text('練習一括ログを削除しますか?'),
+                title: const Text('監視ログを削除しますか?'),
                 content: const Text('共有済みのファイルは消えません。'),
                 actions: [
                   TextButton(
@@ -79,7 +87,7 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('練習一括ログ')),
+      appBar: AppBar(title: const Text('監視ログ')),
       body: FutureBuilder<List<PracticeLog>>(
           future: _logs,
           builder: (context, snapshot) {
@@ -106,11 +114,13 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
                           ? Icons.ios_share
                           : Icons.warning_amber_rounded),
                       title: Text(formatDateTime(log.startedAt.toLocal())),
-                      subtitle: Text(!log.isComplete
-                          ? '未完了'
-                          : minutes == null
-                              ? ''
-                              : '$minutes分'),
+                      subtitle: Text([
+                        if (!log.isComplete)
+                          '未完了'
+                        else if (minutes != null)
+                          '$minutes分',
+                        if (log.isDiagnosticsShared) '送信済み',
+                      ].join(' ・ ')),
                       onTap: () => _share(log),
                       trailing: IconButton(
                           tooltip: 'この端末から削除',
