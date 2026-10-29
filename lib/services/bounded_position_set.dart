@@ -189,9 +189,12 @@ class CapsuleSet implements BoundedPositionSet {
   @override
   LatLng get representativePoint => start;
 
+  /// [representativePoint](start)を中心に、終端 end の円まで含む半径。
+  /// 長さの半分では中点中心の値になり、start 中心では終端を包まない
+  /// (不変条件8。2026-10-29 監査 F15)。
   @override
   double get boundingRadiusMeters =>
-      radiusMeters + _distanceMeters(start, end) / 2;
+      radiusMeters + _distanceMeters(start, end);
 
   @override
   BoundedPositionSet grownBy({
