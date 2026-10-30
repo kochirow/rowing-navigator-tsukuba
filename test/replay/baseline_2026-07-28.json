@@ -49,7 +49,7 @@
       },
       "episodeCountOutsideMooring": {
         "shore": 33,
-        "pile": 1
+        "pile": 0
       }
     },
     "rowing_diagnostics_20260725": {
@@ -72,7 +72,8 @@
         "shore": 2
       },
       "episodeCountOutsideMooring": {
-        "shore": 18
+        "shore": 18,
+        "pile": 2
       },
       "alertingSeconds": {
         "shore": 784
@@ -132,7 +133,8 @@
         "shore": 1
       },
       "episodeCountOutsideMooring": {
-        "shore": 2
+        "shore": 2,
+        "pile": 2
       },
       "alertingSeconds": {
         "shore": 265
@@ -159,5 +161,26 @@
         ]
       }
     }
-  }
+  },
+  "profileUpdates": [
+    {
+      "version": 11,
+      "profileSha256": "5bef0edfe2785b357cc2be4014a610430900526c9363e7474b637f102de9e413",
+      "reason": "霞ヶ浦レーンと杭の座標更新。杭1の旧形状だけを戻した対照再生で、1785361334955の杭エピソードが0→1へ戻ることを確認。新形状の杭2区域内での衝突検知はpreset_obstacle_service_testで別に検証。",
+      "changedOutsidePileEpisodes": {
+        "1785361334955": [
+          1,
+          0
+        ],
+        "1785186811432": [
+          0,
+          2
+        ],
+        "1785188265260": [
+          0,
+          2
+        ]
+      }
+    }
+  ]
 }

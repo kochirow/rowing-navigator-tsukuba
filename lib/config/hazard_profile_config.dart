@@ -2,6 +2,6 @@
 ///
 /// 座標差分だけを別バージョンのプリセットへ適用すると危険なため、
 /// アプリとFirestoreの双方でversionとSHA-256の完全一致を要求する。
-const currentHazardProfileDataVersion = 10;
+const currentHazardProfileDataVersion = 11;
 const currentHazardProfileSha256 =
-    '962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5';
+    '5bef0edfe2785b357cc2be4014a610430900526c9363e7474b637f102de9e413';

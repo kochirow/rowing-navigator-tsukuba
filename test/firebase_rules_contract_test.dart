@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/hazard_profile_config.dart';
 import 'package:rowing_navigator/models/presentation_state_protocol.dart';
+import 'package:rowing_navigator/models/shared_safety_calibration.dart';
 
 /// `database.rules.json` は Firebase Rules の JSONC(行コメントを書ける)。
 /// 設定値の根拠はルールの隣に置きたいので、解析前に行コメントだけ落とす。
@@ -212,6 +213,11 @@ void main() {
     expect(rules, contains('validSharedSafetyCalibrationV7'));
     expect(rules, contains('validSharedSafetyCalibrationV8'));
     expect(rules, contains('validSharedSafetyCalibrationV9'));
+    expect(rules, contains('validSharedSafetyCalibrationV10'));
+    expect(
+        rules,
+        contains(
+            'match /managed_hazards/${SharedSafetyCalibrationState.documentId}'));
     expect(rules, contains('validScaledOffsetMap'));
     expect(rules, contains('// GENERATED: hazard-allowlist BEGIN'));
     expect(rules, contains('function canPublishTeamSafety(teamId)'));

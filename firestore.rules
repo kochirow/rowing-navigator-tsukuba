@@ -210,6 +210,7 @@ service cloud.firestore {
         'bridgepier_7fdc56a4',
         'bridgepier_e7ea8ed4',
         'pile_71ec1621',
+        'pile_2729efb2',
         'driftwood_estuary',
         'island_sakuragawa_bridge',
         'island_upstream',
@@ -278,7 +279,7 @@ service cloud.firestore {
 
     function validDisabledWarningSourceIds(values) {
       return values is list
-        && values.size() <= 40
+        && values.size() <= 41
         && values.hasOnly([
           'pile_3eacc519',
           'pile_e14ff5c6',
@@ -305,6 +306,7 @@ service cloud.firestore {
           'bridgepier_7fdc56a4',
           'bridgepier_e7ea8ed4',
           'pile_71ec1621',
+          'pile_2729efb2',
           'driftwood_estuary',
           'island_sakuragawa_bridge',
           'island_upstream',
@@ -583,6 +585,42 @@ service cloud.firestore {
         && data.baseProfileVersion == 10
         && data.baseProfileSha256 ==
           '962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5'
+        && validScaledOffsetMap(data.scaledOffsets)
+        && validScaledVertexOffsetsV8(data.scaledVertexOffsets)
+        && validDangerZoneOffsets(data.dangerZoneOffsets)
+        && validDisabledWarningSourceIds(data.disabledWarningSourceIds)
+        && data.primaryWarningLeadSeconds is number
+        && data.primaryWarningLeadSeconds >= 8.5
+        && data.primaryWarningLeadSeconds < data.advanceWarningLeadSeconds
+        && data.advanceWarningLeadSeconds is number
+        && data.advanceWarningLeadSeconds >= 9
+        && data.advanceWarningLeadSeconds <= 25
+        && data.revision is int
+        && data.revision >= 1
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validSharedSafetyCalibrationV10(data) {
+      return data.keys().hasAll([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'kind', 'baseProfileVersion', 'baseProfileSha256',
+          'scaledOffsets', 'scaledVertexOffsets',
+          'dangerZoneOffsets', 'disabledWarningSourceIds', 'revision',
+          'primaryWarningLeadSeconds', 'advanceWarningLeadSeconds',
+          'updatedAt', 'updatedBy',
+          'previousState'
+        ])
+        && data.kind == 'fixed_obstacle_calibrations'
+        && data.baseProfileVersion == 11
+        && data.baseProfileSha256 ==
+          '5bef0edfe2785b357cc2be4014a610430900526c9363e7474b637f102de9e413'
         && validScaledOffsetMap(data.scaledOffsets)
         && validScaledVertexOffsetsV8(data.scaledVertexOffsets)
         && validDangerZoneOffsets(data.dangerZoneOffsets)
@@ -1070,17 +1108,23 @@ service cloud.firestore {
       }
 
       match /managed_hazards/fixed_obstacle_calibrations_v10 {
-        // v10は座標更新と陸上エリア追加を含むprofile v10専用。v9以前の
+        // v10の頂点差分を変更後の杭へ混ぜない。旧文書は読み取りだけ残す。
+        allow read: if isTeamMember(teamId);
+        allow create, update, delete: if false;
+      }
+
+      match /managed_hazards/fixed_obstacle_calibrations_v11 {
+        // v11は霞ヶ浦レーンと杭の座標更新を含むprofile v11専用。v10以前の
         // 共有校正を新しい座標へ誤適用せず、新しいrevision 1から開始する。
         allow read: if isTeamMember(teamId);
         allow create: if canPublishTeamSafety(teamId)
-          && validSharedSafetyCalibrationV9(request.resource.data)
+          && validSharedSafetyCalibrationV10(request.resource.data)
           && !request.resource.data.keys().hasAny(['previousState'])
           && request.resource.data.revision == 1
           && request.resource.data.updatedAt == request.time
           && request.resource.data.updatedBy == request.auth.uid;
         allow update: if canPublishTeamSafety(teamId)
-          && validSharedSafetyCalibrationV9(request.resource.data)
+          && validSharedSafetyCalibrationV10(request.resource.data)
           && request.resource.data.kind == resource.data.kind
           && request.resource.data.baseProfileVersion
             == resource.data.baseProfileVersion
