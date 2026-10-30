@@ -371,6 +371,13 @@
       "verificationStatus": "aerial_only",
       "style": {}
     },
+    "ashorearea_8bfefca3": {
+      "folderId": "fld_safety",
+      "order": 1,
+      "description": "",
+      "verificationStatus": "aerial_only",
+      "style": {}
+    },
     "mooringarea_efb61f15": {
       "folderId": "fld_mooring",
       "order": 0,
@@ -480,9 +487,9 @@
       "verificationStatus": "aerial_only",
       "style": {}
     },
-    "ashorearea_8bfefca3": {
-      "folderId": "fld_safety",
-      "order": 1785925547245,
+    "pile_2729efb2": {
+      "folderId": "fld_piles",
+      "order": 1793357747221,
       "description": "",
       "verificationStatus": "draft",
       "style": {}

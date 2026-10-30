@@ -4,6 +4,9 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/fixed_obstacle_calibration.dart';
+import 'package:rowing_navigator/models/boat_model.dart';
+import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
+import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/models/managed_hazard_model.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/fixed_obstacle_calibration_service.dart';
@@ -56,7 +59,7 @@ void main() {
     final service = PresetObstacleService();
     final obstacles = await service.loadPresets();
     // 閉じた固定流木は5本の辺リボンではなく、1枚の塗りつぶしにする。
-    expect(obstacles, hasLength(370));
+    expect(obstacles, hasLength(371));
     expect(obstacles.every((obstacle) => obstacle.isDefault), isTrue);
     // 近接注意距離はkind別の既定値を使う。プロファイルの
     // defaultObstacleProximityCautionMeters が0のときは「指定なし」として
@@ -137,11 +140,18 @@ void main() {
     final piles = obstacles
         .where((obstacle) => obstacle.kind == StaticObstacleKind.pile)
         .toList();
-    expect(piles, hasLength(3));
+    expect(piles, hasLength(4));
     expect(
       piles.any((obstacle) => obstacle.sourceId == 'pile_71ec1621'),
       isTrue,
     );
+    final newPile = piles.singleWhere(
+      (obstacle) => obstacle.sourceId == 'pile_2729efb2',
+    );
+    expect(newPile.name, '霞ヶ浦沖杭2');
+    expect(newPile.isWarningEnabled, isTrue);
+    expect(newPile.isVisibleOnNavigationMap, isTrue);
+    expect(newPile.points, hasLength(5));
     expect(piles.every((obstacle) => !obstacle.isManaged), isTrue);
     expect(
       piles
@@ -158,6 +168,39 @@ void main() {
           .where((obstacle) => obstacle.kind == StaticObstacleKind.testZone),
       hasLength(4),
     );
+  });
+
+  test('更新した沖杭2区域に入る艇を実データの衝突判定で検知する', () async {
+    final service = PresetObstacleService(
+      useLocalFixedObstacleCalibrations: false,
+      useLocalDangerZoneSettings: false,
+    );
+    final obstacles = await service.loadPresets();
+    for (final id in ['pile_3eacc519', 'pile_2729efb2']) {
+      final pile = obstacles.singleWhere((obstacle) => obstacle.sourceId == id);
+      final lat = pile.points.map((p) => p.latitude).reduce((a, b) => a + b) /
+          pile.points.length;
+      final lng = pile.points.map((p) => p.longitude).reduce((a, b) => a + b) /
+          pile.points.length;
+      final boat = Boat(
+        boatId: 'pile-regression',
+        boatType: BoatType.r_1x,
+        lat: lat,
+        lng: lng,
+        heading: 90,
+        speed: 4,
+        timestamp: DateTime.utc(2026, 10, 30),
+        accuracy: 5,
+      );
+      final assessment = CollisionRiskEvaluatorService().assessRisk(
+        boat,
+        const [],
+        [pile],
+        warningTimeSeconds: 13,
+      );
+      expect(assessment.currentOverlap, isTrue, reason: id);
+      expect(assessment.threats, isNotEmpty, reason: id);
+    }
   });
 
   test('production設定ではtestZoneを同梱判定から除外する', () async {

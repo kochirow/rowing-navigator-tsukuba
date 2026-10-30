@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/config/hazard_profile_config.dart';
 import 'package:rowing_navigator/models/fixed_obstacle_calibration.dart';
@@ -26,6 +28,28 @@ void main() {
 
     expect((await teamA.loadCached())?.revision, 4);
     expect((await teamB.loadCached()), isNull);
+  });
+
+  test('v10の杭の頂点補正をv11へ持ち越さず、旧cacheを破棄する', () async {
+    final old = SharedSafetyCalibrationState(
+      baseProfileVersion: 10,
+      baseProfileSha256:
+          '962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5',
+      calibrations: const {
+        'pile_3eacc519': FixedObstacleCalibration(
+          vertexOffsets: {0: FixedObstacleVertexOffset(northMeters: 4)},
+        ),
+      },
+      revision: 7,
+    );
+    const key = 'shared_safety_calibration_v2_team-a';
+    SharedPreferences.setMockInitialValues({key: jsonEncode(old.toCacheMap())});
+
+    final service = SharedSafetyCalibrationService(teamId: 'team-a');
+    expect(await service.loadCached(), isNull);
+    expect((await SharedPreferences.getInstance()).containsKey(key), isFalse);
+    await service.cache(SharedSafetyCalibrationState(revision: 1));
+    expect((await service.loadCached())?.revision, 1);
   });
 
   test('壊れたcacheは削除し、他チームへ波及させない', () async {
