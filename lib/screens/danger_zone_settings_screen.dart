@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'warning_settings_widgets.dart';
 
+import '../config/location_activity_config.dart';
 import '../config/risk_evaluator_config.dart';
 import '../models/danger_zone_settings.dart';
 import '../services/danger_zone_settings_service.dart';
+import '../services/location_activity_settings_service.dart';
 import '../services/map_display_settings_service.dart';
 import '../services/risk_evaluator_settings_service.dart';
 import '../services/shared_safety_calibration_service.dart';
@@ -29,6 +31,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
   final _riskEvaluatorService = RiskEvaluatorSettingsService();
   final _sharedCalibrationService = SharedSafetyCalibrationService();
   final _mapDisplaySettings = MapDisplaySettingsService();
+  final _locationActivitySettings = LocationActivitySettingsService();
   DangerZoneSettings? _settings;
   WarningLeadTimes? _warningLeadTimes;
   // 読み込んだ時点(=保存済み)の値。未保存の変更の件数を数えるために持つ。
@@ -41,6 +44,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       FixedObstacleCalibrationPublishStatus.idle;
   String? _publishMessage;
   bool _showDeveloperSafetyShapeOverlay = false;
+  NavigationLocationActivity _locationActivity =
+      defaultNavigationLocationActivity;
 
   bool get _busy => _saving || _publishing;
   bool get _hasTeamMembership => TeamService.activeMembership != null;
@@ -56,8 +61,10 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
     final warningLeadTimes = await _riskEvaluatorService.loadWarningLeadTimes();
     final showDeveloperSafetyShapeOverlay =
         await _mapDisplaySettings.loadDeveloperSafetyShapeOverlay();
+    final locationActivity = await _locationActivitySettings.load();
     if (mounted) {
       setState(() {
+        _locationActivity = locationActivity;
         _settings = settings;
         _warningLeadTimes = warningLeadTimes;
         _savedSettings = settings;
@@ -126,6 +133,14 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
           primaryWarningLeadSeconds: p.toDouble(),
           advanceWarningLeadSeconds: a2.toDouble(),
         ));
+  }
+
+  void _setLocationActivityFitness(bool useFitness) {
+    final activity = useFitness
+        ? NavigationLocationActivity.fitness
+        : NavigationLocationActivity.maritime;
+    setState(() => _locationActivity = activity);
+    unawaited(_locationActivitySettings.save(activity));
   }
 
   void _setDeveloperSafetyShapeOverlay(bool enabled) {
@@ -452,6 +467,24 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                     ),
                     value: _showDeveloperSafetyShapeOverlay,
                     onChanged: _busy ? null : _setDeveloperSafetyShapeOverlay,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // R7-R4。既定は maritime。水上で悪化に気づいたら、その端末だけ
+                // 次の航行から以前の fitness に戻せる。iPhone だけに効く。
+                Card(
+                  child: SwitchListTile(
+                    key: const Key('location-activity-fitness-switch'),
+                    secondary: const Icon(Icons.gps_fixed),
+                    title: const Text('位置の取り方を以前の設定に戻す（開発者用）'),
+                    subtitle: const Text(
+                      'iPhone の位置の取り方を、水上向け（maritime）から以前の運動向け'
+                      '（fitness）に戻します。次の航行開始から効きます。'
+                      'どちらを使ったかは診断ログに残ります。',
+                    ),
+                    value:
+                        _locationActivity == NavigationLocationActivity.fitness,
+                    onChanged: _busy ? null : _setLocationActivityFitness,
                   ),
                 ),
                 const SizedBox(height: 24),

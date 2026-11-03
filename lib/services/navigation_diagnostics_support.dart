@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 
+import '../config/location_activity_config.dart';
 import '../models/boat_model.dart';
 import '../models/session_model.dart';
 import 'ship_domain_service.dart';
@@ -96,5 +97,34 @@ Map<String, Object?> sessionRecoveryContext(Session session) {
     'lastLowPowerModeEnabled': lastLowPowerMode,
     'memoryPressureCount': memoryPressureCount,
     'lastMemoryPressureAt': lastMemoryPressureAt?.toUtc().toIso8601String(),
+  };
+}
+
+/// 位置取得の用途指定の記録(R7-R2)。
+///
+/// 指定した用途、実際に効いた種類、geolocator_apple の版を残す。効いた種類は
+/// 端末の iOS の版と、アプリを作った SDK(Info.plist の `DTSDKName`)で決まる。
+/// どちらかが読めなければ `locationActivityEffective` は null のまま残す。
+Map<String, Object?> locationActivityDiagnostics({
+  required NavigationLocationActivity requested,
+  Map<String, Object?> deviceSnapshot = const {},
+}) {
+  final isIos = deviceSnapshot['platform'] == 'iOS' ||
+      deviceSnapshot['systemName'] == 'iOS' ||
+      deviceSnapshot['systemName'] == 'iPadOS';
+  final systemVersion = deviceSnapshot['systemVersion'];
+  final sdkName = deviceSnapshot['buildSdkName'];
+  return {
+    'locationActivityRequested': requested.name,
+    if (deviceSnapshot.isNotEmpty)
+      'locationActivityEffective': effectiveLocationActivityName(
+        requested: requested,
+        isIos: isIos,
+        iosMajorVersion:
+            leadingMajorVersion(systemVersion is String ? systemVersion : null),
+        sdkMajorVersion:
+            leadingMajorVersion(sdkName is String ? sdkName : null),
+      ),
+    'geolocatorAppleVersion': geolocatorAppleVersion,
   };
 }

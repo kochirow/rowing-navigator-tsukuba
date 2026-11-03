@@ -221,7 +221,11 @@ flutter run
 
 ## 衝突警告の仕組み
 
-1. GPSストリームから測位を受け、`GpsPositionFilter` で明らかに使えないものを落とす
+1. GPSストリームから測位を受け、`GpsPositionFilter` で明らかに使えないものを落とす。
+   iOS の位置取得の用途指定は、2026-11-04 から既定 `maritime`(iOS 27 未満は `otherNavigation`)。
+   **評価中**で、悪ければ既定を `fitness` に戻す。端末ごとに戻す開発者用の切り替えがある。
+   指定と実際に効いた種類は `navigation_started`・`gps_environment_snapshot` に残る
+   (`lib/config/location_activity_config.dart`、要件定義 11/03 R7)
 2. `ConservativePositionEstimator`(保守側の推定。`PrimarySolution.conservative`)が
    安全判定・表示・共有に使う位置・速度・方位を出す。代表点は生の測位そのもので、
    速度・方位だけを平滑化する。**GNSSの速度・方位は `GnssMotionValidity` で

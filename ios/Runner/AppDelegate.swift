@@ -95,6 +95,10 @@ import MetricKit
           "systemVersion": UIDevice.current.systemVersion,
           "thermalState": thermalState,
           "lowPowerModeEnabled": processInfo.isLowPowerModeEnabled,
+          // アプリを作った SDK("iphoneos27.0" など)。位置取得の用途指定
+          // maritime は iOS 27 の SDK で作ったときだけ効く(R7)。
+          "buildSdkName": Bundle.main.object(forInfoDictionaryKey: "DTSDKName") as? String
+            ?? "unknown",
         ])
       }
     }

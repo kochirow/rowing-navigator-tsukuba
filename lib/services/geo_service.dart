@@ -1,19 +1,39 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:rowing_navigator/config/location_activity_config.dart';
 import 'package:rowing_navigator/config/navigator_config.dart';
 import 'package:rowing_navigator/config/practice_log_config.dart';
+
+import 'location_activity_settings_service.dart';
 
 // =============================================
 // 位置情報サービス
 // =============================================
 class GeoService {
-  GeoService({Future<Position?> Function()? lastKnownPosition})
-      : _lastKnownPosition =
-            lastKnownPosition ?? Geolocator.getLastKnownPosition;
+  GeoService({
+    Future<Position?> Function()? lastKnownPosition,
+    LocationActivitySettingsService? activitySettings,
+  })  : _lastKnownPosition =
+            lastKnownPosition ?? Geolocator.getLastKnownPosition,
+        _activitySettings =
+            activitySettings ?? LocationActivitySettingsService();
 
   /// OSの最後の位置を取る関数。テストでは差し替える。
   final Future<Position?> Function() _lastKnownPosition;
+  final LocationActivitySettingsService _activitySettings;
   Position? _lastObservedPosition;
+
+  /// 航行中の位置取得に使う用途指定(R7)。航行開始の前に
+  /// [refreshNavigationActivity] で端末の設定を読み直す。
+  NavigationLocationActivity _navigationActivity =
+      defaultNavigationLocationActivity;
+  NavigationLocationActivity get navigationActivity => _navigationActivity;
+
+  /// 端末の設定(「詳細」で fitness に戻したか)を読み直す。失敗しても既定を使う。
+  Future<NavigationLocationActivity> refreshNavigationActivity() async {
+    _navigationActivity = await _activitySettings.load();
+    return _navigationActivity;
+  }
 
   LocationSettings _locationSettings(
     LocationAccuracy accuracy, {
@@ -40,10 +60,13 @@ class GeoService {
       return AppleSettings(
         accuracy: accuracy,
         // -1 is kCLDistanceFilterNone. 0 is not equivalent in
-        // geolocator_apple 2.3.13's Objective-C mapper.
+        // geolocator_apple's Objective-C mapper (2.3.13 and 2.4.3).
         distanceFilter: iosDistanceFilterNone,
         timeLimit: timeLimit,
-        activityType: ActivityType.fitness,
+        activityType: switch (_navigationActivity) {
+          NavigationLocationActivity.maritime => ActivityType.maritime,
+          NavigationLocationActivity.fitness => ActivityType.fitness,
+        },
         pauseLocationUpdatesAutomatically: false,
         showBackgroundLocationIndicator: true,
         allowBackgroundLocationUpdates: true,
