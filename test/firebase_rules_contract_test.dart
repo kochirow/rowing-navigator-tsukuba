@@ -206,6 +206,12 @@ void main() {
         'match /managed_hazards/fixed_obstacle_calibrations_v10',
       ),
     );
+    expect(
+      rules,
+      contains(
+        'match /managed_hazards/fixed_obstacle_calibrations_v11',
+      ),
+    );
     expect(rules, contains('validSharedSafetyCalibrationV3'));
     expect(rules, contains('validSharedSafetyCalibrationV4'));
     expect(rules, contains('validSharedSafetyCalibrationV5'));
@@ -214,6 +220,7 @@ void main() {
     expect(rules, contains('validSharedSafetyCalibrationV8'));
     expect(rules, contains('validSharedSafetyCalibrationV9'));
     expect(rules, contains('validSharedSafetyCalibrationV10'));
+    expect(rules, contains('validSharedSafetyCalibrationV11'));
     expect(
         rules,
         contains(

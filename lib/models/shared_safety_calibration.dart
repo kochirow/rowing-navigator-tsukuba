@@ -11,9 +11,9 @@ import 'shared_safety_calibration.g.dart';
 /// 位置校正と危険範囲を同じ文書にまとめることで、航行中の更新確認を
 /// 1 document read（または1 listener）で完了できる。
 class SharedSafetyCalibrationState {
-  /// v11は霞ヶ浦レーンと杭の座標更新を含むprofile v11専用。旧profile向けの
-  /// 頂点差分を新しい座標へ誤適用しないよう、v10以前とは文書を分離する。
-  static const documentId = 'fixed_obstacle_calibrations_v11';
+  /// v12は港の中(harborAreas)を足したprofile v12専用。プロフィールの
+  /// SHA-256が変わるため、v11以前の文書とは分離して revision 1 から始める。
+  static const documentId = 'fixed_obstacle_calibrations_v12';
   static const kind = 'fixed_obstacle_calibrations';
 
   /// 現地確認により、現在使っていない旧ポリゴン2件を初期状態で
@@ -32,7 +32,7 @@ class SharedSafetyCalibrationState {
   /// 未知の障害物IDを書き込めないようにする。
   static const allowedSourceIds = generatedAllowedSourceIds;
 
-  /// 同梱プロフィールv11の各基準線・Polygonの頂点数。
+  /// 同梱プロフィールv12の各基準線・Polygonの頂点数。
   ///
   /// 頂点補正はこの固定レイアウトに対する差分だけを共有する。基準
   /// プロフィールのversion/hashが変われば、別レイアウトを誤適用しない。
