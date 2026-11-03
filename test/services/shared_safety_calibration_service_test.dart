@@ -30,11 +30,11 @@ void main() {
     expect((await teamB.loadCached()), isNull);
   });
 
-  test('v10の杭の頂点補正をv11へ持ち越さず、旧cacheを破棄する', () async {
+  test('v11の共有校正をv12へ持ち越さず、旧cacheを破棄する', () async {
     final old = SharedSafetyCalibrationState(
-      baseProfileVersion: 10,
+      baseProfileVersion: 11,
       baseProfileSha256:
-          '962ed029ec2ba091e7d5cfd1fbc6cf98d5fe1dad7787dff11a7f68bfb978f3e5',
+          '5bef0edfe2785b357cc2be4014a610430900526c9363e7474b637f102de9e413',
       calibrations: const {
         'pile_3eacc519': FixedObstacleCalibration(
           vertexOffsets: {0: FixedObstacleVertexOffset(northMeters: 4)},
