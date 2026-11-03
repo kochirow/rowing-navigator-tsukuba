@@ -4,6 +4,7 @@ import GoogleMaps
 import AVFoundation
 import Darwin
 import MetricKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -59,6 +60,46 @@ import MetricKit
           "sampleRate": session.sampleRate,
           "ioBufferDurationMs": session.ioBufferDuration * 1000,
         ])
+      }
+
+      // 監視端末が背面にある間の通知(要件定義 11/03 R3)。音は鳴らさない
+      // (DESIGN_PRINCIPLES 3.5-3)。艇ごとに1つのIDで上書きする。
+      let observerNotificationChannel = FlutterMethodChannel(
+        name: "jp.kosei.rowingnavigator.tsukuba/observer_notifications",
+        binaryMessenger: messenger
+      )
+      observerNotificationChannel.setMethodCallHandler { call, result in
+        let center = UNUserNotificationCenter.current()
+        switch call.method {
+        case "requestPermission":
+          // 音の許可は求めない。バナーと通知センターだけ。
+          center.requestAuthorization(options: [.alert]) { granted, _ in
+            DispatchQueue.main.async { result(granted) }
+          }
+        case "show":
+          guard let args = call.arguments as? [String: Any],
+            let id = args["id"] as? String,
+            let title = args["title"] as? String,
+            let body = args["body"] as? String
+          else {
+            result(FlutterError(code: "bad_args", message: "id/title/body", details: nil))
+            return
+          }
+          let content = UNMutableNotificationContent()
+          content.title = title
+          content.body = body
+          content.sound = nil
+          content.threadIdentifier = "observer"
+          // Time Sensitive の権限(entitlement)が無い間は、通常の通知として届く。
+          content.interruptionLevel = .timeSensitive
+          let request = UNNotificationRequest(
+            identifier: "observer-\(id)", content: content, trigger: nil)
+          center.add(request) { error in
+            DispatchQueue.main.async { result(error == nil) }
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
       }
 
       let deviceDiagnosticsChannel = FlutterMethodChannel(

@@ -172,6 +172,7 @@ flutter run
 | `lib/hooks/use_coach_watch.dart` | コーチ(監視)機能。航跡・艇一覧・異常検知。異常は初検知時刻を保持し、地図上の件数の印(`ObserverStatusIcon`)と艇一覧で示す。**音は既定で出さない**(`coachAudibleAnomalyKindNames` が空。DESIGN_PRINCIPLES 3.5-3)。音を鳴らすのは、そこへ入れた種類の新規と `anomalyReannounceSec` 経過時だけ。**監視中はWakelockを保持しない**(下記) |
 | `lib/hooks/use_stroke_rate.dart` | 加速度センサからのSPM計測。Kalmanのノイズ設計にも渡す。基準速度はGNSSが使えなければ位置由来の値で、その間は融合の信頼度を0.6までに抑える(`imuFusionNonGnssBaseConfidenceCap`) |
 | `lib/hooks/use_observer_warning_alerts.dart` | 監視端末で、航行中の艇の漕手に警告の音(band 1・2)が鳴ったら、画面表示中だけバイブで1回知らせる。地図の札(赤)と艇一覧に種類・鳴り方・継続時間を出す。判定は `observer_warning_notifier.dart`(純Dart。種類が変わるまで繰り返さない・10秒の無音で再武装・2秒に1回へまとめる)。オン・オフは艇一覧の上(既定オン)。通知は監視ログに `observer_warning_notified` で残る。**音は鳴らさない**(DESIGN_PRINCIPLES 3.5-3) |
+| `lib/hooks/use_observer_background_alerts.dart` | 監視端末が**背面にある間**、漕手の警告・更新途絶(90秒)・長時間停止(通知用は5分、`observerBackgroundStoppedNotifySec`)を通知で出す(2026-11-04、要件定義 11/03 R3)。判定は `observer_background_alert_policy.dart`(純Dart)。**受信を直接購読し、タイマーで判定する**(画面の描画に頼ると背面で動かない)。前面の間・切った種類は通知せず消化する。係留区域・港の中・陸上判定中の艇は途絶・停止を出さない。音なし(iOS は Time Sensitive の指定、Android は音なし・バイブありの専用チャンネル)。艇ごとに1つのIDで上書き。種類ごとのオン・オフは艇一覧の上。監視ログに `observer_background_notified` で残る |
 | `lib/services/stroke_speed_trace.dart` | 艇速変化グラフ用の連続波形(純Dart)。**表示専用**。1サンプルO(1)のリング。**航行中の画面には出さない**(2026-08-13に廃止。監視端末専用) |
 | `lib/services/stroke_trace_history.dart` | 監視端末が受けた1ストロークずつを連結する(純Dart) |
 | `lib/hooks/use_stroke_trace_sharing.dart` | 1ストロークの波形を監視端末へ共有。安全経路の外側。**波形を見る口はここ(監視端末の `stroke_trace_sheet.dart`)だけ**で、艇側は送るだけ |

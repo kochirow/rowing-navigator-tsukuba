@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -117,7 +118,7 @@ bool isAudibleCoachAnomalyKind(BoatAnomalyKind kind) =>
 /// - 長時間停止・更新途絶を検知して画面に表示
 /// - 一覧パネル用のステータスを提供
 UseCoachWatch useCoachWatch({
-  required List<Boat> otherBoats,
+  required ValueListenable<List<Boat>> otherBoats,
   required bool enabled,
   ChannelCenterline? channelCenterline,
   ChannelLaneResolver? channelLaneResolver,
@@ -153,32 +154,41 @@ UseCoachWatch useCoachWatch({
     boatColors.value = assignBoatTrackColors(boatIds);
   }
 
-  // 受信した艇情報を航跡に蓄積
+  // 受信した艇情報を航跡に蓄積する。
+  //
+  // 受信を**直接購読する**。画面の再描画(effect の再実行)に頼ると、背面では
+  // Flutter が描画しないので最終受信が更新されず、背面から戻った瞬間に
+  // 全艇が「更新途絶」に見える(2026-11-04 R3)。
   useEffect(() {
     if (!enabled) return null;
-    final now = DateTime.now();
-    for (final boat in otherBoats) {
-      // otherBoatsは受信鮮度タイマー等でも再通知される。ここをnowにすると
-      // 実データが止まっていても「最終受信0秒前」に戻り続けるため、
-      // メッセージ自身の更新時刻を保持する。
-      lastSeen.value[boat.boatId] = coachFreshnessTimestamp(boat, now);
-      lastBoat.value[boat.boatId] = boat;
-      final trail = trails.value.putIfAbsent(boat.boatId, () => []);
-      // 同じタイムスタンプの点は重複追加しない
-      // (RTDBは他艇の更新でも全艇分のイベントが再送されるため)
-      if (trail.isEmpty || trail.last.t != boat.timestamp) {
-        trail.add(_TrailPoint(
-          t: boat.timestamp,
-          position: LatLng(boat.lat, boat.lng),
-          speed: boat.speed,
-        ));
+    void ingest() {
+      final now = DateTime.now();
+      for (final boat in otherBoats.value) {
+        // otherBoatsは受信鮮度タイマー等でも再通知される。ここをnowにすると
+        // 実データが止まっていても「最終受信0秒前」に戻り続けるため、
+        // メッセージ自身の更新時刻を保持する。
+        lastSeen.value[boat.boatId] = coachFreshnessTimestamp(boat, now);
+        lastBoat.value[boat.boatId] = boat;
+        final trail = trails.value.putIfAbsent(boat.boatId, () => []);
+        // 同じタイムスタンプの点は重複追加しない
+        // (RTDBは他艇の更新でも全艇分のイベントが再送されるため)
+        if (trail.isEmpty || trail.last.t != boat.timestamp) {
+          trail.add(_TrailPoint(
+            t: boat.timestamp,
+            position: LatLng(boat.lat, boat.lng),
+            speed: boat.speed,
+          ));
+        }
+        // 古い航跡を削除
+        trail.removeWhere(
+            (p) => now.difference(p.t).inSeconds > trailDurationSec);
       }
-      // 古い航跡を削除
-      trail
-          .removeWhere((p) => now.difference(p.t).inSeconds > trailDurationSec);
+      syncBoatColors();
     }
-    syncBoatColors();
-    return null;
+
+    ingest();
+    otherBoats.addListener(ingest);
+    return () => otherBoats.removeListener(ingest);
   }, [otherBoats, enabled]);
 
   // 異常検知とステータス更新(定期スキャン)
@@ -321,7 +331,7 @@ UseCoachWatch useCoachWatch({
       if (!enabled) return;
       try {
         final evaluation = trafficEvaluator.evaluate(
-          boats: otherBoats,
+          boats: otherBoats.value,
           evaluatedAt: DateTime.now().toUtc(),
           previousState: trafficState.value,
           channelCenterline: channelCenterline,
