@@ -9,6 +9,7 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import '../config/hazard_profile_config.dart';
 import '../config/navigator_config.dart';
 import '../models/ashore_area.dart';
+import '../models/harbor_area.dart';
 import '../models/mooring_area.dart';
 import '../models/channel_lane.dart';
 import '../models/danger_zone_settings.dart';
@@ -379,6 +380,27 @@ class PresetObstacleService {
         areas.add(MooringArea.fromJson(Map<String, dynamic>.from(raw as Map)));
       } catch (error) {
         debugPrint('Invalid mooring area skipped: $error');
+      }
+    }
+    return List.unmodifiable(areas);
+  }
+
+  /// 港の中(発着場所から航路の入口まで)を読む。危険区域・校正対象ではない。
+  /// 1件が壊れていても残りの有効なエリアは使い、全件欠損なら従来どおり鳴らす。
+  Future<List<HarborArea>> loadHarborAreas() async {
+    final data = await _loadProfile();
+    final areas = <HarborArea>[];
+    final rawAreas = data['harborAreas'];
+    if (rawAreas == null) return const <HarborArea>[];
+    if (rawAreas is! List) {
+      debugPrint('Invalid harborAreas array ignored.');
+      return const <HarborArea>[];
+    }
+    for (final raw in rawAreas) {
+      try {
+        areas.add(HarborArea.fromJson(Map<String, dynamic>.from(raw as Map)));
+      } catch (error) {
+        debugPrint('Invalid harbor area skipped: $error');
       }
     }
     return List.unmodifiable(areas);

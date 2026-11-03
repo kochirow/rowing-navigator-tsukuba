@@ -3,7 +3,7 @@ import { dangerZonePreviews } from '../io/dangerZone';
 import type { Coordinate, MapObject, Project } from '../model/types';
 import { bearing, destination, distanceMeters, pointInPolygon } from '../io/geo';
 import { colorWithAlpha, objectColor } from './objectColor';
-import type { FieldTrackLine } from '../model/fieldTracks';
+import type { FieldTrackLine, FieldTrackWarningMarker } from '../model/fieldTracks';
 
 export type MapInteractionMode = 'pan' | 'add' | 'move';
 type Props = {
@@ -12,6 +12,8 @@ type Props = {
   mode: MapInteractionMode;
   /** 実機ログの航跡(表示専用)。作図オブジェクトの下に描く。 */
   fieldTracks?: FieldTrackLine[];
+  /** 実機で鳴った警告の印(表示専用)。航跡の上、作図の頂点の下に置く。 */
+  fieldTrackWarnings?: FieldTrackWarningMarker[];
   /** 増えるたびに、表示中の航跡が収まるよう地図を動かす。 */
   fitFieldTracksRequest?: number;
   onAddPoint: (point: Coordinate) => void;
@@ -194,7 +196,7 @@ async function loadMapLibraries(mk: any, libraries: string[]): Promise<void> {
   });
 }
 
-export function MapCanvas({ project, selected, mode, fieldTracks = [], fitFieldTracksRequest = 0, onAddPoint, onMovePoint, onFinishInteraction }: Props) {
+export function MapCanvas({ project, selected, mode, fieldTracks = [], fieldTrackWarnings = [], fitFieldTracksRequest = 0, onAddPoint, onMovePoint, onFinishInteraction }: Props) {
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<any>(undefined);
   const mapkit = useRef<any>(undefined);
@@ -287,10 +289,14 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fitFieldT
         const coordinates = object.geometry.points.map((point) => new mk.Coordinate(point.lat, point.lng));
         if (coordinates.length < 2) continue;
         const color = objectColor(object);
+        // 桟橋エリア・港の中は危険区域ではなく「ここは港」という宣言なので、
+        // アプリと同じく破線の輪郭で描き、塗りを薄くする。
+        const declaredArea = object.kind === 'mooringArea' || object.kind === 'harborArea';
         const style = {
           strokeColor: color,
           lineWidth: object.id === selected?.id ? 4 : object.style.strokeWidth ?? 2,
-          fillColor: colorWithAlpha(color, object.kind === 'ashoreArea' ? '55' : '33'),
+          fillColor: colorWithAlpha(color, object.kind === 'ashoreArea' ? '55' : declaredArea ? '14' : '33'),
+          ...(declaredArea ? { lineDash: [8, 6] } : {}),
         };
         const overlayOptions = { style: new mk.Style(style), enabled: false };
         const overlay = object.geometry.type === 'polygon'
@@ -300,6 +306,23 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fitFieldT
           throw new Error('MapKit のオーバーレイ生成を確認できませんでした。地図を再読み込みしてください。');
         }
         overlays.push(overlay);
+      }
+      // 鳴った警告の印。押すと時刻・種類・鳴り方とセッションが出る。
+      for (const marker of fieldTrackWarnings) {
+        const annotation = new mk.Annotation(new mk.Coordinate(marker.lat, marker.lng), () => {
+          const element = document.createElement('div');
+          element.className = 'field-warning-marker';
+          element.style.setProperty('--warning-color', marker.categoryColor);
+          element.style.setProperty('--session-color', marker.sessionColor);
+          element.textContent = marker.mark;
+          return element;
+        }, {
+          title: marker.title,
+          subtitle: marker.subtitle,
+          calloutEnabled: true,
+          animates: false,
+        });
+        current.addAnnotation(annotation);
       }
       for (const arrow of laneArrows(project)) {
         const annotation = new mk.Annotation(new mk.Coordinate(arrow.point.lat, arrow.point.lng), (_coordinate: any, _options: any) => {
@@ -360,7 +383,7 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fitFieldT
     } catch (error) {
       setMessage(error instanceof Error ? `地図オーバーレイを更新できませんでした: ${error.message}` : '地図オーバーレイを更新できませんでした。');
     }
-  }, [mapReady, project, selected, mode, fieldTrackOverlays]);
+  }, [mapReady, project, selected, mode, fieldTrackOverlays, fieldTrackWarnings]);
 
   const fallbackPoint = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'add' || map.current) return;

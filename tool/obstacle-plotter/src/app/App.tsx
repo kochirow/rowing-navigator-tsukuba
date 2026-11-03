@@ -12,14 +12,14 @@ import { useProjectStore } from '../store/projectStore';
 import { download } from './download';
 import { prepareTemporaryObstacleImport, readTeamSafety } from '../io/firestore';
 import { promoteTemporaryObject, temporaryObstacleObjects } from '../io/temporaryObstacles';
-import { FieldTrackPanel, loadVisibleTrackDates } from './FieldTrackPanel';
-import { visibleFieldTrackLines, type FieldTrackSet } from '../model/fieldTracks';
+import { FieldTrackPanel, loadFieldWarningDisplay, loadVisibleTrackDates } from './FieldTrackPanel';
+import { visibleFieldTrackLines, visibleFieldTrackWarnings, type FieldTrackSet } from '../model/fieldTracks';
 
 const kinds: Array<[ObjectKind, string]> = [
   ['shore', '岸（向きのある基準線）'], ['bridge', '橋（閉じた基準線）'], ['island', '中州（閉じた基準線）'],
   ['bridgePier', '橋脚（外周ポリゴン）'],
   ['driftwood', '流木（閉じた基準線）'], ['pile', '杭（外周ポリゴン）'], ['testZone', 'テスト区域'], ['curve', 'カーブ'], ['reverse', '逆走注意区域（旧データ用）'], ['generic', '危険区域'],
-  ['ashoreArea', '陸上エリア（警告停止）'], ['mooringArea', '桟橋エリア（着艇時の他艇静音）'], ['navigableWater', '移動・一般水域（逆走判定なし）'], ['lane', '航路レーン'],
+  ['ashoreArea', '陸上エリア（警告停止）'], ['mooringArea', '桟橋エリア（着艇時の他艇静音）'], ['harborArea', '港の中（岸・他艇を控えめに鳴らす）'], ['navigableWater', '移動・一般水域（逆走判定なし）'], ['lane', '航路レーン'],
   ['practiceArea', '練習水域'], ['operationalCoverage', '対応水域'], ['channelCenterline', '航路中心線'],
 ];
 const seven = (value: number) => value.toFixed(7);
@@ -80,6 +80,11 @@ export default function App() {
   const [visibleTrackDates, setVisibleTrackDates] = useState<Set<string>>(loadVisibleTrackDates);
   const [fitFieldTracksRequest, setFitFieldTracksRequest] = useState(0);
   const fieldTrackLines = useMemo(() => visibleFieldTrackLines(fieldTracks, visibleTrackDates), [fieldTracks, visibleTrackDates]);
+  const [fieldWarningDisplay, setFieldWarningDisplay] = useState(loadFieldWarningDisplay);
+  const fieldTrackWarnings = useMemo(
+    () => fieldWarningDisplay.visible ? visibleFieldTrackWarnings(fieldTracks, visibleTrackDates, fieldWarningDisplay.hiddenCategories) : [],
+    [fieldTracks, visibleTrackDates, fieldWarningDisplay],
+  );
 
   useEffect(() => { void store.loadLast(); }, []);
   useEffect(() => {
@@ -245,13 +250,13 @@ export default function App() {
           <button className="map-tools-finish" onClick={() => setMapMode('pan')} disabled={mapMode === 'pan'}>操作を終了</button>
           <p className="map-tools-help">追加は地図をクリック、移動は番号付き頂点をドラッグ。「操作を終了」で通常の地図操作へ戻ります。</p>
         </div>
-        <FieldTrackPanel visibleDates={visibleTrackDates} onVisibleDatesChange={setVisibleTrackDates} onLoaded={setFieldTracks} onFitRequest={() => setFitFieldTracksRequest((count) => count + 1)} />
+        <FieldTrackPanel visibleDates={visibleTrackDates} onVisibleDatesChange={setVisibleTrackDates} onLoaded={setFieldTracks} onFitRequest={() => setFitFieldTracksRequest((count) => count + 1)} warningDisplay={fieldWarningDisplay} onWarningDisplayChange={setFieldWarningDisplay} />
         <h2>オブジェクト</h2>
         <ObjectTree folders={project.folders} objects={project.objects} selectedId={selectedFolderId ? null : current?.id ?? null} selectedFolderId={selectedFolderId} onSelect={(id) => { setSelectedFolderId(null); store.select(id); }} onSelectFolder={(id) => { setSelectedFolderId(id); setMapMode('pan'); }} onToggleFolder={(id) => store.updateFolder(id, (folder) => ({ ...folder, expanded: !folder.expanded }), false)} onAddChildFolder={createFolder} />
         <h2>検証</h2>
         <div className="issues">{issues.map((item, index) => <p className={item.level} key={`${item.code}-${index}`}>{item.level === 'error' ? '⛔' : '⚠'} {item.message}</p>)}</div>
       </aside>
-      <section className="map-panel"><MapCanvas project={project} selected={current} mode={mapMode} fieldTracks={fieldTrackLines} fitFieldTracksRequest={fitFieldTracksRequest} onAddPoint={addPoint} onMovePoint={movePoint} onFinishInteraction={() => setMapMode('pan')} /></section>
+      <section className="map-panel"><MapCanvas project={project} selected={current} mode={mapMode} fieldTracks={fieldTrackLines} fieldTrackWarnings={fieldTrackWarnings} fitFieldTracksRequest={fitFieldTracksRequest} onAddPoint={addPoint} onMovePoint={movePoint} onFinishInteraction={() => setMapMode('pan')} /></section>
       <aside className="inspector">{currentFolder ? <FolderInspector folder={currentFolder} folders={project.folders} onChange={(folder) => store.updateFolder(folder.id, () => folder)} /> : <Inspector object={current} objects={project.objects} folders={project.folders} onChange={(object) => store.updateObject(object.id, () => object)} onSelect={store.select} onDrawing={() => setMapMode('add')} onMoving={() => setMapMode('move')} onPromote={promote} />}</aside>
     </section>
     {serverMessage && <div className="action-notice" role="status" aria-live="polite"><span>{serverMessage}</span><button onClick={() => setServerMessage('')} aria-label="通知を閉じる">×</button></div>}

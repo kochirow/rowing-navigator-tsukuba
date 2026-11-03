@@ -96,6 +96,9 @@ const int channelDividerZIndex = 2;
 /// 中央線と同じ「取り決め」の層に置き、危険区域の塗りより下に敷く。
 const int mooringAreaZIndex = 3;
 
+/// 港の中の輪郭。桟橋エリアと同じ層(どちらも「ここは港」という宣言)。
+const int harborAreaZIndex = 3;
+
 /// 監視モードの航跡。過去の線なので危険区域より下。
 const int coachTrailZIndex = 5;
 
@@ -255,5 +258,23 @@ MooringAreaStyle mooringAreaStyleFor({required bool isSatellite}) {
     casingWidth: 4,
     dashLengthPixels: 10,
     gapLengthPixels: 8,
+  );
+}
+
+/// 港の中の表示色。[isSatellite] は `MapType.hybrid` のとき true。
+///
+/// 桟橋エリアと同じく**塗らない**破線の輪郭にする(港の中は水面で、そこに
+/// 何かが在るわけではない)。桟橋エリアより広い区域なので、線を細く・間隔を
+/// 広くして、桟橋エリア・中央線・危険区域より目立たせない。
+MooringAreaStyle harborAreaStyleFor({required bool isSatellite}) {
+  return MooringAreaStyle(
+    coreColor: const Color(0xB3FFFFFF), // 白 alpha 0.70
+    coreWidth: 1,
+    casingColor: isSatellite
+        ? const Color(0x66000000) // 黒 alpha 0.40
+        : const Color(0x73263238), // #263238 alpha 0.45
+    casingWidth: 3,
+    dashLengthPixels: 6,
+    gapLengthPixels: 10,
   );
 }

@@ -14,6 +14,15 @@ const maxBridgePierLongSideMeters = 30;
 /// 5000m² は「明らかに広げすぎ」を弾くための上限。
 const maxMooringAreaSquareMeters = 5000;
 
+/// 港の中の面積上限 [m²]。
+///
+/// 港の中では、岸の警告の鳴り始めを停止時間＋1秒へ縮めて1回だけにし、
+/// 両者が低速なら他艇の警告も1回だけにする。**区域が航路まで広がると、
+/// 巡航中の岸・他艇の警告まで控えめになる。** ラクスマリーナの港の中は
+/// 桟橋から防波堤の先まで約400m × 数十m(1〜2万m²)で、6万m² は
+/// 「明らかに沖まで含めた」を弾くための上限。
+const maxHarborAreaSquareMeters = 60000;
+
 function pointsOf(geometry: Geometry) {
   return geometry.type === 'point' ? [geometry.point] : geometry.points;
 }
@@ -368,9 +377,9 @@ export function validateProject(project: Project): ValidationIssue[] {
     }
   }
   for (const object of project.objects) {
-    if (NAVIGABLE_KINDS.has(object.kind) || object.kind === 'ashoreArea' || object.kind === 'mooringArea') {
+    if (NAVIGABLE_KINDS.has(object.kind) || object.kind === 'ashoreArea' || object.kind === 'mooringArea' || object.kind === 'harborArea') {
       if (DANGER_BASELINE_KINDS.has(object.kind) || DANGER_POLYGON_KINDS.has(object.kind)) {
-        issues.push(issue('error', 'safety.category-separation', '陸上エリア・桟橋エリア・航路を危険区域に混在させてはいけません。', object));
+        issues.push(issue('error', 'safety.category-separation', '陸上エリア・桟橋エリア・港の中・航路を危険区域に混在させてはいけません。', object));
       }
     }
   }
@@ -410,6 +419,51 @@ export function validateProject(project: Project): ValidationIssue[] {
           '桟橋エリアが陸上エリアと重なっています。陸上判定は全ての音を止めるため、意味が二重になります。', area));
         break;
       }
+    }
+  }
+
+  // ---- 港の中 ----
+  //
+  // 発着場所から航路(レーン)の入口までの水面。中では岸・他艇の警告を
+  // 控えめにする。**航路へ広がると巡航中の警告まで控えめになる。**
+  // レーンと重ならない・中心線を跨がない・面積の上限、の3つが安全弁である。
+  for (const area of project.objects.filter((object) => object.kind === 'harborArea')) {
+    const points = polygonPoints(area);
+    if (points.length < 3) {
+      issues.push(issue('error', 'harborArea.geometry', '港の中は3点以上の閉じたポリゴンでなければなりません。', area));
+      continue;
+    }
+    if (hasSelfIntersection(points)) {
+      issues.push(issue('error', 'harborArea.selfIntersection', '港の中の外周が自己交差しています。内外の判定が定まりません。', area));
+    }
+    const areaSquareMeters = polygonAreaSquareMeters(points);
+    if (areaSquareMeters > maxHarborAreaSquareMeters) {
+      issues.push(issue('error', 'harborArea.tooLarge',
+        `港の中の面積 ${Math.round(areaSquareMeters)}m² が上限 ${maxHarborAreaSquareMeters}m² を超えています。沖まで含めると、巡航中の岸・他艇の警告まで控えめになります。`, area));
+    }
+    for (const lane of lanes) {
+      const lanePoints = polygonPoints(lane);
+      if (lanePoints.length >= 3 && polygonsOverlap(points, lanePoints)) {
+        issues.push(issue('error', 'harborArea.overlapsLane',
+          `港の中が航路レーン「${lane.name || lane.exportId}」と重なっています。港の中は航路の入口の手前までにしてください。`, area));
+      }
+    }
+    for (const centerline of centerlines) {
+      const centerlinePoints = centerline.geometry.type === 'polyline' ? centerline.geometry.points : [];
+      if (centerlinePoints.length < 2) continue;
+      if (centerlineTouchesOrNearPolygon(centerlinePoints, points, 0)) {
+        issues.push(issue('error', 'harborArea.overlapsCenterline',
+          `港の中が航路中心線「${centerline.name || centerline.exportId}」を跨いでいます。航路上の警告まで控えめになります。`, area));
+        break;
+      }
+    }
+    const containsMooring = mooringAreas.some((mooring) => {
+      const mooringPoints = polygonPoints(mooring);
+      return mooringPoints.length >= 3 && pointInPolygon(centroid(mooringPoints), points);
+    });
+    if (!containsMooring) {
+      issues.push(issue('warning', 'harborArea.noMooring',
+        '港の中に桟橋エリアが入っていません。発着場所から航路の入口までを囲めているか確認してください。', area));
     }
   }
   return issues;

@@ -102,6 +102,8 @@ class SuppressionRule {
 /// 他艇無音化と同じ事故が起きる。
 class SuppressionRules {
   static const otherBoat = 'other_boat';
+  static const shore = 'shore';
+  static const reverse = 'reverse';
 
   /// 低速時の固定物静音。3秒の確定待ちを持つ。
   static const lowSpeedStatic = SuppressionRule(
@@ -151,10 +153,71 @@ class SuppressionRules {
     requiredInputs: {SuppressionInput.ownSpeed},
   );
 
+  // ---- 港の中(2026-11-03) ----
+  //
+  // 発着場所から航路の入口までの水面。音は止めずに控えめにする。
+  // 鳴り始めを縮める・1回だけにする・誤差だけの重なりを表示にする、の3つで、
+  // 検知・表示・記録は変えない。港の外へは効かない(`harborAreas` の内外判定)。
+
+  /// 港の中の岸: 到達までの時間が「停止時間＋1秒」より先なら表示だけにする。
+  static const harborShoreLead = SuppressionRule(
+    id: 'harbor_shore_lead',
+    reasonCode: 'PRESENTATION_HARBOR_SHORE_LEAD',
+    allowedCategories: {shore},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+    requiredInputs: {SuppressionInput.ownPosition},
+  );
+
+  /// 港の中の岸: 自艇の測位の誤差の円だけで重なる候補は表示だけにする。
+  static const harborShoreUncertainty = SuppressionRule(
+    id: 'harbor_shore_uncertainty',
+    reasonCode: 'PRESENTATION_HARBOR_UNCERTAINTY_VISUAL',
+    allowedCategories: {shore},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+    requiredInputs: {SuppressionInput.ownPosition},
+  );
+
+  /// 港の中の岸: 繰り返さず、1つのエピソードで1回だけ読み上げる。
+  static const harborShoreSingle = SuppressionRule(
+    id: 'harbor_shore_single',
+    reasonCode: 'PRESENTATION_HARBOR_SINGLE',
+    allowedCategories: {shore},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+    requiredInputs: {SuppressionInput.ownPosition},
+  );
+
+  /// 港の中の他艇: 自艇も相手も出し入れの速さ未満なら1回だけ読み上げる。
+  /// **相手の速度が取れていることを要求する**(原則6)。
+  static const harborManeuver = SuppressionRule(
+    id: 'harbor_maneuver',
+    reasonCode: 'PRESENTATION_HARBOR_SINGLE',
+    allowedCategories: {otherBoat},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+    requiredInputs: {
+      SuppressionInput.ownSpeed,
+      SuppressionInput.ownPosition,
+      SuppressionInput.otherBoatSpeed,
+    },
+  );
+
+  /// 港の中の逆走注意: 読み上げない。港の中ではレーンを使わない。
+  static const harborGuidance = SuppressionRule(
+    id: 'harbor_guidance',
+    reasonCode: 'PRESENTATION_HARBOR_GUIDANCE_SILENT',
+    allowedCategories: {reverse},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+    requiredInputs: {SuppressionInput.ownPosition},
+  );
+
   static const all = <SuppressionRule>[
     lowSpeedStatic,
     uncertaintyOnly,
     mooringArea,
     stableStop,
+    harborShoreLead,
+    harborShoreUncertainty,
+    harborShoreSingle,
+    harborManeuver,
+    harborGuidance,
   ];
 }

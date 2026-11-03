@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import type { FieldTrackDay, FieldTrackSession, FieldTrackSet } from '../src/model/fieldTracks';
+import type { FieldTrackDay, FieldTrackSession, FieldTrackSet, FieldTrackWarning } from '../src/model/fieldTracks';
 
 /** 実機ログの保存先。リポジトリの一段上に置く運用(docs/実機ログ保存場所.md)。 */
 export function defaultTrackLogRoot(repoRoot: string): string {
@@ -15,7 +15,9 @@ export const maxTrackGapSeconds = 10;
 // 1m未満の動きは間引く。停泊中の点の山で描画が重くなるのを避ける。
 export const minTrackStepMeters = 1;
 
-const sessionFolderPattern = /^rowing_diagnostics_(.+)$/;
+// 提供者の名前を前に付けたフォルダ(例: yamashita_rowing_diagnostics_<id>)も読む。
+// まとめ送信の束(<名前>_rowing_diagnostics_bundle_...)はセッションではないので除き、中を探す。
+const sessionFolderPattern = /^(?:(.+?)_)?rowing_diagnostics_(?!bundle_)(.+)$/;
 const maxSearchDepth = 5;
 
 type Row = Record<string, string>;
@@ -74,6 +76,78 @@ export function trackSegmentsFromCsv(text: string): Array<Array<[number, number]
   return segments;
 }
 
+function eventTimeMs(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * `events.jsonl` から、実際に鳴った警告（`warning_presentation_requested`）を取り出し、
+ * その時刻にいちばん近い測位の位置に置く。読めない行は飛ばす（古い形式・途中で切れた行）。
+ *
+ * 鳴っていた長さは、次の `warning_presentation_cleared` か次の再生要求までの秒数。
+ * 1回だけの読み上げでは、次の要求までの間隔になるので参考値にとどめる。
+ */
+export function warningsFromEvents(eventsText: string, csvText: string): FieldTrackWarning[] {
+  const fixes: Array<{ time: number; lat: number; lng: number }> = [];
+  for (const row of parseCsv(csvText)) {
+    const time = Date.parse(row.timestamp);
+    const lat = Number(row.raw_lat || row.filtered_lat);
+    const lng = Number(row.raw_lng || row.filtered_lng);
+    if (Number.isFinite(time) && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      fixes.push({ time, lat, lng });
+    }
+  }
+  if (!fixes.length) return [];
+  fixes.sort((a, b) => a.time - b.time);
+  const nearest = (time: number) => {
+    let low = 0;
+    let high = fixes.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (fixes[middle].time < time) low = middle + 1; else high = middle;
+    }
+    const candidates = [fixes[low - 1], fixes[low]].filter(Boolean);
+    return candidates.reduce((best, fix) => Math.abs(fix.time - time) < Math.abs(best.time - time) ? fix : best);
+  };
+  type Event = { time: number; type: string; details: Record<string, unknown> };
+  const events: Event[] = [];
+  for (const line of eventsText.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line) as { t?: unknown; type?: unknown; details?: unknown };
+      const time = eventTimeMs(parsed.t);
+      if (time === undefined || typeof parsed.type !== 'string') continue;
+      if (parsed.type !== 'warning_presentation_requested' && parsed.type !== 'warning_presentation_cleared') continue;
+      events.push({ time, type: parsed.type, details: (parsed.details ?? {}) as Record<string, unknown> });
+    } catch { /* 途中で切れた行は飛ばす */ }
+  }
+  events.sort((a, b) => a.time - b.time);
+  const warnings: FieldTrackWarning[] = [];
+  events.forEach((event, index) => {
+    if (event.type !== 'warning_presentation_requested') return;
+    const category = typeof event.details.category === 'string' ? event.details.category : 'unknown';
+    const mode = typeof event.details.mode === 'string' ? event.details.mode : 'unknown';
+    const fix = nearest(event.time);
+    // 測位から60秒以上離れた警告は、場所を決められないので出さない。
+    if (Math.abs(fix.time - event.time) > 60_000) return;
+    const next = events.slice(index + 1).find((later) => later.type === 'warning_presentation_cleared' || later.type === 'warning_presentation_requested');
+    warnings.push({
+      at: new Date(event.time).toISOString(),
+      lat: Number(fix.lat.toFixed(7)),
+      lng: Number(fix.lng.toFixed(7)),
+      category,
+      mode,
+      ...(next ? { durationSec: Math.round((next.time - event.time) / 100) / 10 } : {}),
+    });
+  });
+  return warnings;
+}
+
 async function findSessionFolders(root: string, depth = 0): Promise<string[]> {
   if (depth > maxSearchDepth) return [];
   let entries;
@@ -88,8 +162,13 @@ async function findSessionFolders(root: string, depth = 0): Promise<string[]> {
   return found;
 }
 
-/** バンドル名の先頭(例: hanazawa_rowing_diagnostics_bundle_...)を提供者名として使う。 */
+/**
+ * 提供者名。セッションのフォルダ名の先頭(例: yamashita_rowing_diagnostics_...)か、
+ * バンドル名の先頭(例: hanazawa_rowing_diagnostics_bundle_...)を使う。
+ */
 function providerOf(folder: string): string | undefined {
+  const own = sessionFolderPattern.exec(basename(folder))?.[1];
+  if (own) return own;
   const parent = basename(dirname(folder));
   const match = /^(.+?)_rowing_diagnostics_bundle/.exec(parent);
   return match?.[1];
@@ -102,7 +181,9 @@ async function readSession(root: string, folder: string): Promise<FieldTrackSess
   try { manifest = JSON.parse(await readFile(join(folder, 'manifest.json'), 'utf8')); } catch { /* 古い形式はmanifestを欠くことがある */ }
   const segments = trackSegmentsFromCsv(csv);
   if (!segments.length) return undefined;
-  const id = sessionFolderPattern.exec(basename(folder))?.[1] ?? basename(folder);
+  let warnings: FieldTrackWarning[] = [];
+  try { warnings = warningsFromEvents(await readFile(join(folder, 'events.jsonl'), 'utf8'), csv); } catch { /* events.jsonl の無い古い形式 */ }
+  const id = sessionFolderPattern.exec(basename(folder))?.[2] ?? basename(folder);
   const firstTimestamp = /\n(\d{4}-\d{2}-\d{2}T[^,]+),/.exec(csv)?.[1];
   const startedAt: string = manifest.session?.startedAt ?? firstTimestamp ?? (await stat(folder)).mtime.toISOString();
   return {
@@ -116,6 +197,7 @@ async function readSession(root: string, folder: string): Promise<FieldTrackSess
     folder: relative(root, folder),
     pointCount: segments.reduce((sum, segment) => sum + segment.length, 0),
     segments,
+    warnings,
   };
 }
 

@@ -1,3 +1,6 @@
+import 'boat_config.dart';
+import '../types/boat_type.dart';
+
 /// 警告判定そのものを変えず、画面表示と音声の段階だけを決める設定。
 ///
 /// **設計の要点: 2つの軸を分離する。**
@@ -218,3 +221,43 @@ const lowSpeedMutedCategories = <String>{
   'shore',
   'reverse',
 };
+
+// ## 港の中(発着場所から航路の入口まで)
+//
+// 港の中では、艇を桟橋から離し、向きを変え、防波堤に沿って出口へ向かう。
+// 予測地平と一致させた13秒の鳴り始めは、巡航(3〜5m/s)で40〜65m先を見る値で、
+// 港の中の速さ(中央値1.1m/s。2026-11-03 までの霞ヶ浦5練習)では壁まで十数mしか
+// ない港のほぼ全体が予測に入り、向きを変えるたびに岸の警告が鳴っていた
+// (港の中で49回 / 霞ヶ浦全体100回。漕手2人が別々に指摘)。
+// 要件: docs/要件定義_2026-11-03_実機ログとレビューに基づく改善.md R4。
+
+/// 港の中で岸の警告を鳴らし始める時刻の、停止時間に足す余裕 [秒]。
+///
+/// 停止距離の式(`boat_config.dart`)は速さに比例するので、止まりきるまでの
+/// **時間**は速さによらず艇種ごとに一定(1x 6.95秒・8+ 8.15秒など)。
+/// 「止まりきれる時点では必ず鳴る」を港の中でも保つため、停止時間を下回らない
+/// 値にする。1秒は、鳴ってから漕手が振り返るまでの余裕として選ぶ。
+const harborShoreLeadMarginSeconds = 1.0;
+
+/// 港の中で「艇を出し入れしている」とみなす速さ [m/s]。
+///
+/// 巡航速度(3〜5m/s。DESIGN_PRINCIPLES 1.3)の下限の半分。桟橋で艇を寄せる・
+/// 離す・向きを変える速さ。自艇も相手もこれ未満なら、他艇の警告を1回だけに
+/// する。相手が速い、または速度が分からなければ今までどおり繰り返す(原則6)。
+const harborManeuverSpeedMetersPerSecond = 1.5;
+
+/// 艇種の停止時間 [秒]。停止距離の式に 1m/s を入れた値(式が速さに比例するため)。
+double stoppingTimeSecondsFor(BoatType type) =>
+    boatConfigs.byBoatType(type).stoppingDistanceFormula(1.0);
+
+/// 港の中で岸の警告を鳴らし始める、到達までの時間の上限。
+///
+/// 艇種の停止時間 + [harborShoreLeadMarginSeconds]。
+Duration harborShoreAudioStartDeadlineFor(BoatType type) => Duration(
+      milliseconds:
+          ((stoppingTimeSecondsFor(type) + harborShoreLeadMarginSeconds) * 1000)
+              .round(),
+    );
+
+/// 艇種が分からないときの既定値。最も止まりにくい 8+ に合わせる(8.15 + 1 秒)。
+const defaultHarborShoreAudioStartDeadline = Duration(milliseconds: 9150);

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/config/alert_presentation_config.dart';
 import 'package:rowing_navigator/config/risk_evaluator_config.dart';
 
@@ -43,5 +44,35 @@ void main() {
       config.guidanceRepeatInterval,
       greaterThanOrEqualTo(config.guidanceRearmDuration),
     );
+  });
+
+  group('港の中の岸の鳴り始め(2026-11-03 R4)', () {
+    test('どの艇種でも停止時間を下回らない(止まりきれる時点では必ず鳴る)', () {
+      for (final type in BoatType.values) {
+        final deadline = harborShoreAudioStartDeadlineFor(type);
+        final stopping = Duration(
+          milliseconds: (stoppingTimeSecondsFor(type) * 1000).round(),
+        );
+        expect(deadline, greaterThanOrEqualTo(stopping), reason: type.name);
+        // 港の中で縮めるのが目的なので、港の外の鳴り始めより早くはしない。
+        expect(deadline, lessThanOrEqualTo(config.audioStartDeadline),
+            reason: type.name);
+      }
+    });
+
+    test('8+ は停止時間 8.15秒 + 1秒、既定値は最も止まりにくい艇種に合わせる', () {
+      expect(harborShoreAudioStartDeadlineFor(BoatType.r_8p),
+          const Duration(milliseconds: 9150));
+      final longest = BoatType.values
+          .map(harborShoreAudioStartDeadlineFor)
+          .reduce((a, b) => a > b ? a : b);
+      expect(defaultHarborShoreAudioStartDeadline, longest);
+    });
+
+    test('出し入れの速さは巡航速度(3〜5m/s)の下限の半分以下', () {
+      expect(harborManeuverSpeedMetersPerSecond, lessThanOrEqualTo(3.0 / 2));
+      expect(harborManeuverSpeedMetersPerSecond,
+          greaterThan(config.stableStopSpeedMetersPerSecond));
+    });
   });
 }

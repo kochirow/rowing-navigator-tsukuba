@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sessionColor, sessionLabel, type FieldTrackSet } from '../model/fieldTracks';
+import { sessionColor, sessionLabel, warningCategoryInfo, warningCategoryLabel, warningCountsByCategory, type FieldTrackSet } from '../model/fieldTracks';
 
 const storageKey = 'obstacle-plotter.visibleTrackDates';
 
@@ -14,12 +14,33 @@ function saveVisibleTrackDates(dates: ReadonlySet<string>) {
   try { localStorage.setItem(storageKey, JSON.stringify([...dates])); } catch { /* 保存できなくても表示は続ける */ }
 }
 
+const warningsKey = 'obstacle-plotter.fieldTrackWarnings';
+
+/** 鳴った警告の表示設定（表示するか・隠す種類）。端末のブラウザにだけ保存する。 */
+export type FieldWarningDisplay = { visible: boolean; hiddenCategories: Set<string> };
+
+export function loadFieldWarningDisplay(): FieldWarningDisplay {
+  try {
+    const value = JSON.parse(localStorage.getItem(warningsKey) ?? '{}');
+    return {
+      visible: value.visible === true,
+      hiddenCategories: new Set(Array.isArray(value.hiddenCategories) ? value.hiddenCategories.filter((item: unknown): item is string => typeof item === 'string') : []),
+    };
+  } catch { return { visible: false, hiddenCategories: new Set() }; }
+}
+
+function saveFieldWarningDisplay(display: FieldWarningDisplay) {
+  try { localStorage.setItem(warningsKey, JSON.stringify({ visible: display.visible, hiddenCategories: [...display.hiddenCategories] })); } catch { /* 保存できなくても表示は続ける */ }
+}
+
 /** 実機ログの航跡を日付ごとに表示・非表示にする。作図データには触れない。 */
-export function FieldTrackPanel({ visibleDates, onVisibleDatesChange, onLoaded, onFitRequest }: {
+export function FieldTrackPanel({ visibleDates, onVisibleDatesChange, onLoaded, onFitRequest, warningDisplay, onWarningDisplayChange }: {
   visibleDates: ReadonlySet<string>;
   onVisibleDatesChange: (dates: Set<string>) => void;
   onLoaded: (set: FieldTrackSet | undefined) => void;
   onFitRequest: () => void;
+  warningDisplay: FieldWarningDisplay;
+  onWarningDisplayChange: (display: FieldWarningDisplay) => void;
 }) {
   const [set, setSet] = useState<FieldTrackSet>();
   const [loading, setLoading] = useState(false);
@@ -52,6 +73,13 @@ export function FieldTrackPanel({ visibleDates, onVisibleDatesChange, onLoaded, 
   };
   const days = set?.days ?? [];
   const sessionCount = days.reduce((sum, day) => sum + day.sessions.length, 0);
+  const warningCounts = warningCountsByCategory(set, visibleDates);
+  const updateWarnings = (next: FieldWarningDisplay) => { saveFieldWarningDisplay(next); onWarningDisplayChange(next); };
+  const toggleCategory = (category: string) => {
+    const hidden = new Set(warningDisplay.hiddenCategories);
+    if (hidden.has(category)) hidden.delete(category); else hidden.add(category);
+    updateWarnings({ ...warningDisplay, hiddenCategories: hidden });
+  };
 
   return <section className="field-tracks">
     <div className="field-tracks-heading">
@@ -64,6 +92,22 @@ export function FieldTrackPanel({ visibleDates, onVisibleDatesChange, onLoaded, 
       <button onClick={() => update(new Set(days.map((day) => day.date)))}>すべて表示</button>
       <button onClick={() => update(new Set())}>すべて隠す</button>
       <button onClick={onFitRequest} disabled={![...visibleDates].some((date) => days.some((day) => day.date === date))}>表示中へ移動</button>
+    </div>}
+    {days.length > 0 && <div className="field-warnings">
+      <label><input type="checkbox" checked={warningDisplay.visible} onChange={() => updateWarnings({ ...warningDisplay, visible: !warningDisplay.visible })} /> 鳴った警告を表示</label>
+      {warningDisplay.visible && <>
+        <p className="field-tracks-help">表示中の日付で実際に鳴った警告を、鳴り始めの位置に印で出します。印の枠の色は航跡の色と同じです。印を押すと時刻と鳴り方が出ます。</p>
+        {warningCounts.length === 0 && <p className="field-tracks-help">表示中の日付に、鳴った警告の記録はありません。</p>}
+        <ul className="field-warning-categories">
+          {warningCounts.map(([category, count]) => <li key={category}>
+            <label>
+              <input type="checkbox" checked={!warningDisplay.hiddenCategories.has(category)} onChange={() => toggleCategory(category)} />
+              <span className="field-warning-mark" style={{ background: warningCategoryInfo[category]?.color ?? '#9e9e9e' }}>{warningCategoryInfo[category]?.mark ?? '？'}</span>
+              {warningCategoryLabel(category)} {count}回
+            </label>
+          </li>)}
+        </ul>
+      </>}
     </div>}
     <ul className="field-track-days">
       {[...days].reverse().map((day) => <li key={day.date}>

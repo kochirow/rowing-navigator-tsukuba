@@ -6,7 +6,7 @@ import { roundCoordinate, sameCoordinate } from './geo';
 type RawItem = { id?: unknown; name?: unknown; kind?: unknown; bridgeId?: unknown; centerlineId?: unknown; direction?: unknown; leg?: unknown; warningAudio?: unknown; points?: unknown };
 const knownTopLevel = new Set([
   'version', 'area', 'source', 'notice', 'howToEdit', 'defaultObstacleProximityCautionMeters',
-  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'channelCenterlines', 'ashoreAreas', 'mooringAreas', 'navigableWaters',
+  'practiceArea', 'operationalCoveragePolygon', 'channelCenterline', 'channelCenterlines', 'ashoreAreas', 'mooringAreas', 'harborAreas', 'navigableWaters',
   'dangerZoneBaselines', 'obstacles',
 ]);
 
@@ -29,7 +29,7 @@ function withoutClosingDuplicate(points: Coordinate[]): { points: Coordinate[]; 
 }
 
 function kindOf(value: unknown, fallback: ObjectKind): ObjectKind {
-  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'pile', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'mooringArea', 'navigableWater', 'lane', 'channelCenterline'];
+  const all: ObjectKind[] = ['shore', 'bridge', 'bridgePier', 'island', 'driftwood', 'pile', 'testZone', 'curve', 'reverse', 'generic', 'ashoreArea', 'mooringArea', 'harborArea', 'navigableWater', 'lane', 'channelCenterline'];
   return typeof value === 'string' && all.includes(value as ObjectKind) ? value as ObjectKind : fallback;
 }
 
@@ -115,6 +115,9 @@ export async function importProfileText(text: string): Promise<Project> {
   }
   for (const [index, item] of (Array.isArray(raw.mooringAreas) ? raw.mooringAreas : []).entries()) {
     objects.push(objectFromRaw(item as RawItem, 'mooringArea', index));
+  }
+  for (const [index, item] of (Array.isArray(raw.harborAreas) ? raw.harborAreas : []).entries()) {
+    objects.push(objectFromRaw(item as RawItem, 'harborArea', index));
   }
   for (const [index, item] of (Array.isArray(raw.navigableWaters) ? raw.navigableWaters : []).entries()) {
     objects.push(objectFromRaw(item as RawItem, 'navigableWater', index));
@@ -213,6 +216,9 @@ export function profileObject(project: Project): Record<string, unknown> {
   // 食い違う。座標を入れた時点で version と hash を上げる運用に合わせる。
   const mooringAreas = byKind((object) => object.kind === 'mooringArea').map(standardItem);
   if (mooringAreas.length > 0) output.mooringAreas = mooringAreas;
+  // 港の中も同じ理由で、1件以上あるときだけ書き出す。
+  const harborAreas = byKind((object) => object.kind === 'harborArea').map(standardItem);
+  if (harborAreas.length > 0) output.harborAreas = harborAreas;
   output.navigableWaters = byKind((object) => NAVIGABLE_KINDS.has(object.kind)).map(standardItem);
   output.dangerZoneBaselines = byKind((object) => DANGER_BASELINE_KINDS.has(object.kind)).map(standardItem);
   output.obstacles = byKind((object) => DANGER_POLYGON_KINDS.has(object.kind)).map(standardItem);

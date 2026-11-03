@@ -374,6 +374,7 @@ UseNavigator useNavigator() {
   final lastAshoreState = useRef<AshoreState>(AshoreState.initial);
   // 桟橋エリア（着艇・係留の水域）。危険区域ではなく提示ポリシーだけを変える。
   final mooringAreaPolygons = useRef<List<List<LatLng>>>(const []);
+  final harborAreaPolygons = useRef<List<List<LatLng>>>(const []);
   final activeWarnings = useState<List<NavigationWarning>>(const []);
   final activeWarningCount = useState(0);
   final safetyRunMode = useState<SafetyRunMode>(SafetyRunMode.stopped);
@@ -1552,8 +1553,13 @@ UseNavigator useNavigator() {
       final mooringAreas = await presetObstacleService.loadMooringAreas();
       mooringAreaPolygons.value =
           mooringAreas.map((area) => area.points).toList(growable: false);
+      // 港の中(発着から航路の入口まで)。岸・他艇を控えめに鳴らすだけで、空でも動く。
+      final harborAreas = await presetObstacleService.loadHarborAreas();
+      harborAreaPolygons.value =
+          harborAreas.map((area) => area.points).toList(growable: false);
       appendRuntimeDiagnostic('mooring_areas_loaded', {
         'areaCount': mooringAreas.length,
+        'harborAreaCount': harborAreas.length,
       });
       final integrity = presetObstacleService.lastProfileIntegrity;
       if (integrity != null && !integrity.isFullyVerified) {
@@ -4542,6 +4548,9 @@ UseNavigator useNavigator() {
         sessionId: messageSessionId.value!,
         sessionGeneration: generation,
         mooringAreas: mooringAreaPolygons.value,
+        harborAreas: harborAreaPolygons.value,
+        harborShoreAudioStartDeadline:
+            harborShoreAudioStartDeadlineFor(config_.boatType),
         presentationConfig: AlertPresentationConfig(
           lowConfidenceAudioStartDeadline: Duration(
             milliseconds: (primaryWarningLeadTimeSeconds.value * 1000).round(),

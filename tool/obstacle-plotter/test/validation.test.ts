@@ -354,4 +354,80 @@ describe('project validation', () => {
     expect(validateProject(project).some((item) =>
       item.code === 'mooringArea.overlapsAshore' && item.level === 'warning')).toBe(true);
   });
+  // ---- 港の中 ----
+  //
+  // 中では岸・他艇の警告を控えめにする。**航路へ広がると巡航中の警告まで
+  // 控えめになる。** レーン・中心線と重ならないこと、面積の上限が安全弁。
+
+  function mooringWest() {
+    return polygon(newMapObject('mooringArea'), [
+      { lat: 36.0700, lng: 140.1940 }, { lat: 36.0702, lng: 140.1940 },
+      { lat: 36.0702, lng: 140.1943 }, { lat: 36.0700, lng: 140.1943 },
+    ]);
+  }
+
+  it('accepts a harbor area that stays west of the lanes and contains the mooring area', () => {
+    const project = defaultProject();
+    // レーンは lng 140.1960〜140.2040。港の中は西側の約 180m × 110m。
+    const harbor = polygon(newMapObject('harborArea'), [
+      { lat: 36.0695, lng: 140.1935 }, { lat: 36.0705, lng: 140.1935 },
+      { lat: 36.0705, lng: 140.1955 }, { lat: 36.0695, lng: 140.1955 },
+    ]);
+    project.objects = [
+      centerline(),
+      lane('lane_a', 'along', 140.1960, 140.2000, undefined),
+      lane('lane_b', 'against', 140.2000, 140.2040, undefined),
+      mooringWest(), harbor,
+    ];
+    const codes = validateProject(project).filter((item) => item.objectId === harbor.id).map((item) => item.code);
+    expect(codes).not.toContain('harborArea.overlapsLane');
+    expect(codes).not.toContain('harborArea.overlapsCenterline');
+    expect(codes).not.toContain('harborArea.tooLarge');
+    expect(codes).not.toContain('harborArea.noMooring');
+  });
+
+  it('rejects a harbor area that overlaps a lane', () => {
+    const project = defaultProject();
+    const harbor = polygon(newMapObject('harborArea'), [
+      { lat: 36.0695, lng: 140.1935 }, { lat: 36.0705, lng: 140.1935 },
+      { lat: 36.0705, lng: 140.1970 }, { lat: 36.0695, lng: 140.1970 },
+    ]);
+    project.objects = [centerline(), lane('lane_a', 'along', 140.1960, 140.2000), mooringWest(), harbor];
+    expect(validateProject(project).some((item) =>
+      item.code === 'harborArea.overlapsLane' && item.level === 'error')).toBe(true);
+  });
+
+  it('rejects a harbor area that crosses the centerline', () => {
+    const project = defaultProject();
+    const harbor = polygon(newMapObject('harborArea'), [
+      { lat: 36.0695, lng: 140.1990 }, { lat: 36.0705, lng: 140.1990 },
+      { lat: 36.0705, lng: 140.2010 }, { lat: 36.0695, lng: 140.2010 },
+    ]);
+    project.objects = [centerline(), harbor];
+    expect(validateProject(project).some((item) =>
+      item.code === 'harborArea.overlapsCenterline' && item.level === 'error')).toBe(true);
+  });
+
+  it('rejects a harbor area larger than the area limit', () => {
+    const project = defaultProject();
+    // 約 1.1km × 180m = 約20万m²。沖まで含めた港。
+    const harbor = polygon(newMapObject('harborArea'), [
+      { lat: 36.0650, lng: 140.1930 }, { lat: 36.0750, lng: 140.1930 },
+      { lat: 36.0750, lng: 140.1950 }, { lat: 36.0650, lng: 140.1950 },
+    ]);
+    project.objects = [centerline(), harbor];
+    expect(validateProject(project).some((item) =>
+      item.code === 'harborArea.tooLarge' && item.level === 'error')).toBe(true);
+  });
+
+  it('warns when the harbor area does not contain a mooring area', () => {
+    const project = defaultProject();
+    const harbor = polygon(newMapObject('harborArea'), [
+      { lat: 36.0710, lng: 140.1935 }, { lat: 36.0715, lng: 140.1935 },
+      { lat: 36.0715, lng: 140.1945 }, { lat: 36.0710, lng: 140.1945 },
+    ]);
+    project.objects = [centerline(), mooringWest(), harbor];
+    expect(validateProject(project).some((item) =>
+      item.code === 'harborArea.noMooring' && item.level === 'warning')).toBe(true);
+  });
 });
