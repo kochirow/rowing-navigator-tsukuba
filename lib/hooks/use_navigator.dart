@@ -1090,6 +1090,10 @@ UseNavigator useNavigator() {
         'triggerType': triggerType,
         ...details,
         ...snapshot,
+        ...locationActivityDiagnostics(
+          requested: geoService.navigationActivity,
+          deviceSnapshot: snapshot,
+        ),
       });
     }).catchError((Object error) {
       if (!isCurrentNavigation(generation)) return;
@@ -4293,6 +4297,8 @@ UseNavigator useNavigator() {
       // 初回位置が無い・座標が不正・精度が悪い、のどれも航行開始を止める
       // 理由にしない(原則1・不変条件5)。GPSは「利用不可」として表示される。
       final bootstrapPos = await geoService.getNavigationBootstrapPosition();
+      // 位置取得の用途指定(R7)。端末で fitness に戻していればそれを使う。
+      await geoService.refreshNavigationActivity();
       ensureStartIsCurrent();
       gpsFilter.value.reset();
       positionEstimator.reset();
@@ -4522,6 +4528,8 @@ UseNavigator useNavigator() {
           'positionSharingInitialState': 'pending_setup',
           if (initialAccuracy != null && initialAccuracy.isFinite)
             'initialGpsAccuracyMeters': initialAccuracy,
+          ...locationActivityDiagnostics(
+              requested: geoService.navigationActivity),
         },
       ));
       recordGpsQualityIfChanged(
