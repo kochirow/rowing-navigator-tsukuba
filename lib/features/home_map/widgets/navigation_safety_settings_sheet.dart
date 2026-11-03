@@ -9,6 +9,7 @@ import '../../../services/fixed_obstacle_warning_settings_service.dart';
 import '../../../services/preset_obstacle_service.dart';
 import '../../../services/risk_evaluator_settings_service.dart';
 import '../../../services/shared_safety_calibration_service.dart';
+import '../../../widgets/effect_scope_badge.dart';
 
 /// 航行を覆い隠さずに、警告に効く設定だけを変更する下半分のシート。
 ///
@@ -185,7 +186,7 @@ class _NavigationSafetySettingsSheetState
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
-          applied ? '設定を反映しました' : '形状を作り直せなかったため、航行中の設定は変更せず従来の警告を続けています。'),
+          applied ? '自艇に反映しました' : '形状を作り直せなかったため、航行中の設定は変更せず従来の警告を続けています。'),
     ));
   }
 
@@ -210,9 +211,9 @@ class _NavigationSafetySettingsSheetState
     final next = _zones;
     if (_busy || next == null) return;
     final confirmed = await _confirm(
-      title: '危険区域の幅を反映しますか？',
+      title: '区域の幅を自艇に反映しますか？',
       message: widget.usesSharedSafetySettings ? 'チームの共有設定にも公開されます。' : null,
-      applyLabel: '反映',
+      applyLabel: '自艇に反映',
     );
     if (!confirmed || !mounted) return;
     final previous = await _zoneSettings.load();
@@ -228,7 +229,7 @@ class _NavigationSafetySettingsSheetState
       );
       _showResult(applied);
     } catch (error) {
-      if (mounted) setState(() => _error = '危険区域を反映できませんでした: $error');
+      if (mounted) setState(() => _error = '区域の幅を自艇に反映できませんでした: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -238,9 +239,9 @@ class _NavigationSafetySettingsSheetState
     final next = _fixedWarnings;
     if (_busy || next == null) return;
     final confirmed = await _confirm(
-      title: '固定対象物の警告設定を反映しますか？',
+      title: '同梱の危険区域の警告を自艇に反映しますか？',
       message: widget.usesSharedSafetySettings ? 'チームの共有設定にも公開されます。' : null,
-      applyLabel: '反映',
+      applyLabel: '自艇に反映',
     );
     if (!confirmed || !mounted) return;
     final previous = await _fixedWarningSettings.load();
@@ -256,7 +257,7 @@ class _NavigationSafetySettingsSheetState
       );
       _showResult(applied);
     } catch (error) {
-      if (mounted) setState(() => _error = '固定対象物の警告設定を反映できませんでした: $error');
+      if (mounted) setState(() => _error = '同梱の危険区域の警告を自艇に反映できませんでした: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -266,8 +267,8 @@ class _NavigationSafetySettingsSheetState
     final revision = widget.pendingSharedSafetyRevision;
     if (_busy || revision == null) return;
     final confirmed = await _confirm(
-      title: '共有設定 版 $revision を反映しますか？',
-      applyLabel: '反映',
+      title: 'チームの共有設定 版 $revision を自艇に反映しますか？',
+      applyLabel: '自艇に反映',
     );
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
@@ -358,7 +359,11 @@ class _NavigationSafetySettingsSheetState
             ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
-              title: const Text('航行中の警告設定'),
+              title: const Row(children: [
+                Flexible(child: Text('航行中の警告設定')),
+                SizedBox(width: 8),
+                EffectScopeBadge(EffectScope.thisNavigation),
+              ]),
               subtitle: Text(widget.safetySettingsLabel),
               trailing: _busy
                   ? const SizedBox(
@@ -393,7 +398,7 @@ class _NavigationSafetySettingsSheetState
                               trailing: FilledButton(
                                 onPressed:
                                     _busy ? null : _applyPendingSharedRevision,
-                                child: const Text('反映'),
+                                child: const Text('自艇に反映'),
                               ),
                             ),
                           ),
@@ -416,7 +421,7 @@ class _NavigationSafetySettingsSheetState
                         ExpansionTile(
                           initiallyExpanded: true,
                           leading: const Icon(Icons.timer_outlined),
-                          title: const Text('警告を始める時間'),
+                          title: const Text('鳴り始め'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
@@ -481,7 +486,7 @@ class _NavigationSafetySettingsSheetState
                         ),
                         ExpansionTile(
                           leading: const Icon(Icons.straighten_outlined),
-                          title: const Text('危険区域の幅'),
+                          title: const Text('区域の幅'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [
@@ -528,7 +533,7 @@ class _NavigationSafetySettingsSheetState
                         ),
                         ExpansionTile(
                           leading: const Icon(Icons.notifications_off_outlined),
-                          title: const Text('固定対象物の警告'),
+                          title: const Text('同梱の危険区域の警告'),
                           childrenPadding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           children: [

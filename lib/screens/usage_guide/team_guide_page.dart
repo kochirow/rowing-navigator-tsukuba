@@ -32,7 +32,7 @@ class TeamGuidePage extends StatelessWidget {
             description: '流木など、その日だけの危険を地図に描いてチームへ共有します。',
             child: GuideBullets(
               items: [
-                'メニューの「危険区域を追加」から登録します。航行中でも登録できます。',
+                'メニューの「危険区域の追加・編集」から登録します。航行中でも登録できます。',
                 '登録した区域はチーム全員の地図に出て、警告の対象になります。'
                     'チームメンバーは全員、追加・編集・削除ができます。'
                     '削除した区域は7日間、危険区域の画面の「最近削除した区域」から元に戻せます。',
@@ -40,8 +40,8 @@ class TeamGuidePage extends StatelessWidget {
             ),
           ),
           GuideSection(
-            title: '既設危険区域の位置の調整',
-            description: '橋・岸・中州の位置が実際とずれているときに、0.5m単位で動かしてチームへ公開します。',
+            title: '同梱の危険区域の位置合わせ',
+            description: '橋・岸・中州の位置が実際とずれているときに、0.5m単位で動かしてチームに公開します。',
             child: GuideBullets(
               items: [
                 '出艇前(待機中)だけメニューに出ます。',
@@ -60,7 +60,7 @@ class TeamGuidePage extends StatelessWidget {
             title: '警告の対象から外す',
             child: GuideBullets(
               items: [
-                'メニューの「警告の設定」→「警告対象となる障害物の選択」で、'
+                'メニューの「警告の設定」→「警告する危険区域を選ぶ」で、'
                     '危険区域ごとに警告のオン・オフを切り替えられます。オフにしても地図からは消えません。',
               ],
             ),

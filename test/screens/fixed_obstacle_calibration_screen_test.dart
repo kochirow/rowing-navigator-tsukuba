@@ -193,7 +193,7 @@ void main() {
       ),
     );
 
-    expect(find.text('チームへ公開しています…'), findsOneWidget);
+    expect(find.text('チームに公開しています…'), findsOneWidget);
     expect(find.text('公開中…'), findsOneWidget);
     await tester.tap(
       find.byKey(const ValueKey('publish-calibration-button')),
@@ -282,7 +282,7 @@ void main() {
     expect(find.textContaining('公開できませんでした'), findsOneWidget);
   });
 
-  testWidgets('危険範囲の公開確認に各分類を表示し警告時間は共有しないと案内する', (tester) async {
+  testWidgets('区域の幅の公開確認に各分類を表示し鳴り始めは共有しないと案内する', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -297,7 +297,7 @@ void main() {
     expect(find.text('橋'), findsOneWidget);
     expect(find.text('中州'), findsOneWidget);
     expect(find.text('固定流木'), findsOneWidget);
-    expect(find.textContaining('警告開始時間は公開されず'), findsOneWidget);
+    expect(find.textContaining('鳴り始めは公開されず'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('confirm-publish-danger-zones-button')),
       findsOneWidget,

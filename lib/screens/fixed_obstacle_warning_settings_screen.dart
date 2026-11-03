@@ -9,6 +9,7 @@ import '../services/shared_safety_calibration_service.dart';
 import '../services/team_service.dart';
 import '../widgets/app_state_views.dart';
 import '../widgets/fixed_obstacle_calibration_controls.dart';
+import '../widgets/effect_scope_badge.dart';
 
 /// 固定対象物を衝突判定・警告の対象にするかを設定・共有する画面。
 class FixedObstacleWarningSettingsScreen extends StatefulWidget {
@@ -80,7 +81,7 @@ class _FixedObstacleWarningSettingsScreenState
         setState(() {
           _publishStatus = FixedObstacleCalibrationPublishStatus.failure;
           _publishMessage = '共有版の更新状況を取得できませんでした。'
-              '端末内の下書きは続けられます。';
+              'この端末だけの変更は続けられます。';
         });
       }
     } catch (error) {
@@ -121,14 +122,14 @@ class _FixedObstacleWarningSettingsScreenState
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
-            title: const Text('チームへの公開内容を確認'),
+            title: const Text('チームに公開する内容を確認'),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
               child: SingleChildScrollView(
                 child: Text(
                   disabledTargets.isEmpty
-                      ? 'すべての固定対象物を警告対象にします。'
-                      : '次の固定対象物を警告対象から外します。\n\n'
+                      ? 'すべての同梱の危険区域を警告対象にします。'
+                      : '次の同梱の危険区域を警告対象から外します。\n\n'
                           '${disabledTargets.map((name) => '・$name').join('\n')}',
                 ),
               ),
@@ -163,7 +164,7 @@ class _FixedObstacleWarningSettingsScreenState
       setState(() {
         _sharedRevision = saved.revision;
         _publishStatus = FixedObstacleCalibrationPublishStatus.success;
-        _publishMessage = '固定対象物の警告設定をチームへ公開しました'
+        _publishMessage = '同梱の危険区域の警告設定をチームに公開しました'
             '（版 ${saved.revision}）。';
       });
     } on SharedSafetyCalibrationConflictException {
@@ -229,7 +230,7 @@ class _FixedObstacleWarningSettingsScreenState
           ];
     if (_loadError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('警告対象となる障害物の選択')),
+        appBar: AppBar(title: const Text('警告する危険区域を選ぶ')),
         body: AppErrorView(
           title: '警告対象を読み込めませんでした',
           message: _loadError!,
@@ -242,7 +243,7 @@ class _FixedObstacleWarningSettingsScreenState
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('警告対象となる障害物の選択')),
+      appBar: AppBar(title: const Text('警告する危険区域を選ぶ')),
       // 「警告の設定」と同じく、変更があるときだけ下に保存バーを出す。
       // 右上の「保存」の文字だけでは、未保存かどうかが分からない。
       bottomNavigationBar: !_changed && !_saving
@@ -269,10 +270,15 @@ class _FixedObstacleWarningSettingsScreenState
               ),
             ),
       body: settings == null || targets == null
-          ? const AppLoadingView(message: '固定対象物を読み込んでいます…')
+          ? const AppLoadingView(message: '同梱の危険区域を読み込んでいます…')
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: EffectScopeBadge(EffectScope.teamAfterPublish),
+                ),
+                const SizedBox(height: 8),
                 // 説明カードと「オン: 警告対象」の凡例は外した。スイッチと
                 // 画面名が言う。例外(未使用の区域はオフで地図からも消える)
                 // だけを、その行の副題に書く。
@@ -308,8 +314,8 @@ class _FixedObstacleWarningSettingsScreenState
                   status: _publishStatus,
                   statusMessage: _hasTeamMembership
                       ? _publishMessage
-                      : '共有確定版: 版 $_sharedRevision。'
-                          '表示中の設定は端末内の下書きです。'
+                      : 'チームに公開中: 版 $_sharedRevision。'
+                          '表示中の設定は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
                           'チームに参加すると公開できます。',
                   enabled: !_busy,
                   showPublishButton: _hasTeamMembership,

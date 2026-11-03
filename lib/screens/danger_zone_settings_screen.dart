@@ -17,6 +17,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_state_views.dart';
 import '../widgets/fixed_obstacle_calibration_controls.dart';
 import 'fixed_obstacle_warning_settings_screen.dart';
+import '../widgets/effect_scope_badge.dart';
 
 class DangerZoneSettingsScreen extends StatefulWidget {
   const DangerZoneSettingsScreen({super.key});
@@ -217,7 +218,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
       setState(() {
         _sharedRevision = saved.revision;
         _publishStatus = FixedObstacleCalibrationPublishStatus.success;
-        _publishMessage = '危険範囲と警告開始時間をチームへ公開しました'
+        _publishMessage = '区域の幅と鳴り始めをチームに公開しました'
             '（版 ${saved.revision}）。';
       });
     } on SharedSafetyCalibrationConflictException {
@@ -292,6 +293,12 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // 誰に効くか(R6 段1)。この画面の変更は公開するまで端末の中だけ。
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: EffectScopeBadge(EffectScope.teamAfterPublish),
+                ),
+                const SizedBox(height: 8),
                 // 設定を「時間」と「距離」と「対象」の3つの問いへ分ける。
                 // どれも警告の設定だが、答えている問いが違う。
                 // 見出しは問いだけ。何を決めるのかは下の図が見せる。
@@ -376,7 +383,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 // 既定値は各項目の「変更」の印と「既定に戻す」が示すので、
                 // 見出しや説明に繰り返し書かない。設定値の根拠は
                 // DESIGN_PRINCIPLES にある。
-                const _SectionHeader('障害物の当たり判定の調整'),
+                const _SectionHeader('区域の幅'),
                 const SizedBox(height: 4),
                 _zoneCard(
                   kind: DangerZoneKind.shore,
@@ -422,15 +429,15 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                   status: _publishStatus,
                   statusMessage: _hasTeamMembership
                       ? _publishMessage
-                      : '共有確定版: 版 $_sharedRevision。'
-                          '表示中の危険範囲は端末内の下書きです。'
+                      : 'チームに公開中: 版 $_sharedRevision。'
+                          '表示中の区域の幅は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
                           'チームに参加すると公開できます。',
                   enabled: !_busy,
                   showPublishButton: _hasTeamMembership,
                   onPublish: _publishDangerZones,
                 ),
                 const SizedBox(height: 24),
-                const _SectionHeader('警告対象となる障害物の選択'),
+                const _SectionHeader('警告する危険区域を選ぶ'),
                 Card(
                   margin: const EdgeInsets.only(top: 12),
                   child: ListTile(
@@ -458,6 +465,14 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                 // プライバシーは警告の設定ではないので「端末とデータ」へ、
                 // ライセンスは「このアプリについて」へ移した。
                 const SizedBox(height: 12),
+                // ここから下は開発者用で、この端末だけに効く(R6 段1)。
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: EffectScopeBadge(EffectScope.thisDevice),
+                  ),
+                ),
                 Card(
                   child: SwitchListTile(
                     secondary: const Icon(Icons.architecture_outlined),

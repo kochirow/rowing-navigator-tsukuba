@@ -89,7 +89,7 @@ class FixedObstacleCalibrationTargetDropdown extends StatelessWidget {
       initialValue: selectedId,
       isExpanded: true,
       decoration: const InputDecoration(
-        labelText: '調整する固定障害物',
+        labelText: '調整する同梱の危険区域',
         border: OutlineInputBorder(),
         isDense: true,
       ),
@@ -158,7 +158,7 @@ class FixedObstacleCalibrationPublishPanel extends StatelessWidget {
     };
     final message = statusMessage ??
         (status == FixedObstacleCalibrationPublishStatus.publishing
-            ? 'チームへ公開しています…'
+            ? 'チームに公開しています…'
             // 操作部品の名前(以前は「スライダー」)に依存しない言い方にする。
             : '公開するまで、チームの端末には反映されません');
 
@@ -244,7 +244,7 @@ class FixedObstacleCalibrationPublishConfirmation extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return AlertDialog(
-      title: const Text('チームへの公開内容を確認'),
+      title: const Text('チームに公開する内容を確認'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
         child: SingleChildScrollView(
@@ -366,7 +366,7 @@ class DangerZoneSettingsPublishConfirmation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('チームへの危険範囲を確認'),
+      title: const Text('チームに公開する区域の幅を確認'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
         child: SingleChildScrollView(
@@ -381,7 +381,7 @@ class DangerZoneSettingsPublishConfirmation extends StatelessWidget {
                 ),
               const SizedBox(height: 8),
               Text(
-                '警告開始時間は公開されず、この端末の設定を維持します。',
+                '鳴り始めは公開されず、この端末の設定を維持します。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
