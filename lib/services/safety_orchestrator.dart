@@ -32,6 +32,21 @@ class SafetyOrchestrator {
   /// **危険区域ではない。** 自艇と相手の双方が低速のときだけ、他艇警告の
   /// 音を落とすためにだけ使う。空でも全機能が従来どおり動く。
   final List<List<LatLng>> mooringAreas;
+
+  /// 港の中(発着場所から航路の入口まで)のポリゴン。
+  ///
+  /// **危険区域ではない。** 中にいる間だけ、岸の警告の鳴り始めを
+  /// [harborShoreAudioStartDeadline] へ縮めて1回だけにし、自艇と相手がともに
+  /// 低速なら他艇の警告を1回だけにし、逆走注意を読み上げない。
+  /// 検知・表示・記録は変えない。空でも全機能が従来どおり動く。
+  final List<List<LatLng>> harborAreas;
+
+  /// 港の中で岸の警告を鳴らし始める、到達までの時間の上限。
+  /// 自艇の艇種の停止時間 + 1秒(`harborShoreAudioStartDeadlineFor`)。
+  final Duration harborShoreAudioStartDeadline;
+
+  /// 直近の評価で、自艇が港の中にいたか。逆走注意の提示に使う。
+  bool _inHarborArea = false;
   // 航行中に利用者が警告時間を変更しても、状態機械を作り直して既存の
   // 警告エピソードを失わないよう、提示設定だけを差し替えられるようにする。
   // 衝突判定結果そのものはこの設定に依存しない。
@@ -74,6 +89,8 @@ class SafetyOrchestrator {
     required this.sessionId,
     required this.sessionGeneration,
     this.mooringAreas = const [],
+    this.harborAreas = const [],
+    this.harborShoreAudioStartDeadline = defaultHarborShoreAudioStartDeadline,
     AlertPresentationConfig presentationConfig = defaultAlertPresentationConfig,
     AlertStateMachine? stateMachine,
   })  : _presentationConfig = presentationConfig,
@@ -462,6 +479,8 @@ class SafetyOrchestrator {
   }) {
     final riskCandidates = byId.values.toList(growable: false);
     final inMooringArea = _isInMooringArea(ownPosition);
+    final inHarborArea = _isInAnyPolygon(ownPosition, harborAreas);
+    _inHarborArea = inHarborArea;
     final guidanceIds = riskCandidates
         .where((candidate) => _isGuidance(candidate))
         .map((candidate) => candidate.alertId)
@@ -580,6 +599,54 @@ class SafetyOrchestrator {
         if (silenceStatic || silenceBoat) {
           behavior = _quieter(behavior, AlertBehavior.visualOnly);
           extraReasonCodes.add('PRESENTATION_MOORING_AREA_SILENT');
+        }
+      }
+      // ---- 港の中(発着場所から航路の入口まで) ----
+      //
+      // 艇を出し入れする水面では、岸へ向かって向きを変えるのが普通の動きで、
+      // 13秒前からの鳴り始めでは港のほぼ全体が予測に入る(2026-11-03 R4)。
+      // 音は止めずに控えめにする。どれも「下げるだけ」。
+      if (inHarborArea) {
+        void lower(SuppressionRule rule, AlertBehavior to) {
+          final before = behavior;
+          behavior = _quieter(behavior, to);
+          if (behavior != before) extraReasonCodes.add(rule.reasonCode);
+        }
+
+        if (candidate.category == SuppressionRules.shore) {
+          final deadline = candidate.actionDeadline;
+          // 鳴り始めを停止時間＋1秒へ縮める。止まりきれる時点では必ず鳴る。
+          if (!candidate.currentOverlap &&
+              deadline != null &&
+              deadline > harborShoreAudioStartDeadline &&
+              permitted(SuppressionRules.harborShoreLead)) {
+            lower(SuppressionRules.harborShoreLead, AlertBehavior.visualOnly);
+          }
+          // 自艇の測位の誤差の円だけで重なる候補は、表示だけにする。
+          if (_isHarborUncertaintyOnlyShore(candidate) &&
+              permitted(SuppressionRules.harborShoreUncertainty)) {
+            lower(
+              SuppressionRules.harborShoreUncertainty,
+              AlertBehavior.visualOnly,
+            );
+          }
+          // 繰り返さず、1つのエピソードで1回だけ読み上げる。
+          if (permitted(SuppressionRules.harborShoreSingle)) {
+            lower(
+                SuppressionRules.harborShoreSingle, AlertBehavior.singleAction);
+          }
+        }
+        // 自艇も相手も出し入れの速さ未満なら、他艇も1回だけにする。
+        // 相手の速度が分からなければ permitted が false になる(原則6)。
+        if (candidate.category == SuppressionRules.otherBoat &&
+            _isBelow(
+                ownSpeedMetersPerSecond, harborManeuverSpeedMetersPerSecond) &&
+            _isBelow(
+              otherBoatSpeedById[candidate.targetId],
+              harborManeuverSpeedMetersPerSecond,
+            ) &&
+            permitted(SuppressionRules.harborManeuver)) {
+          lower(SuppressionRules.harborManeuver, AlertBehavior.singleAction);
         }
       }
       final canSuppressAtRest = _canSuppressAtRest(candidate) &&
@@ -798,10 +865,14 @@ class SafetyOrchestrator {
     final reverseAudioDisabled =
         candidate.category == StaticObstacleKind.reverse.name &&
             !_reverseGuidanceAudioEnabled;
+    // 港の中ではレーンを使わない。逆走の判定・表示・記録は残し、音だけ出さない。
+    final harborSilenced =
+        _inHarborArea && candidate.category == SuppressionRules.reverse;
     final shouldPlay = entry.shouldPlay &&
         entry.canPlayCurrentAudio &&
         reverseConfirmed &&
         !reverseAudioDisabled &&
+        !harborSilenced &&
         !(_lowSpeedAudioMuted &&
             lowSpeedMutedCategories.contains(candidate.category));
     return candidate.copyWith(
@@ -814,6 +885,8 @@ class SafetyOrchestrator {
         ...candidate.reasonCodes,
         if (!reverseConfirmed)
           'REVERSE_CONFIRM_PENDING'
+        else if (harborSilenced)
+          SuppressionRules.harborGuidance.reasonCode
         else if (reverseAudioDisabled)
           'REVERSE_AUDIO_DISABLED'
         else if (!entry.shouldPlay)
@@ -1036,13 +1109,33 @@ class SafetyOrchestrator {
   bool get _isLowSpeed => _isAudioMuteSpeedNow;
 
   /// 桟橋エリアの中にいるか。座標が無ければ**外**として扱う(抑制しない)。
-  bool _isInMooringArea(LatLng? position) {
-    if (position == null || mooringAreas.isEmpty) return false;
-    for (final polygon in mooringAreas) {
+  bool _isInMooringArea(LatLng? position) =>
+      _isInAnyPolygon(position, mooringAreas);
+
+  /// いずれかのポリゴンの中にいるか。座標が無ければ**外**として扱う(抑制しない)。
+  static bool _isInAnyPolygon(LatLng? position, List<List<LatLng>> polygons) {
+    if (position == null || polygons.isEmpty) return false;
+    for (final polygon in polygons) {
       if (polygon.length < 3) continue;
       if (isPointInPolygon(position, polygon)) return true;
     }
     return false;
+  }
+
+  /// 速度が取れていて、[limit] 未満か。取れなければ false(原則6)。
+  static bool _isBelow(double? speed, double limit) =>
+      speed != null && speed.isFinite && speed >= 0 && speed < limit;
+
+  /// 自艇の測位の誤差だけで岸に重なる候補か。
+  ///
+  /// `own_position_set_entry`(自艇の位置の範囲が重なった)と
+  /// `gps_guard_entry`(GPS帯込みで重なった)は、実体の掃引が重なった
+  /// `continuous_domain_entry` と違い、測位の誤差が大きいほど現れる。
+  static bool _isHarborUncertaintyOnlyShore(AlertCandidate candidate) {
+    final codes = candidate.reasonCodes;
+    return !codes.contains('continuous_domain_entry') &&
+        (codes.contains('own_position_set_entry') ||
+            codes.contains('gps_guard_entry'));
   }
 
   /// いま値が取れている静音判定の入力。

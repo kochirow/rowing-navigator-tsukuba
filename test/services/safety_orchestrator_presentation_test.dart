@@ -1622,4 +1622,179 @@ void main() {
           'audio/other_boat_warning.mp3');
     });
   });
+
+  // ---- 7. 港の中(2026-11-03 R4) ----
+
+  group('港の中', () {
+    // 桟橋から航路の入口までを囲む四角形。実座標はプロットツールで入れる。
+    const harbor = <LatLng>[
+      LatLng(36.0810, 140.2130),
+      LatLng(36.0810, 140.2180),
+      LatLng(36.0830, 140.2180),
+      LatLng(36.0830, 140.2130),
+    ];
+    const insideHarbor = LatLng(36.0820, 140.2150);
+    const outsideHarbor = LatLng(36.0900, 140.2150);
+
+    SafetyOrchestrator orchestrator(String id, {bool withHarbor = true}) =>
+        SafetyOrchestrator(
+          sessionId: 'session-harbor-$id',
+          sessionGeneration: 1,
+          harborAreas: withHarbor ? const [harbor] : const [],
+          // 8+ の停止時間 8.15秒 + 1秒。
+          harborShoreAudioStartDeadline: const Duration(milliseconds: 9150),
+        );
+
+    // 到達まで数秒ある候補は、最初の評価では確定しない(実機でも1秒後に確定)。
+    // 1秒おきに3回評価した結果を見る。
+    SafetyOrchestratorResult shore(
+      SafetyOrchestrator o, {
+      required LatLng? position,
+      double? entrySeconds,
+      bool overlap = false,
+      List<String> reasonCodes = const ['continuous_domain_entry'],
+      double ownSpeed = 1.1,
+      StaticObstacleKind kind = StaticObstacleKind.shore,
+    }) {
+      late SafetyOrchestratorResult result;
+      for (var second = 0; second < 3; second++) {
+        result = o.processAssessment(
+          assessment: assessment([
+            staticThreat(
+              obstacleId: '${kind.name}_north_25',
+              sourceId: '${kind.name}_north',
+              kind: kind,
+              overlap: overlap,
+              distanceMeters: 8,
+              entrySeconds: entrySeconds,
+              reasonCodes: reasonCodes,
+            ),
+          ]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: ownSpeed,
+          ownPosition: position,
+        );
+      }
+      return result;
+    }
+
+    test('港の中の岸は、停止時間＋1秒より先なら表示だけにする', () {
+      final result =
+          shore(orchestrator('far'), position: insideHarbor, entrySeconds: 12);
+      expect(result.snapshot.audioDirective, isNull);
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.reasonCodes, contains('PRESENTATION_HARBOR_SHORE_LEAD'));
+      // 表示・記録は残す。
+      expect(result.state.activeAlerts, hasLength(1));
+    });
+
+    test('港の中の岸は、停止時間＋1秒以内なら1回だけ読み上げる', () {
+      final result =
+          shore(orchestrator('near'), position: insideHarbor, entrySeconds: 8);
+      final directive = result.snapshot.audioDirective;
+      expect(directive?.asset, 'audio/shore_warning.mp3');
+      expect(directive?.mode, AudioDirectiveMode.playOnce);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_HARBOR_SINGLE'));
+    });
+
+    test('港の外の岸は今までどおり13秒前から繰り返す', () {
+      final result = shore(orchestrator('outside'),
+          position: outsideHarbor, entrySeconds: 12);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    test('港の区域が無ければ、港の中の座標でも今までどおり', () {
+      final result = shore(orchestrator('none', withHarbor: false),
+          position: insideHarbor, entrySeconds: 12);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    test('座標が無ければ港の中とみなさない(原則6)', () {
+      final result =
+          shore(orchestrator('no-position'), position: null, entrySeconds: 12);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    test('港の中で、測位の誤差の円だけで岸に重なる候補は表示だけにする', () {
+      final result = shore(
+        orchestrator('uncertain'),
+        position: insideHarbor,
+        overlap: true,
+        reasonCodes: const ['own_position_set_entry'],
+      );
+      expect(result.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_HARBOR_UNCERTAINTY_VISUAL'));
+    });
+
+    test('港の中でも杭は今までどおり鳴らす', () {
+      final result = shore(orchestrator('pile'),
+          position: insideHarbor,
+          entrySeconds: 12,
+          kind: StaticObstacleKind.pile);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    SafetyOrchestratorResult boat(SafetyOrchestrator o,
+            {required double ownSpeed, required double? otherSpeed}) =>
+        o.processAssessment(
+          assessment: assessment([boatThreat(boatId: 'other-1')]),
+          evaluatedAt: t0,
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: ownSpeed,
+          ownPosition: insideHarbor,
+          otherBoatSpeedById: {'other-1': otherSpeed},
+          healthyBoatIds: const {'other-1'},
+        );
+
+    test('港の中で自艇も相手も1.5m/s未満なら、他艇を1回だけ読み上げる', () {
+      final result =
+          boat(orchestrator('boat-slow'), ownSpeed: 0.5, otherSpeed: 1.0);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);
+      final candidate = result.snapshot.activeAlerts.single.candidate;
+      expect(candidate.reasonCodes, contains('PRESENTATION_HARBOR_SINGLE'));
+      expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
+    });
+
+    test('港の中でも相手が1.5m/s以上なら他艇は今までどおり繰り返す', () {
+      final result =
+          boat(orchestrator('boat-fast'), ownSpeed: 0.5, otherSpeed: 2.0);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    test('港の中でも相手の速度が分からなければ他艇は繰り返す(原則6)', () {
+      final result =
+          boat(orchestrator('boat-unknown'), ownSpeed: 0.5, otherSpeed: null);
+      expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    });
+
+    test('港の中では逆走注意を読み上げない(表示は残す)', () {
+      final o = orchestrator('reverse');
+      final result = o.processAssessment(
+        assessment: assessment([guidanceThreat(StaticObstacleKind.reverse)]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 2.5,
+        ownPosition: insideHarbor,
+      );
+      expect(result.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_HARBOR_GUIDANCE_SILENT'));
+    });
+
+    test('港の外では逆走注意を今までどおり読み上げる', () {
+      final o = orchestrator('reverse-outside');
+      final result = o.processAssessment(
+        assessment: assessment([guidanceThreat(StaticObstacleKind.reverse)]),
+        evaluatedAt: t0,
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 2.5,
+        ownPosition: outsideHarbor,
+      );
+      expect(
+          result.snapshot.audioDirective?.asset, 'audio/reverse_warning.mp3');
+    });
+  });
 }

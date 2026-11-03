@@ -80,6 +80,9 @@
 //
 // ```json
 // { "mooringAreas": [ { "points": [ {"lat": .., "lng": ..}, ... ] } ] }
+//
+// 港の中(`harborAreas`)も同じ形で書ける。地図データへ描く前に、港の中の
+// 鳴り方を実ログの航跡で確かめるために使う(プロファイル側へ**追加**)。
 // ```
 import 'dart:convert';
 import 'dart:io';
@@ -169,6 +172,7 @@ void main() {
 
     final ashoreAreas = await service.loadAshoreAreas();
     final mooringAreas = await service.loadMooringAreas();
+    final harborAreas = await service.loadHarborAreas();
     final ashoreDetector = AshoreDetector(
       ashoreAreas: ashoreAreas.map((area) => area.points).toList(),
     );
@@ -194,6 +198,12 @@ void main() {
         ...mooringAreas.map((area) => area.points),
         ...scenario.mooringAreas,
       ],
+      harborAreas: [
+        ...harborAreas.map((area) => area.points),
+        ...scenario.harborAreas,
+      ],
+      // アプリと同じく、艇種の停止時間 + 1秒で港の中の岸を鳴らし始める。
+      harborShoreAudioStartDeadline: harborShoreAudioStartDeadlineFor(boatType),
     );
 
     final rows = const LineSplitter().convert(trackFile.readAsStringSync());
@@ -472,6 +482,7 @@ void main() {
       'otherBoatsInjected': scenario.boatCount,
       'scenarioCases': scenario.cases,
       'mooringAreasInjected': scenario.mooringAreas.length,
+      'harborAreasInjected': scenario.harborAreas.length,
       'audioStarts': playsByCategory,
       'audibleSamples': audibleSamples,
       'lowConfidenceAudibleSamples': lowConfidenceAudibleSamples,
@@ -676,24 +687,30 @@ Future<List<StaticObstacle>> _polygonZones() async {
 }
 
 _Scenario _readScenario(String path) {
-  if (path.isEmpty) return const _Scenario([], []);
+  if (path.isEmpty) return const _Scenario([], [], []);
   final file = File(path);
-  if (!file.existsSync()) return const _Scenario([], []);
+  if (!file.existsSync()) return const _Scenario([], [], []);
   final raw = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-  final mooringAreas = <List<LatLng>>[];
-  for (final item in (raw['mooringAreas'] as List<dynamic>? ?? const [])) {
-    final points = <LatLng>[];
-    for (final p
-        in ((item as Map<String, dynamic>)['points'] as List<dynamic>? ??
-            const [])) {
-      final point = p as Map<String, dynamic>;
-      points.add(LatLng(
-        (point['lat'] as num).toDouble(),
-        (point['lng'] as num).toDouble(),
-      ));
+  List<List<LatLng>> polygons(String key) {
+    final result = <List<LatLng>>[];
+    for (final item in (raw[key] as List<dynamic>? ?? const [])) {
+      final points = <LatLng>[];
+      for (final p
+          in ((item as Map<String, dynamic>)['points'] as List<dynamic>? ??
+              const [])) {
+        final point = p as Map<String, dynamic>;
+        points.add(LatLng(
+          (point['lat'] as num).toDouble(),
+          (point['lng'] as num).toDouble(),
+        ));
+      }
+      if (points.length >= 3) result.add(points);
     }
-    if (points.length >= 3) mooringAreas.add(points);
+    return result;
   }
+
+  final mooringAreas = polygons('mooringAreas');
+  final harborAreas = polygons('harborAreas');
   final boats = <_ScenarioBoat>[];
   for (final item in (raw['otherBoats'] as List<dynamic>? ?? const [])) {
     final map = item as Map<String, dynamic>;
@@ -720,14 +737,15 @@ _Scenario _readScenario(String path) {
       samples: samples,
     ));
   }
-  return _Scenario(boats, mooringAreas);
+  return _Scenario(boats, mooringAreas, harborAreas);
 }
 
 class _Scenario {
   final List<_ScenarioBoat> boats;
   final List<List<LatLng>> mooringAreas;
+  final List<List<LatLng>> harborAreas;
 
-  const _Scenario(this.boats, this.mooringAreas);
+  const _Scenario(this.boats, this.mooringAreas, this.harborAreas);
 
   int get boatCount => boats.length;
 
