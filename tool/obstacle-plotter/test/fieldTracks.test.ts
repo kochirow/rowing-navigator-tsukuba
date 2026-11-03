@@ -2,8 +2,8 @@ import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { japanDate, readFieldTracks, trackSegmentsFromCsv } from '../server/trackLogs';
-import { visibleFieldTrackLines } from '../src/model/fieldTracks';
+import { japanDate, readFieldTracks, trackSegmentsFromCsv, warningsFromEvents } from '../server/trackLogs';
+import { visibleFieldTrackLines, visibleFieldTrackWarnings, warningCountsByCategory } from '../src/model/fieldTracks';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
@@ -71,5 +71,60 @@ describe('実機ログの航跡', () => {
   it('保存先が無くても空の一覧を返す', async () => {
     const set = await readFieldTracks(join(tmpdir(), 'field-tracks-missing-folder'));
     expect(set.days).toEqual([]);
+  });
+  describe('鳴った警告', () => {
+    const at = (second: number) => Date.UTC(2026, 9, 27, 21, 0, second);
+    const event = (second: number, type: string, details: Record<string, unknown> = {}, iso = false) =>
+      JSON.stringify({ seq: second, t: iso ? new Date(at(second)).toISOString() : at(second), type, details });
+    const track = csv([row(0, 36.08, 140.21), row(10, 36.0801, 140.21), row(20, 36.0802, 140.21)]);
+
+    it('再生要求だけを拾い、その時刻にいちばん近い測位に置く', () => {
+      const events = [
+        event(9, 'warning_presentation_requested', { category: 'other_boat', mode: 'loop' }),
+        event(12, 'audio_playback_started', { asset: 'audio/other_boat_warning.mp3' }),
+        event(14, 'warning_presentation_cleared', {}),
+        event(19, 'warning_presentation_requested', { category: 'reverse', mode: 'playOnce' }, true),
+        '{"途中で切れた行',
+      ].join('\n');
+      const warnings = warningsFromEvents(events, track);
+      expect(warnings).toEqual([
+        { at: new Date(at(9)).toISOString(), lat: 36.0801, lng: 140.21, category: 'other_boat', mode: 'loop', durationSec: 5 },
+        { at: new Date(at(19)).toISOString(), lat: 36.0802, lng: 140.21, category: 'reverse', mode: 'playOnce' },
+      ]);
+    });
+
+    it('測位から60秒以上離れた警告は、場所を決められないので出さない', () => {
+      const events = event(200, 'warning_presentation_requested', { category: 'shore', mode: 'loop' });
+      expect(warningsFromEvents(events, track)).toEqual([]);
+    });
+
+    it('名前を前に付けたセッションのフォルダも読み、名前を提供者にする', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'field-tracks-'));
+      roots.push(root);
+      await session(root, '2026_11/yamashita_rowing_diagnostics_444', [row(0, 36.08, 140.21), row(1, 36.08003, 140.21)]);
+      await session(root, '2026_10/hanazawa_rowing_diagnostics_bundle_20261029-2051_1/rowing_diagnostics_555', [row(0, 36.08, 140.21), row(1, 36.08003, 140.21)]);
+      const sessions = (await readFieldTracks(root)).days.flatMap((day) => day.sessions);
+      expect(sessions.map((item) => [item.id, item.provider]).sort()).toEqual([['444', 'yamashita'], ['555', 'hanazawa']]);
+    });
+
+    it('セッションの読込で警告を付け、種類ごとに隠せる', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'field-tracks-'));
+      roots.push(root);
+      const folder = '2026_11/yamashita_rowing_diagnostics_bundle_x/rowing_diagnostics_333';
+      await session(root, folder, [row(0, 36.08, 140.21), row(10, 36.0801, 140.21), row(20, 36.0802, 140.21)]);
+      await writeFile(join(root, folder, 'events.jsonl'), [
+        event(9, 'warning_presentation_requested', { category: 'other_boat', mode: 'loop' }),
+        event(19, 'warning_presentation_requested', { category: 'shore', mode: 'loop' }),
+      ].join('\n'));
+      const set = await readFieldTracks(root);
+      const dates = new Set(['2026-10-28']);
+      expect(set.days[0].sessions[0].warnings).toHaveLength(2);
+      expect(warningCountsByCategory(set, dates)).toEqual([['other_boat', 1], ['shore', 1]]);
+      const all = visibleFieldTrackWarnings(set, dates);
+      expect(all.map((marker) => marker.mark)).toEqual(['艇', '岸']);
+      expect(all[0].title).toContain('他艇（繰り返し');
+      expect(visibleFieldTrackWarnings(set, dates, new Set(['shore'])).map((marker) => marker.category)).toEqual(['other_boat']);
+      expect(visibleFieldTrackWarnings(set, new Set())).toEqual([]);
+    });
   });
 });

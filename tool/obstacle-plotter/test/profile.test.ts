@@ -169,4 +169,25 @@ describe('profile IO', () => {
     expect(output.dangerZoneBaselines.map((item: { id: string }) => item.id)).not.toContain('mooring_boathouse');
     expect(output.obstacles.map((item: { id: string }) => item.id)).not.toContain('mooring_boathouse');
   });
+  it('round-trips harbor areas and omits the field when none are plotted', async () => {
+    // 桟橋エリアと同じく、1件以上あるときだけ書き出す（SHA-256 を不必要に変えない）。
+    const withoutHarbor = await importProfileText(source);
+    expect(JSON.parse(exportProfileText(withoutHarbor)).harborAreas).toBeUndefined();
+
+    const withHarbor = JSON.parse(source);
+    withHarbor.harborAreas = [{
+      id: 'harbor_laxmarina', name: 'ラクスマリーナの港の中', kind: 'harborArea',
+      points: [{ lat: 36.081, lng: 140.213 }, { lat: 36.083, lng: 140.213 }, { lat: 36.083, lng: 140.218 }],
+    }];
+    const project = await importProfileText(JSON.stringify(withHarbor, null, 2));
+    const area = project.objects.find((object) => object.exportId === 'harbor_laxmarina')!;
+    expect(area.kind).toBe('harborArea');
+    expect(area.parentFolderId).toBe('fld_harbor');
+    const output = JSON.parse(exportProfileText(project));
+    expect(output.harborAreas.map((item: { id: string }) => item.id)).toEqual(['harbor_laxmarina']);
+    expect(output.harborAreas[0].kind).toBe('harborArea');
+    expect(output.dangerZoneBaselines.map((item: { id: string }) => item.id)).not.toContain('harbor_laxmarina');
+    expect(output.obstacles.map((item: { id: string }) => item.id)).not.toContain('harbor_laxmarina');
+    expect(output.navigableWaters.map((item: { id: string }) => item.id)).not.toContain('harbor_laxmarina');
+  });
 });

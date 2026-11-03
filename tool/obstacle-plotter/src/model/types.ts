@@ -23,6 +23,7 @@ export type ObjectKind =
   | 'generic'
   | 'ashoreArea'
   | 'mooringArea'
+  | 'harborArea'
   | 'navigableWater'
   | 'lane'
   | 'practiceArea'
