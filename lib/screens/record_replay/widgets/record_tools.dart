@@ -14,6 +14,8 @@ import '../../../theme/record_palette.dart';
 import '../../../widgets/share_origin.dart';
 import '../replay_format.dart';
 import 'selection_card.dart';
+import '../../../widgets/session_feedback_editor.dart';
+import '../../../utils/alert_category_label.dart';
 
 /// 記録画面の下段: 共有(診断ログ・GPX・CSV)、警告の振り返り、削除。
 ///
@@ -202,6 +204,17 @@ class RecordTools extends HookWidget {
           ]),
         ]),
       ),
+      // 練習の後のシートと同じ5段階とひとこと。後から入れ直せる(R1-R11)。
+      RecordCard(
+        palette: p,
+        child: _FeedbackCard(
+          session: session,
+          palette: p,
+          onChanged: (feedback) => unawaited(save(
+              session.copyWith(userFeedback: () => feedback),
+              '評価を保存できませんでした。')),
+        ),
+      ),
       AlertReviewCard(
         session: session,
         onSeekTo: onSeekTo,
@@ -215,9 +228,6 @@ class RecordTools extends HookWidget {
           unawaited(save(session.copyWith(alertEpisodeRatings: ratings),
               '警告の評価を保存できませんでした。'));
         },
-        onRateOverall: (rating) => unawaited(save(
-            session.copyWith(alertOverallRating: () => rating?.name),
-            '警告の評価を保存できませんでした。')),
       ),
       RecordCard(
         palette: p,
@@ -231,6 +241,68 @@ class RecordTools extends HookWidget {
           label: const Text('この記録を削除'),
           onPressed: busy ? null : delete,
         ),
+      ),
+    ]);
+  }
+}
+
+/// 練習の評価(5段階×2)とひとこと(R1-R11)。保存は呼び出し側が行う。
+class _FeedbackCard extends StatelessWidget {
+  final Session session;
+  final RecordPalette palette;
+  final ValueChanged<SessionUserFeedback?> onChanged;
+
+  const _FeedbackCard({
+    required this.session,
+    required this.palette,
+    required this.onChanged,
+  });
+
+  void _update({
+    int? Function()? timing,
+    int? Function()? amount,
+    String? Function()? comment,
+  }) {
+    final now = DateTime.now();
+    final base = session.userFeedback ?? SessionUserFeedback(updatedAt: now);
+    final next = base.copyWith(
+      timingOffset: timing,
+      amountOffset: amount,
+      comment: comment,
+      updatedAt: now,
+    );
+    onChanged(next.isEmpty && session.userFeedback == null ? null : next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feedback = session.userFeedback;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('今日の評価',
+          style: TextStyle(
+              fontSize: 12,
+              letterSpacing: 1,
+              fontWeight: FontWeight.w800,
+              color: palette.textSub)),
+      const SizedBox(height: 8),
+      FeedbackScaleSelector(
+        scale: FeedbackScale.timing,
+        value: feedback?.timingOffset,
+        labelColor: palette.text,
+        onChanged: (value) => _update(timing: () => value),
+      ),
+      const SizedBox(height: 12),
+      FeedbackScaleSelector(
+        scale: FeedbackScale.amount,
+        value: feedback?.amountOffset,
+        labelColor: palette.text,
+        onChanged: (value) => _update(amount: () => value),
+      ),
+      const SizedBox(height: 12),
+      FeedbackCommentField(
+        initialValue: feedback?.comment,
+        labelColor: palette.text,
+        onChanged: (value) => _update(comment: () => value),
       ),
     ]);
   }
@@ -252,14 +324,12 @@ class AlertReviewCard extends HookWidget {
   final Session session;
   final ValueChanged<double> onSeekTo;
   final void Function(AlertEpisode, AlertEpisodeRating?) onRate;
-  final ValueChanged<AlertOverallRating?> onRateOverall;
 
   const AlertReviewCard({
     super.key,
     required this.session,
     required this.onSeekTo,
     required this.onRate,
-    required this.onRateOverall,
   });
 
   @override
@@ -292,7 +362,6 @@ class AlertReviewCard extends HookWidget {
     final rated = episodes
         .where((e) => session.alertEpisodeRatings.containsKey(e.id))
         .length;
-    final overall = AlertOverallRating.fromName(session.alertOverallRating);
 
     final eyebrow = TextStyle(
         fontSize: 12,
@@ -322,18 +391,7 @@ class AlertReviewCard extends HookWidget {
                 style: TextStyle(fontSize: 12, color: p.textSub)),
           ),
         if (categories.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text('今日の警告は', style: TextStyle(fontSize: 13, color: p.text)),
-          const SizedBox(height: 4),
-          Wrap(spacing: 6, runSpacing: 4, children: [
-            for (final r in AlertOverallRating.values)
-              ChoiceChip(
-                label: Text(r.displayLabel),
-                selected: overall == r,
-                onSelected: (on) => onRateOverall(on ? r : null),
-              ),
-          ]),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           TextButton.icon(
             key: const Key('alert-review-toggle'),
             style: TextButton.styleFrom(alignment: Alignment.centerLeft),
@@ -436,20 +494,3 @@ class _EpisodeRow extends StatelessWidget {
     );
   }
 }
-
-String alertCategoryLabel(String category) => switch (category) {
-      'shore' => '岸',
-      'bridge' => '橋',
-      'bridgePier' => '橋脚',
-      'island' => '中州',
-      'driftwood' => '流木',
-      'pile' => '杭',
-      'curve' => 'カーブ',
-      'reverse' => '逆走注意',
-      'other_boat' => '他艇',
-      'other_boat_track_lost' => '他艇情報途絶',
-      'gps_unavailable' => 'GPS利用不可',
-      'generic' => '危険区域',
-      'testZone' => 'テスト区域',
-      _ => category,
-    };

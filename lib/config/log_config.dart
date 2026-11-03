@@ -228,6 +228,9 @@ const diagnosticEventCatalog = <String, dynamic>{
         'OSがメモリ不足を通知した(iOSのメモリ警告・AndroidのonTrimMemory)。背面での強制終了の手がかり。',
     'metrickit_background_exits':
         'iOSのMetricKitが届けた、背面での終了の件数(期間ごとの累計)。1回の練習の終了理由は特定できない。',
+    'session_end_prompt_closed':
+        '練習の後の「今日の記録」シートを閉じた。送った・あとで・閉じたの別と、評価・ひとことの有無(R1)。',
+    'session_end_prompt_shown': '練習の後の「今日の記録」シートを出した。途切れた記録の確定後か、鳴った警告の回数(R1)。',
     'warning_presentation_requested': 'SafetyOrchestratorが選んだ警告をUI/音声層へ渡した瞬間。',
     'warning_presentation_cleared': '前回提示していた警告を画面/音声層から解除した瞬間。',
     'audio_directive_changed': '安全判定の音声対象・モードが前回から変わった瞬間。',

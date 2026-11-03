@@ -21,7 +21,7 @@ import '../widgets/app_state_views.dart';
 import '../widgets/share_delivery_prompt.dart';
 import '../widgets/share_origin.dart';
 import 'record_replay/record_replay_screen.dart';
-import 'record_replay/widgets/diagnostic_share_flow.dart';
+import '../widgets/session_diagnostic_share_flow.dart';
 import 'record_replay/replay_analysis.dart';
 import 'record_replay/replay_format.dart';
 

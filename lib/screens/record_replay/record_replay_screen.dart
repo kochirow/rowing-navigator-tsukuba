@@ -14,7 +14,7 @@ import 'replay_analysis.dart';
 import 'replay_controller.dart';
 import 'replay_format.dart';
 import 'widgets/detail_sections.dart';
-import 'widgets/diagnostic_share_flow.dart';
+import '../../widgets/session_diagnostic_share_flow.dart';
 import 'widgets/metric_chart.dart';
 import 'widgets/answer_overlay.dart';
 import 'widgets/record_tools.dart';

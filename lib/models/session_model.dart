@@ -3,6 +3,11 @@
 // 端末内にJSONファイルとして保存される(サーバー不要・費用ゼロ)。
 // =====================================================
 
+import 'session_feedback.dart';
+
+// 練習の後の評価は記録の一部なので、記録のモデルと一緒に使えるようにする。
+export 'session_feedback.dart';
+
 /// 1秒ごとの記録点
 class TrackPoint {
   final DateTime t;
@@ -594,6 +599,22 @@ class Session {
   /// 完了済みとして互換性を保つ。
   final bool isComplete;
 
+  /// 漕いだ本人の評価とひとこと(R1)。未入力は null。
+  final SessionUserFeedback? userFeedback;
+
+  /// 練習の後の「今日の記録」シートを出した時刻。出したら二度と出さない(R1-R12)。
+  final DateTime? endPromptShownAt;
+
+  /// 記録の終わり方。終了操作で終わった記録は null。途切れた記録を次回起動時に
+  /// 完了へ直したものは [endReasonRecoveredAfterTermination](R1-R14)。
+  final String? endReason;
+
+  static const endReasonRecoveredAfterTermination = 'recoveredAfterTermination';
+
+  /// 終了操作をせずに途切れ、最後の記録の時刻で確定した記録か。
+  bool get wasRecoveredAfterTermination =>
+      endReason == endReasonRecoveredAfterTermination;
+
   Session({
     this.schemaVersion = currentSchemaVersion,
     required this.id,
@@ -610,6 +631,9 @@ class Session {
     this.alertEpisodeRatings = const {},
     this.alertOverallRating,
     this.diagnosticsSharedAt,
+    this.userFeedback,
+    this.endPromptShownAt,
+    this.endReason,
   });
 
   bool get isDiagnosticsShared => diagnosticsSharedAt != null;
@@ -617,6 +641,7 @@ class Session {
   /// [alertOverallRating] と [diagnosticsSharedAt] は null へ戻せるよう、
   /// 関数で渡す(`() => null` で消す)。
   Session copyWith({
+    DateTime? endedAt,
     SessionSummary? summary,
     bool? isComplete,
     SessionDiagnosticMetadata? diagnosticMetadata,
@@ -625,12 +650,15 @@ class Session {
     Map<String, String>? alertEpisodeRatings,
     String? Function()? alertOverallRating,
     DateTime? Function()? diagnosticsSharedAt,
+    SessionUserFeedback? Function()? userFeedback,
+    DateTime? endPromptShownAt,
+    String? endReason,
   }) =>
       Session(
         schemaVersion: schemaVersion,
         id: id,
         startedAt: startedAt,
-        endedAt: endedAt,
+        endedAt: endedAt ?? this.endedAt,
         boatTypeName: boatTypeName,
         seatPosLabel: seatPosLabel,
         points: points,
@@ -646,6 +674,9 @@ class Session {
         diagnosticsSharedAt: diagnosticsSharedAt != null
             ? diagnosticsSharedAt()
             : this.diagnosticsSharedAt,
+        userFeedback: userFeedback != null ? userFeedback() : this.userFeedback,
+        endPromptShownAt: endPromptShownAt ?? this.endPromptShownAt,
+        endReason: endReason ?? this.endReason,
       );
 
   Map<String, dynamic> toJson() => {
@@ -671,6 +702,10 @@ class Session {
           'alertOverallRating': alertOverallRating,
         if (diagnosticsSharedAt != null)
           'diagnosticsSharedAt': diagnosticsSharedAt!.millisecondsSinceEpoch,
+        if (userFeedback != null) 'userFeedback': userFeedback!.toJson(),
+        if (endPromptShownAt != null)
+          'endPromptShownAt': endPromptShownAt!.millisecondsSinceEpoch,
+        if (endReason != null) 'endReason': endReason,
       };
 
   factory Session.fromJson(Map<String, dynamic> json) => Session(
@@ -708,5 +743,11 @@ class Session {
             ? DateTime.fromMillisecondsSinceEpoch(
                 (json['diagnosticsSharedAt'] as num).toInt())
             : null,
+        userFeedback: SessionUserFeedback.fromJson(json['userFeedback']),
+        endPromptShownAt: json['endPromptShownAt'] is num
+            ? DateTime.fromMillisecondsSinceEpoch(
+                (json['endPromptShownAt'] as num).toInt())
+            : null,
+        endReason: json['endReason'] as String?,
       );
 }

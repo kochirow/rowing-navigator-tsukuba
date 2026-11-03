@@ -147,6 +147,8 @@ void main() {
     expect(names, {
       'manifest.json',
       'diagnostic_event_catalog.json',
+      // 漕いだ本人の評価とひとこと(R1-R8)。
+      'feedback.txt',
       'track.csv',
       'alerts.jsonl',
       'events.jsonl',

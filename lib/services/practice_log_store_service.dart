@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,15 @@ import '../models/practice_log_model.dart';
 /// 本サービスは安全判定・RTDB・地図モデルを参照しない。
 class PracticeLogStoreService {
   final Future<Directory> Function() _documentsDirectoryProvider;
+
+  /// 監視を終えて監視ログが確定したとき(終了操作・途切れた記録の確定)に
+  /// IDを流す。「今日の記録」シート(R1)がこれを受けて出る。
+  static final StreamController<String> _finishedLogIds =
+      StreamController<String>.broadcast();
+  static Stream<String> get finishedLogIds => _finishedLogIds.stream;
+
+  /// 終了操作で確定したことを知らせる(meta.json を書き終えた後に呼ぶ)。
+  static void notifyFinished(String id) => _finishedLogIds.add(id);
   PracticeLogStoreService(
       {Future<Directory> Function()? documentsDirectoryProvider})
       : _documentsDirectoryProvider =
@@ -56,6 +66,56 @@ class PracticeLogStoreService {
       _writeMeta(File('${(await _dir(log.id)).path}/meta.json'), log);
   Future<void> complete(PracticeLog log, DateTime endedAt) =>
       checkpoint(log.copyWith(endedAt: endedAt.toUtc(), isComplete: true));
+
+  /// meta.json を読み、[update] で書き換える(ひとこと・シートの表示時刻など)。
+  /// 記録中のログには呼ばない(記録側が控えで meta.json を書き直すため)。
+  /// 読めない・無いログは null を返し、何もしない。
+  Future<PracticeLog?> updateMeta(
+      String id, PracticeLog Function(PracticeLog log) update) async {
+    final file = File('${(await _dir(id)).path}/meta.json');
+    if (!await file.exists()) return null;
+    final log = PracticeLog.fromJson(
+        Map<String, dynamic>.from(jsonDecode(await file.readAsString())));
+    final updated = update(log);
+    await _writeMeta(file, updated);
+    return updated;
+  }
+
+  /// 途切れた監視ログを、最後の記録の時刻で完了に直す(R1-R16)。
+  ///
+  /// [startedBefore] より後に始まったログ(いま記録中)は触らない。
+  /// 直したものは `endReason: recoveredAfterTermination` を持ち、通常の終了と
+  /// 区別できる。1件の失敗で他を止めない。
+  Future<List<String>> recoverIncompleteLogs(
+      {required DateTime startedBefore}) async {
+    final recovered = <String>[];
+    for (final log in await list()) {
+      if (log.isComplete || !log.startedAt.isBefore(startedBefore)) continue;
+      try {
+        final data = await read(log.id);
+        var lastAt = log.startedAt;
+        for (final point in data.points) {
+          if (point.t.isAfter(lastAt)) lastAt = point.t;
+        }
+        for (final event in data.events) {
+          if (event.t.isAfter(lastAt)) lastAt = event.t;
+        }
+        final livePoints = data.points
+            .where((point) => point.source == PracticeLogSource.live)
+            .length;
+        await checkpoint(data.log.copyWith(
+            endedAt: lastAt.toUtc(),
+            isComplete: true,
+            pointCount: data.points.length,
+            eventCount: data.events.length,
+            livePointCount: livePoints,
+            endReason: 'recoveredAfterTermination'));
+        recovered.add(log.id);
+        _finishedLogIds.add(log.id);
+      } catch (_) {/* 読めないログはそのまま残し、一覧で回収できる */}
+    }
+    return recovered;
+  }
 
   /// 共有した時刻を meta.json へ書く。記録中のログには呼ばない
   /// (記録側が持つ控えで meta.json を書き直すため、印が消える)。
