@@ -424,6 +424,11 @@ flutter run
   system faultは実際の提示どおり「表示のみ」で残る
 - **欠測は必ず書く。** 艇側の途絶(`seq` の飛び = `gap`)と監視端末側の中断
   (`recorder_gap`)は別イベントにする。空白を「そこに艇がいなかった」と読ませない(原則6)
+- **背面へ回っただけでは中断と書かない**(2026-11-04)。受信した位置は
+  `receivedPracticeLogMessages` を直接購読して記録する(画面の再描画に頼ると背面で止まる)。
+  背面の間に記録の処理が動いた印(保存の刻み・監視者の測位・受信)を数え、印が
+  `practiceLogBackgroundSilenceGapSec`(25秒)を超えて途切れた区間だけを `recorder_gap` にする。
+  背面の様子は `recorder_background` に残る
 - **記録の失敗が監視表示・安全経路を止めてはならない。** 保存失敗は表示のみで継続する
 - 監視者トラックの位置ストリームは記録専用。**バックグラウンド継続の資格もここから来る**
   (Wakelockとは無関係)。設定値は `lib/config/practice_log_config.dart`

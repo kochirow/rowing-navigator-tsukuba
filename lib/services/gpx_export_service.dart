@@ -143,6 +143,13 @@ class GpxExportService {
               'snapshotAvailable': false,
             },
       'settings': settings,
+      if (session.diagnosticEvents
+          .any((event) => event.type == 'metrickit_background_exits'))
+        'metricKitBackgroundExits': {
+          'source': 'events.jsonl metrickit_background_exits',
+          'note': 'iOSが期間(おおむね1日)ごとに届ける累計の件数。'
+              'この練習で何が起きたかは特定できない。',
+        },
       'alertEpisodeRatings': session.alertEpisodeRatings,
       'alertOverallRating': session.alertOverallRating,
       'privacy': {
@@ -185,6 +192,8 @@ class GpxExportService {
         'raw_course_deg',
         'speed_source',
         'heading_source',
+        // 2026-11-04 追加(R8-R7)。港を描いていない記録では空。
+        'in_harbor_area',
       ].join(','));
     for (final point in session.points) {
       track.writeln([
@@ -217,6 +226,7 @@ class GpxExportService {
         point.rawCourseDegrees ?? '',
         point.speedSource ?? '',
         point.headingSource ?? '',
+        point.inHarborArea ?? '',
       ].map(_csvCell).join(','));
     }
 

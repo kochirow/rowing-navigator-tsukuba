@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:battery_plus/battery_plus.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map_math/flutter_geo_math.dart';
@@ -58,6 +55,7 @@ import '../services/gps_position_filter.dart';
 import '../services/gps_health_monitor.dart';
 import '../services/latest_only_async_publisher.dart';
 import '../services/message_service.dart';
+import '../services/navigation_diagnostics_support.dart';
 import '../services/navigation_warning_service.dart';
 import '../services/other_boat_track_store.dart';
 import '../services/permission_service.dart';
@@ -141,34 +139,19 @@ double _blendHeading(double previous, double measured, {double weight = 0.5}) {
 
 double? _finiteOrNull(double value) => value.isFinite ? value : null;
 
-Map<String, Object?> _positionSharingErrorDetails(Object error) {
-  if (error is FirebaseException) {
-    final message = error.message?.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return {
-      'errorType': 'FirebaseException',
-      'errorCode': error.code,
-      'plugin': error.plugin,
-      if (message != null && message.isNotEmpty)
-        'message': message.length <= 240 ? message : message.substring(0, 240),
-      if (error.code == 'permission-denied')
-        'likelyCause':
-            'rtdb_rules_payload_membership_auth_app_check_or_deployed_rules',
-    };
-  }
-  return {'errorType': error.runtimeType.toString()};
-}
-
-/// 原因分類に使う errorCode。Firebase 以外は null。
-String? _sharingErrorCode(Object error) =>
-    error is FirebaseException ? error.code : null;
-
 class _NavigationMetricsObserver with WidgetsBindingObserver {
   final VoidCallback onMetricsChanged;
+  final VoidCallback onMemoryPressure;
 
-  _NavigationMetricsObserver(this.onMetricsChanged);
+  _NavigationMetricsObserver(this.onMetricsChanged, this.onMemoryPressure);
 
   @override
   void didChangeMetrics() => onMetricsChanged();
+
+  /// iOS のメモリ警告(`didReceiveMemoryWarning`)・Android の onTrimMemory。
+  /// 背面での強制終了の手がかりとして残す(R8-R2)。
+  @override
+  void didHaveMemoryPressure() => onMemoryPressure();
 }
 
 UseNavigator useNavigator() {
@@ -704,7 +687,7 @@ UseNavigator useNavigator() {
         if (positionSharingDiagnosticState.value != 'failed') {
           appendRuntimeDiagnostic('position_sharing_failed', {
             'failureCount': sharingFailureCount.value,
-            ..._positionSharingErrorDetails(error),
+            ...positionSharingErrorDetails(error),
             'protocolVersion': message.protocolVersion,
             'profileVersion': message.profileVersion,
             'hasWarningState': message.presentationState != null,
@@ -815,6 +798,19 @@ UseNavigator useNavigator() {
     );
   }
 
+  /// 他艇の警告に添える相手の速度・方位の信頼(R8-R1)。記録専用。
+  ({double? speedMps, bool? headingReliable}) diagnosticTargetMotion(
+    AlertCandidate candidate,
+  ) {
+    final targetId = candidate.targetId;
+    if (targetId == null || !isOtherBoatAlert(candidate)) {
+      return (speedMps: null, headingReliable: null);
+    }
+    final boat =
+        otherBoats.value.where((boat) => boat.boatId == targetId).firstOrNull;
+    return otherBoatTargetDiagnostics(boat);
+  }
+
   void recordSafetyDiagnostics(SafetyOrchestratorResult result) {
     final candidateById = <String, AlertCandidate>{
       for (final state in result.state.alerts)
@@ -885,6 +881,7 @@ UseNavigator useNavigator() {
         continue;
       }
       lastAlertObservationAt.value[candidate.alertId] = observedAt;
+      final targetMotion = diagnosticTargetMotion(candidate);
       appendAlertEvent(AlertDiagnosticEvent(
         t: result.snapshot.evaluatedAt,
         event: 'observation',
@@ -910,6 +907,8 @@ UseNavigator useNavigator() {
                 ? 'continue'
                 : 'start'
             : null,
+        targetSpeedMps: targetMotion.speedMps,
+        targetHeadingReliable: targetMotion.headingReliable,
       ));
     }
     for (final transition in result.state.transitions) {
@@ -948,6 +947,7 @@ UseNavigator useNavigator() {
           });
         }
       }
+      final targetMotion = diagnosticTargetMotion(candidate);
       appendAlertEvent(AlertDiagnosticEvent(
         t: transition.occurredAt,
         event: 'transition',
@@ -969,6 +969,8 @@ UseNavigator useNavigator() {
             ? null
             : candidate.actionDeadline!.inMilliseconds / 1000,
         reasonCodes: candidate.reasonCodes,
+        targetSpeedMps: targetMotion.speedMps,
+        targetHeadingReliable: targetMotion.headingReliable,
       ));
       if (transition.to == AlertPhase.safe) {
         diagnosticCandidates.value.remove(transition.alertId);
@@ -1322,11 +1324,7 @@ UseNavigator useNavigator() {
       final calibrations = await fixedObstacleCalibrationService.loadAll();
       final calibrationTargets =
           await presetObstacleService.loadCalibrationTargets();
-      final rawProfile = Map<String, dynamic>.from(
-        jsonDecode(
-          await rootBundle.loadString(PresetObstacleService.presetAssetPath),
-        ) as Map,
-      );
+      final rawProfile = await presetObstacleService.loadRawProfileJson();
       final calibrationSnapshot = [
         for (final entry in calibrations.entries)
           {
@@ -2143,7 +2141,7 @@ UseNavigator useNavigator() {
         failureLogged = true;
         queuePreSessionDiagnostic('dynamic_receive_access_probe_failed', {
           'backendType': messageService.receiveBackendType,
-          ..._positionSharingErrorDetails(error),
+          ...positionSharingErrorDetails(error),
         });
       }
     }).whenComplete(() {
@@ -3538,6 +3536,7 @@ UseNavigator useNavigator() {
         rawCourseDegrees: _finiteOrNull(rawPos.heading),
         speedSource: conservative?.speedSource.name,
         headingSource: conservative?.headingSource.name,
+        inHarborArea: safetyOrchestrator.value?.inHarborAreaForDiagnostics,
       ));
       // 初回fixはすぐ、以後は60秒ごとに保存。ファイルI/Oは
       // awaitせず、衝突判定と次のGPS fixをブロックしない。
@@ -3712,7 +3711,7 @@ UseNavigator useNavigator() {
     }, onError: (Object error, StackTrace _) {
       if (isCurrentNavigation(generation)) {
         appendRuntimeDiagnostic('position_sharing_clear_failed', {
-          ..._positionSharingErrorDetails(error),
+          ...positionSharingErrorDetails(error),
         });
       }
     }));
@@ -3723,7 +3722,7 @@ UseNavigator useNavigator() {
     }, onError: (Object error, StackTrace _) {
       if (isCurrentNavigation(generation)) {
         appendRuntimeDiagnostic('position_sharing_disconnect_arm_failed', {
-          ..._positionSharingErrorDetails(error),
+          ...positionSharingErrorDetails(error),
         });
       }
     }));
@@ -3741,7 +3740,7 @@ UseNavigator useNavigator() {
         _publishingSetupAckTimeout,
       );
       final kind = classifySharingFailure(
-        errorCode: _sharingErrorCode(error),
+        errorCode: sharingErrorCode(error),
         errorType: error.runtimeType.toString(),
       );
       publishingSetupFailureKind.value = kind;
@@ -3758,7 +3757,7 @@ UseNavigator useNavigator() {
       appendRuntimeDiagnostic('position_sharing_setup_failed', {
         'failureKind': kind.name,
         'retryable': kind.shouldRetry(1),
-        ..._positionSharingErrorDetails(error),
+        ...positionSharingErrorDetails(error),
       });
     });
 
@@ -3799,7 +3798,7 @@ UseNavigator useNavigator() {
         return;
       }
       final kind = classifySharingFailure(
-        errorCode: _sharingErrorCode(error),
+        errorCode: sharingErrorCode(error),
         errorType: error.runtimeType.toString(),
       );
       publishingSetupFailureKind.value = kind;
@@ -3811,7 +3810,7 @@ UseNavigator useNavigator() {
       appendRuntimeDiagnostic('position_sharing_setup_failed', {
         'failureKind': kind.name,
         'retryable': kind.shouldRetry(1),
-        ..._positionSharingErrorDetails(error),
+        ...positionSharingErrorDetails(error),
       });
       debugPrint('Position publishing setup is unavailable: $error');
     }));
@@ -3877,7 +3876,7 @@ UseNavigator useNavigator() {
         publishingSetupInFlight.value = null;
       }
       final kind = classifySharingFailure(
-        errorCode: _sharingErrorCode(error),
+        errorCode: sharingErrorCode(error),
         errorType: error.runtimeType.toString(),
       );
       publishingSetupFailureKind.value = kind;
@@ -3888,7 +3887,7 @@ UseNavigator useNavigator() {
         'failureKind': kind.name,
         'retryable': kind.shouldRetry(nextFailureCount),
         'retryAttempt': attempt,
-        ..._positionSharingErrorDetails(error),
+        ...positionSharingErrorDetails(error),
       });
     }
   }
@@ -4534,6 +4533,13 @@ UseNavigator useNavigator() {
         if (initialAccuracy != null && initialAccuracy.isFinite)
           'initialGpsAccuracyMeters': initialAccuracy,
       });
+      unawaited(deviceRuntimeDiagnostics.backgroundExits().then((exits) {
+        if (exits.isEmpty || !isCurrentNavigation(generation)) return;
+        appendRuntimeDiagnostic('metrickit_background_exits', {
+          'payloads': exits,
+          'note': '期間ごとの累計。1回の練習の終了理由は特定できない',
+        });
+      }));
       recordOrientationIfChanged();
       gpsFilter.value.rebaseLastAcceptedElapsed(Duration.zero);
       safetyEvaluationLiveness.value
@@ -5142,7 +5148,12 @@ UseNavigator useNavigator() {
   });
 
   final metricsObserver = useMemoized(
-    () => _NavigationMetricsObserver(recordOrientationIfChanged),
+    () => _NavigationMetricsObserver(
+      recordOrientationIfChanged,
+      () => appendRuntimeDiagnostic('memory_pressure', {
+        'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
+      }),
+    ),
   );
 
   void queueRecoveryDiagnostic(SessionDiagnosticEvent event) {
@@ -5186,6 +5197,7 @@ UseNavigator useNavigator() {
           'lastDiagnosticEventType': incomplete.diagnosticEvents.isEmpty
               ? null
               : incomplete.diagnosticEvents.last.type,
+          ...sessionRecoveryContext(incomplete),
         },
       );
       try {

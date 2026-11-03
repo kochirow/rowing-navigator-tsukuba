@@ -206,7 +206,7 @@ class HomeMapScreen extends HookConsumerWidget {
       enabled: coachWatchEnabled,
       teamId: TeamService.activeMembership?.teamId,
       recordedBy: auth.currentUser?.uid,
-      messages: navigator.receivedPracticeLogMessages.value,
+      messages: navigator.receivedPracticeLogMessages,
       anomalies: coachWatch.anomalies.value,
       observerWarnings: observerWarnings,
     );

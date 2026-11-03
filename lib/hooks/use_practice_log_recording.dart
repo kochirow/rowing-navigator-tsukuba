@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
@@ -22,11 +23,15 @@ class UsePracticeLogRecording {
 /// 監視中だけ一括ログを開始する。位置共有・地図の後段で動き、保存に失敗しても
 /// 監視表示を止めない。画面を消してもOSが継続を保証するとは言わず、空白は
 /// recorder_gapとして残す。
+///
+/// 受信した位置は [messages] の変化を**直接購読して**記録する。画面の再描画
+/// (hook の effect)に頼ると、背面では Flutter が描画しないので記録が止まる
+/// (2026-11-04 R8-R6)。
 UsePracticeLogRecording usePracticeLogRecording({
   required bool enabled,
   required String? teamId,
   required String? recordedBy,
-  required List<Message> messages,
+  required ValueListenable<List<Message>> messages,
   required List<BoatAnomaly> anomalies,
   UseObserverWarningAlerts? observerWarnings,
 }) {
@@ -138,7 +143,7 @@ UsePracticeLogRecording usePracticeLogRecording({
         lastCheckpoint.value = now;
         error.value = null;
         log.value = created;
-        recorder.value!.recordMessages(messages, now: now);
+        recorder.value!.recordMessages(messages.value, now: now);
         subscription.value = geo.getObserverPositionStream().listen((position) {
           latestObserver.value = position;
           observerUnavailableReported.value = false;
@@ -199,12 +204,18 @@ UsePracticeLogRecording usePracticeLogRecording({
     };
   }, [enabled, teamId, recordedBy]);
 
+  final enabledRef = useRef(enabled);
+  enabledRef.value = enabled;
   useEffect(() {
-    final r = recorder.value;
-    if (!enabled || r == null) return null;
-    r.recordMessages(messages, now: DateTime.now());
-    return null;
-  }, [enabled, messages]);
+    void record() {
+      final r = recorder.value;
+      if (!enabledRef.value || r == null) return;
+      r.recordMessages(messages.value, now: DateTime.now());
+    }
+
+    messages.addListener(record);
+    return () => messages.removeListener(record);
+  }, [messages]);
 
   useEffect(() {
     final r = recorder.value;

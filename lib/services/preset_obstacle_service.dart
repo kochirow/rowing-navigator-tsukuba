@@ -185,6 +185,14 @@ class PresetObstacleService {
   ///
   /// checksum不一致では例外を投げない。同じアセットに対して sha256 を
   /// 5回計算していた無駄も同時に取り除く。
+  /// 同梱プリセットを、検証・キャッシュを通さずそのまま読む(診断の記録用)。
+  ///
+  /// 呼び出し側が書き換えても [_loadProfile] のキャッシュを汚さないよう、
+  /// 毎回アセットから読み直した新しい map を返す。
+  Future<Map<String, dynamic>> loadRawProfileJson() async =>
+      Map<String, dynamic>.from(
+          json.decode(await rootBundle.loadString(presetAssetPath)) as Map);
+
   Future<Map<String, dynamic>> _loadProfile() async {
     final cached = _cachedProfile;
     if (cached != null) return cached;

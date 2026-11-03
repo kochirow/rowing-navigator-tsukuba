@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rowing_navigator/hooks/use_screen_wakelock.dart';
 import 'package:rowing_navigator/types/nav_mode.dart';
@@ -37,6 +38,7 @@ void main() {
     final controller = ScreenWakelockController(
       platform: platform,
       onDiagnostic: (_, details) => diagnostics.add(details),
+      lifecycleState: () => AppLifecycleState.resumed,
     );
 
     await controller.apply(desired: true, reason: 'state_changed');
@@ -46,9 +48,49 @@ void main() {
     expect(platform.enableCalls, 1);
     expect(platform.disableCalls, 1);
     expect(diagnostics, [
-      {'desired': true, 'actual': true, 'reason': 'state_changed'},
-      {'desired': true, 'actual': true, 'reason': 'periodic_reassert'},
-      {'desired': false, 'actual': false, 'reason': 'dispose'},
+      {
+        'desired': true,
+        'actual': true,
+        'reason': 'state_changed',
+        'lifecycle': 'resumed',
+        'effective': true,
+      },
+      {
+        'desired': true,
+        'actual': true,
+        'reason': 'periodic_reassert',
+        'lifecycle': 'resumed',
+        'effective': true,
+      },
+      {
+        'desired': false,
+        'actual': false,
+        'reason': 'dispose',
+        'lifecycle': 'resumed',
+        'effective': false,
+      },
     ]);
+  });
+
+  test('背面では要求が残っていても effective を false と記録し、状態を変えない', () async {
+    final platform = _FakeScreenWakelockPlatform()..isEnabled = true;
+    final diagnostics = <Map<String, dynamic>>[];
+    final controller = ScreenWakelockController(
+      platform: platform,
+      onDiagnostic: (_, details) => diagnostics.add(details),
+      lifecycleState: () => AppLifecycleState.paused,
+    );
+
+    await controller.record(desired: true, reason: 'lifecycle_paused');
+
+    expect(platform.enableCalls, 0);
+    expect(platform.disableCalls, 0);
+    expect(diagnostics.single, {
+      'desired': true,
+      'actual': true,
+      'reason': 'lifecycle_paused',
+      'lifecycle': 'paused',
+      'effective': false,
+    });
   });
 }

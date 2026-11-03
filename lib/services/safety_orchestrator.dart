@@ -47,6 +47,10 @@ class SafetyOrchestrator {
 
   /// 直近の評価で、自艇が港の中にいたか。逆走注意の提示に使う。
   bool _inHarborArea = false;
+
+  /// 直近の評価で自艇が港の中にいたか(記録用)。港を描いていなければ null。
+  bool? get inHarborAreaForDiagnostics =>
+      harborAreas.isEmpty ? null : _inHarborArea;
   // 航行中に利用者が警告時間を変更しても、状態機械を作り直して既存の
   // 警告エピソードを失わないよう、提示設定だけを差し替えられるようにする。
   // 衝突判定結果そのものはこの設定に依存しない。

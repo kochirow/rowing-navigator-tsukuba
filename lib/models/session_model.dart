@@ -41,6 +41,10 @@ class TrackPoint {
   final String? speedSource;
   final String? headingSource;
 
+  /// 直近の評価で自艇が港の中(`harborAreas`)にいたか。港の中の鳴り方(R4)の
+  /// 効果を実機ログで数えるための記録専用の値。港を描いていない記録では null。
+  final bool? inHarborArea;
+
   TrackPoint({
     required this.t,
     this.elapsedMs,
@@ -71,6 +75,7 @@ class TrackPoint {
     this.rawCourseDegrees,
     this.speedSource,
     this.headingSource,
+    this.inHarborArea,
   });
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +123,7 @@ class TrackPoint {
         if (rawCourseDegrees != null) 'rawCourseDegrees': rawCourseDegrees,
         if (speedSource != null) 'speedSource': speedSource,
         if (headingSource != null) 'headingSource': headingSource,
+        if (inHarborArea != null) 'inHarborArea': inHarborArea,
       };
 
   factory TrackPoint.fromJson(Map<String, dynamic> json) => TrackPoint(
@@ -160,6 +166,7 @@ class TrackPoint {
         rawCourseDegrees: (json['rawCourseDegrees'] as num?)?.toDouble(),
         speedSource: json['speedSource'] as String?,
         headingSource: json['headingSource'] as String?,
+        inHarborArea: json['inHarborArea'] as bool?,
       );
 }
 
@@ -195,6 +202,12 @@ class AlertDiagnosticEvent {
   final String? audioMode;
   final String? audioAction;
 
+  /// 他艇の警告で、評価に使った相手の速度 [m/s] と、相手の方位を
+  /// 信頼したか(`ShipDomainService.headingIsReliable`)。港の中の他艇の
+  /// 鳴り方(相手の速さで変わる)を後から確かめるための記録専用の値。
+  final double? targetSpeedMps;
+  final bool? targetHeadingReliable;
+
   AlertDiagnosticEvent({
     this.sequence,
     this.elapsedMs,
@@ -218,6 +231,8 @@ class AlertDiagnosticEvent {
     this.reasonCodes = const [],
     this.audioMode,
     this.audioAction,
+    this.targetSpeedMps,
+    this.targetHeadingReliable,
   });
 
   Map<String, dynamic> toJson() => {
@@ -243,6 +258,9 @@ class AlertDiagnosticEvent {
         'reasonCodes': reasonCodes,
         if (audioMode != null) 'audioMode': audioMode,
         if (audioAction != null) 'audioAction': audioAction,
+        if (targetSpeedMps != null) 'targetSpeedMps': targetSpeedMps,
+        if (targetHeadingReliable != null)
+          'targetHeadingReliable': targetHeadingReliable,
       };
 
   factory AlertDiagnosticEvent.fromJson(Map<String, dynamic> json) =>
@@ -271,6 +289,8 @@ class AlertDiagnosticEvent {
             .toList(growable: false),
         audioMode: json['audioMode'] as String?,
         audioAction: json['audioAction'] as String?,
+        targetSpeedMps: (json['targetSpeedMps'] as num?)?.toDouble(),
+        targetHeadingReliable: json['targetHeadingReliable'] as bool?,
       );
 }
 
