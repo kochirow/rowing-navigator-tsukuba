@@ -224,8 +224,10 @@ const diagnosticEventCatalog = <String, dynamic>{
     'audio_stop_requested': '提示ポリシーまたは航行終了が持続警告音の停止を要求した。',
     'audio_test_finished': '利用者による警告音試験が終了した。成功可否はdetailsで区別する。',
     'audio_test_started': '利用者による警告音試験を開始した。',
-    'memory_pressure': 'OSがメモリ不足を通知した(iOSのメモリ警告・AndroidのonTrimMemory)。背面での強制終了の手がかり。',
-    'metrickit_background_exits': 'iOSのMetricKitが届けた、背面での終了の件数(期間ごとの累計)。1回の練習の終了理由は特定できない。',
+    'memory_pressure':
+        'OSがメモリ不足を通知した(iOSのメモリ警告・AndroidのonTrimMemory)。背面での強制終了の手がかり。',
+    'metrickit_background_exits':
+        'iOSのMetricKitが届けた、背面での終了の件数(期間ごとの累計)。1回の練習の終了理由は特定できない。',
     'warning_presentation_requested': 'SafetyOrchestratorが選んだ警告をUI/音声層へ渡した瞬間。',
     'warning_presentation_cleared': '前回提示していた警告を画面/音声層から解除した瞬間。',
     'audio_directive_changed': '安全判定の音声対象・モードが前回から変わった瞬間。',
