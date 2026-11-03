@@ -195,7 +195,7 @@ class HomeMapScreen extends HookConsumerWidget {
         navigator.mode.value == NavMode.observer && navigator.isWatching.value;
     final observerSession = useObserverSession(
       enabled: coachWatchEnabled,
-      otherBoats: navigator.otherBoats.value,
+      otherBoats: navigator.otherBoats,
       receivedMessages: navigator.receivedPracticeLogMessages,
       teamId: TeamService.activeMembership?.teamId,
       recordedBy: auth.currentUser?.uid,
@@ -1619,6 +1619,8 @@ class HomeMapScreen extends HookConsumerWidget {
                                                   coachWatch.boatColors.value,
                                               observerWarnings:
                                                   observerWarnings,
+                                              backgroundAlerts: observerSession
+                                                  .backgroundAlerts,
                                               onTapBoat: (boatId) => unawaited(
                                                 focusOnWatchedBoat(boatId),
                                               ),

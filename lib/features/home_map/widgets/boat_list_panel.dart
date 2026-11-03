@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../hooks/use_coach_watch.dart';
+import '../../../hooks/use_observer_background_alerts.dart';
 import '../../../hooks/use_observer_warning_alerts.dart';
+import '../../../services/observer_background_alert_policy.dart';
 import '../../../widgets/app_state_views.dart';
 
 /// コーチ(観察者)モードで表示する艇一覧パネル。
@@ -45,6 +47,10 @@ class BoatListPanel extends StatelessWidget {
   /// 「安全」とは表示しない(何も出さないだけ)。
   final UseObserverWarningAlerts? observerWarnings;
 
+  /// 画面を消している間(背面)に通知で知らせる種類の切り替え(R3)。
+  /// null なら出さない。通知は音を鳴らさない。
+  final UseObserverBackgroundAlerts? backgroundAlerts;
+
   const BoatListPanel({
     super.key,
     required this.statuses,
@@ -52,6 +58,7 @@ class BoatListPanel extends StatelessWidget {
     this.onShowStrokeTrace,
     this.boatColors = const {},
     this.observerWarnings,
+    this.backgroundAlerts,
   });
 
   static String _durationLabel(Duration d) {
@@ -73,6 +80,38 @@ class BoatListPanel extends StatelessWidget {
           value: observerWarnings!.vibrationEnabled.value,
           onChanged: observerWarnings!.setVibrationEnabled,
         ),
+      ],
+    );
+  }
+
+  Widget _backgroundAlertSwitches(BuildContext context) {
+    final colors = context.colors;
+    final alerts = backgroundAlerts!;
+    final enabled = alerts.enabledKinds.value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '画面を消しても通知（音なし）',
+          style: TextStyle(fontSize: 13, color: colors.textSecondary),
+        ),
+        Wrap(
+          spacing: 6,
+          children: [
+            for (final kind in ObserverBackgroundAlertKind.values)
+              FilterChip(
+                key: Key('background-alert-${kind.name}'),
+                label: Text(kind.settingsLabel),
+                selected: enabled.contains(kind),
+                onSelected: (on) => alerts.setEnabled(kind, on),
+              ),
+          ],
+        ),
+        if (alerts.permissionGranted.value == false)
+          Text(
+            '通知が許可されていません。端末の設定で許可すると届きます。',
+            style: TextStyle(fontSize: 12, color: colors.textSecondary),
+          ),
       ],
     );
   }
@@ -280,6 +319,7 @@ class BoatListPanel extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: _vibrationSwitch(context),
             ),
+          if (backgroundAlerts != null) _backgroundAlertSwitches(context),
           if (statuses.isEmpty)
             const AppEmptyView(
               icon: Icons.rowing,

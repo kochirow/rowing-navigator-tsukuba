@@ -17,7 +17,16 @@ import '../services/practice_log_store_service.dart';
 class UsePracticeLogRecording {
   final ValueNotifier<PracticeLog?> log;
   final ValueNotifier<String?> error;
-  const UsePracticeLogRecording({required this.log, required this.error});
+
+  /// 監視ログへイベントを1件書く(記録中でなければ何もしない)。
+  /// 背面の通知(R3)など、画面の描画と関係なく起きたことを残すために使う。
+  final void Function(String type, Map<String, dynamic> details) recordEvent;
+
+  const UsePracticeLogRecording({
+    required this.log,
+    required this.error,
+    required this.recordEvent,
+  });
 }
 
 /// 監視中だけ一括ログを開始する。位置共有・地図の後段で動き、保存に失敗しても
@@ -275,5 +284,10 @@ UsePracticeLogRecording usePracticeLogRecording({
     }
     unawaited(flush(checkpoint: true).catchError((_) {}));
   });
-  return UsePracticeLogRecording(log: log, error: error);
+  return UsePracticeLogRecording(
+    log: log,
+    error: error,
+    recordEvent: (type, details) =>
+        recorder.value?.recordEvent(DateTime.now(), type, details),
+  );
 }

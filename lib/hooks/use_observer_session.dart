@@ -5,6 +5,7 @@ import '../models/message_model.dart';
 import '../services/channel_centerline.dart';
 import '../services/channel_lane_resolver.dart';
 import 'use_coach_watch.dart';
+import 'use_observer_background_alerts.dart';
 import 'use_observer_warning_alerts.dart';
 import 'use_practice_log_recording.dart';
 
@@ -17,16 +18,20 @@ class UseObserverSession {
   final UseObserverWarningAlerts warnings;
   final UsePracticeLogRecording recording;
 
+  /// 監視端末が背面にある間の通知(R3)。
+  final UseObserverBackgroundAlerts backgroundAlerts;
+
   const UseObserverSession({
     required this.coachWatch,
     required this.warnings,
     required this.recording,
+    required this.backgroundAlerts,
   });
 }
 
 UseObserverSession useObserverSession({
   required bool enabled,
-  required List<Boat> otherBoats,
+  required ValueListenable<List<Boat>> otherBoats,
   required ValueListenable<List<Message>> receivedMessages,
   required String? teamId,
   required String? recordedBy,
@@ -51,9 +56,15 @@ UseObserverSession useObserverSession({
     anomalies: coachWatch.anomalies.value,
     observerWarnings: warnings,
   );
+  final backgroundAlerts = useObserverBackgroundAlerts(
+    enabled: enabled,
+    messages: receivedMessages,
+    onRecord: recording.recordEvent,
+  );
   return UseObserverSession(
     coachWatch: coachWatch,
     warnings: warnings,
     recording: recording,
+    backgroundAlerts: backgroundAlerts,
   );
 }
