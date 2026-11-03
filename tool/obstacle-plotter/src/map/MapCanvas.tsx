@@ -1,3 +1,4 @@
+import { loadMapKit } from './loadMapKit';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dangerZonePreviews } from '../io/dangerZone';
 import type { Coordinate, MapObject, Project } from '../model/types';
@@ -23,7 +24,6 @@ type Props = {
 // Use the complete bundle. The modular `mapkit.core.js` bundle can report that
 // `map` is loaded before annotation/overlay constructors are ready, which
 // makes a later redraw fail when an object is selected.
-const scriptUrl = 'https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js';
 // Survey-grade vertex editing needs to reach far closer than the default
 // camera range. This is a camera distance in metres, not a screen zoom level.
 const minimumEditCameraDistance = 8;
@@ -116,18 +116,6 @@ function laneArrows(project: Project): LaneArrow[] {
   return arrows;
 }
 
-async function loadMapKit(): Promise<any> {
-  if ((window as any).mapkit) return (window as any).mapkit;
-  await new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('MapKit JS を読み込めませんでした。'));
-    document.head.append(script);
-  });
-  return (window as any).mapkit;
-}
 
 async function loadMapLibraries(mk: any, libraries: string[]): Promise<void> {
   // MapKit JS 5 can signal library loading with events, while newer releases
@@ -205,12 +193,16 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fieldTrac
   const movePointRef = useRef(onMovePoint);
   const [message, setMessage] = useState('Apple Maps を準備しています…');
   const [mapReady, setMapReady] = useState(false);
+  const [initializationAttempt, setInitializationAttempt] = useState(0);
+  const [initializing, setInitializing] = useState(true);
   modeRef.current = mode;
   addPointRef.current = onAddPoint;
   movePointRef.current = onMovePoint;
 
   useEffect(() => {
     let cancelled = false;
+    setInitializing(true);
+    setMessage('Apple Maps を準備しています…');
     const initialize = async () => {
       try {
         const token = await fetch('/api/mapkit/token').then(async (response) => {
@@ -243,6 +235,8 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fieldTrac
         setMapReady(true);
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : 'Apple Maps を初期化できませんでした。');
+      } finally {
+        if (!cancelled) setInitializing(false);
       }
     };
     void initialize();
@@ -253,7 +247,7 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fieldTrac
       map.current = undefined;
       mapkit.current = undefined;
     };
-  }, []);
+  }, [initializationAttempt]);
 
   // 航跡は数万点あるので、作図を編集するたびに作り直さない。
   // 表示する日付が変わったときだけオーバーレイを作り、編集時は同じものを使い回す。
@@ -393,7 +387,9 @@ export function MapCanvas({ project, selected, mode, fieldTracks = [], fieldTrac
     onAddPoint({ lat, lng });
   };
   return <div className="map-frame" ref={node} onPointerDown={fallbackPoint}>
-    {message && <div className="map-fallback"><p>{message}</p><p>Apple Mapsの設定後に再読み込みしてください。設定前はこの概略座標面をクリックして作図できます。</p></div>}
+    {message && <div className="map-fallback" role="status"><p>{message}</p>
+      {!initializing && <><p>設定エラーの場合はツールの設定を確認してください。再試行しても編集中の座標は保持されます。</p><button onPointerDown={(event) => event.stopPropagation()} onClick={() => setInitializationAttempt((value) => value + 1)}>地図を再試行</button></>}
+    </div>}
     {mode === 'add' && <div className="draw-notice"><span>頂点追加モード: 地図をクリックして頂点を追加します</span><button onClick={onFinishInteraction}>追加を終了</button></div>}
     {mode === 'move' && <div className="draw-notice"><span>頂点移動モード: 番号付きの頂点をドラッグして移動します</span><button onClick={onFinishInteraction}>移動を終了</button></div>}
   </div>;
