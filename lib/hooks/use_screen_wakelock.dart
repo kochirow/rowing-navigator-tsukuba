@@ -47,10 +47,13 @@ class ScreenWakelockController {
   ScreenWakelockController({
     required this.platform,
     required this.onDiagnostic,
-  });
+    AppLifecycleState? Function()? lifecycleState,
+  }) : _lifecycleState =
+            lifecycleState ?? (() => WidgetsBinding.instance.lifecycleState);
 
   final ScreenWakelockPlatform platform;
   final ScreenWakelockDiagnostic onDiagnostic;
+  final AppLifecycleState? Function() _lifecycleState;
 
   Future<void> apply({
     required bool desired,
@@ -70,10 +73,38 @@ class ScreenWakelockController {
     } catch (error) {
       debugPrint('Wakelock state update failed: $error');
     }
+    _record(desired: desired, actual: actual, reason: reason);
+  }
+
+  /// 端末の状態を変えずに、今の状態だけを記録する(背面へ回ったときなど)。
+  Future<void> record({
+    required bool desired,
+    required String reason,
+  }) async {
+    bool? actual;
+    try {
+      actual = await platform.enabled;
+    } catch (error) {
+      debugPrint('Wakelock state read failed: $error');
+    }
+    _record(desired: desired, actual: actual, reason: reason);
+  }
+
+  /// `actual` は OS が報告する要求の状態で、背面では画面が消えていても true の
+  /// ままになりうる。実際に画面を保てているのは前面(`resumed`)の間だけなので、
+  /// それを `effective` として別に残す(R8-R4)。
+  void _record({
+    required bool desired,
+    required bool? actual,
+    required String reason,
+  }) {
+    final lifecycle = _lifecycleState();
     onDiagnostic('wakelock_state_changed', {
       'desired': desired,
       'actual': actual,
       'reason': reason,
+      'lifecycle': lifecycle?.name,
+      'effective': actual == true && lifecycle == AppLifecycleState.resumed,
     });
   }
 }
@@ -113,7 +144,17 @@ void useScreenWakelock({
   }, [controller, shouldKeepAwake]);
 
   useOnAppLifecycleStateChange((_, current) {
-    if (current != AppLifecycleState.resumed) return;
+    if (current != AppLifecycleState.resumed) {
+      // 背面では常時点灯が効かない。そのことを記録に残す(状態は変えない)。
+      if (current == AppLifecycleState.paused ||
+          current == AppLifecycleState.hidden) {
+        unawaited(controller.record(
+          desired: desiredRef.value,
+          reason: 'lifecycle_${current.name}',
+        ));
+      }
+      return;
+    }
     unawaited(controller.apply(
       desired: desiredRef.value,
       reason: 'lifecycle_resumed',

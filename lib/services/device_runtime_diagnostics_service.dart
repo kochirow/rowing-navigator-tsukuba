@@ -51,4 +51,26 @@ class DeviceRuntimeDiagnosticsService {
     }
     return result;
   }
+
+  /// iOS の MetricKit が届けた「背面での終了」の件数(R8-R3)。
+  ///
+  /// 件数は期間(おおむね1日)ごとの累計で、1回の練習で何が起きたかは
+  /// 分からない。まだ届いていない・iOS 以外・読み取り失敗では空を返す。
+  Future<List<Map<String, Object?>>> backgroundExits() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
+    try {
+      final native = await _channel.invokeListMethod<Object?>(
+        'backgroundExits',
+      );
+      return [
+        for (final entry in native ?? const <Object?>[])
+          if (entry is Map)
+            {
+              for (final item in entry.entries) item.key.toString(): item.value,
+            },
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
 }

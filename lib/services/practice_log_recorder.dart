@@ -15,11 +15,22 @@ class PracticeLogRecorder {
   bool _limited = false;
   DateTime? _pausedAt;
 
+  /// 背面にある間に、記録の処理が動いた印(保存の刻み・監視者の測位・受信)。
+  /// 背面で処理が続いたか、止まっていたかを、推測ではなくこの印で決める。
+  final Duration backgroundSilenceGap;
+  DateTime? _lastAliveWhilePaused;
+  int _aliveCountWhilePaused = 0;
+  Duration _maxSilenceWhilePaused = Duration.zero;
+  final List<({DateTime from, DateTime to})> _silencesWhilePaused = [];
+
   PracticeLogRecorder(
       {required this.startedAt,
       this.maxPoints = maxPracticeLogPoints,
-      Duration? lostAfter})
-      : lostAfter = lostAfter ?? const Duration(seconds: trailDurationSec);
+      Duration? lostAfter,
+      Duration? backgroundSilenceGap})
+      : lostAfter = lostAfter ?? const Duration(seconds: trailDurationSec),
+        backgroundSilenceGap = backgroundSilenceGap ??
+            const Duration(seconds: practiceLogBackgroundSilenceGapSec);
   bool get isLimited => _limited;
 
   void recordMessages(Iterable<Message> messages, {required DateTime now}) {
@@ -29,6 +40,7 @@ class PracticeLogRecorder {
   }
 
   void recordMessage(Message message, {required DateTime now}) {
+    _markAlive(now);
     if (_limited) return;
     final state = _boats.putIfAbsent(message.boatId, _BoatState.new);
     final key = '${message.sessionId}:${message.sequence}';
@@ -87,6 +99,7 @@ class PracticeLogRecorder {
       double? accuracy,
       double? speed,
       double? course}) {
+    _markAlive(now);
     if (_limited) return;
     _point(PracticeLogPoint(
         t: now.toUtc(),
@@ -106,6 +119,7 @@ class PracticeLogRecorder {
       _event(now, type, details);
 
   void tick(DateTime now) {
+    _markAlive(now);
     for (final entry in _boats.entries) {
       final last = entry.value.lastReceivedAt;
       if (last != null &&
@@ -126,20 +140,70 @@ class PracticeLogRecorder {
     // 数え、開始時刻は最初のものを保つ。
     if (_pausedAt != null) return;
     _pausedAt = now.toUtc();
+    _resetPauseEvidence();
     _event(now, 'recorder_paused', {'state': state});
   }
 
+  /// 前面へ戻ったとき、背面の間に記録が続いていたかを印から決める(R8-R6)。
+  ///
+  /// 印と印の間(背面へ回った時刻・戻った時刻を含む)が [backgroundSilenceGap]
+  /// を超えた区間だけを `recorder_gap` にし、背面の間の様子は
+  /// `recorder_background` に残す。印が1つも無く、背面が長ければ、全体が
+  /// 1つの `recorder_gap` になる(従来と同じ)。
+  ///
+  /// 背面へ回っただけで中断と書くと、実際には記録できていた区間まで
+  /// 「艇がいなかった」ように読めてしまう。
   void resume(DateTime now, {required String state}) {
     final paused = _pausedAt;
     _event(now, 'recorder_resumed', {'state': state});
     if (paused != null) {
-      _event(now, 'recorder_gap', {
+      final end = now.toUtc();
+      final aliveCount = _aliveCountWhilePaused;
+      _noteSilence(from: _lastAliveWhilePaused ?? paused, to: end);
+      _event(now, 'recorder_background', {
         'from': paused.toIso8601String(),
-        'to': now.toUtc().toIso8601String(),
-        'reason': 'app_background'
+        'to': end.toIso8601String(),
+        'aliveCount': aliveCount,
+        'suspendedCount': _silencesWhilePaused.length,
+        'maxSilenceSec': _maxSilenceWhilePaused.inMilliseconds / 1000,
       });
+      for (final silence in _silencesWhilePaused) {
+        _event(now, 'recorder_gap', {
+          'from': silence.from.toIso8601String(),
+          'to': silence.to.toIso8601String(),
+          'reason':
+              aliveCount == 0 ? 'app_background' : 'app_background_suspended'
+        });
+      }
     }
     _pausedAt = null;
+    _resetPauseEvidence();
+  }
+
+  void _resetPauseEvidence() {
+    _lastAliveWhilePaused = null;
+    _aliveCountWhilePaused = 0;
+    _maxSilenceWhilePaused = Duration.zero;
+    _silencesWhilePaused.clear();
+  }
+
+  /// 印と印の間(背面へ回った時刻・戻った時刻を含む)の空白を記録する。
+  void _noteSilence({required DateTime from, required DateTime to}) {
+    final length = to.difference(from);
+    if (length > _maxSilenceWhilePaused) _maxSilenceWhilePaused = length;
+    if (length > backgroundSilenceGap) {
+      _silencesWhilePaused.add((from: from, to: to));
+    }
+  }
+
+  void _markAlive(DateTime now) {
+    final paused = _pausedAt;
+    if (paused == null) return;
+    final at = now.toUtc();
+    if (at.isBefore(paused)) return;
+    _noteSilence(from: _lastAliveWhilePaused ?? paused, to: at);
+    _lastAliveWhilePaused = at;
+    _aliveCountWhilePaused++;
   }
 
   ({List<PracticeLogPoint> points, List<PracticeLogEvent> events}) drain() {

@@ -3,6 +3,7 @@ import Flutter
 import GoogleMaps
 import AVFoundation
 import Darwin
+import MetricKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -19,6 +20,10 @@ import Darwin
         "GOOGLE_MAPS_API_KEY is not configured. Set ios/Flutter/Secrets.xcconfig before distribution."
       )
     }
+
+    // 背面での終了件数(MetricKit)は1日ごとに届く。起動直後から受け取れるよう
+    // ここで購読する。失敗しても起動は止めない。
+    MetricKitBackgroundExitStore.shared.start()
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -61,6 +66,10 @@ import Darwin
         binaryMessenger: messenger
       )
       deviceDiagnosticsChannel.setMethodCallHandler { call, result in
+        if call.method == "backgroundExits" {
+          result(MetricKitBackgroundExitStore.shared.storedPayloads())
+          return
+        }
         guard call.method == "snapshot" else {
           result(FlutterMethodNotImplemented)
           return
@@ -99,5 +108,74 @@ import Darwin
         String(cString: $0)
       }
     }
+  }
+}
+
+/// MetricKit が1日ごとに届ける「背面での終了」の件数を端末内に保つ(R8-R3)。
+///
+/// 件数は期間(おおむね1日)ごとの累計で、どの練習で何が起きたかまでは分からない。
+/// 診断ログでは「途切れた記録の手がかりの1つ」としてだけ使う。
+final class MetricKitBackgroundExitStore: NSObject, MXMetricManagerSubscriber {
+  static let shared = MetricKitBackgroundExitStore()
+
+  private let storageKey = "metrickit_background_exits_v1"
+  private let maxStoredPayloads = 14
+  private let queue = DispatchQueue(label: "jp.kosei.rowingnavigator.metrickit")
+  private var started = false
+
+  func start() {
+    queue.sync {
+      guard !started else { return }
+      started = true
+      MXMetricManager.shared.add(self)
+    }
+  }
+
+  func storedPayloads() -> [[String: Any]] {
+    queue.sync { load() }
+  }
+
+  func didReceive(_ payloads: [MXMetricPayload]) {
+    let formatter = ISO8601DateFormatter()
+    let entries: [[String: Any]] = payloads.compactMap { payload in
+      guard let exits = payload.applicationExitMetrics?.backgroundExitData else {
+        return nil
+      }
+      return [
+        "periodStart": formatter.string(from: payload.timeStampBegin),
+        "periodEnd": formatter.string(from: payload.timeStampEnd),
+        "normal": exits.cumulativeNormalAppExitCount,
+        "memoryResourceLimit": exits.cumulativeMemoryResourceLimitExitCount,
+        "memoryPressure": exits.cumulativeMemoryPressureExitCount,
+        "cpuResourceLimit": exits.cumulativeCPUResourceLimitExitCount,
+        "appWatchdog": exits.cumulativeAppWatchdogExitCount,
+        "suspendedWithLockedFile": exits.cumulativeSuspendedWithLockedFileExitCount,
+        "badAccess": exits.cumulativeBadAccessExitCount,
+        "illegalInstruction": exits.cumulativeIllegalInstructionExitCount,
+        "abnormal": exits.cumulativeAbnormalExitCount,
+        "backgroundTaskAssertionTimeout":
+          exits.cumulativeBackgroundTaskAssertionTimeoutExitCount,
+      ]
+    }
+    guard !entries.isEmpty else { return }
+    queue.async {
+      var stored = self.load()
+      stored.append(contentsOf: entries)
+      if stored.count > self.maxStoredPayloads {
+        stored.removeFirst(stored.count - self.maxStoredPayloads)
+      }
+      if let data = try? JSONSerialization.data(withJSONObject: stored) {
+        UserDefaults.standard.set(data, forKey: self.storageKey)
+      }
+    }
+  }
+
+  private func load() -> [[String: Any]] {
+    guard let data = UserDefaults.standard.data(forKey: storageKey),
+      let decoded = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else {
+      return []
+    }
+    return decoded
   }
 }

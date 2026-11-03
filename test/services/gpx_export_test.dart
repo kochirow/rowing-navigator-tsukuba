@@ -233,6 +233,38 @@ void main() {
     expect(header.length, row.length);
   });
 
+  test('track.csvに港の中にいたかを残し、港の無い記録では空にする(R8-R7)', () {
+    final base = makeSession();
+    TrackPoint point(bool? inHarbor) => TrackPoint(
+          t: base.startedAt,
+          lat: 36.08,
+          lng: 140.21,
+          speed: 1.1,
+          heading: 90,
+          safetyLevel: 'safe',
+          inHarborArea: inHarbor,
+        );
+    expect(TrackPoint.fromJson(point(true).toJson()).inHarborArea, isTrue);
+    expect(point(null).toJson().containsKey('inHarborArea'), isFalse);
+
+    final session = Session(
+      id: base.id,
+      startedAt: base.startedAt,
+      endedAt: base.endedAt,
+      boatTypeName: base.boatTypeName,
+      seatPosLabel: base.seatPosLabel,
+      points: [point(true), point(false), point(null)],
+      summary: base.summary,
+    );
+    final lines = const LineSplitter()
+        .convert(exporter.buildDiagnosticFiles(session)['track.csv']!);
+    final header = lines.first.split(',');
+    final column = header.indexOf('in_harbor_area');
+    expect(column, header.length - 1);
+    expect([for (final line in lines.skip(1)) line.split(',')[column]],
+        ['true', 'false', '']);
+  });
+
   test('GPX共有は非空ファイル・MIME・共有元矩形を渡し結果を返す', () async {
     final temp = await Directory.systemTemp.createTemp('rowing-export-');
     addTearDown(() async {
