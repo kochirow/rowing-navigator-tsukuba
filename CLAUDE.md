@@ -468,6 +468,15 @@ flutter run
 ## 練習ログ
 
 - ナビ終了時に `SessionStoreService` が端末内にJSON保存(サーバー送信なし)
+- **終了したら出艇前の地図に「今日の記録」シートを出す**(2026-11-04、要件定義 11/03 R1)。
+  警告のタイミング・量の5段階(真ん中＝ちょうどよい、−2〜+2)と「ひとこと」を
+  `Session.userFeedback` に保存し、診断ZIPの `manifest.json`・`feedback.txt`・`bundle_manifest.json`
+  に入れる。出す条件は `session_end_prompt_policy.dart`、表示は `features/home_map/session_end_prompt.dart`。
+  航行中・監視中には出さない。一度出した記録には二度と出さない(`endPromptShownAt`)。
+  監視ログにはひとことだけ
+- **途切れた記録は次回起動で、最後の記録の時刻で完了に直す**(`recoverIncompleteSessions`)。
+  `endReason: recoveredAfterTermination` と `session_recovery_detected` で通常の終了と区別できる。
+  監視ログも同じ(`recoverIncompleteLogs`)
 - 途中チェックポイントは60秒ごと。解析(`SessionAnalyzerService`)は5分ごとにだけ作り直す
 - 解析ロジック変更時は `test/services/session_analyzer_test.dart` で検証し、新しい挙動や未保護の回帰がある場合に更新
 - GPXはStrava互換。形式変更時は `test/services/gpx_export_test.dart` で検証

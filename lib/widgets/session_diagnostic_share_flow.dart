@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../../../models/session_model.dart';
-import '../../../services/gpx_export_service.dart';
-import '../../../services/session_store_service.dart';
-import '../../../widgets/share_delivery_prompt.dart';
-import '../../../widgets/share_origin.dart';
+import '../models/session_model.dart';
+import '../services/gpx_export_service.dart';
+import '../services/session_store_service.dart';
+import 'share_delivery_prompt.dart';
+import 'share_origin.dart';
 
 /// 診断ZIPを作るときに利用者へ出す説明。まとめて送るときも同じ文を使う。
 const diagnosticShareNotice = '診断ZIPには正確な航路、警告の発生状況、端末のOS情報、'
-    '危険区域の設定が含まれます。自動送信はされません。'
+    '危険区域の設定が含まれます。警告の評価と「ひとこと」も送られます'
+    '（人の名前などを書いた場合も、そのまま届きます）。自動送信はされません。'
     '内容を理解したうえで、共有先を自分で選んでください。';
 
 /// 1つの記録の診断ログを送る(説明→共有→送信済みの記録)。

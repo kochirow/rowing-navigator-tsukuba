@@ -125,6 +125,20 @@ class PracticeLog {
   /// 過去の記録には項目が無いので、未送信として読む。
   final DateTime? diagnosticsSharedAt;
 
+  /// 監視者のひとこと(R1-R5)。監視ログには5段階を持たない。未入力は null。
+  final String? userComment;
+  final DateTime? userCommentUpdatedAt;
+
+  /// 「今日の記録」シートを出した時刻。出したら二度と出さない(R1-R12)。
+  final DateTime? endPromptShownAt;
+
+  /// 途切れた監視ログを次回起動時に完了へ直したものは
+  /// `recoveredAfterTermination`(R1-R16)。終了操作で終わったものは null。
+  final String? endReason;
+
+  bool get wasRecoveredAfterTermination =>
+      endReason == 'recoveredAfterTermination';
+
   const PracticeLog(
       {required this.id,
       required this.teamId,
@@ -135,7 +149,11 @@ class PracticeLog {
       this.pointCount = 0,
       this.eventCount = 0,
       this.livePointCount,
-      this.diagnosticsSharedAt});
+      this.diagnosticsSharedAt,
+      this.userComment,
+      this.userCommentUpdatedAt,
+      this.endPromptShownAt,
+      this.endReason});
 
   bool get isDiagnosticsShared => diagnosticsSharedAt != null;
 
@@ -146,7 +164,11 @@ class PracticeLog {
           int? pointCount,
           int? eventCount,
           int? livePointCount,
-          DateTime? Function()? diagnosticsSharedAt}) =>
+          DateTime? Function()? diagnosticsSharedAt,
+          String? Function()? userComment,
+          DateTime? userCommentUpdatedAt,
+          DateTime? endPromptShownAt,
+          String? endReason}) =>
       PracticeLog(
           id: id,
           teamId: teamId,
@@ -159,7 +181,12 @@ class PracticeLog {
           livePointCount: livePointCount ?? this.livePointCount,
           diagnosticsSharedAt: diagnosticsSharedAt != null
               ? diagnosticsSharedAt()
-              : this.diagnosticsSharedAt);
+              : this.diagnosticsSharedAt,
+          userComment: userComment != null ? userComment() : this.userComment,
+          userCommentUpdatedAt:
+              userCommentUpdatedAt ?? this.userCommentUpdatedAt,
+          endPromptShownAt: endPromptShownAt ?? this.endPromptShownAt,
+          endReason: endReason ?? this.endReason);
   Map<String, dynamic> toJson() => {
         'practiceLogSchemaVersion': 1,
         'practiceId': id,
@@ -173,6 +200,13 @@ class PracticeLog {
         if (livePointCount != null) 'livePointCount': livePointCount,
         if (diagnosticsSharedAt != null)
           'diagnosticsSharedAt': diagnosticsSharedAt!.millisecondsSinceEpoch,
+        if (userComment != null) 'userComment': userComment,
+        if (userCommentUpdatedAt != null)
+          'userCommentUpdatedAt':
+              userCommentUpdatedAt!.toUtc().toIso8601String(),
+        if (endPromptShownAt != null)
+          'endPromptShownAt': endPromptShownAt!.millisecondsSinceEpoch,
+        if (endReason != null) 'endReason': endReason,
         'automaticUpload': false
       };
   factory PracticeLog.fromJson(Map<String, dynamic> json) => PracticeLog(
@@ -190,7 +224,15 @@ class PracticeLog {
       diagnosticsSharedAt: json['diagnosticsSharedAt'] is num
           ? DateTime.fromMillisecondsSinceEpoch(
               (json['diagnosticsSharedAt'] as num).toInt())
-          : null);
+          : null,
+      userComment: json['userComment'] as String?,
+      userCommentUpdatedAt:
+          DateTime.tryParse(json['userCommentUpdatedAt'] as String? ?? ''),
+      endPromptShownAt: json['endPromptShownAt'] is num
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['endPromptShownAt'] as num).toInt())
+          : null,
+      endReason: json['endReason'] as String?);
 }
 
 String practiceLogJsonLine(Object value) => jsonEncode(value is PracticeLogPoint

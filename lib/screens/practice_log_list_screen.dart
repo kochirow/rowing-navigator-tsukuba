@@ -4,7 +4,7 @@ import '../models/practice_log_model.dart';
 import '../services/practice_log_export_service.dart';
 import '../services/practice_log_store_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/share_delivery_prompt.dart';
+import '../widgets/practice_log_share_flow.dart';
 import 'record_list_screen.dart' show formatDateTime;
 
 class PracticeLogListScreen extends StatefulWidget {
@@ -25,43 +25,13 @@ class _PracticeLogListScreenState extends State<PracticeLogListScreen> {
 
   void _reload() => _logs = _store.list();
   Future<void> _share(PracticeLog log) async {
-    final anonymized = await showDialog<bool>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-                // 選択肢はボタンの名前が言う。外へ出しても安全な側
-                // (伏せる)を既定の塗りボタンにする。
-                title: const Text('監視ログを共有'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialog, false),
-                      child: const Text('艇名を含める')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(dialog, true),
-                      child: const Text('艇名を伏せる'))
-                ]));
-    if (anonymized == null || !mounted) return;
-    try {
-      final data = await _store.read(log.id);
-      if (!mounted) return;
-      final box = context.findRenderObject() as RenderBox?;
-      final origin = box == null
-          ? const Rect.fromLTWH(0, 0, 1, 1)
-          : box.localToGlobal(Offset.zero) & box.size;
-      final result = await _export.share(data.log, data.points, data.events,
-          anonymized: anonymized, sharePositionOrigin: origin);
-      // 届いたものは送信済みにする。まとめて送る対象から外れ、メニューの件数も減る。
-      // 記録中のログは書込が続き、送信済みの印も記録側に上書きされるので印を付けない。
-      if (!mounted || !data.log.isComplete) return;
-      if (await confirmShareDelivered(context, result)) {
-        await _store.markDiagnosticsShared(log.id, DateTime.now());
-        if (mounted) setState(_reload);
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('監視ログを共有できませんでした。')));
-      }
-    }
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box == null
+        ? const Rect.fromLTWH(0, 0, 1, 1)
+        : box.localToGlobal(Offset.zero) & box.size;
+    final shared = await sharePracticeLog(context,
+        log: log, origin: origin, store: _store, exporter: _export);
+    if (shared && mounted) setState(_reload);
   }
 
   Future<void> _delete(PracticeLog log) async {

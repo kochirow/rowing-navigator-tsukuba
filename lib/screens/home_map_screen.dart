@@ -34,7 +34,7 @@ import '../features/home_map/widgets/rounded_button.dart';
 import '../features/home_map/widgets/nav_widgets.dart';
 import '../features/home_map/widgets/stroke_trace_sheet.dart';
 import '../hooks/use_coach_watch.dart';
-import '../hooks/use_practice_log_recording.dart';
+import '../hooks/use_observer_session.dart';
 import '../hooks/use_stroke_trace_sharing.dart';
 import '../hooks/use_tracking.dart';
 import '../services/channel_centerline.dart';
@@ -46,6 +46,7 @@ import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
 import '../widgets/app_state_views.dart';
 import '../features/home_map/area_outline_lines.dart';
+import '../features/home_map/session_end_prompt.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
@@ -55,7 +56,6 @@ import '../hooks/use_navigator.dart';
 import '../hooks/use_lap_metrics.dart';
 import '../hooks/use_workout.dart';
 import '../hooks/use_nav_map.dart';
-import '../hooks/use_observer_warning_alerts.dart';
 import '../models/nav_config_model.dart';
 import '../services/auth_service.dart';
 import '../services/map_display_settings_service.dart';
@@ -193,23 +193,18 @@ class HomeMapScreen extends HookConsumerWidget {
     final auth = AuthService();
     final coachWatchEnabled =
         navigator.mode.value == NavMode.observer && navigator.isWatching.value;
-    final coachWatch = useCoachWatch(
-      otherBoats: navigator.otherBoats.value,
+    final observerSession = useObserverSession(
       enabled: coachWatchEnabled,
+      otherBoats: navigator.otherBoats.value,
+      receivedMessages: navigator.receivedPracticeLogMessages,
+      teamId: TeamService.activeMembership?.teamId,
+      recordedBy: auth.currentUser?.uid,
       channelCenterline: navigator.channelCenterline.value,
       channelLaneResolver: navigator.channelLaneResolver.value,
     );
-    final observerWarnings = useObserverWarningAlerts(
-        enabled: coachWatchEnabled,
-        messages: navigator.receivedPracticeLogMessages.value);
-    final practiceLogRecording = usePracticeLogRecording(
-      enabled: coachWatchEnabled,
-      teamId: TeamService.activeMembership?.teamId,
-      recordedBy: auth.currentUser?.uid,
-      messages: navigator.receivedPracticeLogMessages,
-      anomalies: coachWatch.anomalies.value,
-      observerWarnings: observerWarnings,
-    );
+    final coachWatch = observerSession.coachWatch;
+    final observerWarnings = observerSession.warnings;
+    final practiceLogRecording = observerSession.recording;
     // State
     final loading = useState(true);
     final initLatLng = useState<LatLng?>(null);
@@ -807,6 +802,13 @@ class HomeMapScreen extends HookConsumerWidget {
       ready: !loading.value && phase == HomePhase.ashore,
       primaryWarningLeadSeconds: navigator.primaryWarningLeadTimeSeconds.value,
       advanceWarningLeadSeconds: navigator.warningTimeSeconds.value,
+    );
+
+    // 練習・監視を終えたら、出艇前の地図に「今日の記録」シートを出す(R1)。
+    // 航行中・監視中には出さない。表示の失敗は地図を止めない。
+    useSessionEndPrompt(
+      context,
+      ready: !loading.value && phase == HomePhase.ashore,
     );
 
     // 地図の見え方設定を復元する。失敗しても既定(通常表示)で続行する。

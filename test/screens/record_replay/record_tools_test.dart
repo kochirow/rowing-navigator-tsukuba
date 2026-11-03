@@ -54,14 +54,14 @@ void main() {
       session: session,
       onSeekTo: (_) {},
       onRate: (_, __) {},
-      onRateOverall: (_) {},
     )));
 
     expect(find.text('岸 7回'), findsOneWidget);
     // システム系は件数だけ出し、評価の対象にしない。
     expect(find.textContaining('GPS・通信の表示 3回'), findsOneWidget);
     expect(find.textContaining('地図で見る'), findsNothing);
-    expect(find.text('ちょうどよい'), findsOneWidget);
+    // 以前の3択(ちょうどよい／多すぎた／足りなかった)は画面から外した(R1-R11)。
+    expect(find.text('多すぎた'), findsNothing);
 
     await tester.tap(find.byKey(const Key('alert-review-toggle')));
     await tester.pump();
@@ -80,7 +80,7 @@ void main() {
     expect(find.textContaining('地図で見る'), findsNWidgets(7));
   });
 
-  testWidgets('システム系の警告しか無いときは全体評価も場面も出さない', (tester) async {
+  testWidgets('システム系の警告しか無いときは場面を出さない', (tester) async {
     final base = practice();
     final session = base.copyWith(alertEvents: [
       _alert(base.startedAt, 'gps', 'gps_unavailable'),
@@ -89,11 +89,29 @@ void main() {
       session: session,
       onSeekTo: (_) {},
       onRate: (_, __) {},
-      onRateOverall: (_) {},
     )));
     expect(find.text('危険区域・他艇の警告はありませんでした'), findsOneWidget);
-    expect(find.text('ちょうどよい'), findsNothing);
     expect(find.byKey(const Key('alert-review-toggle')), findsNothing);
+  });
+
+  testWidgets('記録画面でも5段階とひとことを入れ直せる(R1-R11)', (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Session? changed;
+    await tester.pumpWidget(_host(RecordTools(
+      session: _withAlerts(),
+      onSessionChanged: (s) => changed = s,
+      exporter: GpxExportService(),
+      store: _NoopStore(),
+      onSeekTo: (_) {},
+      onShareDiagnostics: (_) {},
+    )));
+    await tester.ensureVisible(find.byKey(const Key('feedback-amount-2')));
+    await tester.tap(find.byKey(const Key('feedback-amount-2')));
+    await tester.pump();
+    expect(changed?.userFeedback?.amountOffset, 2);
+    expect(changed?.userFeedback?.timingOffset, isNull);
   });
 
   testWidgets('診断ログを送るボタンは警告の振り返りより上にある', (tester) async {
@@ -157,4 +175,9 @@ void main() {
     await tester.pump();
     expect(find.text('時間軸を拡大'), findsOneWidget);
   });
+}
+
+class _NoopStore extends SessionStoreService {
+  @override
+  Future<void> saveSession(Session session) async {}
 }

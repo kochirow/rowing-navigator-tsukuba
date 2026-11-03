@@ -101,6 +101,8 @@ class GpxExportService {
         'startedAt': session.startedAt.toUtc().toIso8601String(),
         'endedAt': session.endedAt.toUtc().toIso8601String(),
         'isComplete': session.isComplete,
+        // 途切れた記録を次回起動時に確定したものは recoveredAfterTermination。
+        'endReason': session.endReason,
         'boatType': session.boatTypeName,
         'seatPosition': session.seatPosLabel,
         'pointCount': session.points.length,
@@ -150,6 +152,13 @@ class GpxExportService {
           'note': 'iOSが期間(おおむね1日)ごとに届ける累計の件数。'
               'この練習で何が起きたかは特定できない。',
         },
+      // 漕いだ本人の評価とひとこと(R1)。未入力の項目は null。
+      'userFeedback': {
+        'timingOffset': session.userFeedback?.timingOffset,
+        'amountOffset': session.userFeedback?.amountOffset,
+        'comment': session.userFeedback?.comment,
+        'updatedAt': session.userFeedback?.updatedAt.toUtc().toIso8601String(),
+      },
       'alertEpisodeRatings': session.alertEpisodeRatings,
       'alertOverallRating': session.alertOverallRating,
       'privacy': {
@@ -257,6 +266,7 @@ class GpxExportService {
       'manifest.json': const JsonEncoder.withIndent('  ').convert(manifest),
       'diagnostic_event_catalog.json':
           const JsonEncoder.withIndent('  ').convert(diagnosticEventCatalog),
+      'feedback.txt': sessionFeedbackText(session),
       'track.csv': track.toString(),
       'alerts.jsonl': alertLines.isEmpty ? '' : '$alertLines\n',
       'events.jsonl': eventLines.isEmpty ? '' : '$eventLines\n',
@@ -370,4 +380,23 @@ class GpxExportService {
     return '${dt.year}/${dt.month.toString().padLeft(2, '0')}/'
         '${dt.day.toString().padLeft(2, '0')}';
   }
+}
+
+/// 診断ZIPに入れる、人が読める評価(R1-R8)。未入力の項目は「未入力」。
+String sessionFeedbackText(Session session) {
+  final feedback = session.userFeedback;
+  final started = session.startedAt.toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  final lines = <String>[
+    '記録の開始：${started.year}/${two(started.month)}/${two(started.day)} '
+        '${two(started.hour)}:${two(started.minute)}',
+    if (session.wasRecoveredAfterTermination)
+      '終わり方：終了ボタンを押さずに途切れ、最後の記録の時刻で確定した',
+    '${FeedbackScale.timing.title}：'
+        '${FeedbackScale.timing.describe(feedback?.timingOffset)}',
+    '${FeedbackScale.amount.title}：'
+        '${FeedbackScale.amount.describe(feedback?.amountOffset)}',
+    'ひとこと：${feedback?.comment ?? '未入力'}',
+  ];
+  return '${lines.join('\n')}\n';
 }

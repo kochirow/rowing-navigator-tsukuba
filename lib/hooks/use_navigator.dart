@@ -5029,7 +5029,8 @@ UseNavigator useNavigator() {
       final session = buildSessionSnapshot(isComplete: true);
       if (session != null) {
         await attempt('Final session save', () async {
-          await sessionStoreService.saveSession(session);
+          // 確定した記録を「今日の記録」シート(R1)へ知らせる。
+          await sessionStoreService.saveFinishedSession(session);
           if (kDebugMode) debugPrint('Session saved: ${session.id}');
         });
       }
@@ -5172,58 +5173,23 @@ UseNavigator useNavigator() {
     }
   }
 
+  /// 前回の途切れた記録を完了に直す(R1-R14)。いま記録中の航行は触らない。
   Future<void> probeRecoverableSession() async {
     if (recoveryProbeDone.value) return;
     recoveryProbeDone.value = true;
+    final now = DateTime.now();
     try {
-      final sessions = await sessionStoreService.listSessions();
-      Session? incomplete;
-      for (final session in sessions) {
-        if (!session.isComplete) {
-          incomplete = session;
-          break;
-        }
-      }
-      if (incomplete == null) return;
-      final now = DateTime.now();
-      final previousSequence = incomplete.diagnosticEvents.fold<int>(
-        0,
-        (current, event) => math.max(current, event.sequence ?? 0),
+      final outcomes = await sessionStoreService.recoverIncompleteSessions(
+        now: now,
+        startedBefore: sessionStartedAt.value ?? now,
       );
-      final recoveryEvent = SessionDiagnosticEvent(
-        sequence: previousSequence + 1,
-        t: now,
-        type: 'session_recovery_detected',
-        details: {
-          'sessionId': incomplete.id,
-          'startedAt': incomplete.startedAt.toUtc().toIso8601String(),
-          'endedAt': incomplete.endedAt.toUtc().toIso8601String(),
-          'ageMs': now.difference(incomplete.endedAt).inMilliseconds,
-          'pointCount': incomplete.points.length,
-          'alertEventCount': incomplete.alertEvents.length,
-          'diagnosticEventCount': incomplete.diagnosticEvents.length,
-          'lastDiagnosticEventType': incomplete.diagnosticEvents.isEmpty
-              ? null
-              : incomplete.diagnosticEvents.last.type,
-          ...sessionRecoveryContext(incomplete),
-        },
-      );
-      try {
-        await sessionStoreService.saveSession(
-          incomplete.copyWith(
-            diagnosticEvents: [
-              ...incomplete.diagnosticEvents,
-              recoveryEvent,
-            ],
-          ),
-        );
-      } catch (error) {
+      for (final failed in outcomes.where((outcome) => !outcome.succeeded)) {
         queueRecoveryDiagnostic(SessionDiagnosticEvent(
           t: now,
           type: 'session_recovery_save_failed',
           details: {
-            'sessionId': incomplete.id,
-            'errorType': error.runtimeType.toString(),
+            'sessionId': failed.sessionId,
+            'errorType': failed.error.runtimeType.toString(),
           },
         ));
       }

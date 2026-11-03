@@ -105,6 +105,8 @@ UsePracticeLogRecording usePracticeLogRecording({
       await store.checkpoint(completed);
       await store.prune();
       log.value = null;
+      // 確定した監視ログを「今日の記録」シート(R1)へ知らせる。
+      PracticeLogStoreService.notifyFinished(completed.id);
     } catch (_) {
       // metaが未完了のまま残り、次回の一覧で回収できる。監視終了は妨げない。
       log.value = null;

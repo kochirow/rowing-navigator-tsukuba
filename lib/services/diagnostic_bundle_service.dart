@@ -231,6 +231,13 @@ class DiagnosticBundleService {
               'practiceSec': practiceSecOf(session).round(),
               'distanceMeters': session.summary.totalDistanceMeters.round(),
               'boatType': session.boatTypeName,
+              'endReason': session.endReason,
+              // 漕いだ本人の評価とひとこと(R1-R8)。未入力の項目は null。
+              'userFeedback': {
+                'timingOffset': session.userFeedback?.timingOffset,
+                'amountOffset': session.userFeedback?.amountOffset,
+                'comment': session.userFeedback?.comment,
+              },
             },
       ],
       // 監視端末の監視ログ。無いときも空の配列で出し、受け取る側が項目の有無で迷わない。
@@ -242,6 +249,8 @@ class DiagnosticBundleService {
               'folder': log.id,
               'startedAt': log.startedAt.toUtc().toIso8601String(),
               'durationSec': practiceLogSecOf(log).round(),
+              'endReason': log.endReason,
+              'userComment': log.userComment,
             },
       ],
       'privacy': {

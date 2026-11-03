@@ -92,6 +92,7 @@ class PracticeLogExportService {
     final manifest = {
       ...log.toJson()
         ..remove('diagnosticsSharedAt')
+        ..remove('endPromptShownAt')
         // 匿名化した書き出しに、記録した端末の利用者IDを残さない。
         ..removeWhere((key, _) => anonymized && key == 'recordedBy'),
       'endedAt': log.endedAt?.toUtc().toIso8601String(),
@@ -157,6 +158,12 @@ class PracticeLogExportService {
             '${_csv(b['alias'])},${b['sessionCount']},${b['pointCount']}')
       ].join('\n')}\n',
       'tracks.csv': tracks.toString(),
+      // 監視者のひとこと(R1-R8)。監視ログに5段階は無い。
+      'feedback.txt': '${[
+        if (log.wasRecoveredAfterTermination)
+          '終わり方：終了ボタンを押さずに途切れ、最後の記録の時刻で確定した',
+        'ひとこと：${log.userComment ?? '未入力'}',
+      ].join('\n')}\n',
       'events.jsonl': eventList
               .map((e) => jsonEncode(
                   anonymized ? _anonymizedEvent(e, alias) : e.toJson()))
