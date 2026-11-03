@@ -45,7 +45,7 @@ import '../types/tracking_mode.dart';
 import '../utils/rowing_navigation.dart';
 import '../widgets/map_control_button.dart';
 import '../widgets/app_state_views.dart';
-import '../models/mooring_area.dart';
+import '../features/home_map/area_outline_lines.dart';
 import '../models/navigation_warning.dart';
 import '../theme/app_theme.dart';
 import '../theme/hazard_palette.dart';
@@ -234,10 +234,6 @@ class HomeMapScreen extends HookConsumerWidget {
         useState<Map<String, ChannelCenterline>>(const {});
     final showChannelLanes = useState(true); // 既定ON
     final channelDividerLines = useState<Set<Polyline>>({});
-    // 桟橋エリア。**表示専用**で、抑制の判断は use_navigator 側が
-    // 同じプロファイルを読んで独立に行う。読めなくても航行・警告は動く。
-    final mooringAreas = useState<List<MooringArea>>(const []);
-    final mooringAreaLines = useState<Set<Polyline>>({});
     // 直射日光下で危険区域を浮き上がらせる地図スタイル(端末内設定)。
     final highContrastMap = useState(false);
     // 航行中の「夜の配色」。航行中かつ通常地図のときだけ暗い地図にし、
@@ -846,63 +842,11 @@ class HomeMapScreen extends HookConsumerWidget {
       return () => disposed = true;
     }, const []);
 
-    // 桟橋エリアを起動時に1回だけ読む。危険区域ではないので、読めなければ
-    // 描かないだけで、航行も警告も従来どおり動く(原則1)。
-    useEffect(() {
-      var disposed = false;
-      unawaited(PresetObstacleService().loadMooringAreas().then((areas) {
-        if (disposed) return;
-        mooringAreas.value = areas;
-      }).catchError((Object error) {
-        if (kDebugMode) debugPrint('Mooring areas not displayed: $error');
-      }));
-      return () => disposed = true;
-    }, const []);
-
-    // ##########################
-    // 桟橋エリアを描く
-    // ##########################
-    // **塗らない。** 塗り = 実在する危険、という対応を崩さない
-    // (map_layer_spec.dart)。輪郭を破線で閉じて示すだけにする。
-    useEffect(() {
-      final areas = mooringAreas.value;
-      if (areas.isEmpty) {
-        if (mooringAreaLines.value.isNotEmpty) mooringAreaLines.value = {};
-        return null;
-      }
-      final isSatellite = navMap.mapType.value == MapType.hybrid;
-      final style = mooringAreaStyleFor(isSatellite: isSatellite);
-      final pattern = <PatternItem>[
-        PatternItem.dash(style.dashLengthPixels.toDouble()),
-        PatternItem.gap(style.gapLengthPixels.toDouble()),
-      ];
-      final nextLines = <Polyline>{};
-      for (final area in areas) {
-        if (area.points.length < 3) continue;
-        // ポリゴンではなくポリラインで閉じる。塗りを持たせないため。
-        final ring = <LatLng>[...area.points, area.points.first];
-        nextLines.add(Polyline(
-          polylineId: PolylineId('mooring_area_casing_${area.id}'),
-          points: ring,
-          color: style.casingColor,
-          width: style.casingWidth,
-          patterns: pattern,
-          zIndex: mooringAreaZIndex,
-          consumeTapEvents: false,
-        ));
-        nextLines.add(Polyline(
-          polylineId: PolylineId('mooring_area_core_${area.id}'),
-          points: ring,
-          color: style.coreColor,
-          width: style.coreWidth,
-          patterns: pattern,
-          zIndex: mooringAreaZIndex,
-          consumeTapEvents: false,
-        ));
-      }
-      mooringAreaLines.value = nextLines;
-      return null;
-    }, [mooringAreas.value, navMap.mapType.value]);
+    // 桟橋エリア・港の中の輪郭(破線)。**表示専用**で、音を控えめにする判断は
+    // use_navigator 側が同じプロファイルを読んで独立に行う(area_outline_lines.dart)。
+    final areaOutlineLines = useAreaOutlineLines(
+      isSatellite: navMap.mapType.value == MapType.hybrid,
+    );
 
     // ##########################
     // 航路の中央線を描く
@@ -1318,7 +1262,7 @@ class HomeMapScreen extends HookConsumerWidget {
         // 越えない取り決めの線。実在する危険と航跡より下に敷く。
         ...channelDividerLines.value,
         // 場所の宣言(危険ではない)。中央線のすぐ上、危険区域より下。
-        ...mooringAreaLines.value,
+        ...areaOutlineLines,
         // 過去に通った線。危険区域より下に敷く。
         if (navigator.mode.value == NavMode.observer)
           for (final trail in coachWatch.trailPolylines.value)
@@ -1329,7 +1273,7 @@ class HomeMapScreen extends HookConsumerWidget {
       return null;
     }, [
       channelDividerLines.value,
-      mooringAreaLines.value,
+      areaOutlineLines,
       coachWatch.trailPolylines.value,
       stoppingDistanceLines.value,
       navigator.mode.value,
