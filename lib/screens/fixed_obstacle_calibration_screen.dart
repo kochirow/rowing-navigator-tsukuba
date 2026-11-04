@@ -12,6 +12,7 @@ import '../services/shared_safety_calibration_service.dart';
 import '../services/team_service.dart';
 import '../widgets/app_state_views.dart';
 import '../widgets/fixed_obstacle_calibration_controls.dart';
+import '../widgets/effect_scope_badge.dart';
 
 /// 同梱プリセットを変更せず、端末内の頂点差分を現地校正する画面。
 class FixedObstacleCalibrationScreen extends StatefulWidget {
@@ -199,7 +200,7 @@ class _FixedObstacleCalibrationScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '位置補正は保存しましたが、地図プレビューを更新できませんでした: $error',
+              '位置合わせは保存しましたが、地図プレビューを更新できませんでした: $error',
             ),
           ),
         );
@@ -207,7 +208,7 @@ class _FixedObstacleCalibrationScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('位置補正を保存できませんでした: $error')),
+        SnackBar(content: Text('位置合わせを保存できませんでした: $error')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -257,10 +258,10 @@ class _FixedObstacleCalibrationScreenState
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('すべての位置補正を解除しますか？'),
+            title: const Text('すべての位置合わせを解除しますか？'),
             content: const Text(
-              'この端末で行った固定障害物の位置調整をすべて削除し、'
-              '同梱された基準位置へ戻します。危険範囲の幅設定は変わりません。',
+              'この端末で行った同梱の危険区域の位置合わせをすべて削除し、'
+              '同梱された基準位置へ戻します。区域の幅は変わりません。',
             ),
             actions: [
               TextButton(
@@ -296,7 +297,7 @@ class _FixedObstacleCalibrationScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '位置補正はすべて解除しましたが、地図プレビューを更新できませんでした: $error',
+              '位置合わせはすべて解除しましたが、地図プレビューを更新できませんでした: $error',
             ),
           ),
         );
@@ -304,7 +305,7 @@ class _FixedObstacleCalibrationScreenState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('位置補正を解除できませんでした: $error')),
+        SnackBar(content: Text('位置合わせを解除できませんでした: $error')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -371,7 +372,7 @@ class _FixedObstacleCalibrationScreenState
       setState(() {
         _sharedRevision = saved.revision;
         _publishStatus = FixedObstacleCalibrationPublishStatus.success;
-        _publishMessage = 'チームへ公開しました（版 ${saved.revision}）。';
+        _publishMessage = 'チームに公開しました（版 ${saved.revision}）。';
       });
     } on SharedSafetyCalibrationConflictException {
       if (!mounted) return;
@@ -892,12 +893,20 @@ class _FixedObstacleCalibrationScreenState
       saving: _busy,
       onBlockedPop: () {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('位置補正を保存しています。完了後に戻れます。')),
+          const SnackBar(content: Text('位置合わせを保存しています。完了後に戻れます。')),
         );
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('既設危険区域の位置の調整'),
+          title: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('同梱の危険区域の位置合わせ'),
+              SizedBox(height: 2),
+              EffectScopeBadge(EffectScope.teamAfterPublish),
+            ],
+          ),
           leading: IconButton(
             tooltip: '戻る',
             icon: const Icon(Icons.arrow_back),
@@ -905,7 +914,7 @@ class _FixedObstacleCalibrationScreenState
           ),
           actions: [
             IconButton(
-              tooltip: 'すべての位置補正を解除',
+              tooltip: 'すべての位置合わせを解除',
               onPressed: _busy || _calibrations.isEmpty ? null : _resetAll,
               icon: const Icon(Icons.restore_page_outlined),
             ),
@@ -918,12 +927,12 @@ class _FixedObstacleCalibrationScreenState
 
   Widget _buildBody() {
     if (_loading) {
-      return const AppLoadingView(message: '固定障害物を読み込んでいます…');
+      return const AppLoadingView(message: '同梱の危険区域を読み込んでいます…');
     }
     if (_error != null || _targets.isEmpty) {
       return AppErrorView(
-        title: '固定障害物を読み込めません',
-        message: _error?.toString() ?? '調整できる固定障害物がありません。',
+        title: '同梱の危険区域を読み込めません',
+        message: _error?.toString() ?? '調整できる同梱の危険区域がありません。',
         primaryLabel: '再試行',
         onPrimary: _load,
       );
@@ -1055,8 +1064,8 @@ class _FixedObstacleCalibrationScreenState
                               status: _publishStatus,
                               statusMessage: _hasTeamMembership
                                   ? _publishMessage
-                                  : '共有確定版: 版 $_sharedRevision。'
-                                      '現在の地図は端末内の下書きです。'
+                                  : 'チームに公開中: 版 $_sharedRevision。'
+                                      '現在の地図は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
                                       'チームに参加すると公開できます。',
                               enabled: !_busy,
                               showPublishButton: _hasTeamMembership,

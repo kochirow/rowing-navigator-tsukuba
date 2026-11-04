@@ -536,7 +536,7 @@ class HomeMapScreen extends HookConsumerWidget {
             section: sectionOf[MapMenuItemId.workout]),
         MapMenuItemId.addHazard: MapMenuAction(
           icon: Icons.add_location_alt_outlined,
-          title: '危険区域を追加',
+          title: '危険区域の追加・編集',
           section: sectionOf[MapMenuItemId.addHazard],
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
@@ -566,7 +566,7 @@ class HomeMapScreen extends HookConsumerWidget {
           // 副題は、名前だけでは中身が分からない項目にだけ付け、
           // 中身を短く並べる(2026-10-23 利用者決定)。名前で分かる項目
           // (チーム・練習記録・使い方など)には付けない。
-          subtitle: isObserver ? '時間・当たり判定・対象' : '時間・区域の幅・対象・逆走の音',
+          subtitle: isObserver ? '鳴り始め・区域の幅・対象' : '鳴り始め・区域の幅・対象・逆走の音',
           section: sectionOf[MapMenuItemId.warningSettings],
           onTap: () async {
             if (!isObserver) {
@@ -615,7 +615,7 @@ class HomeMapScreen extends HookConsumerWidget {
         // 「危険区域を追加」とは別の操作なので、名前もまとめない。
         MapMenuItemId.calibrateFixedHazards: MapMenuAction(
           icon: Icons.straighten,
-          title: '既設危険区域の位置の調整',
+          title: '同梱の危険区域の位置合わせ',
           section: sectionOf[MapMenuItemId.calibrateFixedHazards],
           onTap: () async {
             await Navigator.push(

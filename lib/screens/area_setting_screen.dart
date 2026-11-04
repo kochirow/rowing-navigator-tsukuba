@@ -25,6 +25,7 @@ import '../widgets/app_state_views.dart';
 import '../theme/app_theme.dart';
 import 'app_entry_gate.dart';
 import 'danger_zone_settings_screen.dart';
+import '../widgets/effect_scope_badge.dart';
 
 const _sakuragawaFallbackCenter = LatLng(36.069, 140.208);
 
@@ -216,6 +217,31 @@ class AreaSettingScreen extends HookConsumerWidget {
       }
     }
 
+    /// 削除の直後の「元に戻す」。削除の印が手元へ届くまでの間は戻せないので、
+    /// そのときは「最近削除した区域」から戻すよう伝える。
+    Future<void> undoDelete(String id) async {
+      if (!hasExistingTeamSession()) return;
+      final item = mapEditor.deletedTemporaryObstacles.value
+          .where((deleted) => deleted.id == id)
+          .firstOrNull;
+      if (item == null) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('削除の反映を待っています。少し待って、右上の「最近削除した区域」から戻してください。'),
+        ));
+        return;
+      }
+      try {
+        await mapEditor.restoreDeleted(item);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('「${item.name}」を元に戻しました。')),
+        );
+      } catch (error) {
+        showHazardStateError(error, failure: '元に戻せませんでした');
+      }
+    }
+
     Future<void> deleteSelection() async {
       if (!hasExistingTeamSession()) return;
       if (mapEditor.selectedObstacle.value?.isTemporary != true) return;
@@ -247,11 +273,23 @@ class AreaSettingScreen extends HookConsumerWidget {
           false;
       if (!confirmed || !context.mounted) return;
       if (!hasExistingTeamSession()) return;
+      final deletedId = mapEditor.selectedObstacle.value?.id;
       try {
         await mapEditor.deleteSelected();
         if (!context.mounted) return;
+        // 削除の直後に、その場で元に戻せるようにする(R6 段1)。
+        // チーム全員にすぐ効く操作なので、押し間違いをすぐ取り消せることが要る。
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('臨時危険区域を削除しました。')),
+          SnackBar(
+            content: const Text('臨時危険区域を削除しました。'),
+            duration: const Duration(seconds: 8),
+            action: deletedId == null
+                ? null
+                : SnackBarAction(
+                    label: '元に戻す',
+                    onPressed: () => unawaited(undoDelete(deletedId)),
+                  ),
+          ),
         );
       } catch (error) {
         showHazardStateError(error, failure: '削除できませんでした');
@@ -314,7 +352,16 @@ class AreaSettingScreen extends HookConsumerWidget {
     final warnings = navigationWarnings;
     return Scaffold(
       appBar: AppBar(
-        title: Text(warnings == null ? '危険区域を追加' : '危険区域を追加(航行中)'),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(warnings == null ? '危険区域の追加・編集' : '危険区域の追加・編集(航行中)'),
+            const SizedBox(height: 2),
+            // 臨時の区域・流木は保存した瞬間にチーム全員に効く(R6 段1)。
+            const EffectScopeBadge(EffectScope.teamImmediately),
+          ],
+        ),
         bottom: warnings == null
             ? null
             : PreferredSize(
@@ -468,7 +515,7 @@ class AreaSettingScreen extends HookConsumerWidget {
                             : Icons.add_location_alt,
                         label: mapEditor.mode.value == MapEditorMode.edit
                             ? '追加終了'
-                            : '危険区域を追加',
+                            : '危険区域の追加・編集',
                         color: mapEditor.mode.value == MapEditorMode.edit
                             ? context.colors.danger
                             : null,
