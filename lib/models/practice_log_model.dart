@@ -105,6 +105,34 @@ class PracticeLogEvent {
               Map<String, dynamic>.from(json['details'] as Map? ?? const {}));
 }
 
+/// 監視ログを記録したアプリのビルド。共有したアプリではなく、記録した
+/// アプリを残す(共有はあとで別のビルドから行うことがあるため)。
+class PracticeLogAppBuild {
+  final String version;
+  final String buildNumber;
+  final String gitCommitSha;
+
+  const PracticeLogAppBuild({
+    required this.version,
+    required this.buildNumber,
+    required this.gitCommitSha,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'version': version,
+        'buildNumber': buildNumber,
+        'gitCommitSha': gitCommitSha,
+      };
+
+  /// 読めない項目は `unknown`。値を推測で埋めない。
+  factory PracticeLogAppBuild.fromJson(Map<String, dynamic> json) =>
+      PracticeLogAppBuild(
+        version: json['version'] as String? ?? 'unknown',
+        buildNumber: json['buildNumber'] as String? ?? 'unknown',
+        gitCommitSha: json['gitCommitSha'] as String? ?? 'unknown',
+      );
+}
+
 class PracticeLog {
   final String id;
   final String teamId;
@@ -136,6 +164,9 @@ class PracticeLog {
   /// `recoveredAfterTermination`(R1-R16)。終了操作で終わったものは null。
   final String? endReason;
 
+  /// 記録したアプリのビルド。この項目より前の記録には無いので null。
+  final PracticeLogAppBuild? appBuild;
+
   bool get wasRecoveredAfterTermination =>
       endReason == 'recoveredAfterTermination';
 
@@ -153,7 +184,8 @@ class PracticeLog {
       this.userComment,
       this.userCommentUpdatedAt,
       this.endPromptShownAt,
-      this.endReason});
+      this.endReason,
+      this.appBuild});
 
   bool get isDiagnosticsShared => diagnosticsSharedAt != null;
 
@@ -186,7 +218,8 @@ class PracticeLog {
           userCommentUpdatedAt:
               userCommentUpdatedAt ?? this.userCommentUpdatedAt,
           endPromptShownAt: endPromptShownAt ?? this.endPromptShownAt,
-          endReason: endReason ?? this.endReason);
+          endReason: endReason ?? this.endReason,
+          appBuild: appBuild);
   Map<String, dynamic> toJson() => {
         'practiceLogSchemaVersion': 1,
         'practiceId': id,
@@ -207,6 +240,7 @@ class PracticeLog {
         if (endPromptShownAt != null)
           'endPromptShownAt': endPromptShownAt!.millisecondsSinceEpoch,
         if (endReason != null) 'endReason': endReason,
+        if (appBuild != null) 'app': appBuild!.toJson(),
         'automaticUpload': false
       };
   factory PracticeLog.fromJson(Map<String, dynamic> json) => PracticeLog(
@@ -232,7 +266,11 @@ class PracticeLog {
           ? DateTime.fromMillisecondsSinceEpoch(
               (json['endPromptShownAt'] as num).toInt())
           : null,
-      endReason: json['endReason'] as String?);
+      endReason: json['endReason'] as String?,
+      appBuild: json['app'] is Map
+          ? PracticeLogAppBuild.fromJson(
+              Map<String, dynamic>.from(json['app'] as Map))
+          : null);
 }
 
 String practiceLogJsonLine(Object value) => jsonEncode(value is PracticeLogPoint

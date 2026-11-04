@@ -96,7 +96,13 @@ class PracticeLogExportService {
         // 匿名化した書き出しに、記録した端末の利用者IDを残さない。
         ..removeWhere((key, _) => anonymized && key == 'recordedBy'),
       'endedAt': log.endedAt?.toUtc().toIso8601String(),
-      'app': {'version': Message.currentAppVersion, 'buildNumber': 'unknown'},
+      // 記録したアプリのビルド。項目の無い古い記録は、ビルド番号・SHAを
+      // `unknown` とする(共有したアプリのビルドで埋めると取り違える)。
+      'app': {
+        'version': log.appBuild?.version ?? Message.currentAppVersion,
+        'buildNumber': log.appBuild?.buildNumber ?? 'unknown',
+        'gitCommitSha': log.appBuild?.gitCommitSha ?? 'unknown',
+      },
       'device': {
         'platform': Platform.operatingSystem,
         'operatingSystemVersion': Platform.operatingSystemVersion,
