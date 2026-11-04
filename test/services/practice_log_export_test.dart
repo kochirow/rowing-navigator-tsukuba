@@ -195,4 +195,29 @@ void main() {
     expect((manifest['privacy'] as Map)['automaticUpload'], isFalse);
     expect((manifest['privacy'] as Map)['scope'], 'team_members_only');
   });
+
+  test('記録したアプリのビルド番号とSHAをmanifestへ出す', () {
+    const build = PracticeLogAppBuild(
+        version: '1.2.1', buildNumber: '22', gitCommitSha: 'abc1234');
+    final log = PracticeLog.fromJson(
+        logFor().copyWith().toJson()..['app'] = build.toJson());
+    final files = service.buildFiles(log, [livePoint(boatId: 'a')], const []);
+    final manifest =
+        jsonDecode(files['practice_manifest.json']!) as Map<String, dynamic>;
+    expect(manifest['app'], {
+      'version': '1.2.1',
+      'buildNumber': '22',
+      'gitCommitSha': 'abc1234',
+    });
+  });
+
+  test('ビルドの項目が無い古い記録は、ビルド番号とSHAをunknownにする', () {
+    final files =
+        service.buildFiles(logFor(), [livePoint(boatId: 'a')], const []);
+    final manifest =
+        jsonDecode(files['practice_manifest.json']!) as Map<String, dynamic>;
+    final app = manifest['app'] as Map;
+    expect(app['buildNumber'], 'unknown');
+    expect(app['gitCommitSha'], 'unknown');
+  });
 }

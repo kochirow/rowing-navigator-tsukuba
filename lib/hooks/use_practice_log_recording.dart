@@ -11,6 +11,7 @@ import '../models/message_model.dart';
 import '../models/practice_log_model.dart';
 import '../services/geo_service.dart';
 import 'use_observer_warning_alerts.dart';
+import '../services/practice_log_app_build.dart';
 import '../services/practice_log_recorder.dart';
 import '../services/practice_log_store_service.dart';
 
@@ -50,6 +51,8 @@ UsePracticeLogRecording usePracticeLogRecording({
   final error = useState<String?>(null);
   final store = useMemoized(PracticeLogStoreService.new);
   final geo = useMemoized(GeoService.new);
+  // 画面を開いた時点で読み始め、監視の開始を待たせない。
+  final appBuild = useMemoized(loadPracticeLogAppBuild);
   final recorder = useRef<PracticeLogRecorder?>(null);
   final pointCount = useRef(0);
   final livePointCount = useRef(0);
@@ -135,6 +138,9 @@ UsePracticeLogRecording usePracticeLogRecording({
     }
     final run = ++generation.value;
     unawaited(Future<void>(() async {
+      final build = await appBuild;
+      // 読んでいる間に監視が止まった・やり直したなら、空の記録を作らない。
+      if (generation.value != run) return;
       final now = DateTime.now().toUtc();
       final id =
           'practice_${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
@@ -143,7 +149,8 @@ UsePracticeLogRecording usePracticeLogRecording({
           teamId: teamId,
           recordedBy: recordedBy,
           startedAt: now,
-          isComplete: false);
+          isComplete: false,
+          appBuild: build);
       try {
         await store.create(created);
         if (generation.value != run) return;
