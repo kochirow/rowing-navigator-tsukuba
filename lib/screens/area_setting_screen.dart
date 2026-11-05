@@ -9,12 +9,16 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../features/hazard_calibration/fixed_obstacle_calibration_controller.dart';
+import '../features/hazard_calibration/bundled_hazard_card.dart';
+import '../features/hazard_calibration/fixed_obstacle_calibration_panel.dart';
 import '../features/home_map/widgets/map_type_switcher.dart';
 import '../features/home_map/widgets/safety_banner.dart';
 import '../hooks/use_map_editor.dart';
 import '../hooks/use_nav_map.dart';
 import '../models/managed_hazard_model.dart';
 import '../models/navigation_warning.dart';
+import '../models/static_obstacle_model.dart';
 import '../services/auth_service.dart';
 import '../services/permission_service.dart';
 import '../services/static_obstacle_service.dart';
@@ -26,6 +30,7 @@ import '../theme/app_theme.dart';
 import 'app_entry_gate.dart';
 import 'danger_zone_settings_screen.dart';
 import '../widgets/effect_scope_badge.dart';
+import '../widgets/fixed_obstacle_calibration_controls.dart';
 
 const _sakuragawaFallbackCenter = LatLng(36.069, 140.208);
 
@@ -45,7 +50,18 @@ class AreaSettingScreen extends HookConsumerWidget {
   /// 無告知で落ちないよう、航行中はここへ重ねて出す。
   final ValueListenable<List<NavigationWarning>>? navigationWarnings;
 
-  const AreaSettingScreen({super.key, this.navigationWarnings});
+  /// 同梱の危険区域の位置合わせができない理由。null なら位置合わせできる。
+  ///
+  /// 位置合わせは出艇前だけ。公開するとチーム全員の警告の位置が動くので、
+  /// 艇を出している最中(航行中・監視中)にはさせない。ボタンは隠さず、
+  /// 押せない状態でこの理由を出す(「位置合わせはどこ？」と迷わせない)。
+  final String? calibrationBlockedReason;
+
+  const AreaSettingScreen({
+    super.key,
+    this.navigationWarnings,
+    this.calibrationBlockedReason,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,11 +80,63 @@ class AreaSettingScreen extends HookConsumerWidget {
     const locationAccuracy = LocationAccuracy.bestForNavigation;
     const defaultZoomLevel = 17.0;
 
+    // 同梱の危険区域。押すと説明のカードを出し、そこから位置合わせを始める。
+    final bundledSelection = useState<StaticObstacle?>(null);
+    // 位置合わせの最中だけ non-null。同じ地図の上で位置合わせをする
+    // (以前の専用画面「同梱の危険区域の位置合わせ」を、この画面へまとめた)。
+    final calibration = useState<FixedObstacleCalibrationController?>(null);
+    useListenable(calibration.value);
+    final calibrating = calibration.value != null;
+    useEffect(() => () => calibration.value?.dispose(), const []);
+
     void showError(Object error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存できませんでした: $error')),
       );
+    }
+
+    void showMessage(String message) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    void startCalibration(String? sourceId) {
+      if (calibrationBlockedReason != null || calibration.value != null) {
+        return;
+      }
+      mapEditor.clearSelection();
+      mapEditor.setMode(MapEditorMode.select);
+      bundledSelection.value = null;
+      final controller = FixedObstacleCalibrationController(
+        onMessage: showMessage,
+        initialSourceId: sourceId,
+      )..attachMap(navMap.mapController.value);
+      calibration.value = controller;
+      unawaited(controller.load());
+    }
+
+    Future<void> finishCalibration() async {
+      final controller = calibration.value;
+      if (controller == null) return;
+      if (controller.busy) {
+        showMessage('位置合わせを保存しています。完了後に戻れます。');
+        return;
+      }
+      final unpublished = controller.hasUnpublishedChanges;
+      calibration.value = null;
+      controller.dispose();
+      // 端末内の下書きではなく、いつもの(公開済みの)位置で描き直す。
+      try {
+        await mapEditor.reloadDefaultObstacles();
+      } catch (error) {
+        debugPrint('Reload after calibration failed: $error');
+      }
+      if (unpublished) {
+        showMessage('位置合わせはこの端末に保存しました。'
+            'チームに公開すると、チーム全員の警告の位置が動きます。');
+      }
     }
 
     /// 削除・元に戻すの失敗。2人がほぼ同時に同じ区域を操作すると、後の人は
@@ -150,8 +218,18 @@ class AreaSettingScreen extends HookConsumerWidget {
     useEffect(() {
       if (!navMap.isReady.value) return null;
       final polygons = HashSet<Polygon>();
+      final selectingMode = mapEditor.mode.value == MapEditorMode.select;
+      final bundledSourceId = bundledSelection.value?.sourceId;
       for (final obstacle in mapEditor.obstacles.value) {
-        final selected = obstacle.id == mapEditor.selectedObstacle.value?.id;
+        final editable = obstacle.isTemporary || obstacle.isManaged;
+        // 同梱の区域は、選ぶモードのときだけ押せる。追加のモードでは押せない
+        // (岸の区域の中に流木を足したいときに、タップを横取りしない)。
+        final bundledTappable = !editable &&
+            obstacle.isDefault &&
+            obstacle.sourceId != null &&
+            selectingMode;
+        final selected = obstacle.id == mapEditor.selectedObstacle.value?.id ||
+            (bundledSourceId != null && obstacle.sourceId == bundledSourceId);
         final previewPoints = selected && obstacle.isTemporary
             ? mapEditor.temporaryPreviewPoints.value
             : selected && obstacle.isManaged
@@ -168,8 +246,18 @@ class AreaSettingScreen extends HookConsumerWidget {
                   : Colors.orange.shade800,
           fillColor: (obstacle.isManaged ? Colors.deepOrange : Colors.red)
               .withValues(alpha: selected ? 0.55 : 0.35),
-          consumeTapEvents: obstacle.isTemporary || obstacle.isManaged,
-          onTap: () => mapEditor.selectObstacle(obstacle),
+          // 臨時の区域・流木は同梱の区域の上に重ね、重なった所では先に押せるようにする。
+          zIndex: editable ? 2 : 1,
+          consumeTapEvents: editable || bundledTappable,
+          onTap: () {
+            if (editable) {
+              bundledSelection.value = null;
+              mapEditor.selectObstacle(obstacle);
+            } else if (bundledTappable) {
+              mapEditor.clearSelection();
+              bundledSelection.value = obstacle;
+            }
+          },
         ));
       }
       final markers = HashSet<Marker>();
@@ -201,6 +289,8 @@ class AreaSettingScreen extends HookConsumerWidget {
       mapEditor.managedDraft.value,
       mapEditor.temporaryPreviewPoints.value,
       mapEditor.managedPreviewPoints.value,
+      mapEditor.mode.value,
+      bundledSelection.value,
       navMap.isReady.value,
     ]);
 
@@ -350,224 +440,388 @@ class AreaSettingScreen extends HookConsumerWidget {
     }
 
     final warnings = navigationWarnings;
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(warnings == null ? '危険区域の追加・編集' : '危険区域の追加・編集(航行中)'),
-            const SizedBox(height: 2),
-            // 臨時の区域・流木は保存した瞬間にチーム全員に効く(R6 段1)。
-            const EffectScopeBadge(EffectScope.teamImmediately),
-          ],
-        ),
-        bottom: warnings == null
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(74),
-                child: ValueListenableBuilder<List<NavigationWarning>>(
-                  valueListenable: warnings,
-                  builder: (context, active, _) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 航行中であることはタイトルが、警告が続いていることは
-                      // このバナーが示すので、説明の帯は重ねない。
-                      SafetyBanner(warnings: active),
-                    ],
-                  ),
-                ),
-              ),
-        actions: [
-          ValueListenableBuilder<List<DeletedTemporaryObstacle>>(
-            valueListenable: mapEditor.deletedTemporaryObstacles,
-            builder: (context, deleted, _) => IconButton(
-              tooltip: '最近削除した区域',
-              icon: Badge(
-                isLabelVisible: deleted.isNotEmpty,
-                label: Text('${deleted.length}'),
-                child: const Icon(Icons.restore_from_trash),
-              ),
-              onPressed: showRecentlyDeleted,
-            ),
-          ),
-          IconButton(
-            tooltip: '固定流木の最新状態を取得',
-            icon: const Icon(Icons.sync),
-            onPressed: mapEditor.saving.value
-                ? null
-                : () async {
-                    if (!hasExistingTeamSession()) return;
-                    try {
-                      await mapEditor.refreshManagedHazard();
-                    } catch (error) {
-                      showError(error);
-                    }
-                  },
-          ),
-          if (!kReleaseMode)
-            IconButton(
-              tooltip: '警告の設定',
-              icon: const Icon(Icons.tune),
-              onPressed: () async {
-                final changed = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DangerZoneSettingsScreen(),
-                  ),
-                );
-                if (changed == true) {
-                  await mapEditor.reloadDefaultObstacles();
-                }
-              },
-            ),
-        ],
-      ),
-      body: loading.value || initLatLng.value == null
-          ? const AppLoadingView(message: '危険区域を読み込んでいます…')
-          : Stack(
-              children: [
-                GoogleMap(
-                  myLocationEnabled: locationAvailable.value,
-                  myLocationButtonEnabled: false,
-                  initialCameraPosition: CameraPosition(
-                    target: initLatLng.value!,
-                    zoom: defaultZoomLevel,
-                  ),
-                  mapType: navMap.mapType.value,
-                  onMapCreated: navMap.setController,
-                  onTap: (position) async {
-                    if (mapEditor.mode.value == MapEditorMode.edit) {
-                      if (!hasExistingTeamSession()) return;
-                      try {
-                        await mapEditor.createTemporaryCircle(position);
-                        if (!context.mounted) return;
-                        // 追加モードを1回で解除し、連続タップによる
-                        // 重複区域と不要なFirestore writeを防ぐ。
-                        mapEditor.setMode(MapEditorMode.select);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('半径5mの臨時危険区域を保存しました。'),
-                          ),
-                        );
-                      } catch (error) {
-                        showError(error);
-                      }
-                    } else {
-                      mapEditor.clearSelection();
-                    }
-                  },
-                  polygons: navMap.polygons.value,
-                  markers: navMap.markers.value,
-                ),
-                if (locationIssue.value != null ||
-                    mapEditor.mode.value == MapEditorMode.edit)
-                  Positioned(
-                    top: 12,
-                    left: 16,
-                    right: 16,
-                    child: Column(
+    final cal = calibration.value;
+    return PopScope(
+      // 位置合わせの最中の「戻る」は、画面を閉じずに位置合わせを終える。
+      canPop: !calibrating,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(finishCalibration());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: calibrating
+              ? IconButton(
+                  tooltip: '位置合わせを終える',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => unawaited(finishCalibration()),
+                )
+              : null,
+          // 誰に効くかの札は、区域ごとのカードの見出しに出す。同じ画面に
+          // 効き方の違う区域(すぐ効く臨時の区域・公開すると効く同梱の区域)が並ぶため。
+          title: Text(warnings == null ? '危険区域の追加・編集' : '危険区域の追加・編集(航行中)'),
+          bottom: warnings == null
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(74),
+                  child: ValueListenableBuilder<List<NavigationWarning>>(
+                    valueListenable: warnings,
+                    builder: (context, active, _) => Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (locationIssue.value != null)
-                          _LocationIssueCard(
-                            message: locationIssue.value!,
-                            onRetry: () => initAttempt.value += 1,
-                            onOpenSettings: () async {
-                              final serviceEnabled =
-                                  await Geolocator.isLocationServiceEnabled();
-                              if (serviceEnabled) {
-                                await Geolocator.openAppSettings();
-                              } else {
-                                await Geolocator.openLocationSettings();
-                              }
-                            },
-                          ),
-                        if (locationIssue.value != null &&
-                            mapEditor.mode.value == MapEditorMode.edit)
-                          const SizedBox(height: 8),
-                        if (mapEditor.mode.value == MapEditorMode.edit)
-                          const _Guide(
-                            text: '追加したい場所を1回タップすると、半径5mの臨時危険区域を保存します。',
-                          ),
+                        // 航行中であることはタイトルが、警告が続いていることは
+                        // このバナーが示すので、説明の帯は重ねない。
+                        SafetyBanner(warnings: active),
                       ],
                     ),
                   ),
-                Positioned(
-                  left: 17,
-                  right: 17,
-                  bottom: mapEditor.selectedObstacle.value == null ? 28 : 250,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      MapTypeSwitcher(
-                        mapType: navMap.mapType.value,
-                        onTap: () => navMap.setMapType(
-                          navMap.mapType.value == MapType.normal
-                              ? MapType.hybrid
-                              : MapType.normal,
-                        ),
+                ),
+          actions: calibrating
+              ? null
+              : [
+                  ValueListenableBuilder<List<DeletedTemporaryObstacle>>(
+                    valueListenable: mapEditor.deletedTemporaryObstacles,
+                    builder: (context, deleted, _) => IconButton(
+                      tooltip: '最近削除した区域',
+                      icon: Badge(
+                        isLabelVisible: deleted.isNotEmpty,
+                        label: Text('${deleted.length}'),
+                        child: const Icon(Icons.restore_from_trash),
                       ),
-                      RoundedIconButton(
-                        icon: mapEditor.mode.value == MapEditorMode.edit
-                            ? Icons.close
-                            : Icons.add_location_alt,
-                        label: mapEditor.mode.value == MapEditorMode.edit
-                            ? '追加終了'
-                            : '危険区域の追加・編集',
-                        color: mapEditor.mode.value == MapEditorMode.edit
-                            ? context.colors.danger
-                            : null,
-                        onPressed: mapEditor.saving.value
-                            ? null
-                            : () => mapEditor.setMode(
-                                  mapEditor.mode.value == MapEditorMode.select
-                                      ? MapEditorMode.edit
-                                      : MapEditorMode.select,
+                      onPressed: showRecentlyDeleted,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '固定流木の最新状態を取得',
+                    icon: const Icon(Icons.sync),
+                    onPressed: mapEditor.saving.value
+                        ? null
+                        : () async {
+                            if (!hasExistingTeamSession()) return;
+                            try {
+                              await mapEditor.refreshManagedHazard();
+                            } catch (error) {
+                              showError(error);
+                            }
+                          },
+                  ),
+                  if (!kReleaseMode)
+                    IconButton(
+                      tooltip: '警告の設定',
+                      icon: const Icon(Icons.tune),
+                      onPressed: () async {
+                        final changed = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DangerZoneSettingsScreen(),
+                          ),
+                        );
+                        if (changed == true) {
+                          await mapEditor.reloadDefaultObstacles();
+                        }
+                      },
+                    ),
+                ],
+        ),
+        body: loading.value || initLatLng.value == null
+            ? const AppLoadingView(message: '危険区域を読み込んでいます…')
+            : LayoutBuilder(builder: (context, constraints) {
+                final calibrationLayout =
+                    FixedObstacleCalibrationLayoutSpec.fromConstraints(
+                        constraints);
+                return Stack(
+                  children: [
+                    GoogleMap(
+                      myLocationEnabled: locationAvailable.value,
+                      myLocationButtonEnabled: false,
+                      initialCameraPosition: CameraPosition(
+                        target: initLatLng.value!,
+                        zoom: defaultZoomLevel,
+                      ),
+                      // 位置合わせは航空写真で現地と見比べる。
+                      mapType:
+                          cal != null ? MapType.hybrid : navMap.mapType.value,
+                      padding: cal != null
+                          ? calibrationLayout.mapPadding
+                          : EdgeInsets.zero,
+                      onMapCreated: (controller) {
+                        navMap.setController(controller);
+                        calibration.value?.attachMap(controller);
+                      },
+                      onTap: (position) async {
+                        if (calibrating) return;
+                        if (mapEditor.mode.value == MapEditorMode.edit) {
+                          if (!hasExistingTeamSession()) return;
+                          try {
+                            await mapEditor.createTemporaryCircle(position);
+                            if (!context.mounted) return;
+                            // 追加モードを1回で解除し、連続タップによる
+                            // 重複区域と不要なFirestore writeを防ぐ。
+                            mapEditor.setMode(MapEditorMode.select);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('半径5mの臨時危険区域を保存しました。'),
+                              ),
+                            );
+                          } catch (error) {
+                            showError(error);
+                          }
+                        } else {
+                          mapEditor.clearSelection();
+                          bundledSelection.value = null;
+                        }
+                      },
+                      polygons: cal != null
+                          ? cal.buildPolygons()
+                          : navMap.polygons.value,
+                      polylines: cal != null ? cal.buildPolylines() : const {},
+                      circles: cal != null ? cal.buildCircles() : const {},
+                      markers: cal != null
+                          ? cal.buildMarkers()
+                          : navMap.markers.value,
+                    ),
+                    if (cal != null) ...[
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        right: calibrationLayout.isLandscape
+                            ? calibrationLayout.panelWidth + 12
+                            : 12,
+                        child: const FixedObstacleCalibrationLegendCard(),
+                      ),
+                      _CalibrationPanelFrame(
+                        layout: calibrationLayout,
+                        maxHeight: constraints.maxHeight,
+                        child: cal.loading
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child: Center(
+                                  child: Text('同梱の危険区域を読み込んでいます…'),
                                 ),
+                              )
+                            : cal.error != null || cal.targets.isEmpty
+                                ? _CalibrationLoadError(
+                                    message: cal.error?.toString() ??
+                                        '調整できる同梱の危険区域がありません。',
+                                    onRetry: () => unawaited(cal.load()),
+                                    onFinish: () =>
+                                        unawaited(finishCalibration()),
+                                  )
+                                : FixedObstacleCalibrationPanel(
+                                    controller: cal,
+                                    onFinish: () =>
+                                        unawaited(finishCalibration()),
+                                  ),
                       ),
                     ],
-                  ),
-                ),
-                if (mapEditor.selectedObstacle.value?.isTemporary == true)
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: _TemporaryEditor(
-                      radius: mapEditor.draftRadiusMeters.value,
-                      saving: mapEditor.saving.value,
-                      onRadiusChanged: mapEditor.updateDraftRadius,
-                      onSave: saveSelection,
-                      onDelete: deleteSelection,
-                      onReport: () {
-                        final selected = mapEditor.selectedObstacle.value;
-                        if (selected == null) return;
-                        openReportForm(
-                          context,
-                          subject: '臨時危険区域「${selected.name ?? '名称なし'}」'
-                              '(ID: ${selected.id})',
-                        );
-                      },
-                      onCancel: mapEditor.clearSelection,
-                    ),
-                  ),
-                if (mapEditor.selectedObstacle.value?.isManaged == true &&
-                    mapEditor.managedDraft.value != null)
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: _ManagedEditor(
-                      state: mapEditor.managedDraft.value!,
-                      saving: mapEditor.saving.value,
-                      onChanged: mapEditor.updateManagedDraft,
-                      onReset: mapEditor.resetManagedDraft,
-                      onSave: saveSelection,
-                      onCancel: mapEditor.clearSelection,
-                    ),
-                  ),
-              ],
-            ),
+                    if (cal == null &&
+                        (locationIssue.value != null ||
+                            mapEditor.mode.value == MapEditorMode.edit))
+                      Positioned(
+                        top: 12,
+                        left: 16,
+                        right: 16,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (locationIssue.value != null)
+                              _LocationIssueCard(
+                                message: locationIssue.value!,
+                                onRetry: () => initAttempt.value += 1,
+                                onOpenSettings: () async {
+                                  final serviceEnabled = await Geolocator
+                                      .isLocationServiceEnabled();
+                                  if (serviceEnabled) {
+                                    await Geolocator.openAppSettings();
+                                  } else {
+                                    await Geolocator.openLocationSettings();
+                                  }
+                                },
+                              ),
+                            if (locationIssue.value != null &&
+                                mapEditor.mode.value == MapEditorMode.edit)
+                              const SizedBox(height: 8),
+                            if (mapEditor.mode.value == MapEditorMode.edit)
+                              const _Guide(
+                                text: '追加したい場所を1回タップすると、半径5mの臨時危険区域を保存します。'
+                                    '保存した区域はチーム全員にすぐ効きます。',
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (cal == null)
+                      Positioned(
+                        left: 17,
+                        right: 17,
+                        bottom: mapEditor.selectedObstacle.value == null &&
+                                bundledSelection.value == null
+                            ? 28
+                            : 250,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            MapTypeSwitcher(
+                              mapType: navMap.mapType.value,
+                              onTap: () => navMap.setMapType(
+                                navMap.mapType.value == MapType.normal
+                                    ? MapType.hybrid
+                                    : MapType.normal,
+                              ),
+                            ),
+                            RoundedIconButton(
+                              icon: mapEditor.mode.value == MapEditorMode.edit
+                                  ? Icons.close
+                                  : Icons.add_location_alt,
+                              label: mapEditor.mode.value == MapEditorMode.edit
+                                  ? '追加終了'
+                                  : '危険区域を追加',
+                              color: mapEditor.mode.value == MapEditorMode.edit
+                                  ? context.colors.danger
+                                  : null,
+                              onPressed: mapEditor.saving.value
+                                  ? null
+                                  : () {
+                                      bundledSelection.value = null;
+                                      mapEditor.setMode(
+                                        mapEditor.mode.value ==
+                                                MapEditorMode.select
+                                            ? MapEditorMode.edit
+                                            : MapEditorMode.select,
+                                      );
+                                    },
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (cal == null &&
+                        mapEditor.selectedObstacle.value?.isTemporary == true)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: _TemporaryEditor(
+                          radius: mapEditor.draftRadiusMeters.value,
+                          saving: mapEditor.saving.value,
+                          onRadiusChanged: mapEditor.updateDraftRadius,
+                          onSave: saveSelection,
+                          onDelete: deleteSelection,
+                          onReport: () {
+                            final selected = mapEditor.selectedObstacle.value;
+                            if (selected == null) return;
+                            openReportForm(
+                              context,
+                              subject: '臨時危険区域「${selected.name ?? '名称なし'}」'
+                                  '(ID: ${selected.id})',
+                            );
+                          },
+                          onCancel: mapEditor.clearSelection,
+                        ),
+                      ),
+                    if (cal == null &&
+                        mapEditor.selectedObstacle.value?.isManaged == true &&
+                        mapEditor.managedDraft.value != null)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: _ManagedEditor(
+                          state: mapEditor.managedDraft.value!,
+                          saving: mapEditor.saving.value,
+                          onChanged: mapEditor.updateManagedDraft,
+                          onReset: mapEditor.resetManagedDraft,
+                          onSave: saveSelection,
+                          onCancel: mapEditor.clearSelection,
+                        ),
+                      ),
+                    if (cal == null && bundledSelection.value != null)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: BundledHazardCard(
+                          obstacle: bundledSelection.value!,
+                          blockedReason: calibrationBlockedReason,
+                          onStartCalibration: () => startCalibration(
+                              bundledSelection.value?.sourceId),
+                          onClose: () => bundledSelection.value = null,
+                        ),
+                      ),
+                  ],
+                );
+              }),
+      ),
     );
   }
+}
+
+/// 位置合わせのパネルを置く枠。縦画面は下、横画面は右(以前の専用画面と同じ配置)。
+class _CalibrationPanelFrame extends StatelessWidget {
+  final FixedObstacleCalibrationLayoutSpec layout;
+  final double maxHeight;
+  final Widget child;
+
+  const _CalibrationPanelFrame({
+    required this.layout,
+    required this.maxHeight,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment:
+            layout.isLandscape ? Alignment.centerRight : Alignment.bottomCenter,
+        child: SizedBox(
+          width: layout.panelWidth,
+          height: layout.isLandscape ? maxHeight : null,
+          child: SafeArea(
+            top: false,
+            left: false,
+            child: Material(
+              elevation: 12,
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: layout.isLandscape
+                  ? const BorderRadius.horizontal(left: Radius.circular(20))
+                  : const BorderRadius.vertical(top: Radius.circular(20)),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: layout.isLandscape
+                      ? maxHeight
+                      : layout.portraitPanelHeight,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class _CalibrationLoadError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onFinish;
+
+  const _CalibrationLoadError({
+    required this.message,
+    required this.onRetry,
+    required this.onFinish,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('同梱の危険区域を読み込めません',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(message),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: onFinish, child: const Text('終える')),
+              FilledButton(onPressed: onRetry, child: const Text('再試行')),
+            ],
+          ),
+        ],
+      );
 }
 
 class _Guide extends StatelessWidget {
@@ -674,6 +928,8 @@ class _TemporaryEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _EditorCard(
         title: '臨時危険区域  半径${radius.toStringAsFixed(0)}m',
+        // 臨時の区域・流木は保存した瞬間にチーム全員に効く(R6 段1)。
+        badge: EffectScope.teamImmediately,
         child: Column(
           children: [
             Slider(
@@ -724,6 +980,7 @@ class _ManagedEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _EditorCard(
         title: '固定流木',
+        badge: EffectScope.teamImmediately,
         child: Column(
           children: [
             _CompactSlider(
@@ -847,7 +1104,14 @@ class _EditorButtons extends StatelessWidget {
 class _EditorCard extends StatelessWidget {
   final String title;
   final Widget child;
-  const _EditorCard({required this.title, required this.child});
+
+  /// 見出しに添える「誰に効くか」の札。
+  final EffectScope? badge;
+  const _EditorCard({
+    required this.title,
+    required this.child,
+    this.badge,
+  });
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -863,6 +1127,10 @@ class _EditorCard extends StatelessWidget {
               children: [
                 Text(title,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
+                if (badge != null) ...[
+                  const SizedBox(height: 4),
+                  EffectScopeBadge(badge!),
+                ],
                 child,
               ],
             ),
