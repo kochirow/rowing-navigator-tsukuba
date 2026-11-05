@@ -94,7 +94,7 @@ Rowing Navigator はローイングの安全な航行を支援するアプリで
 | チーム参加・管理 | `team_onboarding_screen.dart`, `team_screen.dart` | チーム作成・招待コード参加、メンバー一覧・管理者交代・招待コード更新 |
 | 名前の登録 | `display_name_registration_screen.dart` | アカウントの名前(同名可・20文字以内) |
 | 危険区域の編集 | `area_setting_screen.dart` | 臨時危険区域の追加・編集・削除(7日間は元に戻せる)、固定流木の位置・大きさの更新 |
-| 既設危険区域の調整 | `fixed_obstacle_calibration_screen.dart`, `fixed_obstacle_warning_settings_screen.dart` | 同梱の危険区域の位置合わせ、警告対象からの除外 |
+| 既設危険区域の調整 | `area_setting_screen.dart` + `features/hazard_calibration/`, `fixed_obstacle_warning_settings_screen.dart` | 同梱の危険区域の位置合わせ(「危険区域の追加・編集」の中で、区域を押して始める。出艇前だけ)、警告対象からの除外 |
 | 練習記録 | `record_list_screen.dart`, `record_replay/` | 航行ごとの記録一覧・リプレイ・GPX/CSV出力 |
 | 監視ログ | `practice_log_list_screen.dart` | 監視端末が記録した全艇のログ(ZIPで共有) |
 | ワークアウト | `workout_setup_screen.dart` | メニューの登録・準備 |

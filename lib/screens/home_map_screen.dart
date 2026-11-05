@@ -70,7 +70,6 @@ import 'about_app_screen.dart';
 import 'area_setting_screen.dart';
 import 'danger_zone_settings_screen.dart';
 import 'device_status_screen.dart';
-import 'fixed_obstacle_calibration_screen.dart';
 import 'record_list_screen.dart';
 import 'practice_log_list_screen.dart';
 import 'first_run_guide_screen.dart';
@@ -537,6 +536,10 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuItemId.addHazard: MapMenuAction(
           icon: Icons.add_location_alt_outlined,
           title: '危険区域の追加・編集',
+          // 同梱の危険区域の位置合わせもここから行う(2026-11-05 利用者決定で、
+          // 別の項目「同梱の危険区域の位置合わせ」をまとめた)。名前だけでは
+          // 位置合わせが入っていると分からないので、出艇前だけ副題で示す。
+          subtitle: phase == HomePhase.ashore ? '区域の追加・位置合わせ' : null,
           section: sectionOf[MapMenuItemId.addHazard],
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
@@ -550,6 +553,14 @@ class HomeMapScreen extends HookConsumerWidget {
                   navigationWarnings: navigator.mode.value == NavMode.navigator
                       ? navigator.activeWarnings
                       : null,
+                  // 位置合わせは出艇前だけ。公開するとチーム全員の警告の位置が
+                  // 動くので、艇を出している最中(航行中・監視中)にはさせない。
+                  calibrationBlockedReason: switch (phase) {
+                    HomePhase.ashore => null,
+                    HomePhase.navigating => '位置合わせは出艇前にできます。航行中は操作できません。',
+                    HomePhase.watching =>
+                      '位置合わせは出艇前にできます。監視中は、チーム全員の警告の位置が動く操作はできません。',
+                  },
                 ),
               ),
             );
@@ -608,23 +619,6 @@ class HomeMapScreen extends HookConsumerWidget {
             // 開発者トグルは設定画面の最下部で変更する。判定そのものを
             // 変更しない表示設定なので、戻ったときに復元すればよい。
             await reloadDeveloperSafetyShapeOverlay();
-          },
-        ),
-        // 位置合わせは出艇前だけ。成功するとチーム全員の警告位置が動くので、
-        // 艇を出している最中(自分の監視対象が水上にいる最中)には出さない。
-        // 「危険区域を追加」とは別の操作なので、名前もまとめない。
-        MapMenuItemId.calibrateFixedHazards: MapMenuAction(
-          icon: Icons.straighten,
-          title: '同梱の危険区域の位置合わせ',
-          section: sectionOf[MapMenuItemId.calibrateFixedHazards],
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const FixedObstacleCalibrationScreen(),
-              ),
-            );
-            await navigator.reloadDefaultObstacles();
           },
         ),
         MapMenuItemId.team: MapMenuAction(

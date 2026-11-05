@@ -30,7 +30,6 @@ void main() {
       MapMenuItemId.addHazard,
       MapMenuItemId.warningSettings,
       MapMenuItemId.warningVolume,
-      MapMenuItemId.calibrateFixedHazards,
       MapMenuItemId.team,
       MapMenuItemId.deviceStatus,
       MapMenuItemId.usageGuide,
@@ -51,9 +50,8 @@ void main() {
     ]);
   });
 
-  test('監視中は位置の調整を出さず、ほかは陸上と同じ', () {
-    expect(ids(HomePhase.watching),
-        ids(HomePhase.ashore)..remove(MapMenuItemId.calibrateFixedHazards));
+  test('監視中は陸上と同じ項目(位置合わせは「危険区域の追加・編集」の中にある)', () {
+    expect(ids(HomePhase.watching), ids(HomePhase.ashore));
   });
 
   test('どの姿勢でも、共通に出る項目の上下関係は同じ', () {
