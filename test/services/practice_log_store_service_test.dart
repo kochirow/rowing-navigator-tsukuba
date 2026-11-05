@@ -42,6 +42,16 @@ void main() {
     expect(read.endedAt, start.add(const Duration(minutes: 40)));
   });
 
+  test('null を渡すと送信済みの印を外し、未送信として読む', () async {
+    await store.create(log('practice_20261001_060000'));
+    await store.markDiagnosticsShared(
+        'practice_20261001_060000', DateTime.utc(2026, 10, 2));
+    await store.markDiagnosticsShared('practice_20261001_060000', null);
+    final read = (await store.list()).single;
+    expect(read.isDiagnosticsShared, isFalse);
+    expect(read.pointCount, 12);
+  });
+
   test('印の項目が無い古いmeta.jsonは未送信として読む', () async {
     await store.create(log('practice_20261001_060000'));
     final file =
