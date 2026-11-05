@@ -662,13 +662,15 @@ class HomeMapScreen extends HookConsumerWidget {
           // 航行後の「練習記録」とは別物なので、何の記録かだけ添える。
           subtitle: '監視中に記録した全艇の位置',
           section: sectionOf[MapMenuItemId.practiceLog],
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => const PracticeLogListScreen(),
               ),
             );
+            // 一覧で送信済み／未送信を切り替えた分を、練習記録の件数へ反映する。
+            await pendingLogs.refresh();
           },
         ),
         // どの場面でも同じ位置に置く(航行中は地図のボタンを置かず、ここが入口)。

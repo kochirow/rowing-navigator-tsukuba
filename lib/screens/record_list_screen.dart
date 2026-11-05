@@ -18,6 +18,7 @@ import '../services/session_store_service.dart';
 import '../theme/app_theme.dart';
 import '../types/boat_type.dart';
 import '../widgets/app_state_views.dart';
+import '../widgets/log_sent_status.dart';
 import '../widgets/share_delivery_prompt.dart';
 import '../widgets/share_origin.dart';
 import 'record_replay/record_replay_screen.dart';
@@ -114,6 +115,73 @@ class RecordListScreen extends HookConsumerWidget {
     final pending = pendingBulkLogExports(sessions.value);
     final pendingLogs = pendingPracticeLogs.value;
 
+    // 長押しで入る選択モード。選べるのは、まとめて送る条件を満たす記録だけ
+    // (満たさない記録は、もともと未送信の件数に数えないので切り替える意味がない)。
+    final selected = useState<Set<String>>(const {});
+    final selecting = selected.value.isNotEmpty;
+    final candidates = [
+      for (final s in sessions.value)
+        if (isBulkLogExportCandidate(s)) s
+    ];
+
+    void toggleSelected(Session s) {
+      final next = {...selected.value};
+      if (!next.remove(s.id)) next.add(s.id);
+      selected.value = next;
+    }
+
+    /// 送信済みの印を付ける・外す。送信済みにするとき、もう送信済みの記録は
+    /// 送った時刻を残す(上書きすると、いつ送ったかが分からなくなる)。
+    /// 終わったら「元に戻す」付きで結果を伝える。
+    Future<void> setShared(List<Session> targets, bool toShared,
+        {bool offerUndo = true}) async {
+      final now = DateTime.now();
+      final changed = <Session>[];
+      var failed = 0;
+      for (final s in targets) {
+        if (s.isDiagnosticsShared == toShared) continue;
+        try {
+          await store.saveSession(
+              s.copyWith(diagnosticsSharedAt: () => toShared ? now : null));
+          changed.add(s);
+        } catch (_) {
+          // 1件の失敗で残りを止めない。保存できなかった分は元のまま残る。
+          failed++;
+        }
+      }
+      await loadSessions();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(logSentToggleMessage(
+              changed: changed.length, failed: failed, toShared: toShared)),
+          action: !offerUndo || changed.isEmpty
+              ? null
+              : SnackBarAction(
+                  label: '元に戻す',
+                  onPressed: () async {
+                    // 変えた記録だけを、変える前の印へ戻す。
+                    for (final s in changed) {
+                      try {
+                        await store.saveSession(s);
+                      } catch (_) {}
+                    }
+                    await loadSessions();
+                  },
+                ),
+        ));
+    }
+
+    Future<void> applyToSelected(bool toShared) async {
+      final targets = [
+        for (final s in candidates)
+          if (selected.value.contains(s.id)) s
+      ];
+      selected.value = const {};
+      await setShared(targets, toShared);
+    }
+
     Future<void> openBulkSend() async {
       await showModalBottomSheet<void>(
         context: context,
@@ -152,95 +220,170 @@ class RecordListScreen extends HookConsumerWidget {
       now: clock?.call(),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text('練習記録'),
-      ),
-      body: loading.value
-          ? const AppLoadingView(message: '練習記録を読み込んでいます…')
-          : sessions.value.isEmpty
-              ? pendingCard == null
-                  ? const AppEmptyView(
-                      icon: Icons.rowing,
-                      title: 'まだ記録がありません',
-                      message: '航行を終了すると自動で保存されます',
-                    )
-                  : ListView(
-                      padding: EdgeInsets.all(context.dimens.space3),
-                      children: [
+    final allSelected =
+        candidates.isNotEmpty && selected.value.length == candidates.length;
+
+    return PopScope(
+      // 選択モード中の「戻る」は、画面を閉じずに選択をやめる。
+      canPop: !selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) selected.value = const {};
+      },
+      child: Scaffold(
+        appBar: selecting
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: '選択をやめる',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => selected.value = const {},
+                ),
+                title: Text('${selected.value.length}件を選択'),
+                actions: [
+                  TextButton(
+                    key: const Key('record-select-all'),
+                    // 見出しの帯と同じ色の文字になり見えなくなるので、帯の上の文字色にする。
+                    style: TextButton.styleFrom(
+                        foregroundColor: context.colors.onPrimary),
+                    onPressed: () => selected.value = allSelected
+                        ? const {}
+                        : {for (final s in candidates) s.id},
+                    child: Text(allSelected ? '選択を解除' : 'すべて選択'),
+                  ),
+                ],
+              )
+            : AppBar(
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                title: const Text('練習記録'),
+              ),
+        // 選んだ記録への操作は、画面の下に言葉のボタンで出す(アイコンだけだと
+        // どちらが「送信済みにする」か分からない)。
+        bottomNavigationBar: !selecting
+            ? null
+            : SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.all(context.dimens.space3),
+                  child: Row(children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('record-selected-unsent'),
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48)),
+                        icon: const Icon(Icons.outgoing_mail),
+                        label: const Text('未送信に戻す'),
+                        onPressed: () => applyToSelected(false),
+                      ),
+                    ),
+                    SizedBox(width: context.dimens.space2),
+                    Expanded(
+                      child: FilledButton.icon(
+                        key: const Key('record-selected-sent'),
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48)),
+                        icon: const Icon(Icons.mark_email_read_outlined),
+                        label: const Text('送信済みにする'),
+                        onPressed: () => applyToSelected(true),
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+        body: loading.value
+            ? const AppLoadingView(message: '練習記録を読み込んでいます…')
+            : sessions.value.isEmpty
+                ? pendingCard == null
+                    ? const AppEmptyView(
+                        icon: Icons.rowing,
+                        title: 'まだ記録がありません',
+                        message: '航行を終了すると自動で保存されます',
+                      )
+                    : ListView(
+                        padding: EdgeInsets.all(context.dimens.space3),
+                        children: [
+                          pendingCard,
+                          SizedBox(height: context.dimens.space3),
+                          Text(
+                            'まだ練習記録がありません。航行を終了すると自動で保存されます。',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      )
+                : ListView(
+                    padding: EdgeInsets.all(context.dimens.space3),
+                    children: [
+                      if (pendingCard != null) ...[
                         pendingCard,
                         SizedBox(height: context.dimens.space3),
-                        Text(
-                          'まだ練習記録がありません。航行を終了すると自動で保存されます。',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
                       ],
-                    )
-              : ListView(
-                  padding: EdgeInsets.all(context.dimens.space3),
-                  children: [
-                    if (pendingCard != null) ...[
-                      pendingCard,
+                      _PeriodSummaryCard(
+                        period: period.value,
+                        aggregate: aggregate,
+                        onChanged: (value) => period.value = value,
+                      ),
                       SizedBox(height: context.dimens.space3),
+                      _WeeklyBars(
+                        sessions: sessions.value,
+                        period: period.value,
+                        now: clock?.call() ?? DateTime.now(),
+                      ),
+                      SizedBox(height: context.dimens.space4),
+                      // 一覧は期間の切替に関係なく全件。期間の切替は集計カードの
+                      // 中にあるので、絞られるのが集計だけだと形で分かる。
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            '記録一覧',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          SizedBox(width: context.dimens.space2),
+                          Text(
+                            '${sessions.value.length}件',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: context.dimens.space2),
+                      ..._groupedSessionList(
+                        context,
+                        sessions.value,
+                        selection: selecting ? selected.value : null,
+                        onOpen: (session) {
+                          if (selecting) {
+                            if (isBulkLogExportCandidate(session)) {
+                              toggleSelected(session);
+                            }
+                            return;
+                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  RecordReplayScreen(session: session),
+                            ),
+                          ).then((_) => loadSessions());
+                        },
+                        onLongPress: toggleSelected,
+                        onToggleShared: (session) =>
+                            setShared([session], !session.isDiagnosticsShared),
+                      ),
                     ],
-                    _PeriodSummaryCard(
-                      period: period.value,
-                      aggregate: aggregate,
-                      onChanged: (value) => period.value = value,
-                    ),
-                    SizedBox(height: context.dimens.space3),
-                    _WeeklyBars(
-                      sessions: sessions.value,
-                      period: period.value,
-                      now: clock?.call() ?? DateTime.now(),
-                    ),
-                    SizedBox(height: context.dimens.space4),
-                    // 一覧は期間の切替に関係なく全件。期間の切替は集計カードの
-                    // 中にあるので、絞られるのが集計だけだと形で分かる。
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          '記録一覧',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                        ),
-                        SizedBox(width: context.dimens.space2),
-                        Text(
-                          '${sessions.value.length}件',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: context.dimens.space2),
-                    ..._groupedSessionList(
-                      context,
-                      sessions.value,
-                      onOpen: (session) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                RecordReplayScreen(session: session),
-                          ),
-                        ).then((_) => loadSessions());
-                      },
-                    ),
-                  ],
-                ),
+                  ),
+      ),
     );
   }
 }
@@ -407,28 +550,65 @@ class _SummaryStat extends StatelessWidget {
 class _SessionListCard extends StatelessWidget {
   final Session session;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
-  const _SessionListCard({required this.session, required this.onTap});
+  /// 送信済み／未送信を切り替える。null なら札を押せない
+  /// (まとめて送る条件を満たさない記録・選択モード中)。
+  final VoidCallback? onToggleShared;
+
+  /// 選択モード中だけ non-null。選択モード外は null。
+  final bool? selected;
+
+  const _SessionListCard({
+    required this.session,
+    required this.onTap,
+    this.onLongPress,
+    this.onToggleShared,
+    this.selected,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final dimens = context.dimens;
     final summary = session.summary;
-    return Card(
+    final candidate = isBulkLogExportCandidate(session);
+    final selecting = selected != null;
+    final card = Card(
       margin: EdgeInsets.only(bottom: dimens.space3),
       elevation: dimens.elevationSm,
-      shape: RoundedRectangleBorder(borderRadius: dimens.borderLg),
+      shape: RoundedRectangleBorder(
+        borderRadius: dimens.borderLg,
+        side: selected == true
+            ? BorderSide(color: colors.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: InkWell(
         borderRadius: dimens.borderLg,
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: EdgeInsets.all(dimens.space3),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 航跡の小さな絵。同じ見た目のカードが続いても、どの日か見分けやすい。
-              _TrackThumb(points: session.points, color: colors.primary),
+              // 選択モード中は、航跡の絵の代わりに選んだかどうかの印を出す。
+              if (selecting && candidate)
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Icon(
+                    selected!
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    key: Key('record-select-${session.id}'),
+                    color: selected! ? colors.primary : colors.textSecondary,
+                    size: 28,
+                  ),
+                )
+              else
+                // 航跡の小さな絵。同じ見た目のカードが続いても、どの日か見分けやすい。
+                _TrackThumb(points: session.points, color: colors.primary),
               SizedBox(width: dimens.space3),
               Expanded(
                 child: Column(
@@ -496,17 +676,17 @@ class _SessionListCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (isBulkLogExportTarget(session)) ...[
-                      SizedBox(height: dimens.space1),
-                      Row(children: [
-                        Icon(Icons.outgoing_mail,
-                            size: 14, color: colors.textSecondary),
-                        SizedBox(width: dimens.space1),
-                        Text('ログ未送信',
-                            style: TextStyle(
-                                fontSize: 12, color: colors.textSecondary)),
-                      ]),
-                    ],
+                    // 送信済み／未送信の札。押すと切り替わる。まとめて送る条件を
+                    // 満たす記録だけに出す(満たさない記録は件数に数えない)。
+                    if (candidate)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: LogSentStatusChip(
+                          key: Key('record-sent-chip-${session.id}'),
+                          sharedAt: session.diagnosticsSharedAt,
+                          onToggle: onToggleShared,
+                        ),
+                      ),
                     SizedBox(height: dimens.space2),
                     Row(
                       children: [
@@ -535,6 +715,8 @@ class _SessionListCard extends StatelessWidget {
         ),
       ),
     );
+    // 選択モード中、切り替えられない記録は薄くして、選べないことを示す。
+    return selecting && !candidate ? Opacity(opacity: 0.45, child: card) : card;
   }
 }
 
@@ -631,6 +813,9 @@ List<Widget> _groupedSessionList(
   BuildContext context,
   List<Session> sessions, {
   required void Function(Session) onOpen,
+  required void Function(Session) onLongPress,
+  required void Function(Session) onToggleShared,
+  Set<String>? selection,
 }) {
   final colors = context.colors;
   final normal = [
@@ -669,7 +854,35 @@ List<Widget> _groupedSessionList(
         ]),
       ));
     }
-    widgets.add(_SessionListCard(session: s, onTap: () => onOpen(s)));
+    final candidate = isBulkLogExportCandidate(s);
+    final card = _SessionListCard(
+      session: s,
+      onTap: () => onOpen(s),
+      // 長押しで選択モードに入る。切り替えられる記録だけ。
+      onLongPress: candidate && selection == null ? () => onLongPress(s) : null,
+      selected: selection?.contains(s.id),
+      onToggleShared:
+          candidate && selection == null ? () => onToggleShared(s) : null,
+    );
+    // 右へスワイプしても切り替えられる(札を押すのと同じ。補助の操作)。
+    // 行は消さずに元の位置へ戻す。
+    widgets.add(candidate && selection == null
+        ? Dismissible(
+            key: ValueKey('record-swipe-${s.id}'),
+            direction: DismissDirection.startToEnd,
+            dismissThresholds: const {DismissDirection.startToEnd: 0.3},
+            background: Padding(
+              padding: EdgeInsets.only(bottom: context.dimens.space3),
+              child:
+                  LogSentSwipeBackground(currentlySent: s.isDiagnosticsShared),
+            ),
+            confirmDismiss: (_) async {
+              onToggleShared(s);
+              return false;
+            },
+            child: card,
+          )
+        : card);
   }
   if (short.isNotEmpty) {
     widgets.add(Card(

@@ -154,6 +154,23 @@ void main() {
     expect(changed!.diagnosticsSharedAt, isNotNull);
   });
 
+  testWidgets('未送信なら「送信済みにする」で、送った時刻を付けた記録を渡す', (tester) async {
+    final changes = <Session>[];
+    await tester.pumpWidget(_host(RecordTools(
+      session: _withAlerts(),
+      onSessionChanged: changes.add,
+      exporter: GpxExportService(),
+      store: _NullStore(),
+      onSeekTo: (_) {},
+      onShareDiagnostics: (_) {},
+    )));
+    expect(find.text('未送信'), findsOneWidget);
+    expect(find.text('未送信に戻す'), findsNothing);
+    await tester.tap(find.byKey(const Key('record-tools-mark-sent')));
+    await tester.pump();
+    expect(changes.single.diagnosticsSharedAt, isNotNull);
+  });
+
   testWidgets('全体選択では「時間軸を拡大」を出さず、「結果を共有」は起点を渡す', (tester) async {
     final controller = ReplayController(ReplayAnalysis.compute(practice()));
     addTearDown(controller.dispose);
@@ -178,6 +195,11 @@ void main() {
 }
 
 class _NoopStore extends SessionStoreService {
+  @override
+  Future<void> saveSession(Session session) async {}
+}
+
+class _NullStore extends SessionStoreService {
   @override
   Future<void> saveSession(Session session) async {}
 }

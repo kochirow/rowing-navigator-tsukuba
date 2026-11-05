@@ -159,6 +159,16 @@ class RecordTools extends HookWidget {
                       session.copyWith(diagnosticsSharedAt: () => null),
                       '送信済みの印を外せませんでした。'),
                   child: const Text('未送信に戻す'),
+                )
+              else
+                // 昔ほかの方法で送った記録を、未送信の件数から外すため。
+                TextButton(
+                  key: const Key('record-tools-mark-sent'),
+                  onPressed: () => save(
+                      session.copyWith(
+                          diagnosticsSharedAt: () => DateTime.now()),
+                      '送信済みの印を付けられませんでした。'),
+                  child: const Text('送信済みにする'),
                 ),
             ]),
           ),

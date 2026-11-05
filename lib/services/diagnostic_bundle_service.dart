@@ -56,8 +56,13 @@ double practiceLogSecOf(PracticeLog log) {
 /// 受け取った)ものだけ。記録中・未完了のログは含めない。記録中のログは書き込みが
 /// 続いており、送信済みの印も記録側に上書きされる。艇の数が不明(null)なら入れない。
 bool isBulkPracticeLogTarget(PracticeLog log) =>
+    !log.isDiagnosticsShared && isBulkPracticeLogCandidate(log);
+
+/// 送信済みかどうかを問わず、まとめて送る条件を満たす監視ログか。
+/// 一覧で「送信済み／未送信」を切り替えられるのは、この条件を満たすものだけ
+/// (満たさないものは、もともと未送信の件数に数えない)。
+bool isBulkPracticeLogCandidate(PracticeLog log) =>
     log.isComplete &&
-    !log.isDiagnosticsShared &&
     (log.livePointCount ?? 0) > 0 &&
     practiceLogSecOf(log) >= bulkPracticeLogMinDurationSec;
 

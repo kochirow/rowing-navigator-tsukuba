@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rowing_navigator/models/practice_log_model.dart';
 import 'package:rowing_navigator/models/session_model.dart';
+import 'package:rowing_navigator/screens/practice_log_list_screen.dart';
 import 'package:rowing_navigator/screens/record_list_screen.dart';
 import 'package:rowing_navigator/services/diagnostic_bundle_service.dart';
 import 'package:rowing_navigator/services/practice_log_store_service.dart';
@@ -353,6 +354,133 @@ void main() {
     expect(store.byId['b']!.isDiagnosticsShared, isFalse);
   });
 
+  // 一覧の札が画面の外に出ないよう、縦に長い画面にする。
+  void tall(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
+  Widget storeScreen(SessionStoreService store) => ProviderScope(
+        child: MaterialApp(
+          home: RecordListScreen(
+            sessionStore: store,
+            practiceLogStore: _MemoryPracticeStore(const []),
+            clock: () => DateTime(2026, 7, 22),
+          ),
+        ),
+      );
+
+  testWidgets('一覧の札を押すと送信済みになり、件数から外れ、元に戻せる', (tester) async {
+    final store = _MemoryStore([
+      eligible('a', DateTime(2026, 7, 5)),
+      eligible('b', DateTime(2026, 7, 6)),
+    ]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+    expect(find.text('未送信のログ 2件'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('record-sent-chip-a')));
+    await tester.pumpAndSettle();
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+    expect(find.textContaining('1件を送信済みにしました'), findsOneWidget);
+    expect(find.textContaining('ログ送信済み'), findsOneWidget);
+
+    await tester.tap(find.text('元に戻す'));
+    await tester.pumpAndSettle();
+    expect(store.byId['a']!.isDiagnosticsShared, isFalse);
+    expect(find.text('未送信のログ 2件'), findsOneWidget);
+  });
+
+  testWidgets('送信済みの札を押すと未送信に戻り、送った時刻は残さない', (tester) async {
+    final store = _MemoryStore([
+      eligible('a', DateTime(2026, 7, 5), sharedAt: DateTime(2026, 7, 5, 12)),
+    ]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pending-log-card')), findsNothing);
+    expect(find.text('ログ送信済み 7/5'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('record-sent-chip-a')));
+    await tester.pumpAndSettle();
+    expect(store.byId['a']!.diagnosticsSharedAt, isNull);
+    expect(find.text('未送信のログ 1件'), findsOneWidget);
+  });
+
+  testWidgets('条件を満たさない短い記録には札を出さない', (tester) async {
+    final store = _MemoryStore([session('short', DateTime(2026, 7, 5))]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('record-sent-chip-short')), findsNothing);
+  });
+
+  testWidgets('右へスワイプしても切り替わり、行は一覧に残る', (tester) async {
+    final store = _MemoryStore([eligible('a', DateTime(2026, 7, 5))]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+    await tester.drag(
+        find.byKey(const ValueKey('record-swipe-a')), const Offset(300, 0));
+    await tester.pumpAndSettle();
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(find.byKey(const ValueKey('record-swipe-a')), findsOneWidget);
+  });
+
+  testWidgets('長押しで選び、すべて選択して送信済みにできる。短い記録は選べない', (tester) async {
+    tall(tester);
+    final store = _MemoryStore([
+      eligible('a', DateTime(2026, 7, 5)),
+      eligible('b', DateTime(2026, 7, 6)),
+      eligible('c', DateTime(2026, 7, 7), sharedAt: DateTime(2026, 7, 7, 9)),
+      session('short', DateTime(2026, 7, 8)),
+    ]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const Key('record-sent-chip-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('1件を選択'), findsOneWidget);
+    expect(find.byKey(const Key('record-select-a')), findsOneWidget);
+    // 選択モード中は、押すと詳細を開かずに選ぶ・外す。
+    await tester.tap(find.byKey(const Key('record-select-b')));
+    await tester.pumpAndSettle();
+    expect(find.text('2件を選択'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('record-select-all')));
+    await tester.pumpAndSettle();
+    expect(find.text('3件を選択'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('record-selected-sent')));
+    await tester.pumpAndSettle();
+    expect(find.text('3件を選択'), findsNothing);
+    expect(store.byId['a']!.isDiagnosticsShared, isTrue);
+    expect(store.byId['b']!.isDiagnosticsShared, isTrue);
+    // もう送信済みだった記録は、送った時刻を上書きしない。
+    expect(store.byId['c']!.diagnosticsSharedAt, DateTime(2026, 7, 7, 9));
+    expect(store.byId['short']!.isDiagnosticsShared, isFalse);
+    expect(find.textContaining('2件を送信済みにしました'), findsOneWidget);
+    expect(find.byKey(const Key('pending-log-card')), findsNothing);
+  });
+
+  testWidgets('選択モードは「戻る」で抜け、画面は閉じない', (tester) async {
+    final store = _MemoryStore([eligible('a', DateTime(2026, 7, 5))]);
+    tall(tester);
+    await tester.pumpWidget(storeScreen(store));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byKey(const Key('record-sent-chip-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('1件を選択'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('1件を選択'), findsNothing);
+    expect(find.text('練習記録'), findsOneWidget);
+  });
+
   PracticeLog monitorLog(String id, DateTime startedAt,
           {int minutes = 40,
           bool complete = true,
@@ -531,6 +659,45 @@ void main() {
     // 外せば、残りは送れる(送る前の画面に戻っている)。
     expect(find.byKey(const Key('bulk-log-send')), findsOneWidget);
   });
+
+  testWidgets('監視ログの一覧でも、札で切り替え、長押しでまとめて送信済みにできる', (tester) async {
+    final practiceStore = _MemoryPracticeStore([
+      monitorLog('practice_20260705_060000', DateTime.utc(2026, 7, 5, 6)),
+      monitorLog('practice_20260706_060000', DateTime.utc(2026, 7, 6, 6)),
+      monitorLog('practice_20260707_060000', DateTime.utc(2026, 7, 7, 6),
+          minutes: 9), // 短い(札なし)
+    ]);
+    await tester.pumpWidget(
+        MaterialApp(home: PracticeLogListScreen(store: practiceStore)));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(
+            const Key('practice-log-sent-chip-practice_20260707_060000')),
+        findsNothing);
+
+    await tester.tap(find
+        .byKey(const Key('practice-log-sent-chip-practice_20260705_060000')));
+    await tester.pumpAndSettle();
+    expect(practiceStore.shared['practice_20260705_060000'], isNotNull);
+    await tester.tap(find.text('元に戻す'));
+    await tester.pumpAndSettle();
+    expect(practiceStore.shared['practice_20260705_060000'], isNull);
+
+    await tester.longPress(
+        find.byKey(const Key('practice-log-row-practice_20260705_060000')));
+    await tester.pumpAndSettle();
+    expect(find.text('1件を選択'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('practice-log-select-all')));
+    await tester.pumpAndSettle();
+    expect(find.text('2件を選択'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('practice-log-selected-sent')));
+    await tester.pumpAndSettle();
+    expect(practiceStore.shared.keys, {
+      'practice_20260705_060000',
+      'practice_20260706_060000',
+    });
+    expect(practiceStore.shared.values.every((v) => v != null), isTrue);
+  });
 }
 
 class _MemoryStore extends SessionStoreService {
@@ -551,7 +718,7 @@ class _MemoryPracticeStore extends PracticeLogStoreService {
   final bool failList;
   final bool failMark;
   final bool failRead;
-  final Map<String, DateTime> shared = {};
+  final Map<String, DateTime?> shared = {};
 
   _MemoryPracticeStore(this.logs,
       {this.failList = false, this.failMark = false, this.failRead = false});
@@ -583,7 +750,7 @@ class _MemoryPracticeStore extends PracticeLogStoreService {
   }
 
   @override
-  Future<void> markDiagnosticsShared(String id, DateTime at) async {
+  Future<void> markDiagnosticsShared(String id, DateTime? at) async {
     if (failMark) throw const FileSystemException('read only');
     shared[id] = at;
   }

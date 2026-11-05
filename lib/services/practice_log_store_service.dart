@@ -117,10 +117,10 @@ class PracticeLogStoreService {
     return recovered;
   }
 
-  /// 共有した時刻を meta.json へ書く。記録中のログには呼ばない
-  /// (記録側が持つ控えで meta.json を書き直すため、印が消える)。
+  /// 共有した時刻を meta.json へ書く。[at] が null なら印を外す(未送信に戻す)。
+  /// 記録中のログには呼ばない(記録側が持つ控えで meta.json を書き直すため、印が消える)。
   /// 読めない・無いログは何もしない。
-  Future<void> markDiagnosticsShared(String id, DateTime at) async {
+  Future<void> markDiagnosticsShared(String id, DateTime? at) async {
     final file = File('${(await _dir(id)).path}/meta.json');
     if (!await file.exists()) return;
     final log = PracticeLog.fromJson(
