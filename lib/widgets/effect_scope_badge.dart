@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// 変更が「誰に・いつ」効くか(要件定義 11/03 R6 段1)。
 ///
 /// 危険区域に関わる変更は効き方が3通りあり、画面からは見えなかった
-/// (チーム全員にすぐ効く/公開するとチーム全員に効く/自艇のこの航行だけ)。
+/// (すぐチーム全員に反映/公開するとチーム全員に反映/自艇のこの航行だけ)。
 /// 設定の見出しに札を付けて、押す前に分かるようにする。
 enum EffectScope {
   /// 臨時の危険区域・流木。保存した瞬間にチーム全員に効く。
@@ -19,8 +19,8 @@ enum EffectScope {
   thisNavigation;
 
   String get label => switch (this) {
-        EffectScope.teamImmediately => 'チーム全員にすぐ効く',
-        EffectScope.teamAfterPublish => '公開するとチーム全員に効く',
+        EffectScope.teamImmediately => 'すぐチーム全員に反映',
+        EffectScope.teamAfterPublish => '公開するとチーム全員に反映',
         EffectScope.thisDevice => 'この端末だけ',
         EffectScope.thisNavigation => 'この航行だけ（自艇）',
       };
@@ -43,7 +43,7 @@ class EffectScopeBadge extends StatelessWidget {
     final team = scope == EffectScope.teamImmediately ||
         scope == EffectScope.teamAfterPublish;
     return Semantics(
-      label: '効く範囲：${scope.label}',
+      label: '反映される範囲：${scope.label}',
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

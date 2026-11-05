@@ -265,7 +265,7 @@ class _FirstRunGuideScreenState extends State<FirstRunGuideScreen> {
       GuideUrgencyRow(
         icon: Icons.graphic_eq,
         title: '鳴る',
-        body: 'あと$advance秒以内に届きます。届かなくなるまで繰り返します。',
+        body: 'あと$advance秒以内に当たる見込みのときに鳴ります。当たる見込みがなくなるまで繰り返します。',
       ),
       GuideUrgencyRow(
         icon: Icons.blur_on,
@@ -275,7 +275,7 @@ class _FirstRunGuideScreenState extends State<FirstRunGuideScreen> {
       const GuideUrgencyRow(
         icon: Icons.visibility_outlined,
         title: '表示のみ',
-        body: '近くにありますが、届く見込みはありません。',
+        body: '近くにありますが、当たる見込みはありません。',
       ),
       Text(
         '航行画面では、相手のいる側の画面の縁が赤く点滅します。',

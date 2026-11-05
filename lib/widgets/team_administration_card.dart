@@ -55,7 +55,7 @@ class _TeamAdministrationCardState extends State<TeamAdministrationCard> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('メンバーをチームから外しますか？'),
             content: Text(
-              '${member.displayLabel}(メンバーID ${member.shortId}…)のFirestore・位置共有へのアクセスを停止します。'
+              '${member.displayLabel}(メンバーID ${member.shortId}…)が、チームのデータと位置共有を使えないようにします。'
               '同時に招待コードも更新されるため、古いコードでの再参加はできません。',
             ),
             actions: [

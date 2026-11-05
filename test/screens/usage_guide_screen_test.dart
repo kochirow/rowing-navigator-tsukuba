@@ -62,7 +62,7 @@ void main() {
     // 以前は「約7秒」「約10秒」と直書きで、既定の10秒・13秒と食い違っていた。
     await tester.pumpWidget(_app(const UsageGuideScreen()));
     await _openEntry(tester, '地図と警告音');
-    expect(find.textContaining('あと13秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと13秒以内に当たる見込みのときに鳴ります'), findsOneWidget);
     expect(find.textContaining('あと10秒以内になってから鳴らします'), findsOneWidget);
     // 警告音は1種類(2026-10-23)。断続音の説明は残さない。
     expect(find.textContaining('断続音'), findsNothing);
@@ -77,7 +77,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _openEntry(tester, '地図と警告音');
-    expect(find.textContaining('あと15秒以内に届きます'), findsOneWidget);
+    expect(find.textContaining('あと15秒以内に当たる見込みのときに鳴ります'), findsOneWidget);
     expect(find.textContaining('あと8.5秒以内になってから鳴らします'), findsOneWidget);
   });
 

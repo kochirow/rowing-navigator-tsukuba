@@ -544,7 +544,7 @@ class _WorkoutEntry extends StatelessWidget {
                     if (plan != null)
                       Text(
                         plan.autoStart
-                            ? '航行を始めると READY で待ち、漕ぎ出しで1本目'
+                            ? '航行を始めると READY で待ち、漕ぎ出したら1本目が始まります'
                             : '航行中に、ワークアウトのボタンから始めます',
                         style: TextStyle(
                           fontSize: 13,

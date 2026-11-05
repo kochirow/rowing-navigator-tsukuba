@@ -281,7 +281,7 @@ class BoatListPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: Semantics(
           button: true,
-          label: '${boat.label}。タップで地図をこの艇へ寄せる',
+          label: '${boat.label}。タップすると地図がこの艇の位置へ動きます',
           child: row,
         ),
       ),

@@ -204,7 +204,7 @@ void main() {
         ),
       ));
       expect(find.text('橋A'), findsOneWidget);
-      expect(find.text('公開するとチーム全員に効く'), findsOneWidget);
+      expect(find.text('公開するとチーム全員に反映'), findsOneWidget);
       expect(find.byKey(const Key('calibration-blocked-reason')), findsNothing);
       await tester.tap(find.byKey(const Key('start-calibration')));
       expect(started, 1);
@@ -253,11 +253,11 @@ void main() {
       return c;
     }
 
-    testWidgets('見出しに「公開するとチーム全員に効く」を出し、「終える」で戻れる', (tester) async {
+    testWidgets('見出しに「公開するとチーム全員に反映」を出し、「終える」で戻れる', (tester) async {
       var finished = 0;
       await pumpPanel(tester, onFinish: () => finished++);
       expect(find.text('同梱の危険区域の位置合わせ'), findsOneWidget);
-      expect(find.text('公開するとチーム全員に効く'), findsOneWidget);
+      expect(find.text('公開するとチーム全員に反映'), findsOneWidget);
       await tester.tap(find.byKey(const Key('calibration-finish')));
       expect(finished, 1);
     });

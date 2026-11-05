@@ -408,7 +408,7 @@ class _ObserverRecordSheetState extends State<ObserverRecordSheet> {
         FeedbackCommentField(
           key: _commentKey,
           initialValue: _log.userComment,
-          hintText: '例：港の出口で他艇の警告が多く知らされた',
+          hintText: '例：港の出口で他艇の警告が何度も鳴った',
           onChanged: _saveComment,
         ),
       ],

@@ -211,7 +211,7 @@ class MessageService {
         throw StateError('位置共有の切断時削除を準備中です。');
       }
       if (publishingBoatId != message.boatId) {
-        throw StateError('登録した艘と異なる位置を送信できません。');
+        throw StateError('登録した艇と異なる位置を送信できません。');
       }
       // onDisconnect登録のACKを待つのは送信専用mailboxだけ。
       // 呼出元のGPS・危険判定パイプラインはこのFutureを待たない。
