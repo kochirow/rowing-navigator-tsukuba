@@ -49,7 +49,7 @@ class GeoService {
           notificationTitle: 'Rowing Navigator が航行を記録中',
           // 実機のlock/background試験が完了するまでは、安全評価の継続を
           // 通知文だけで保証しない。通知はセッション実行中の事実だけを示す。
-          notificationText: '航行中です。アプリの状態を確認してください。',
+          notificationText: '航行中です。位置の共有と警告を続けています。',
           notificationChannelName: '航行中の位置情報',
           enableWakeLock: true,
           setOngoing: true,
@@ -135,7 +135,7 @@ class GeoService {
         intervalDuration: const Duration(seconds: observerTrackIntervalSec),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'Rowing Navigator が監視記録中',
-          notificationText: '監視ログを記録中です。画面を消すと記録が途切れることがあります。',
+          notificationText: '監視ログを記録中です。',
           notificationChannelName: '監視中の位置情報',
           enableWakeLock: false,
           setOngoing: true,

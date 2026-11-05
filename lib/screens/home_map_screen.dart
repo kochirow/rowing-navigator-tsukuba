@@ -557,9 +557,9 @@ class HomeMapScreen extends HookConsumerWidget {
                   // 動くので、艇を出している最中(航行中・監視中)にはさせない。
                   calibrationBlockedReason: switch (phase) {
                     HomePhase.ashore => null,
-                    HomePhase.navigating => '位置合わせは出艇前にできます。航行中は操作できません。',
+                    HomePhase.navigating ||
                     HomePhase.watching =>
-                      '位置合わせは出艇前にできます。監視中は、チーム全員の警告の位置が動く操作はできません。',
+                      '位置合わせは出艇前に始められます。',
                   },
                 ),
               ),

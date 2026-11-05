@@ -216,13 +216,13 @@ void main() {
         home: Scaffold(
           body: BundledHazardCard(
             obstacle: obstacle,
-            blockedReason: '位置合わせは出艇前にできます。',
+            blockedReason: '位置合わせは出艇前に始められます。',
             onStartCalibration: () => started++,
             onClose: () {},
           ),
         ),
       ));
-      expect(find.text('位置合わせは出艇前にできます。'), findsOneWidget);
+      expect(find.text('位置合わせは出艇前に始められます。'), findsOneWidget);
       final button = tester.widget<ButtonStyleButton>(
           find.byKey(const Key('start-calibration')));
       expect(button.onPressed, isNull);

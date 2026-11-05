@@ -161,7 +161,7 @@ class MapAndAlertsGuidePage extends StatelessWidget {
           ),
           const GuideSection(
             title: '警告音の試聴',
-            description: '出艇前に、どの音がどの対象かを確かめられます。',
+            description: 'どの音がどの対象かを、ここで聞いて確かめられます。',
             child: GuideAudioPreviewList(entries: audioEntries),
           ),
         ],
