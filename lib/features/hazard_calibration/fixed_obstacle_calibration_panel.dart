@@ -18,18 +18,14 @@ class FixedObstacleCalibrationLegendCard extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.76),
         borderRadius: BorderRadius.circular(12),
         // 色の説明は文章でなく、見本+1語の凡例にする。
+        // 使い方の注意は書かない。位置合わせは練習中(航行中)に現地を見ながら
+        // することもある(2026-11-05 利用者指摘。使い方を縛る言い方をしない)。
         child: const Padding(
           padding: EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '航行中は操作しないでください。GPSの1点で決めず、往復の航跡と見比べてください。',
-                style:
-                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 6),
               Wrap(
                 spacing: 12,
                 runSpacing: 4,

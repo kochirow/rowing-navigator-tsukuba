@@ -294,8 +294,7 @@ class FixedObstacleCalibrationPublishConfirmation extends StatelessWidget {
                   ),
               const SizedBox(height: 12),
               Text(
-                '公開後は同じチームの端末で利用されます。'
-                '現地と航空写真を照合したことを確認してください。',
+                '公開すると、同じチームの端末の警告の位置が動きます。',
                 style: textTheme.bodySmall,
               ),
             ],

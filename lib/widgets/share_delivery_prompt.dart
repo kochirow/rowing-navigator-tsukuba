@@ -20,8 +20,7 @@ Future<bool> confirmShareDelivered(
         context: context,
         builder: (d) => AlertDialog(
           title: const Text('送れましたか?'),
-          content: const Text('この端末では、共有先へ届いたかを確かめられません。'
-              '送れていれば「送信済みにする」を押してください。'),
+          content: const Text('送れていれば「送信済みにする」を押してください。'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(d).pop(false),
