@@ -116,8 +116,7 @@ class _AppEntryGateState extends State<AppEntryGate> {
               child: AppErrorView(
                 icon: Icons.cloud_off,
                 title: 'チーム情報を確認できませんでした',
-                message:
-                    '通信状態を確認して再試行してください。チームに参加済みでも、アプリを入れ直す必要はありません。',
+                message: '通信状態を確認して再試行してください。チームに参加済みでも、アプリを入れ直す必要はありません。',
                 primaryLabel: '再試行',
                 onPrimary: _retry,
               ),
