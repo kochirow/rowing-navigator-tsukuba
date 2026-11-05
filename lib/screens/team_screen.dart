@@ -116,7 +116,7 @@ class _TeamScreenState extends State<TeamScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'チーム情報を確認できません。自動接続をもう一度確認してください。',
+                  'チーム情報を確認できません。「接続を確認」を押して、もう一度試してください。',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),

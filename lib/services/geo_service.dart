@@ -49,7 +49,7 @@ class GeoService {
           notificationTitle: 'Rowing Navigator が航行を記録中',
           // 実機のlock/background試験が完了するまでは、安全評価の継続を
           // 通知文だけで保証しない。通知はセッション実行中の事実だけを示す。
-          notificationText: '航行セッションを実行中です。アプリの状態を確認してください。',
+          notificationText: '航行中です。アプリの状態を確認してください。',
           notificationChannelName: '航行中の位置情報',
           enableWakeLock: true,
           setOngoing: true,

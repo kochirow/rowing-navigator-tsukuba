@@ -376,7 +376,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
         if (_disposed) return;
         sharedRevision = latest?.revision ?? 0;
         message = '他の端末が先に更新しました。最新版（版 $sharedRevision）を'
-            '取得したため、内容を確認して再公開してください。';
+            '取得したので、内容を確認してもう一度公開してください。';
       } catch (_) {
         // 競合自体を優先表示し、再取得失敗で端末内の下書きを失わない。
       }

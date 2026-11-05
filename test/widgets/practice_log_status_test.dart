@@ -11,12 +11,12 @@ void main() {
 
   testWidgets('保存できないことを黙らせず、短い語と読み上げの全文で示す', (tester) async {
     await tester.pumpWidget(wrap(const PracticeLogFailureNotice(
-      message: '練習ログを端末へ保存できませんでした。監視は継続しています。',
+      message: '監視ログを端末へ保存できませんでした。監視は続いています。',
     )));
 
     expect(find.text('記録できません'), findsOneWidget);
     expect(
-      find.bySemanticsLabel('練習ログを端末へ保存できませんでした。監視は継続しています。'),
+      find.bySemanticsLabel('監視ログを端末へ保存できませんでした。監視は続いています。'),
       findsOneWidget,
     );
   });

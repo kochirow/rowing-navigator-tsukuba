@@ -643,7 +643,7 @@ class AreaSettingScreen extends HookConsumerWidget {
                             if (mapEditor.mode.value == MapEditorMode.edit)
                               const _Guide(
                                 text: '追加したい場所を1回タップすると、半径5mの臨時危険区域を保存します。'
-                                    '保存した区域はチーム全員にすぐ効きます。',
+                                    '保存した区域は、すぐにチーム全員の地図と警告に反映されます。',
                               ),
                           ],
                         ),

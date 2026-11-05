@@ -468,7 +468,7 @@ class FusionReportCard extends StatelessWidget {
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-            '艇速の手がかりを並べ、この記録でほかの手がかりと食い違いが大きいものを外しています。'
+            '艇速を求める元のデータを比べ、この記録でほかと食い違いが大きいものを外しています。'
             'アプリが記録した値も、よく一致していれば使います。',
             style: TextStyle(fontSize: 12, height: 1.5, color: p.textSub),
           ),

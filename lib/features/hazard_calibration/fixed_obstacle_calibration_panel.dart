@@ -25,7 +25,7 @@ class FixedObstacleCalibrationLegendCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '航行中は操作しない・GPS 1点で決めず、両方向の航跡と照合',
+                '航行中は操作しないでください。GPSの1点で決めず、往復の航跡と見比べてください。',
                 style:
                     TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
@@ -140,8 +140,8 @@ class FixedObstacleCalibrationPanel extends StatelessWidget {
           status: c.publishStatus,
           statusMessage: c.hasTeamMembership
               ? c.publishMessage
-              : 'チームに公開中: 版 ${c.sharedRevision}。'
-                  '現在の地図は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
+              : 'チームに公開済みの版: ${c.sharedRevision}。'
+                  'いまの地図は、この端末だけの変更です（チームに公開するまで、ほかの人の端末には反映されません）。'
                   'チームに参加すると公開できます。',
           enabled: !c.busy,
           showPublishButton: c.hasTeamMembership,

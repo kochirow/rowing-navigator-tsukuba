@@ -22,5 +22,5 @@ String shareResultMessage(ShareResult r, {required String what}) =>
     switch (r.status) {
       ShareResultStatus.success => '共有先へ$whatを渡しました。',
       ShareResultStatus.dismissed => '共有をキャンセルしました。',
-      ShareResultStatus.unavailable => '共有シートを開きました。完了結果はこの端末から取得できません。',
+      ShareResultStatus.unavailable => '共有シートを開きました。送れたかどうかは、この端末では分かりません。',
     };

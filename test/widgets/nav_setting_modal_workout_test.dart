@@ -62,7 +62,7 @@ void main() {
     expect(changes.single, isNotNull);
     // 設定画面から戻ったシートに、決めた内容が出る。
     expect(summary(tester), '500m×8 ・ r2:00');
-    expect(find.textContaining('漕ぎ出しで1本目'), findsOneWidget);
+    expect(find.textContaining('漕ぎ出したら1本目が始まります'), findsOneWidget);
   });
 
   testWidgets('決めてあるワークアウトを出し、その場でやめられる', (tester) async {

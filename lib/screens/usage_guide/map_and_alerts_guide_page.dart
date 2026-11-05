@@ -68,7 +68,7 @@ class MapAndAlertsGuidePage extends StatelessWidget {
                 GuideUrgencyRow(
                   icon: Icons.graphic_eq,
                   title: '鳴る',
-                  body: 'あと$advance秒以内に届きます。届かなくなるまで繰り返します。',
+                  body: 'あと$advance秒以内に当たる見込みのときに鳴ります。当たる見込みがなくなるまで繰り返します。',
                 ),
                 GuideUrgencyRow(
                   icon: Icons.blur_on,
@@ -79,7 +79,7 @@ class MapAndAlertsGuidePage extends StatelessWidget {
                 const GuideUrgencyRow(
                   icon: Icons.visibility_outlined,
                   title: '表示のみ',
-                  body: '近くにありますが、届く見込みはありません。音は鳴りません。',
+                  body: '近くにありますが、当たる見込みはありません。音は鳴りません。',
                 ),
               ],
             ),

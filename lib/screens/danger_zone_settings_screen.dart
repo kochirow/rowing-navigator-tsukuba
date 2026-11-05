@@ -232,7 +232,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
         if (!mounted) return;
         _sharedRevision = latest?.revision ?? 0;
         message = '他の端末が先に更新しました。最新版（版 $_sharedRevision）を'
-            '取得したため、内容を確認して再公開してください。';
+            '取得したので、内容を確認してもう一度公開してください。';
       } catch (_) {
         // 競合状態を優先し、端末内へ保存済みの下書きは維持する。
       }
@@ -429,8 +429,8 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                   status: _publishStatus,
                   statusMessage: _hasTeamMembership
                       ? _publishMessage
-                      : 'チームに公開中: 版 $_sharedRevision。'
-                          '表示中の区域の幅は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
+                      : 'チームに公開済みの版: $_sharedRevision。'
+                          '表示中の区域の幅は、この端末だけの変更です（チームに公開するまで、ほかの人の端末には反映されません）。'
                           'チームに参加すると公開できます。',
                   enabled: !_busy,
                   showPublishButton: _hasTeamMembership,
@@ -494,7 +494,7 @@ class _DangerZoneSettingsScreenState extends State<DangerZoneSettingsScreen> {
                     title: const Text('位置の取り方を以前の設定に戻す（開発者用）'),
                     subtitle: const Text(
                       'iPhone の位置の取り方を、水上向け（maritime）から以前の運動向け'
-                      '（fitness）に戻します。次の航行開始から効きます。'
+                      '（fitness）に戻します。次に航行を始めたときから切り替わります。'
                       'どちらを使ったかは診断ログに残ります。',
                     ),
                     value:

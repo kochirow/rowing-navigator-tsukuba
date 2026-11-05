@@ -27,7 +27,7 @@ class PermissionService {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      return Future.error('位置情報サービスの権限が永久に拒否されています。権限を要求することができません。');
+      return Future.error('位置情報の利用が許可されていません。端末の設定から許可してください。');
     }
   }
 
@@ -43,7 +43,7 @@ class PermissionService {
     if (permission != LocationPermission.whileInUse &&
         permission != LocationPermission.always) {
       throw StateError(
-        '航行追跡には位置情報の利用許可が必要です。',
+        '航行には位置情報の利用許可が必要です。',
       );
     }
   }

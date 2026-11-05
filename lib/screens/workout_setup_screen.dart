@@ -241,7 +241,7 @@ class _WorkoutSetupScreenState extends State<WorkoutSetupScreen> {
                 Padding(
                   padding: EdgeInsets.only(top: dimens.space2),
                   child: Text(
-                    '次のワークを漕ぎ出したら、自動で始まります。回頭・待ち合わせの長さが毎回違うときに。',
+                    '次のワークを漕ぎ出したら、自動で始まります。回頭や待ち合わせの長さが毎回違うときに使います。',
                     style: TextStyle(color: colors.textSecondary),
                   ),
                 )

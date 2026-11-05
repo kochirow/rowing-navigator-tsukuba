@@ -207,12 +207,12 @@ UsePracticeLogRecording usePracticeLogRecording({
               at.difference(lastCheckpoint.value!) >=
                   const Duration(seconds: practiceLogCheckpointIntervalSec);
           unawaited(flush(checkpoint: due).catchError((_) {
-            error.value = '練習ログを端末へ保存できませんでした。監視は継続しています。';
+            error.value = '監視ログを端末へ保存できませんでした。監視は続いています。';
           }));
         });
       } catch (_) {
         if (generation.value == run) {
-          error.value = '練習ログを開始できませんでした。監視は継続しています。';
+          error.value = '監視ログを開始できませんでした。監視は続いています。';
         }
       }
     }));

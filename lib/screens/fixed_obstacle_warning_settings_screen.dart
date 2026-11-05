@@ -177,7 +177,7 @@ class _FixedObstacleWarningSettingsScreenState
         if (!mounted) return;
         _sharedRevision = latest?.revision ?? 0;
         message = '他の端末が先に更新しました。最新版（版 $_sharedRevision）を'
-            '取得したため、内容を確認して再公開してください。';
+            '取得したので、内容を確認してもう一度公開してください。';
       } catch (_) {
         // 競合状態を優先表示し、端末内へ保存した下書きは維持する。
       }
@@ -314,8 +314,8 @@ class _FixedObstacleWarningSettingsScreenState
                   status: _publishStatus,
                   statusMessage: _hasTeamMembership
                       ? _publishMessage
-                      : 'チームに公開中: 版 $_sharedRevision。'
-                          '表示中の設定は、この端末だけの変更です（チームに公開するまで他の人には効きません）。'
+                      : 'チームに公開済みの版: $_sharedRevision。'
+                          '表示中の設定は、この端末だけの変更です（チームに公開するまで、ほかの人の端末には反映されません）。'
                           'チームに参加すると公開できます。',
                   enabled: !_busy,
                   showPublishButton: _hasTeamMembership,
