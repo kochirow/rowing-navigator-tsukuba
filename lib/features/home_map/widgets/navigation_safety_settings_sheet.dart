@@ -19,7 +19,6 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
   final String safetySettingsLabel;
   final bool usesSharedSafetySettings;
   final int? appliedSharedSafetyRevision;
-  final int? pendingSharedSafetyRevision;
   final Future<void> Function(
     WarningLeadTimes previous,
     int? sharedRevision,
@@ -30,7 +29,6 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
     required Object? to,
     int? sharedRevision,
   }) onApplyObstacles;
-  final Future<void> Function() onApplyPendingSharedSafetySettings;
   final bool reverseGuidanceAudioEnabled;
   final ValueChanged<bool> onReverseGuidanceAudioEnabledChanged;
 
@@ -39,10 +37,8 @@ class NavigationSafetySettingsSheet extends StatefulWidget {
     required this.safetySettingsLabel,
     required this.usesSharedSafetySettings,
     required this.appliedSharedSafetyRevision,
-    required this.pendingSharedSafetyRevision,
     required this.onApplyWarningLeadTimes,
     required this.onApplyObstacles,
-    required this.onApplyPendingSharedSafetySettings,
     required this.reverseGuidanceAudioEnabled,
     required this.onReverseGuidanceAudioEnabledChanged,
   });
@@ -263,22 +259,6 @@ class _NavigationSafetySettingsSheetState
     }
   }
 
-  Future<void> _applyPendingSharedRevision() async {
-    final revision = widget.pendingSharedSafetyRevision;
-    if (_busy || revision == null) return;
-    final confirmed = await _confirm(
-      title: 'チームの共有設定 版 $revision を自艇に反映しますか？',
-      applyLabel: '自艇に反映',
-    );
-    if (!confirmed || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      await widget.onApplyPendingSharedSafetySettings();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   String _kindLabel(DangerZoneKind kind) => switch (kind) {
         DangerZoneKind.shore => '岸',
         DangerZoneKind.bridge => '橋',
@@ -389,19 +369,6 @@ class _NavigationSafetySettingsSheetState
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                       children: [
-                        if (widget.pendingSharedSafetyRevision != null)
-                          Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.update),
-                              title: Text(
-                                  '新しい共有設定 版 ${widget.pendingSharedSafetyRevision}'),
-                              trailing: FilledButton(
-                                onPressed:
-                                    _busy ? null : _applyPendingSharedRevision,
-                                child: const Text('自艇に反映'),
-                              ),
-                            ),
-                          ),
                         Card(
                           child: SwitchListTile.adaptive(
                             secondary: const Icon(Icons.directions_boat),

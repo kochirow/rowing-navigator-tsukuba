@@ -218,7 +218,6 @@ UseNavigator useNavigator() {
   final sharedSafetyCacheAge = useState<Duration?>(null);
   final sharedSafetyTeamIdHash = useState<String?>(null);
   final appliedSharedSafetyRevision = useState<int?>(null);
-  final pendingSharedSafetyRevision = useState<int?>(null);
   final safetySettingsLabel = useState('読込中');
   final safetySettingsNeedsAttention = useState(true);
   final isStaticProfileUnavailable = useState(false);
@@ -1641,9 +1640,8 @@ UseNavigator useNavigator() {
       captureAppliedDangerZoneSettings();
       if (sharedRevision != null) {
         // 自端末が公開したrevisionも、生成済みなら次のlistener通知で
-        // 「未反映」と表示しないよう適用済みにする。
+        // 作り直さないよう適用済みにする。
         sharedCalibrationSyncPolicy.markApplied(sharedRevision);
-        pendingSharedSafetyRevision.value = null;
       }
       appendRuntimeDiagnostic('setting_changed_during_navigation', {
         'key': key,
@@ -1677,16 +1675,10 @@ UseNavigator useNavigator() {
         }
         final revision = sharedCalibrationSyncPolicy.takePendingRevision();
         if (revision == null) return;
-        if (mode.value == NavMode.navigator) {
-          // 航行中に形状が黙って変わると、足元の危険境界と警告の意味が
-          // 予告なしに変わる。新revisionは保持・表示し、明示操作だけで
-          // 一括適用する(W6/W13)。
-          pendingSharedSafetyRevision.value = revision;
-          appendRuntimeDiagnostic('shared_safety_calibration_pending', {
-            'revision': revision,
-          });
-          return;
-        }
+        // 航行中もそのまま反映する(2026-11-06 利用者決定)。チームが公開した
+        // 位置合わせや新しい区域は、その場で全員の警告に入るべきで、保留すると
+        // 同じ水面の艇どうしで危険区域の形がずれる。下の差し替えは全区域を
+        // 作り終えてから一度に行い、陸上判定も初期化しない。
         sharedCalibrationApplyRunning.value = true;
         try {
           // 共有文書はwatchLatest受信時に端末cacheへ保存済み。
@@ -1749,68 +1741,6 @@ UseNavigator useNavigator() {
     );
   }
 
-  /// 航行中に通知された共有安全設定を、利用者の明示操作で一括反映する。
-  ///
-  /// 新旧のポリゴンを混ぜないため、全固定障害物の生成が成功してから一度に
-  /// 差し替える。失敗時は直前の検証済み形状を保ち、航行・警告・記録・共有は
-  /// 継続する。
-  Future<void> applyPendingSharedSafetySettings() async {
-    final revision = sharedCalibrationSyncPolicy.takePendingRevision() ??
-        pendingSharedSafetyRevision.value;
-    if (revision == null || sharedCalibrationApplyRunning.value) return;
-    sharedCalibrationApplyRunning.value = true;
-    try {
-      final applied = await applyNavigationObstacleSettings(
-        key: 'sharedSafetyRevision',
-        from: appliedSharedSafetyRevision.value,
-        to: revision,
-      );
-      if (!applied) {
-        // takePendingRevision済みでも、次の明示操作で再試行できるよう戻す。
-        sharedCalibrationSyncPolicy.observeRevision(revision);
-        pendingSharedSafetyRevision.value = revision;
-        return;
-      }
-      final shared = await sharedSafetyCalibrationService.loadCached();
-      if (shared != null) {
-        primaryWarningLeadTimeSeconds.value = shared.primaryWarningLeadSeconds;
-        warningTimeSeconds.value = shared.advanceWarningLeadSeconds;
-        safetyOrchestrator.value?.updatePresentationConfig(
-          AlertPresentationConfig(
-            lowConfidenceAudioStartDeadline: Duration(
-              milliseconds: (shared.primaryWarningLeadSeconds * 1000).round(),
-            ),
-            audioStartDeadline: Duration(
-              milliseconds: (shared.advanceWarningLeadSeconds * 1000).round(),
-            ),
-          ),
-        );
-      }
-      sharedCalibrationSyncPolicy.markApplied(revision);
-      pendingSharedSafetyRevision.value = null;
-      isSharedSafetyCalibrationSyncUnavailable.value = false;
-      if (mode.value == NavMode.navigator) {
-        appendDiagnosticEvent(SessionDiagnosticEvent(
-          t: DateTime.now(),
-          type: 'shared_safety_calibration_applied',
-          details: {'revision': revision, 'explicit': true},
-        ));
-      }
-    } catch (error) {
-      // takePendingRevision済みでも再試行できるよう保持し直す。
-      sharedCalibrationSyncPolicy.observeRevision(revision);
-      pendingSharedSafetyRevision.value = revision;
-      isSharedSafetyCalibrationSyncUnavailable.value = true;
-      appendRuntimeDiagnostic('shared_safety_calibration_apply_failed', {
-        'errorType': error.runtimeType.toString(),
-        'revision': revision,
-        'explicit': true,
-      });
-    } finally {
-      sharedCalibrationApplyRunning.value = false;
-    }
-  }
-
   Future<void> startSharedCalibrationWatch() async {
     if (!sharedCalibrationSyncPolicy.beginListening()) return;
     final generation = ++sharedCalibrationSyncGeneration.value;
@@ -1826,13 +1756,6 @@ UseNavigator useNavigator() {
           }
           if (state == null ||
               !sharedCalibrationSyncPolicy.observeRevision(state.revision)) {
-            return;
-          }
-          if (mode.value == NavMode.navigator) {
-            pendingSharedSafetyRevision.value = state.revision;
-            appendRuntimeDiagnostic('shared_safety_calibration_pending', {
-              'revision': state.revision,
-            });
             return;
           }
           // 5秒内に連続公開されても、最新revisionを一度だけ再構築する。
@@ -1914,7 +1837,6 @@ UseNavigator useNavigator() {
     await loadWarningTime(sharedSafety: shared);
     if (sharedRevision != null) {
       sharedCalibrationSyncPolicy.markApplied(sharedRevision);
-      pendingSharedSafetyRevision.value = null;
     }
     appendRuntimeDiagnostic('setting_changed_during_navigation', {
       'key': 'warningLeadTimes',
@@ -2261,7 +2183,6 @@ UseNavigator useNavigator() {
     receiveAccessProbeGeneration.value += 1;
     receiveFaultDebouncer.value.reset();
     isTemporaryObstacleReceiveUnavailable.value = false;
-    pendingSharedSafetyRevision.value = null;
     isWatching.value = false;
   }
 
@@ -5371,7 +5292,6 @@ UseNavigator useNavigator() {
     safetySettingsNeedsAttention: safetySettingsNeedsAttention,
     dangerZoneSettingsSource: dangerZoneSettingsSource,
     appliedSharedSafetyRevision: appliedSharedSafetyRevision,
-    pendingSharedSafetyRevision: pendingSharedSafetyRevision,
     reverseGuidanceAudioEnabled: reverseGuidanceAudioEnabled,
     isWatching: isWatching,
     isTransitioning: isTransitioning,
@@ -5401,7 +5321,6 @@ UseNavigator useNavigator() {
     applyWarningLeadTimesDuringNavigation:
         applyWarningLeadTimesDuringNavigation,
     setReverseGuidanceAudioEnabled: setReverseGuidanceAudioEnabled,
-    applyPendingSharedSafetySettings: applyPendingSharedSafetySettings,
   );
 }
 
@@ -5454,7 +5373,6 @@ class UseNavigator {
   final ValueNotifier<bool> safetySettingsNeedsAttention;
   final ValueNotifier<DangerZoneSettingsSource?> dangerZoneSettingsSource;
   final ValueNotifier<int?> appliedSharedSafetyRevision;
-  final ValueNotifier<int?> pendingSharedSafetyRevision;
   final ValueNotifier<bool> reverseGuidanceAudioEnabled;
   final ValueNotifier<bool> isWatching;
   final ValueNotifier<bool> isTransitioning;
@@ -5496,7 +5414,6 @@ class UseNavigator {
     int? sharedRevision,
   ) applyWarningLeadTimesDuringNavigation;
   final void Function(bool enabled) setReverseGuidanceAudioEnabled;
-  final Future<void> Function() applyPendingSharedSafetySettings;
 
   UseNavigator({
     required this.config,
@@ -5529,7 +5446,6 @@ class UseNavigator {
     required this.safetySettingsNeedsAttention,
     required this.dangerZoneSettingsSource,
     required this.appliedSharedSafetyRevision,
-    required this.pendingSharedSafetyRevision,
     required this.reverseGuidanceAudioEnabled,
     required this.isWatching,
     required this.isTransitioning,
@@ -5556,6 +5472,5 @@ class UseNavigator {
     required this.applyNavigationObstacleSettings,
     required this.applyWarningLeadTimesDuringNavigation,
     required this.setReverseGuidanceAudioEnabled,
-    required this.applyPendingSharedSafetySettings,
   });
 }
