@@ -12,17 +12,17 @@ import '../../services/shared_safety_calibration_service.dart';
 import '../../services/team_service.dart';
 import '../../widgets/fixed_obstacle_calibration_controls.dart';
 
-// # 同梱の危険区域の位置合わせ(状態と処理)
+// # 同梱の危険区域の位置調整(状態と処理)
 //
 // 以前は専用の画面(fixed_obstacle_calibration_screen.dart)が持っていた状態と処理を、
 // 「危険区域の追加・編集」画面の中で使えるよう、画面から切り出したもの
-// (2026-11-05 利用者決定: メニューの「同梱の危険区域の位置合わせ」を
-// 「危険区域の追加・編集」へまとめ、同じ地図の上で位置合わせできるようにする)。
+// (2026-11-05 利用者決定: メニューの「同梱の危険区域の位置調整」を
+// 「危険区域の追加・編集」へまとめ、同じ地図の上で位置調整できるようにする)。
 //
 // 中身(端末内の下書き・0.5m刻み・チームに公開・競合の扱い)は専用画面のときと同じ。
 // 確認のダイアログは画面側(パネル)が出し、ここは確認後の処理だけを持つ。
 
-/// 位置合わせの状態と処理。画面の外から [ChangeNotifier] として聞く。
+/// 位置調整の状態と処理。画面の外から [ChangeNotifier] として聞く。
 class FixedObstacleCalibrationController extends ChangeNotifier {
   static const stepMeters = 0.5;
   static const trackColors = [
@@ -33,7 +33,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
     Colors.pinkAccent,
   ];
 
-  // 位置合わせの間だけは、未公開の端末内下書きを地図へプレビューする。
+  // 位置調整の間だけは、未公開の端末内下書きを地図へプレビューする。
   // 通常の監視・航行画面は共有確定版を優先し、両者を加算しない。
   final PresetObstacleService _presetService;
   final FixedObstacleCalibrationService _calibrationService;
@@ -83,10 +83,10 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
   bool saving = false;
   bool publishing = false;
 
-  /// この位置合わせの間に、端末内の位置合わせを変えたか。
+  /// この位置調整の間に、端末内の位置調整を変えたか。
   bool changed = false;
 
-  /// 変えた位置合わせを、まだチームに公開していないか。
+  /// 変えた位置調整を、まだチームに公開していないか。
   bool hasUnpublishedChanges = false;
   int sharedRevision = 0;
   FixedObstacleCalibrationPublishStatus publishStatus =
@@ -101,7 +101,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
   FixedObstacleCalibrationTarget? get selectedTarget =>
       _selectedId == null ? null : targetById(_selectedId!);
 
-  /// 地図の操作をこの位置合わせに渡す(カメラを選んだ区域へ動かすため)。
+  /// 地図の操作をこの位置調整に渡す(カメラを選んだ区域へ動かすため)。
   /// 地図は画面が持つので、ここでは破棄しない。
   void attachMap(GoogleMapController? controller) {
     _mapController = controller;
@@ -167,7 +167,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
         if (hasTeamMembership) {
           publishStatus = FixedObstacleCalibrationPublishStatus.failure;
           publishMessage = '共有版の更新状況を取得できませんでした。'
-              '端末内の位置合わせは続けられます。';
+              '端末内の位置調整は続けられます。';
           _notify();
         }
       }
@@ -198,7 +198,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
         CameraUpdate.newLatLngZoom(targetCenter(target, draft), 18),
       );
     } catch (_) {
-      // 地図がまだ準備中・破棄済みでも、位置合わせそのものは続ける。
+      // 地図がまだ準備中・破棄済みでも、位置調整そのものは続ける。
     }
   }
 
@@ -237,9 +237,9 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
       publishStatus = FixedObstacleCalibrationPublishStatus.idle;
       publishMessage = null;
       _notify();
-      await _reloadPreview(failurePrefix: '位置合わせは保存しましたが、地図プレビューを更新できませんでした');
+      await _reloadPreview(failurePrefix: '位置調整は保存しましたが、地図プレビューを更新できませんでした');
     } catch (saveError) {
-      onMessage('位置合わせを保存できませんでした: $saveError');
+      onMessage('位置調整を保存できませんでした: $saveError');
     } finally {
       saving = false;
       _notify();
@@ -287,7 +287,7 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
     );
   }
 
-  /// この端末の位置合わせをすべて解除する。確認は呼び出し側で済ませる。
+  /// この端末の位置調整をすべて解除する。確認は呼び出し側で済ませる。
   Future<void> resetAll() async {
     if (busy || calibrations.isEmpty) return;
     saving = true;
@@ -302,10 +302,9 @@ class FixedObstacleCalibrationController extends ChangeNotifier {
       publishStatus = FixedObstacleCalibrationPublishStatus.idle;
       publishMessage = null;
       _notify();
-      await _reloadPreview(
-          failurePrefix: '位置合わせはすべて解除しましたが、地図プレビューを更新できませんでした');
+      await _reloadPreview(failurePrefix: '位置調整はすべて解除しましたが、地図プレビューを更新できませんでした');
     } catch (resetError) {
-      onMessage('位置合わせを解除できませんでした: $resetError');
+      onMessage('位置調整を解除できませんでした: $resetError');
     } finally {
       saving = false;
       _notify();

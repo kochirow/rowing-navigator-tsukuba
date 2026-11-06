@@ -1676,7 +1676,7 @@ UseNavigator useNavigator() {
         final revision = sharedCalibrationSyncPolicy.takePendingRevision();
         if (revision == null) return;
         // 航行中もそのまま反映する(2026-11-06 利用者決定)。チームが公開した
-        // 位置合わせや新しい区域は、その場で全員の警告に入るべきで、保留すると
+        // 位置調整や新しい区域は、その場で全員の警告に入るべきで、保留すると
         // 同じ水面の艇どうしで危険区域の形がずれる。下の差し替えは全区域を
         // 作り終えてから一度に行い、陸上判定も初期化しない。
         sharedCalibrationApplyRunning.value = true;

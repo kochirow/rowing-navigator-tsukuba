@@ -4,7 +4,7 @@ import '../../models/static_obstacle_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/effect_scope_badge.dart';
 
-/// 同梱の危険区域を押したときのカード。ここから位置合わせを始める。
+/// 同梱の危険区域を押したときのカード。ここから位置調整を始める。
 class BundledHazardCard extends StatelessWidget {
   final StaticObstacle obstacle;
   final VoidCallback onStartCalibration;
@@ -37,13 +37,13 @@ class BundledHazardCard extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              // 臨時の区域と違い、位置合わせは公開するまで他の人には効かない。
+              // 臨時の区域と違い、位置調整は公開するまで他の人には効かない。
               const Center(
                   child: EffectScopeBadge(EffectScope.teamAfterPublish)),
               const SizedBox(height: 8),
               const Text(
                 '同梱の危険区域（アプリに入っている区域）です。形や幅は変えられませんが、'
-                '実際の位置とずれているときは、位置合わせで現地に合わせられます。',
+                '実際の位置とずれているときは、ここから現地に合わせて動かせます。',
               ),
               const SizedBox(height: 8),
               Row(
@@ -55,7 +55,7 @@ class BundledHazardCard extends StatelessWidget {
                     key: const Key('start-calibration'),
                     onPressed: onStartCalibration,
                     icon: const Icon(Icons.straighten),
-                    label: const Text('位置合わせを始める'),
+                    label: const Text('位置を調整する'),
                   ),
                 ],
               ),

@@ -159,7 +159,7 @@ void main() {
     expect(shared.published, 0);
   });
 
-  test('すべて解除すると端末内の位置合わせが消える', () async {
+  test('すべて解除すると端末内の位置調整が消える', () async {
     final c = controller(initial: 'bridge_a');
     await c.load();
     c.selectVertex(0);
@@ -191,7 +191,7 @@ void main() {
       kind: StaticObstacleKind.bridge,
     );
 
-    testWidgets('「位置合わせを始める」はいつでも押せる', (tester) async {
+    testWidgets('「位置を調整する」はいつでも押せる', (tester) async {
       var started = 0;
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -209,7 +209,7 @@ void main() {
     });
   });
 
-  group('位置合わせのパネル', () {
+  group('位置調整のパネル', () {
     Future<FixedObstacleCalibrationController> pumpPanel(WidgetTester tester,
         {bool member = true, void Function()? onFinish}) async {
       final c = controller(initial: 'bridge_a', member: member);
@@ -236,7 +236,7 @@ void main() {
     testWidgets('見出しに「公開するとチーム全員に反映」を出し、「終える」で戻れる', (tester) async {
       var finished = 0;
       await pumpPanel(tester, onFinish: () => finished++);
-      expect(find.text('同梱の危険区域の位置合わせ'), findsOneWidget);
+      expect(find.text('同梱の危険区域の位置調整'), findsOneWidget);
       expect(find.text('公開するとチーム全員に反映'), findsOneWidget);
       await tester.tap(find.byKey(const Key('calibration-finish')));
       expect(finished, 1);

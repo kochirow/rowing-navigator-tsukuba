@@ -50,7 +50,7 @@ void main() {
     ]);
   });
 
-  test('監視中は陸上と同じ項目(位置合わせは「危険区域の追加・編集」の中にある)', () {
+  test('監視中は陸上と同じ項目(位置調整は「危険区域の追加・編集」の中にある)', () {
     expect(ids(HomePhase.watching), ids(HomePhase.ashore));
   });
 

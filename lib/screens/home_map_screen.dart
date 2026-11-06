@@ -536,10 +536,10 @@ class HomeMapScreen extends HookConsumerWidget {
         MapMenuItemId.addHazard: MapMenuAction(
           icon: Icons.add_location_alt_outlined,
           title: '危険区域の追加・編集',
-          // 同梱の危険区域の位置合わせもここから行う(2026-11-05 利用者決定で、
-          // 別の項目「同梱の危険区域の位置合わせ」をまとめた)。名前だけでは
-          // 位置合わせが入っていると分からないので、副題で示す。
-          subtitle: '区域の追加・位置合わせ',
+          // 同梱の危険区域の位置調整もここから行う(2026-11-05 利用者決定で、
+          // 別の項目「同梱の危険区域の位置調整」をまとめた)。名前だけでは
+          // 位置調整が入っていると分からないので、副題で示す。
+          subtitle: '区域の追加・位置調整',
           section: sectionOf[MapMenuItemId.addHazard],
           onTap: () async {
             // 編集権限は全チームメンバー共通。航行中でも第一発見者がすぐ登録でき、
