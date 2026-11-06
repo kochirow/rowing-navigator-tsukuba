@@ -586,13 +586,9 @@ class HomeMapScreen extends HookConsumerWidget {
                           DangerZoneSettingsSource.shared,
                   appliedSharedSafetyRevision:
                       navigator.appliedSharedSafetyRevision.value,
-                  pendingSharedSafetyRevision:
-                      navigator.pendingSharedSafetyRevision.value,
                   onApplyWarningLeadTimes:
                       navigator.applyWarningLeadTimesDuringNavigation,
                   onApplyObstacles: navigator.applyNavigationObstacleSettings,
-                  onApplyPendingSharedSafetySettings:
-                      navigator.applyPendingSharedSafetySettings,
                   reverseGuidanceAudioEnabled:
                       navigator.reverseGuidanceAudioEnabled.value,
                   onReverseGuidanceAudioEnabledChanged:

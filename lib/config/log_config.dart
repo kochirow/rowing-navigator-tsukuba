@@ -342,7 +342,8 @@ const diagnosticEventCatalog = <String, dynamic>{
     'shared_safety_cache_unavailable': '共有安全設定のローカルキャッシュを使用できない。',
     'shared_safety_calibration_applied': '受信した共有安全校正値を航行中の判定へ適用した。',
     'shared_safety_calibration_apply_failed': '受信した共有安全校正値を適用できなかった。',
-    'shared_safety_calibration_pending': '共有安全校正値を適用待ちとして保持した。',
+    'shared_safety_calibration_pending':
+        '共有安全校正値を適用待ちとして保持した(2026-11-06 までの版。以降は航行中もすぐ反映する)。',
     'shared_safety_calibration_recovered': '共有安全校正の購読が障害から回復した。',
     'shared_safety_calibration_start_failed': '共有安全校正の購読開始が失敗した。',
     'shared_safety_calibration_stream_error': '共有安全校正の購読ストリームで障害を検出した。',
