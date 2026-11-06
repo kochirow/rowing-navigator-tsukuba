@@ -7,14 +7,12 @@ import '../../widgets/effect_scope_badge.dart';
 /// 同梱の危険区域を押したときのカード。ここから位置合わせを始める。
 class BundledHazardCard extends StatelessWidget {
   final StaticObstacle obstacle;
-  final String? blockedReason;
   final VoidCallback onStartCalibration;
   final VoidCallback onClose;
 
   const BundledHazardCard({
     super.key,
     required this.obstacle,
-    required this.blockedReason,
     required this.onStartCalibration,
     required this.onClose,
   });
@@ -22,7 +20,6 @@ class BundledHazardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final reason = blockedReason;
     return SafeArea(
       top: false,
       child: Material(
@@ -48,24 +45,6 @@ class BundledHazardCard extends StatelessWidget {
                 '同梱の危険区域（アプリに入っている区域）です。形や幅は変えられませんが、'
                 '実際の位置とずれているときは、位置合わせで現地に合わせられます。',
               ),
-              if (reason != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 18, color: colors.textSecondary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        reason,
-                        key: const Key('calibration-blocked-reason'),
-                        style: TextStyle(color: colors.textSecondary),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -74,7 +53,7 @@ class BundledHazardCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     key: const Key('start-calibration'),
-                    onPressed: reason == null ? onStartCalibration : null,
+                    onPressed: onStartCalibration,
                     icon: const Icon(Icons.straighten),
                     label: const Text('位置合わせを始める'),
                   ),

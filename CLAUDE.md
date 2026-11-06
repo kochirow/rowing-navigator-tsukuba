@@ -472,8 +472,10 @@ flutter run
 - **同梱の危険区域の位置合わせは「危険区域の追加・編集」の中にある**(2026-11-05 利用者決定で、
   別のメニュー項目だった専用画面をまとめた)。地図上の同梱の区域を押すとカードが出て、
   「位置合わせを始める」で同じ地図の上が位置合わせになる。状態と処理は
-  `lib/features/hazard_calibration/`。**始められるのは出艇前だけ**で、航行中・監視中は
-  ボタンを隠さず理由を出す(`AreaSettingScreen.calibrationBlockedReason`)
+  `lib/features/hazard_calibration/`。**出艇前・航行中・監視中のどれでも始められる**
+  (2026-11-06 利用者決定。現地を見ながら合わせられるのが練習中しかないこともある。原則2)。
+  航行中の端末では、公開した位置合わせも自艇の警告へはすぐ入らず、航行中の警告設定の
+  「確認して反映」を押すまで保留される(既存の共有設定の保留の仕組み。`reloadDefaultObstaclesForMap`)
 - **桟橋エリア(`mooringAreas`)と港の中(`harborAreas`)は危険区域ではない**(音を控えめにする場所の宣言)。
   プロットツールで描き、`StaticObstacle` へ変換しない。地図には塗らない破線の輪郭で描く
   (`lib/features/home_map/area_outline_lines.dart`)
