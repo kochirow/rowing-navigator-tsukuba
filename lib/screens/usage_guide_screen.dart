@@ -63,7 +63,7 @@ class UsageGuideScreen extends StatelessWidget {
       (
         Icons.groups_outlined,
         TeamGuidePage.title,
-        '招待コード・臨時危険区域の追加・位置合わせ・橋脚の登録',
+        '招待コード・臨時危険区域の追加・位置調整・橋脚の登録',
         const TeamGuidePage(),
       ),
       (

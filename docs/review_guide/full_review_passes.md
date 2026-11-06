@@ -51,7 +51,7 @@
 | --- | --- | --- | --- |
 | P13 | 地図描画: `use_nav_map`, `use_map_editor`, `map_render_update_policy`, `safety_shape_overlay_service`, `calibration_track_overlay_service`, `theme/map_layer_spec`, `theme/boat_palette`, `map_display_*` | 2,300 | I, K, D(6) |
 | P14 | 航行画面: `home_map_screen`(2,175) + `lib/features/home_map/widgets/` 20本(4,756) | 6,900 → **2〜3分割必須**(画面本体 / 計器・バナー / パネル・シート) | I, C |
-| P15 | 設定・記録画面: `record_list_screen`(1,185), `features/hazard_calibration/`(位置合わせ。旧 `fixed_obstacle_calibration_screen`), `area_setting_screen`, `danger_zone_settings_screen`, `fixed_obstacle_warning_settings_screen`, `device_status_screen`, `usage_guide_screen`, `lib/widgets/`, `theme/app_theme` | 4,700 → **2分割可** | I, K |
+| P15 | 設定・記録画面: `record_list_screen`(1,185), `features/hazard_calibration/`(位置調整。旧 `fixed_obstacle_calibration_screen`), `area_setting_screen`, `danger_zone_settings_screen`, `fixed_obstacle_warning_settings_screen`, `device_status_screen`, `usage_guide_screen`, `lib/widgets/`, `theme/app_theme` | 4,700 → **2分割可** | I, K |
 
 P13〜P15 は 2026-07-27 レビューで「**要やり直し**(約6,000行中3点のみ確認)」だった層で、
 その後さらに増えている。**ここを飛ばすなら、飛ばしたと最終報告に書く。**

@@ -4,9 +4,9 @@ import '../../widgets/effect_scope_badge.dart';
 import '../../widgets/fixed_obstacle_calibration_controls.dart';
 import 'fixed_obstacle_calibration_controller.dart';
 
-// # 同梱の危険区域の位置合わせ(画面の部品)
+// # 同梱の危険区域の位置調整(画面の部品)
 //
-// 「危険区域の追加・編集」画面で位置合わせを始めたときに、地図の上に出す部品。
+// 「危険区域の追加・編集」画面で位置調整を始めたときに、地図の上に出す部品。
 // 中身は以前の専用画面と同じ(対象の選択・比較する航跡・座標点の矢印・チームに公開)。
 
 /// 地図の上端に出す、注意と色の凡例。
@@ -18,7 +18,7 @@ class FixedObstacleCalibrationLegendCard extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.76),
         borderRadius: BorderRadius.circular(12),
         // 色の説明は文章でなく、見本+1語の凡例にする。
-        // 使い方の注意は書かない。位置合わせは練習中(航行中)に現地を見ながら
+        // 使い方の注意は書かない。位置調整は練習中(航行中)に現地を見ながら
         // することもある(2026-11-05 利用者指摘。使い方を縛る言い方をしない)。
         child: const Padding(
           padding: EdgeInsets.all(10),
@@ -46,14 +46,14 @@ class FixedObstacleCalibrationLegendCard extends StatelessWidget {
       );
 }
 
-/// すべての位置合わせを解除する前の確認。解除したら true。
+/// すべての位置調整を解除する前の確認。解除したら true。
 Future<bool> confirmResetAllCalibrations(BuildContext context) async =>
     await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('すべての位置合わせを解除しますか？'),
+        title: const Text('すべての位置調整を解除しますか？'),
         content: const Text(
-          'この端末で行った同梱の危険区域の位置合わせをすべて削除し、'
+          'この端末で行った同梱の危険区域の位置調整をすべて削除し、'
           '同梱された基準位置へ戻します。区域の幅は変わりません。',
         ),
         actions: [
@@ -70,11 +70,11 @@ Future<bool> confirmResetAllCalibrations(BuildContext context) async =>
     ) ??
     false;
 
-/// 位置合わせの操作パネル(縦画面は下、横画面は右)。
+/// 位置調整の操作パネル(縦画面は下、横画面は右)。
 class FixedObstacleCalibrationPanel extends StatelessWidget {
   final FixedObstacleCalibrationController controller;
 
-  /// 「位置合わせを終える」。保存中は押せない。
+  /// 「位置調整を終える」。保存中は押せない。
   final VoidCallback onFinish;
 
   const FixedObstacleCalibrationPanel({
@@ -95,7 +95,7 @@ class FixedObstacleCalibrationPanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('同梱の危険区域の位置合わせ',
+                  Text('同梱の危険区域の位置調整',
                       style: TextStyle(fontWeight: FontWeight.bold)),
                   SizedBox(height: 4),
                   // 臨時の区域と違い、公開するまで他の人には効かない。
@@ -152,7 +152,7 @@ class FixedObstacleCalibrationPanel extends StatelessWidget {
                   }
                 },
           icon: const Icon(Icons.restore_page_outlined),
-          label: const Text('すべての位置合わせを解除'),
+          label: const Text('すべての位置調整を解除'),
         ),
       ],
     );

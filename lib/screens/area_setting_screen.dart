@@ -69,10 +69,10 @@ class AreaSettingScreen extends HookConsumerWidget {
     const locationAccuracy = LocationAccuracy.bestForNavigation;
     const defaultZoomLevel = 17.0;
 
-    // 同梱の危険区域。押すと説明のカードを出し、そこから位置合わせを始める。
+    // 同梱の危険区域。押すと説明のカードを出し、そこから位置調整を始める。
     final bundledSelection = useState<StaticObstacle?>(null);
-    // 位置合わせの最中だけ non-null。同じ地図の上で位置合わせをする
-    // (以前の専用画面「同梱の危険区域の位置合わせ」を、この画面へまとめた)。
+    // 位置調整の最中だけ non-null。同じ地図の上で位置調整をする
+    // (以前の専用画面「同梱の危険区域の位置調整」を、この画面へまとめた)。
     final calibration = useState<FixedObstacleCalibrationController?>(null);
     useListenable(calibration.value);
     final calibrating = calibration.value != null;
@@ -92,7 +92,7 @@ class AreaSettingScreen extends HookConsumerWidget {
     }
 
     void startCalibration(String? sourceId) {
-      // 位置合わせは航行中・監視中でも始められる。現地を見ながら合わせられるのが
+      // 位置調整は航行中・監視中でも始められる。現地を見ながら合わせられるのが
       // 練習中(航行中)しかないこともあるため(2026-11-06 利用者決定。使い方は使い手が決める)。
       if (calibration.value != null) return;
       mapEditor.clearSelection();
@@ -110,7 +110,7 @@ class AreaSettingScreen extends HookConsumerWidget {
       final controller = calibration.value;
       if (controller == null) return;
       if (controller.busy) {
-        showMessage('位置合わせを保存しています。完了後に戻れます。');
+        showMessage('位置調整を保存しています。完了後に戻れます。');
         return;
       }
       final unpublished = controller.hasUnpublishedChanges;
@@ -123,7 +123,7 @@ class AreaSettingScreen extends HookConsumerWidget {
         debugPrint('Reload after calibration failed: $error');
       }
       if (unpublished) {
-        showMessage('位置合わせはこの端末に保存しました。'
+        showMessage('位置調整はこの端末に保存しました。'
             'チームに公開すると、チーム全員の警告の位置が動きます。');
       }
     }
@@ -431,7 +431,7 @@ class AreaSettingScreen extends HookConsumerWidget {
     final warnings = navigationWarnings;
     final cal = calibration.value;
     return PopScope(
-      // 位置合わせの最中の「戻る」は、画面を閉じずに位置合わせを終える。
+      // 位置調整の最中の「戻る」は、画面を閉じずに位置調整を終える。
       canPop: !calibrating,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(finishCalibration());
@@ -440,7 +440,7 @@ class AreaSettingScreen extends HookConsumerWidget {
         appBar: AppBar(
           leading: calibrating
               ? IconButton(
-                  tooltip: '位置合わせを終える',
+                  tooltip: '位置調整を終える',
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => unawaited(finishCalibration()),
                 )
@@ -526,7 +526,7 @@ class AreaSettingScreen extends HookConsumerWidget {
                         target: initLatLng.value!,
                         zoom: defaultZoomLevel,
                       ),
-                      // 位置合わせは航空写真で現地と見比べる。
+                      // 位置調整は航空写真で現地と見比べる。
                       mapType:
                           cal != null ? MapType.hybrid : navMap.mapType.value,
                       padding: cal != null
@@ -736,7 +736,7 @@ class AreaSettingScreen extends HookConsumerWidget {
   }
 }
 
-/// 位置合わせのパネルを置く枠。縦画面は下、横画面は右(以前の専用画面と同じ配置)。
+/// 位置調整のパネルを置く枠。縦画面は下、横画面は右(以前の専用画面と同じ配置)。
 class _CalibrationPanelFrame extends StatelessWidget {
   final FixedObstacleCalibrationLayoutSpec layout;
   final double maxHeight;
