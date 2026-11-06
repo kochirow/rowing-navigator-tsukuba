@@ -564,7 +564,7 @@ void main() {
     await tester.tap(find.text('まとめて送る'));
     await tester.pumpAndSettle();
     expect(find.text('3件を送る(共有先を選ぶ)'), findsOneWidget);
-    expect(find.byKey(const Key('bulk-log-anonymize')), findsOneWidget);
+    expect(find.byKey(const Key('bulk-log-anonymize')), findsNothing);
     // 監視ログを1件外すと、送る件数も減る。
     await tester
         .tap(find.byKey(const Key('bulk-practice-practice_20260706_060000')));
@@ -621,9 +621,8 @@ void main() {
 
     expect(bundles.sessionIds, ['a']);
     expect(bundles.practiceLogIds, ['practice_20260705_060000']);
-    // 既定では艇名を伏せて書き出す。
     expect(bundles.practiceFiles.single['practice_manifest.json'],
-        contains('"anonymized": true'));
+        isNot(contains('anonymized')));
     expect(store.byId['a']!.isDiagnosticsShared, isTrue);
     expect(practiceStore.shared.keys, ['practice_20260705_060000']);
     expect(find.textContaining('2件を送信済みにしました'), findsOneWidget);

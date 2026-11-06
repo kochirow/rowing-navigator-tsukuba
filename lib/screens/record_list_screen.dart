@@ -1150,9 +1150,6 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
   };
   String? _busy; // 'send' / 'mark'
 
-  /// 監視ログの艇名を伏せるか。外へ出しても安全な側(伏せる)を既定にする。
-  bool _anonymize = true;
-
   List<Session> get _chosen => [
         for (final s in widget.sessions)
           if (_selected.contains(s.id)) s
@@ -1210,9 +1207,8 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
           final data = await widget.practiceStore.read(l.id);
           inputs.add(PracticeLogBundleInput(
             log: data.log,
-            files: widget.practiceExport.buildFiles(
-                data.log, data.points, data.events,
-                anonymized: _anonymize),
+            files: widget.practiceExport
+                .buildFiles(data.log, data.points, data.events),
           ));
         } catch (_) {
           // 黙って外して送ると、送ったつもりで残りが消える。理由を出して止める。
@@ -1285,7 +1281,7 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
           Text(
               widget.practiceLogs.isEmpty
                   ? diagnosticShareNotice
-                  : '$diagnosticShareNotice 監視ログには、チーム全艇の正確な航路が含まれます。',
+                  : '$diagnosticShareNotice 監視ログには、チーム全艇の名前と正確な航路が含まれます。',
               style: TextStyle(fontSize: 12, color: colors.textSecondary)),
           SizedBox(height: dimens.space2),
           Flexible(
@@ -1326,17 +1322,6 @@ class _BulkLogSendSheetState extends State<BulkLogSendSheet> {
               ],
             ),
           ),
-          if (widget.practiceLogs.isNotEmpty)
-            SwitchListTile(
-              key: const Key('bulk-log-anonymize'),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('監視ログの艇名を伏せる'),
-              value: _anonymize,
-              onChanged: _busy != null
-                  ? null
-                  : (on) => setState(() => _anonymize = on),
-            ),
           SizedBox(height: dimens.space2),
           Builder(
             builder: (b) => FilledButton.icon(

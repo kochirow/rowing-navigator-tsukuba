@@ -176,6 +176,15 @@ class ObserverBackgroundAlertPolicy {
     final track = _boats[message.boatId];
     if (track != null && !observedAt.isAfter(track.lastObservedAt)) return;
     final next = track ?? _BoatTrack(observedAt);
+    // 途絶えていた間に動いていたかは分からない。途絶を挟んだら止まり始めの
+    // 時刻を捨て、戻ってからの受信で数え直す(途絶の時間を停止に数えない。
+    // ビルド22の配布前レビュー指摘2)。
+    if (track != null &&
+        observedAt.difference(track.lastObservedAt) > lostAfter) {
+      next
+        ..stoppedSince = null
+        ..stoppedHandled = false;
+    }
     next
       ..label = boatNameLabel(message.boatType, message.displayName)
       ..lastObservedAt = observedAt
