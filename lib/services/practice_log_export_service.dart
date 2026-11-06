@@ -31,8 +31,7 @@ class PracticeLogExportService {
         _share = share ?? SharePlus.instance.share;
 
   Map<String, String> buildFiles(PracticeLog log,
-      Iterable<PracticeLogPoint> points, Iterable<PracticeLogEvent> events,
-      {bool anonymized = false}) {
+      Iterable<PracticeLogPoint> points, Iterable<PracticeLogEvent> events) {
     final pointList = points.toList();
     final eventList = events.toList();
     final aliases = <String, String>{};
@@ -41,10 +40,9 @@ class PracticeLogExportService {
     // 衝突したまま同じ列名にすると、事故検証で別の艇の航跡を1本に混ぜてしまう。
     // 必ず艇ごとに異なる名前へ振り分ける。
     String alias(String id, String? displayName) => aliases.putIfAbsent(id, () {
-          final base = anonymized || displayName == null || displayName.isEmpty
-              ? 'boat'
-              : displayName;
-          var candidate = anonymized ? 'boat-${aliases.length + 1}' : base;
+          final base =
+              displayName == null || displayName.isEmpty ? 'boat' : displayName;
+          var candidate = base;
           var suffix = 2;
           while (!usedAliases.add(candidate)) {
             candidate = '$base-$suffix';
@@ -92,9 +90,7 @@ class PracticeLogExportService {
     final manifest = {
       ...log.toJson()
         ..remove('diagnosticsSharedAt')
-        ..remove('endPromptShownAt')
-        // 匿名化した書き出しに、記録した端末の利用者IDを残さない。
-        ..removeWhere((key, _) => anonymized && key == 'recordedBy'),
+        ..remove('endPromptShownAt'),
       'endedAt': log.endedAt?.toUtc().toIso8601String(),
       // 記録したアプリのビルド。項目の無い古い記録は、ビルド番号・SHAを
       // `unknown` とする(共有したアプリのビルドで埋めると取り違える)。
@@ -121,7 +117,6 @@ class PracticeLogExportService {
           .where((e) => e.type == 'recorder_gap')
           .map((e) => e.details)
           .toList(),
-      'anonymized': anonymized,
       'privacy': {
         'containsPreciseRoute': true,
         'automaticUpload': false,
@@ -170,20 +165,15 @@ class PracticeLogExportService {
           '終わり方：終了ボタンを押さずに途切れ、最後の記録の時刻で確定した',
         'ひとこと：${log.userComment ?? '未入力'}',
       ].join('\n')}\n',
-      'events.jsonl': eventList
-              .map((e) => jsonEncode(
-                  anonymized ? _anonymizedEvent(e, alias) : e.toJson()))
-              .join('\n') +
+      'events.jsonl': eventList.map((e) => jsonEncode(e.toJson())).join('\n') +
           (eventList.isEmpty ? '' : '\n')
     };
   }
 
   Uint8List buildArchive(PracticeLog log, Iterable<PracticeLogPoint> points,
-      Iterable<PracticeLogEvent> events,
-      {bool anonymized = false}) {
+      Iterable<PracticeLogEvent> events) {
     final archive = Archive();
-    for (final entry
-        in buildFiles(log, points, events, anonymized: anonymized).entries) {
+    for (final entry in buildFiles(log, points, events).entries) {
       final bytes = utf8.encode(entry.value);
       archive.addFile(ArchiveFile(entry.key, bytes.length, bytes));
     }
@@ -196,12 +186,10 @@ class PracticeLogExportService {
 
   Future<ShareResult> share(PracticeLog log, Iterable<PracticeLogPoint> points,
       Iterable<PracticeLogEvent> events,
-      {required Rect sharePositionOrigin, bool anonymized = false}) async {
+      {required Rect sharePositionOrigin}) async {
     final directory = await _temporaryDirectoryProvider();
     final file = File('${directory.path}/${log.id}.zip');
-    await file.writeAsBytes(
-        buildArchive(log, points, events, anonymized: anonymized),
-        flush: true);
+    await file.writeAsBytes(buildArchive(log, points, events), flush: true);
     return _share(ShareParams(
         files: [XFile(file.path, mimeType: 'application/zip')],
         subject: '監視ログ ${log.id}',
@@ -228,18 +216,6 @@ class PracticeLogExportService {
   /// 匿名化した書き出しでは、イベントの艇ID(利用者ID)も航跡と同じ別名へ
   /// 置き換える。航跡だけ別名にしても、イベントに生のIDが残ると艇を
   /// 特定できてしまう(2026-10-29 監査 F17 と同じ問題)。
-  static Map<String, dynamic> _anonymizedEvent(
-    PracticeLogEvent event,
-    String Function(String id, String? displayName) alias,
-  ) {
-    final json = event.toJson();
-    final boatId = event.details['boatId'];
-    if (boatId is String) {
-      json['details'] = {...event.details, 'boatId': alias(boatId, null)};
-    }
-    return json;
-  }
-
   static String _csv(Object? value) {
     var text = value?.toString() ?? '';
     // 表示名など利用者が書いた文字列は、表計算ソフトで数式として

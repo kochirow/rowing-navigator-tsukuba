@@ -84,6 +84,29 @@ void main() {
       expect(again.map((a) => a.kind), [ObserverBackgroundAlertKind.stopped]);
     });
 
+    test('途絶を挟んだら、途絶の前の停止を数えずに戻ってから数え直す', () {
+      final p = policy();
+      // 0〜30秒にゆっくり進む(止まり始め)。そのあと受信が途絶える。
+      final before = run(p,
+          fromSecond: 0, toSecond: 30, receive: (s) => message(s, speed: 0.1));
+      final gap = run(p, fromSecond: 35, toSecond: 595);
+      expect(before, isEmpty);
+      expect(gap.map((a) => a.kind), [ObserverBackgroundAlertKind.lost]);
+      // 600秒に戻ったとき、ゆっくりでもすぐには「長時間停止」を出さない。
+      final back = run(p,
+          fromSecond: 600,
+          toSecond: 890,
+          receive: (s) => message(s, speed: 0.1));
+      expect(back, isEmpty);
+      // 戻ってから5分止まっていれば出す。
+      final later = run(p,
+          fromSecond: 895,
+          toSecond: 910,
+          receive: (s) => message(s, speed: 0.1));
+      expect(later.map((a) => a.kind), [ObserverBackgroundAlertKind.stopped]);
+      expect(later.single.at, at(900));
+    });
+
     test('係留区域・港の中・陸上判定中の艇は出さない', () {
       final inQuiet = run(policy(quiet: (_, __) => true),
           fromSecond: 0, toSecond: 900, receive: (s) => message(s, speed: 0));
