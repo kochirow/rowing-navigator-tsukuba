@@ -50,18 +50,7 @@ class AreaSettingScreen extends HookConsumerWidget {
   /// 無告知で落ちないよう、航行中はここへ重ねて出す。
   final ValueListenable<List<NavigationWarning>>? navigationWarnings;
 
-  /// 同梱の危険区域の位置合わせができない理由。null なら位置合わせできる。
-  ///
-  /// 位置合わせは出艇前だけ。公開するとチーム全員の警告の位置が動くので、
-  /// 艇を出している最中(航行中・監視中)にはさせない。ボタンは隠さず、
-  /// 押せない状態でこの理由を出す(「位置合わせはどこ？」と迷わせない)。
-  final String? calibrationBlockedReason;
-
-  const AreaSettingScreen({
-    super.key,
-    this.navigationWarnings,
-    this.calibrationBlockedReason,
-  });
+  const AreaSettingScreen({super.key, this.navigationWarnings});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -103,9 +92,9 @@ class AreaSettingScreen extends HookConsumerWidget {
     }
 
     void startCalibration(String? sourceId) {
-      if (calibrationBlockedReason != null || calibration.value != null) {
-        return;
-      }
+      // 位置合わせは航行中・監視中でも始められる。現地を見ながら合わせられるのが
+      // 練習中(航行中)しかないこともあるため(2026-11-06 利用者決定。使い方は使い手が決める)。
+      if (calibration.value != null) return;
       mapEditor.clearSelection();
       mapEditor.setMode(MapEditorMode.select);
       bundledSelection.value = null;
@@ -734,7 +723,6 @@ class AreaSettingScreen extends HookConsumerWidget {
                         alignment: Alignment.bottomCenter,
                         child: BundledHazardCard(
                           obstacle: bundledSelection.value!,
-                          blockedReason: calibrationBlockedReason,
                           onStartCalibration: () => startCalibration(
                               bundledSelection.value?.sourceId),
                           onClose: () => bundledSelection.value = null,

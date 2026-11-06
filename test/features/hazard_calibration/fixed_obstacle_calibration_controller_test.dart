@@ -191,13 +191,12 @@ void main() {
       kind: StaticObstacleKind.bridge,
     );
 
-    testWidgets('出艇前なら「位置合わせを始める」を押せる', (tester) async {
+    testWidgets('「位置合わせを始める」はいつでも押せる', (tester) async {
       var started = 0;
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: BundledHazardCard(
             obstacle: obstacle,
-            blockedReason: null,
             onStartCalibration: () => started++,
             onClose: () {},
           ),
@@ -205,27 +204,8 @@ void main() {
       ));
       expect(find.text('橋A'), findsOneWidget);
       expect(find.text('公開するとチーム全員に反映'), findsOneWidget);
-      expect(find.byKey(const Key('calibration-blocked-reason')), findsNothing);
       await tester.tap(find.byKey(const Key('start-calibration')));
       expect(started, 1);
-    });
-
-    testWidgets('航行中・監視中はボタンを隠さず、押せない理由を出す', (tester) async {
-      var started = 0;
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: BundledHazardCard(
-            obstacle: obstacle,
-            blockedReason: '位置合わせは出艇前に始められます。',
-            onStartCalibration: () => started++,
-            onClose: () {},
-          ),
-        ),
-      ));
-      expect(find.text('位置合わせは出艇前に始められます。'), findsOneWidget);
-      final button = tester.widget<ButtonStyleButton>(
-          find.byKey(const Key('start-calibration')));
-      expect(button.onPressed, isNull);
     });
   });
 

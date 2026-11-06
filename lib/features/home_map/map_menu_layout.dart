@@ -63,7 +63,7 @@ List<MapMenuSlot> mapMenuLayout(HomePhase phase,
     MapMenuSlot(MapMenuItemId.warningSettings, s(mapMenuSectionWarnings)),
     MapMenuSlot(MapMenuItemId.warningVolume, s(mapMenuSectionWarnings)),
     // 同梱の危険区域の位置合わせは「危険区域の追加・編集」の中にある
-    // (2026-11-05 にまとめた。出艇前だけ始められる)。
+    // (2026-11-05 にまとめた。どの姿勢でも始められる)。
     if (onLand) MapMenuSlot(MapMenuItemId.team, s(mapMenuSectionTeam)),
     MapMenuSlot(MapMenuItemId.deviceStatus, s(mapMenuSectionHelp)),
     MapMenuSlot(MapMenuItemId.usageGuide, s(mapMenuSectionHelp)),
