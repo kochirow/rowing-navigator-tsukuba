@@ -152,7 +152,7 @@ void main() {
         return result.snapshot.activeAlerts.single.candidate;
       }
 
-      // 初回は接近速度を求められない。データ欠損を安全の根拠にしない(原則6)。
+      // 初回は接近速度を求められない。データ欠損を安全の根拠にしない。
       expect(step(0).behavior, AlertBehavior.continuousAction);
 
       final steady = step(1);
@@ -235,7 +235,7 @@ void main() {
         );
         final candidate = result.snapshot.activeAlerts.single.candidate;
         expect(candidate.distanceMeters, isNull);
-        // データ欠損は安全の根拠にならない(原則6)。
+        // データ欠損は安全の根拠にならない。
         expect(candidate.behavior, AlertBehavior.continuousAction);
       }
     });
@@ -558,7 +558,7 @@ void main() {
         final quiet = step(second);
         expect(quiet.snapshot.oneShotAudioCues, isEmpty);
         expect(quiet.snapshot.audioDirective, isNull);
-        // 表示は消さない(原則1・原則6)。
+        // 表示は消さない(原則1)。
         expect(
           quiet.snapshot.activeAlerts.single.candidate.category,
           'other_boat_receive_unavailable',
@@ -988,7 +988,7 @@ void main() {
             ]),
             evaluatedAt: t0.add(Duration(seconds: second)),
             capabilities: capabilities,
-            // 分速100m未満。橋の下・岸際で休憩している正常な運用。
+            // 2.0m/s未満。橋の下・岸際で休憩している正常な運用。
             ownSpeedMetersPerSecond: 0.2,
           );
 
@@ -1277,7 +1277,7 @@ void main() {
       expect(candidate.behavior, AlertBehavior.continuousAction);
     });
 
-    test('確度の高い他艇接近は低速でも従来どおり鳴る', () {
+    test('確度の高い他艇接近は、低速になった直後(3秒の確定前)は鳴る', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-definite-other-at-rest',
         sessionGeneration: 1,
@@ -1292,7 +1292,7 @@ void main() {
       expect(result.snapshot.audioDirective, isNotNull);
     });
 
-    test('確度の高い候補は低速でも従来どおり鳴る', () {
+    test('確度の高い候補は、低速になった直後(3秒の確定前)は鳴る', () {
       // 不確かさによる抑制が、実体の重なりまで巻き込まないことを固定する。
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-definite-at-rest',
@@ -1316,9 +1316,11 @@ void main() {
           result.snapshot.audioDirective?.asset, 'audio/driftwood_warning.mp3');
     });
 
-    test('低速でも流木と他艇は静音にしない', () {
+    // 2026-11-07 利用者決定: 自艇が2.0m/sより遅い間は、すべての警告の
+    // 音を止める。他艇も、相手の速度が分からなくても止める。表示は残す。
+    test('低速が3秒続くと流木も他艇も音を止め、表示は残す', () {
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'session-low-speed-exceptions',
+        sessionId: 'session-low-speed-all',
         sessionGeneration: 1,
       );
       SafetyOrchestratorResult step(int second) =>
@@ -1330,17 +1332,96 @@ void main() {
                 distanceMeters: 1,
                 entrySeconds: 3,
               ),
+              // 相手の速度は渡さない(分からない)。
+              boatThreat(boatId: 'other-unknown-speed'),
             ]),
             evaluatedAt: t0.add(Duration(seconds: second)),
             capabilities: capabilities,
             ownSpeedMetersPerSecond: 1.0,
           );
-      step(0);
+      expect(step(0).snapshot.audioDirective, isNotNull);
       step(1);
       step(2);
       final afterConfirmation = step(3).snapshot;
-      expect(afterConfirmation.audioDirective?.asset,
-          'audio/driftwood_warning.mp3');
+      expect(afterConfirmation.audioDirective, isNull);
+      expect(afterConfirmation.activeAlerts, hasLength(2));
+      for (final alert in afterConfirmation.activeAlerts) {
+        expect(alert.candidate.behavior, AlertBehavior.visualOnly);
+        expect(
+          alert.candidate.reasonCodes,
+          contains('PRESENTATION_LOW_SPEED_SILENT'),
+        );
+      }
+    });
+
+    test('2.0m/s以上に戻れば、低速の間に出ていた警告が鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-low-speed-resume',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult step(int second, double speed) =>
+          orchestrator.processAssessment(
+            assessment: assessment([boatThreat(boatId: 'other-1')]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: speed,
+          );
+      for (var second = 0; second <= 3; second++) {
+        step(second, 0.5);
+      }
+      expect(step(4, 0.5).snapshot.audioDirective, isNull);
+      expect(step(5, 2.0).snapshot.audioDirective, isNotNull);
+    });
+
+    test('自艇の速度が分からないときは低速とみなさず鳴らす', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-low-speed-unknown',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult? last;
+      for (var second = 0; second <= 4; second++) {
+        last = orchestrator.processAssessment(
+          assessment: assessment([boatThreat(boatId: 'other-1')]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: null,
+        );
+      }
+      expect(last!.snapshot.audioDirective, isNotNull);
+    });
+
+    test('低速が3秒続くとカーブの読み上げも止める', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'session-low-speed-curve',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult? last;
+      for (var second = 0; second <= 3; second++) {
+        last = orchestrator.processAssessment(
+          assessment: assessment(const []),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 1.0,
+        );
+      }
+      last = orchestrator.processAssessment(
+        assessment: assessment([
+          RiskThreat(
+            level: CollisionRiskLevel.lv1,
+            threat: ThreatInfo(
+              kind: ThreatKind.obstacle,
+              position: const LatLng(36, 140),
+              obstacleKind: StaticObstacleKind.curve,
+              obstacleId: 'curve-a',
+            ),
+          ),
+        ]),
+        evaluatedAt: t0.add(const Duration(seconds: 4)),
+        capabilities: capabilities,
+        ownSpeedMetersPerSecond: 1.0,
+      );
+      expect(last.snapshot.audioDirective, isNull);
+      expect(last.snapshot.activeAlerts, hasLength(1));
     });
   });
 
@@ -1350,7 +1431,7 @@ void main() {
     test('数秒消えて戻った同じ脅威は単発音を鳴らし直さない', () {
       // GPSが数秒途絶えると候補が消える。復帰した瞬間に「新しい脅威」として
       // 単発音が鳴り直していた(2026-08-05 実機ログ: 桟橋で8秒周期に同期)。
-      // 測位の欠測は脅威が消えた証拠ではない(原則6)。
+      // 測位の欠測は脅威が消えた証拠ではない。
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-gap-rearm',
         sessionGeneration: 1,
@@ -1498,7 +1579,7 @@ void main() {
           'audio/other_boat_warning.mp3');
     });
 
-    test('相手の速度が取れないときは抑制しない(原則6)', () {
+    test('相手の速度が取れないときは抑制しない', () {
       final result = run(
         areas: const [dock],
         ownPosition: insideDock,
@@ -1573,8 +1654,9 @@ void main() {
       expect(result.snapshot.audioDirective?.asset, 'audio/shore_warning.mp3');
     });
 
-    test('区域内でも流木・杭は止めない(視認しづらく帰結が大きい)', () {
-      // `lowSpeedMutedCategories` に入っていない種類は桟橋でも鳴らす。
+    test('区域内では低速なら流木も確定待ちなしで止める', () {
+      // 2026-11-07 利用者決定: 低速ならすべての警告の音を止める。桟橋エリアでは
+      // 3秒の確定待ちも挟まない。
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-mooring-driftwood',
         sessionGeneration: 1,
@@ -1594,9 +1676,10 @@ void main() {
         ownSpeedMetersPerSecond: 0.2,
         ownPosition: insideDock,
       );
+      expect(result.snapshot.audioDirective, isNull);
       expect(
-        result.snapshot.audioDirective?.asset,
-        'audio/driftwood_warning.mp3',
+        result.snapshot.activeAlerts.single.candidate.reasonCodes,
+        contains('PRESENTATION_MOORING_AREA_SILENT'),
       );
     });
 
@@ -1611,7 +1694,7 @@ void main() {
           'audio/other_boat_warning.mp3');
     });
 
-    test('自艇の座標が取れないときは抑制しない(原則6)', () {
+    test('自艇の座標が取れないときは抑制しない', () {
       final result = run(
         areas: const [dock],
         ownPosition: null,
@@ -1711,7 +1794,7 @@ void main() {
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
     });
 
-    test('座標が無ければ港の中とみなさない(原則6)', () {
+    test('座標が無ければ港の中とみなさない', () {
       final result =
           shore(orchestrator('no-position'), position: null, entrySeconds: 12);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
@@ -1764,7 +1847,7 @@ void main() {
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
     });
 
-    test('港の中でも相手の速度が分からなければ他艇は繰り返す(原則6)', () {
+    test('港の中でも相手の速度が分からなければ他艇は繰り返す', () {
       final result =
           boat(orchestrator('boat-unknown'), ownSpeed: 0.5, otherSpeed: null);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);

@@ -62,7 +62,7 @@ UseLapMetrics useLapMetrics({
   }
   // 本物の測位を処理したときだけ進める(`UseNavigator.postProcessTime`)。
   // GPS が途切れている間は推測した自艇の位置が入るが、それを「漕いでいた」
-  // ことにしない(データの欠けを安全・記録の根拠にしない。原則6)。
+  // ことにしない(データの欠けを安全・記録の根拠にしない)。
   if (myBoat != null && fixProcessedAt != lastFix.value) {
     lastFix.value = fixProcessedAt;
     tracker.onPosition(

@@ -991,7 +991,7 @@ class HomeMapScreen extends HookConsumerWidget {
     // トレードオフ: 監視者が画面から目を離している間、沈・電池切れへの
     // 気づきが音では得られない。運用でそこを拾いたい場合は
     // `coachAudibleAnomalyKindNames` に種類を足すと、この経路が復活する。
-    // 異常の**表示**は常に出しており、情報は減らしていない(原則1・原則6)。
+    // 異常の**表示**は常に出しており、情報は減らしていない(原則1)。
     useEffect(() {
       final watching = navigator.mode.value == NavMode.observer &&
           navigator.isWatching.value;

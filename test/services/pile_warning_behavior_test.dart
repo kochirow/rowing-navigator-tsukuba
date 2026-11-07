@@ -11,7 +11,6 @@ void main() {
       StaticObstacleKind.driftwood.defaultProximityCautionMeters,
     );
     expect(audibleProximityCategories, contains('pile'));
-    expect(lowSpeedMutedCategories, isNot(contains('pile')));
     expect(bandCappedCategories, isNot(contains('pile')));
     expect(
       defaultWarningAudioAssetFor(StaticObstacleKind.pile),

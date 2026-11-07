@@ -252,7 +252,7 @@ class SafetyOrchestrator {
         reasonCodes: const ['REMOTE_TRACK_LOST'],
         // 表示のみ。見失った他艇を読み上げても漕ぎながら対処できず、
         // 本当に鳴るべき衝突警告を覆い隠す(原則4)。
-        // 表示は `displayUntil` まで従来どおり残す(原則1・原則6)。
+        // 表示は `displayUntil` まで従来どおり残す(原則1)。
         audioAsset: null,
       );
       byId[lostCandidate.alertId] = lostCandidate;
@@ -548,11 +548,15 @@ class SafetyOrchestrator {
             knownInputs: knownInputs,
             currentUrgency: baseUrgency,
           );
-      if (_lowSpeedAudioMuted &&
-          lowSpeedMutedCategories.contains(candidate.category) &&
-          permitted(SuppressionRules.lowSpeedStatic)) {
-        // 正常な橋下・岸際の休憩では、検知・表示・記録を残して音だけ止める。
+      if (_lowSpeedAudioMuted && permitted(SuppressionRules.lowSpeed)) {
+        // 自艇が2.0m/sより遅い間は、種類を問わず音だけ止める
+        // (2026-11-07 利用者決定)。漕手は周りを見て避けられる。他艇も止める。
+        // 相手が速く近づくなら、相手の端末で鳴る。検知・表示・記録は残す。
+        final before = behavior;
         behavior = _quieter(behavior, AlertBehavior.visualOnly);
+        if (behavior != before) {
+          extraReasonCodes.add(SuppressionRules.lowSpeed.reasonCode);
+        }
       }
       if (_isUncertaintyOnlyEntry(candidate) &&
           _isLowSpeed &&
@@ -562,12 +566,11 @@ class SafetyOrchestrator {
         // 不確かさが膨らむほど候補が現れたり消えたりして鳴り直す
         // (2026-08-05 実機ログ: 桟橋で岸の単発音が8秒周期で31回)。
         //
-        // `lowSpeedMutedCategories` の3秒確定待ちと違い、ここは状態を
-        // 持たない。確定待ちは有意接近のたびに巻き戻るため、
-        // 測位が疎で距離がぶれる場面では効かなかった。
-        // 固定物は自艇が低速なら止めてよい。一方、他艇は相手も停止して
-        // いると確認できた場合だけ静音にする。相手の速度が不明なときは
-        // 原則6により静音しない。
+        // 低速静音の3秒確定待ちと違い、ここは状態を持たない。
+        // 低速になった直後の3秒間も、誤差だけの重なりでは鳴らさない。
+        // 固定物は自艇が低速なら止めてよい。他艇はこの規則では、相手も停止
+        // していると確認できた場合だけ静音にする(低速の3秒確定前の分。
+        // 確定後は上の低速静音が他艇も含めて止める)。
         final silenceable = _canSuppressAtRest(candidate) ||
             _isOtherBoatAtRest(candidate, otherBoatSpeedById);
         if (silenceable) {
@@ -587,17 +590,14 @@ class SafetyOrchestrator {
         // その状況で岸・橋・橋脚の警告を鳴らすのは、原則4の
         // 「正常な運用で鳴る警告は不具合」に正面から当たる。
         //
-        // - 固定危険区域(`lowSpeedMutedCategories`): 相手がいないので
-        //   自艇が低速というだけで止めてよい。既存の低速静音と同じ対象だが、
-        //   **3秒の確定待ちを挟まない**。確定待ちは有意接近のたびに巻き戻り、
-        //   測位が疎な桟橋では成立しなかった。
+        // - 固定危険区域(他艇以外すべて): 相手がいないので自艇が低速というだけで
+        //   止めてよい。低速静音と同じ対象だが、**3秒の確定待ちを挟まない**
+        //   (桟橋では測位が疎で、速さがしきい値をまたいで揺れやすい)。
         // - 他艇: **双方が低速のときだけ**。相手が動いていれば従来どおり鳴る。
-        //   速度が取れない相手は抑制しない(原則6)。
+        //   速度が取れない相手は、この規則では抑制しない(低速静音が別に止める)。
         //
         // どちらも音だけを止める。表示・riskLevel・記録・位置共有は変えない。
-        final silenceStatic = lowSpeedMutedCategories.contains(
-          candidate.category,
-        );
+        final silenceStatic = candidate.category != SuppressionRules.otherBoat;
         final silenceBoat = candidate.category == 'other_boat' &&
             _isOtherBoatAtRest(candidate, otherBoatSpeedById);
         if (silenceStatic || silenceBoat) {
@@ -641,7 +641,7 @@ class SafetyOrchestrator {
           }
         }
         // 自艇も相手も出し入れの速さ未満なら、他艇も1回だけにする。
-        // 相手の速度が分からなければ permitted が false になる(原則6)。
+        // 相手の速度が分からなければ permitted が false になる。
         if (candidate.category == SuppressionRules.otherBoat &&
             _isBelow(
                 ownSpeedMetersPerSecond, harborManeuverSpeedMetersPerSecond) &&
@@ -809,9 +809,9 @@ class SafetyOrchestrator {
             .map((candidate) => candidate.alertId));
     } else if (wasStableStopped && !_stableStopped) {
       // 再航行または有意な接近で安定停止を抜けた瞬間は、新しい危険変化として
-      // 一度警告できるようにする。低速が続く場合は、ここから改めて静音を判定する。
-      _lowSpeedAudioMuteStartedAt = isAudioMuteSpeed ? evaluatedAt : null;
-      _lowSpeedAudioMuted = false;
+      // 音声エピソードを作り直す。ただし**低速静音は巻き戻さない**。
+      // 2.0m/s未満が続く限り音は止めたままにする(2026-11-07 利用者決定。
+      // 以前はここで3秒の確定待ちをやり直し、岸の2m接近のたびに鳴り直していた)。
       for (final context in _threatContexts.values) {
         context.startNewAudioEpisode();
       }
@@ -877,8 +877,7 @@ class SafetyOrchestrator {
         reverseConfirmed &&
         !reverseAudioDisabled &&
         !harborSilenced &&
-        !(_lowSpeedAudioMuted &&
-            lowSpeedMutedCategories.contains(candidate.category));
+        !_lowSpeedAudioMuted;
     return candidate.copyWith(
       behavior: AlertBehavior.entryEvent,
       audioAsset: shouldPlay ? candidate.audioAsset : null,
@@ -1005,7 +1004,7 @@ class SafetyOrchestrator {
   ///
   /// - 距離が [AlertPresentationConfig.staticOverlapClosingRateMetersPerSecond]
   ///   以上で縮まっている → 従来どおり連続音
-  /// - 距離が取得できない → 接近中として扱い連続音(原則6)
+  /// - 距離が取得できない → 接近中として扱い連続音
   /// - 縮まっていない → 1回だけ読み上げ、猶予を過ぎたら表示のみ
   /// - 再び [AlertPresentationConfig.stableStopRealertApproachMeters] 縮まったら再武装
   ///
@@ -1126,7 +1125,7 @@ class SafetyOrchestrator {
     return false;
   }
 
-  /// 速度が取れていて、[limit] 未満か。取れなければ false(原則6)。
+  /// 速度が取れていて、[limit] 未満か。取れなければ false。
   static bool _isBelow(double? speed, double limit) =>
       speed != null && speed.isFinite && speed >= 0 && speed < limit;
 
@@ -1144,7 +1143,7 @@ class SafetyOrchestrator {
 
   /// いま値が取れている静音判定の入力。
   ///
-  /// 取れていない入力を要求する規則は適用されない(原則6)。
+  /// 取れていない入力を要求する規則は適用されない。
   Set<SuppressionInput> _knownSuppressionInputs({
     required double? ownSpeedMetersPerSecond,
     required LatLng? ownPosition,
@@ -1181,8 +1180,9 @@ class SafetyOrchestrator {
 
   /// 相手も止まっているか。
   ///
-  /// **速度が取れないときは false を返す**(原則6: データ欠損は静音の
-  /// 根拠にならない)。桟橋でも、動いている艇・速度不明の艇には鳴らす。
+  /// **速度が取れないときは false を返す**(相手が止まっていると確かめられない)。
+  /// この判定を使う規則では、動いている艇・速度不明の艇には鳴らす
+  /// (自艇の低速静音は別に、相手によらず止める)。
   bool _isOtherBoatAtRest(
     AlertCandidate candidate,
     Map<String, double?> otherBoatSpeedById,
@@ -1418,7 +1418,7 @@ class _ThreatPresentationContext {
   /// 観測窓ぶんの距離差から求めた接近速度 [m/s]。正が接近。
   ///
   /// 標本が足りない、または時間差が無いときは null を返す。呼び出し側は
-  /// null を「接近中」として扱う(原則6: データ欠損は安全の根拠にならない)。
+  /// null を「接近中」として扱う。
   double? closingRateMetersPerSecond(DateTime at) {
     if (_distanceSamples.length < 2) return null;
     final first = _distanceSamples.first;
@@ -1547,7 +1547,7 @@ class _ThreatPresentationContext {
     // 途絶えて候補が消え、復帰した瞬間に「新しい脅威」として単発音が
     // 鳴り直していた。2026-08-05 の実機ログでは、桟橋で岸の単発音が
     // GPS再接続の8秒周期に同期して31回鳴っている(24回中18回が再接続の
-    // ±2秒以内)。測位の欠測は脅威が消えた証拠ではない(原則6)。
+    // ±2秒以内)。測位の欠測は脅威が消えた証拠ではない。
     //
     // 据え置いても連続音は止まらない。持続音は directive が消えた時点で
     // 停止し、戻れば再開する。据え置きが効くのは `playOnce` の

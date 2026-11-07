@@ -17,7 +17,7 @@ import '../../../widgets/app_state_views.dart';
 ///   本当にまずい艇が埋もれる(DESIGN_PRINCIPLES 原則4)
 ///
 /// **どの種類でも情報は減らさない。** ラベル・継続時間・最終更新秒数は
-/// 常に出す(原則1・原則6)。変えるのは目立たせ方だけ。
+/// 常に出す(原則1)。変えるのは目立たせ方だけ。
 class BoatListPanel extends StatelessWidget {
   final List<BoatStatus> statuses;
 

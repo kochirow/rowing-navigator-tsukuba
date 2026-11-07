@@ -2253,7 +2253,7 @@ UseNavigator useNavigator() {
       //
       // 隻数は見ない。0隻は正常状態でもあり得る(最初に出艇した艇、
       // 他艇が全部上がった後)。「他艇がいない」と「他艇を受信できる状態を
-      // 確認できない」を区別する(原則6)。
+      // 確認できない」を区別する。
       //
       // 2026-08-06 実機ログ: 1台が2セッション118分ずっと unavailable の
       // まま走り、他艇を1隻も受信しなかったのに何も表示されなかった。
@@ -2495,7 +2495,7 @@ UseNavigator useNavigator() {
       //
       // 推測航法の推定は「入力が無い」ではなく「劣化した入力がある」である。
       // 直後に空評価で「入力なし」と宣言するのは自己矛盾であり、
-      // データ欠損を警告解除の根拠にしてはいけない(原則6)。
+      // データ欠損を警告解除の根拠にしてはいけない。
       // GPS断そのものは `buildSystemCandidates` の `gps_unavailable` と
       // `capabilities.gpsUsable` が従来どおり表現する(不変条件3)。
       var appliedAssessmentThisTick = false;
@@ -2731,7 +2731,7 @@ UseNavigator useNavigator() {
           ? null
           : LatLng(myBoat.value!.lat, myBoat.value!.lng),
       // 桟橋での静音は「双方が低速」でだけ成立する。速度が取れない艇は
-      // 抑制対象にしない(原則6)ため、取れたものだけを渡す。
+      // 抑制対象にしないため、取れたものだけを渡す。
       otherBoatSpeedById: {
         for (final boat in otherBoats.value) boat.boatId: boat.speed,
       },

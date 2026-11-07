@@ -195,8 +195,8 @@ class ObserverBackgroundAlertPolicy {
     if (message.speed.isFinite && message.speed < stoppedSpeedForAlert) {
       next.stoppedSince ??= observedAt;
     } else {
-      // 速度が分からないときも「止まっている」とは数えない(原則6の裏返しで、
-      // 欠損を通知の根拠にしない)。動き出したら再武装する。
+      // 速度が分からないときも「止まっている」とは数えない(欠損を通知の
+      // 根拠にしない)。動き出したら再武装する。
       next
         ..stoppedSince = null
         ..stoppedHandled = false;

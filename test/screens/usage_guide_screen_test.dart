@@ -108,7 +108,7 @@ void main() {
 
   testWidgets('故障かな？の秒数・速度は設定値から出す', (tester) async {
     await tester.pumpWidget(_app(const TroubleshootingGuidePage()));
-    expect(find.textContaining('分速100mより遅い間'), findsOneWidget);
+    expect(find.textContaining('分速120mより遅い間'), findsOneWidget);
     expect(
       find.textContaining('陸側に${ashoreConfirmationDuration.inSeconds}秒いると'),
       findsOneWidget,

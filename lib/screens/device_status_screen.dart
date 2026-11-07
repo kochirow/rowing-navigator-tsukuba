@@ -120,7 +120,7 @@ class DeviceStatusScreen extends StatelessWidget {
               _Row(
                 '受信中の他艇',
                 sharingCapabilityUnconfirmed
-                    // 0隻を「他艇がいない」と読ませない(原則6)。
+                    // 0隻を「他艇がいない」と読ませない。
                     ? '確認できません'
                     : '$otherBoatCount 隻',
               ),

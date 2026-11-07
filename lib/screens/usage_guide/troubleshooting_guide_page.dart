@@ -22,7 +22,7 @@ class TroubleshootingGuidePage extends StatelessWidget {
 
   static const title = '故障かな？と思ったら';
 
-  /// 1.667m/s → "分速100m"。
+  /// 2.0m/s → "分速120m"。
   static String get lowSpeedText =>
       '分速${(lowSpeedAudioMuteSpeedMetersPerSecond * 60).round()}m';
 
@@ -52,11 +52,11 @@ class TroubleshootingGuidePage extends StatelessWidget {
         padding: EdgeInsets.all(dimens.space4),
         children: [
           GuideTroubleItem(
-            symptom: '止まっている・ゆっくり進んでいると、橋や岸の音が鳴らない',
-            reason: '$lowSpeedTextより遅い間は、橋・橋脚・岸・逆走の音を止めています。'
-                '止まっている間は、ほかの固定の危険区域の音も止めます。'
-                '休憩中やコーチの指示を聞いている間に鳴らないようにするためです。'
-                '画面の表示は続き、他の艇の警告は止めません。',
+            symptom: '止まっている・ゆっくり進んでいると、警告が鳴らない',
+            reason: '$lowSpeedTextより遅い間は、他の艇を含むすべての警告の音を止めています。'
+                'この速さなら周りを見て避けられるためです。'
+                '休憩中・他の艇と並んで止まっている間・コーチの指示を聞いている間も鳴りません。'
+                '画面の表示は続きます。速く近づいてくる艇があれば、その艇の端末で鳴ります。',
             action: '故障ではありません。漕ぎ出せば戻ります。',
           ),
           GuideTroubleItem(

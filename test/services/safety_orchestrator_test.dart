@@ -513,7 +513,7 @@ void main() {
     );
     // 途絶そのものは読み上げない。漕ぎながら対処できない情報を鳴らすと、
     // 本当に鳴るべき衝突警告を覆い隠す(原則4)。
-    // 表示は `displayUntil` まで残るので、失われたことは分かる(原則1・6)。
+    // 表示は `displayUntil` まで残るので、失われたことは分かる(原則1)。
     expect(afterHold.snapshot.audioDirective, isNull);
     expect(afterHold.snapshot.oneShotAudioCues, isEmpty);
   });
@@ -851,7 +851,9 @@ void main() {
     expect(stopped.snapshot.audioDirective, isNull);
   });
 
-  test('安定停止中でも接近する他艇の緊急警告は反復を維持する', () {
+  // 2026-11-07 利用者決定: 自艇が2.0m/sより遅ければ他艇も音を止める。
+  // 相手が速く近づくなら相手の端末で鳴る。表示は残す。
+  test('自艇が低速なら接近する他艇の警告も音を止め、表示は残す', () {
     final orchestrator = SafetyOrchestrator(
       sessionId: 'session-stopped-other-boat',
       sessionGeneration: 1,
@@ -890,11 +892,18 @@ void main() {
         alert.candidate.category: alert.candidate.behavior,
     };
     expect(byCategory['shore'], AlertBehavior.visualOnly);
-    expect(byCategory['other_boat'], AlertBehavior.continuousAction);
-    expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    expect(byCategory['other_boat'], AlertBehavior.visualOnly);
+    expect(
+      result.snapshot.activeAlerts
+          .singleWhere((alert) => alert.candidate.category == 'other_boat')
+          .candidate
+          .reasonCodes,
+      contains('PRESENTATION_LOW_SPEED_SILENT'),
+    );
+    expect(result.snapshot.audioDirective, isNull);
   });
 
-  test('安定停止から再航行または2m接近すると同一脅威を再警告する', () {
+  test('安定停止から再航行すると同一脅威を再警告し、低速のまま2m近づいても鳴らさない', () {
     RiskAssessment dangerAt(double distance) => assessment([
           staticThreat(
             'shore-rest',
@@ -912,7 +921,7 @@ void main() {
       assessment: dangerAt(10),
       evaluatedAt: t0,
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     for (var seconds = 1; seconds <= 6; seconds++) {
       resumed.processAssessment(
@@ -926,7 +935,7 @@ void main() {
       assessment: dangerAt(10),
       evaluatedAt: t0.add(const Duration(seconds: 7)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     expect(movingAgain.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
 
@@ -938,7 +947,7 @@ void main() {
       assessment: dangerAt(10),
       evaluatedAt: t0,
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     for (var seconds = 1; seconds <= 6; seconds++) {
       drifting.processAssessment(
@@ -954,14 +963,11 @@ void main() {
       capabilities: capabilities,
       ownSpeedMetersPerSecond: 0.2,
     );
-    expect(
-      closer.snapshot.audioDirective?.mode,
-      AudioDirectiveMode.playOnce,
-    );
-    expect(
-      closer.snapshot.audioDirective?.eventId,
-      isNot(driftInitial.snapshot.audioDirective?.eventId),
-    );
+    // 2.0m/s未満のままなら、2m近づいても低速静音を巻き戻さない
+    // (2026-11-07 利用者決定)。表示は残る。
+    expect(driftInitial.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
+    expect(closer.snapshot.audioDirective, isNull);
+    expect(closer.snapshot.activeAlerts, hasLength(1));
   });
 
   test('危険区域内で低速になった直後から反復せず5秒後に無音表示へ移る', () {
@@ -1016,7 +1022,7 @@ void main() {
     expect(stable.snapshot.audioDirective, isNull);
   });
 
-  test('安定停止中でも別の固定障害物へ遷移したときは単発警告する', () {
+  test('低速の間は別の固定障害物が現れても音を出さず、表示には加える', () {
     final orchestrator = SafetyOrchestrator(
       sessionId: 'session-new-threat',
       sessionGeneration: 1,
@@ -1031,7 +1037,7 @@ void main() {
       assessment: assessment([existing]),
       evaluatedAt: t0,
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     for (var seconds = 1; seconds <= 6; seconds++) {
       orchestrator.processAssessment(
@@ -1066,13 +1072,13 @@ void main() {
     );
 
     expect(
-      changed.state.primaryAlert?.candidate.targetId,
-      'driftwood-new',
+      changed.snapshot.activeAlerts.map((alert) => alert.candidate.targetId),
+      contains('driftwood-new'),
     );
-    expect(changed.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);
+    expect(changed.snapshot.audioDirective, isNull);
   });
 
-  test('安定停止中の同一脅威が短時間欠落しても単発イベントを作り直さない', () {
+  test('低速の間は同一脅威が短時間欠落して戻っても音を出さない', () {
     final orchestrator = SafetyOrchestrator(
       sessionId: 'session-stable-jitter',
       sessionGeneration: 1,
@@ -1106,8 +1112,8 @@ void main() {
       capabilities: capabilities,
       ownSpeedMetersPerSecond: 0.2,
     );
-    final eventId = announced.snapshot.audioDirective?.eventId;
-    expect(eventId, isNotNull);
+    expect(announced.snapshot.audioDirective, isNull);
+    expect(announced.snapshot.activeAlerts, hasLength(1));
 
     orchestrator.processAssessment(
       assessment: safe,
@@ -1122,7 +1128,8 @@ void main() {
       ownSpeedMetersPerSecond: 0.2,
     );
 
-    expect(returned.snapshot.audioDirective?.eventId, eventId);
+    expect(returned.snapshot.audioDirective, isNull);
+    expect(returned.snapshot.activeAlerts, hasLength(1));
   });
 
   // 逆走の再武装は60秒(reverseGuidanceRearmDuration)なので、
@@ -1149,7 +1156,7 @@ void main() {
       assessment: inside,
       evaluatedAt: t0,
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     final firstEvent = firstEntry.snapshot.audioDirective?.eventId;
     expect(
@@ -1159,7 +1166,7 @@ void main() {
       assessment: inside,
       evaluatedAt: t0.add(const Duration(seconds: 1)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     expect(staying.snapshot.audioDirective?.eventId, firstEvent);
 
@@ -1167,13 +1174,13 @@ void main() {
       assessment: outside,
       evaluatedAt: t0.add(const Duration(seconds: 2)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     final tooSoon = orchestrator.processAssessment(
       assessment: inside,
       evaluatedAt: t0.add(const Duration(seconds: 4)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     expect(tooSoon.snapshot.audioDirective, isNull);
     expect(tooSoon.snapshot.activeAlerts, hasLength(1));
@@ -1182,21 +1189,21 @@ void main() {
       assessment: outside,
       evaluatedAt: t0.add(const Duration(seconds: 5)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     for (var seconds = 6; seconds < 10; seconds++) {
       orchestrator.processAssessment(
         assessment: outside,
         evaluatedAt: t0.add(Duration(seconds: seconds)),
         capabilities: capabilities,
-        ownSpeedMetersPerSecond: 1,
+        ownSpeedMetersPerSecond: 3,
       );
     }
     final reentered = orchestrator.processAssessment(
       assessment: inside,
       evaluatedAt: t0.add(const Duration(seconds: 10)),
       capabilities: capabilities,
-      ownSpeedMetersPerSecond: 1,
+      ownSpeedMetersPerSecond: 3,
     );
     expect(
         reentered.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);

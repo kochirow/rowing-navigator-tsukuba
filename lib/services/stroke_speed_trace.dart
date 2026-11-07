@@ -7,7 +7,7 @@ import '../config/stroke_trace_config.dart';
 ///
 /// 時刻はエポックミリ秒の double。描画側は「窓の左端＝[startMs]、
 /// 右端＝[endMs]」として横位置を決める。データが右端まで無い場合は
-/// そこで線が途切れる。空白を勝手に埋めない(原則6)。
+/// そこで線が途切れる。空白を勝手に埋めない。
 class StrokeSpeedTraceWindow {
   /// 各点のエポックミリ秒(昇順)。
   final Float64List timesMs;

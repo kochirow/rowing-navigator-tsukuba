@@ -85,7 +85,7 @@ class AshoreState {
 ///
 /// `ashoreAreas` だけを読む。航路・廃止済みの練習水域・岸の基準線は参照しないため、
 /// 岸の頂点順や航路ポリゴンの欠損で水上の音が止まることはない。
-/// エリアが無い・壊れている場合も必ず水上扱いにする（原則6）。
+/// エリアが無い・壊れている場合も必ず水上扱いにする。
 /// 純Dart。検知・表示・記録・位置共有には一切影響しない。
 class AshoreDetector {
   static const double _earthRadiusMeters = 6378137.0;
