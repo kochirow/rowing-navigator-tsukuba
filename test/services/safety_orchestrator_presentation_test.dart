@@ -1832,18 +1832,18 @@ void main() {
           healthyBoatIds: const {'other-1'},
         );
 
-    test('港の中で自艇も相手も1.5m/s未満なら、他艇を1回だけ読み上げる', () {
+    test('港の中で自艇も相手も2.0m/s未満なら、他艇を1回だけ読み上げる', () {
       final result =
-          boat(orchestrator('boat-slow'), ownSpeed: 0.5, otherSpeed: 1.0);
+          boat(orchestrator('boat-slow'), ownSpeed: 0.5, otherSpeed: 1.8);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);
       final candidate = result.snapshot.activeAlerts.single.candidate;
       expect(candidate.reasonCodes, contains('PRESENTATION_HARBOR_SINGLE'));
       expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
     });
 
-    test('港の中でも相手が1.5m/s以上なら他艇は今までどおり繰り返す', () {
+    test('港の中でも相手が2.0m/s以上なら他艇は今までどおり繰り返す', () {
       final result =
-          boat(orchestrator('boat-fast'), ownSpeed: 0.5, otherSpeed: 2.0);
+          boat(orchestrator('boat-fast'), ownSpeed: 0.5, otherSpeed: 2.5);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
     });
 
