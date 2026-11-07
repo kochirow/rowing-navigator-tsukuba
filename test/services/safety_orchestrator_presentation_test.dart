@@ -988,7 +988,7 @@ void main() {
             ]),
             evaluatedAt: t0.add(Duration(seconds: second)),
             capabilities: capabilities,
-            // 2.0m/s未満。橋の下・岸際で休憩している正常な運用。
+            // 分速100m未満。橋の下・岸際で休憩している正常な運用。
             ownSpeedMetersPerSecond: 0.2,
           );
 
@@ -1316,7 +1316,7 @@ void main() {
           result.snapshot.audioDirective?.asset, 'audio/driftwood_warning.mp3');
     });
 
-    // 2026-11-07 利用者決定: 自艇が2.0m/sより遅い間は、すべての警告の
+    // 2026-11-07 利用者決定: 自艇が分速100mより遅い間は、すべての警告の
     // 音を止める。他艇も、相手の速度が分からなくても止める。表示は残す。
     test('低速が3秒続くと流木も他艇も音を止め、表示は残す', () {
       final orchestrator = SafetyOrchestrator(
@@ -1354,7 +1354,7 @@ void main() {
       }
     });
 
-    test('2.0m/s以上に戻れば、低速の間に出ていた警告が鳴る', () {
+    test('分速100m以上に戻れば、低速の間に出ていた警告が鳴る', () {
       final orchestrator = SafetyOrchestrator(
         sessionId: 'session-low-speed-resume',
         sessionGeneration: 1,
@@ -1832,16 +1832,16 @@ void main() {
           healthyBoatIds: const {'other-1'},
         );
 
-    test('港の中で自艇も相手も2.0m/s未満なら、他艇を1回だけ読み上げる', () {
+    test('港の中で自艇も相手も分速100m未満なら、他艇を1回だけ読み上げる', () {
       final result =
-          boat(orchestrator('boat-slow'), ownSpeed: 0.5, otherSpeed: 1.8);
+          boat(orchestrator('boat-slow'), ownSpeed: 0.5, otherSpeed: 1.5);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.playOnce);
       final candidate = result.snapshot.activeAlerts.single.candidate;
       expect(candidate.reasonCodes, contains('PRESENTATION_HARBOR_SINGLE'));
       expect(candidate.internalPriority, CollisionRiskLevel.lv3.index);
     });
 
-    test('港の中でも相手が2.0m/s以上なら他艇は今までどおり繰り返す', () {
+    test('港の中でも相手が分速100m以上なら他艇は今までどおり繰り返す', () {
       final result =
           boat(orchestrator('boat-fast'), ownSpeed: 0.5, otherSpeed: 2.5);
       expect(result.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);

@@ -69,11 +69,11 @@ void main() {
       expect(defaultHarborShoreAudioStartDeadline, longest);
     });
 
-    test('港の中の出し入れの速さは、低速の定義(2.0m/s)と同じ', () {
-      // 2026-11-07 利用者決定: すべての「低速」を2.0m/sに揃える。
+    test('港の中の出し入れの速さは、低速の定義(1.67m/s)と同じ', () {
+      // 2026-11-07 利用者決定: すべての「低速」を1つの値に揃える。
       expect(harborManeuverSpeedMetersPerSecond,
           lowSpeedAudioMuteSpeedMetersPerSecond);
-      expect(harborManeuverSpeedMetersPerSecond, 2.0);
+      expect(harborManeuverSpeedMetersPerSecond, 100 / 60);
       expect(harborManeuverSpeedMetersPerSecond,
           greaterThan(config.stableStopSpeedMetersPerSecond));
     });

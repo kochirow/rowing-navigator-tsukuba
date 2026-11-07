@@ -22,7 +22,7 @@ class TroubleshootingGuidePage extends StatelessWidget {
 
   static const title = '故障かな？と思ったら';
 
-  /// 2.0m/s → "分速120m"。
+  /// 1.667m/s → "分速100m"。
   static String get lowSpeedText =>
       '分速${(lowSpeedAudioMuteSpeedMetersPerSecond * 60).round()}m';
 

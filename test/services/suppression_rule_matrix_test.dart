@@ -42,7 +42,7 @@ void main() {
     // 入力はすべて既知、切迫度は continuous(連続音が鳴る段階)とする。
     const expected = <String, Map<String, bool>>{
       'low_speed': {
-        // 自艇が2.0m/sより遅ければ他艇も止める(2026-11-07 利用者決定)。
+        // 自艇が分速100mより遅ければ他艇も止める(2026-11-07 利用者決定)。
         // 相手が速く近づくなら、相手の端末で鳴る。
         'other_boat': true,
         'shore': true,
