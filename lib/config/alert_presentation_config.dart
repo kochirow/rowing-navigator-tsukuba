@@ -249,10 +249,13 @@ const harborShoreLeadMarginSeconds = 1.0;
 
 /// 港の中で「艇を出し入れしている」とみなす速さ [m/s]。
 ///
-/// 巡航速度(3〜5m/s。DESIGN_PRINCIPLES 1.3)の下限の半分。桟橋で艇を寄せる・
-/// 離す・向きを変える速さ。自艇も相手もこれ未満なら、他艇の警告を1回だけに
-/// する。相手が速い、または速度が分からなければ今までどおり繰り返す。
-const harborManeuverSpeedMetersPerSecond = 1.5;
+/// **低速の定義は1つ(2.0m/s)に揃える**(2026-11-07 利用者決定)ので、
+/// [lowSpeedAudioMuteSpeedMetersPerSecond] をそのまま使う。自艇も相手もこれ未満なら、
+/// 他艇の警告を1回だけにする。相手が速い、または速度が分からなければ今までどおり繰り返す。
+/// 自艇の低速が3秒続けば低速静音がすべての音を止めるので、この規則が働くのは
+/// 低速になった直後の3秒間である。
+const harborManeuverSpeedMetersPerSecond =
+    lowSpeedAudioMuteSpeedMetersPerSecond;
 
 /// 艇種の停止時間 [秒]。停止距離の式に 1m/s を入れた値(式が速さに比例するため)。
 double stoppingTimeSecondsFor(BoatType type) =>
