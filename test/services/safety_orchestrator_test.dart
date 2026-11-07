@@ -851,7 +851,7 @@ void main() {
     expect(stopped.snapshot.audioDirective, isNull);
   });
 
-  // 2026-11-07 利用者決定: 自艇が分速100mより遅ければ他艇も音を止める。
+  // 2026-11-07 利用者決定: 自艇が2.0m/sより遅ければ他艇も音を止める。
   // 相手が速く近づくなら相手の端末で鳴る。表示は残す。
   test('自艇が低速なら接近する他艇の警告も音を止め、表示は残す', () {
     final orchestrator = SafetyOrchestrator(
@@ -963,7 +963,7 @@ void main() {
       capabilities: capabilities,
       ownSpeedMetersPerSecond: 0.2,
     );
-    // 分速100m未満のままなら、2m近づいても低速静音を巻き戻さない
+    // 2.0m/s未満のままなら、2m近づいても低速静音を巻き戻さない
     // (2026-11-07 利用者決定)。表示は残る。
     expect(driftInitial.snapshot.audioDirective?.mode, AudioDirectiveMode.loop);
     expect(closer.snapshot.audioDirective, isNull);
