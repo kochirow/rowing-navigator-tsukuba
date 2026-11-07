@@ -46,6 +46,50 @@ void main() {
     expect(result.output!.representativePoint.latitude, 36);
   });
 
+  test('前の点の精度が悪いときは、その分だけ遠い正しい測位を受け付ける', () {
+    // 2026-11-07 実機: 開始直後の1点が精度121m・実際から約320mずれていて、
+    // 次の正しい測位(精度3.5m)を約40秒捨て続けた。
+    final estimator = ConservativePositionEstimator();
+    estimator.update(
+      fix: ConservativeFix(
+        position: const LatLng(36.07956, 140.21663),
+        timestamp: DateTime.utc(2026, 11, 6, 21, 13, 24),
+        elapsed: Duration.zero,
+        accuracyMeters: 121.5,
+        speedMetersPerSecond: 0,
+        headingDegrees: 0,
+      ),
+    );
+    final result = estimator.update(
+      fix: ConservativeFix(
+        position: const LatLng(36.08173, 140.21432),
+        timestamp: DateTime.utc(2026, 11, 6, 21, 13, 33),
+        elapsed: const Duration(seconds: 9),
+        accuracyMeters: 3.5,
+        speedMetersPerSecond: 0,
+        headingDegrees: 0,
+      ),
+    );
+    expect(result.accepted, isTrue);
+    expect(result.output!.representativePoint.latitude, 36.08173);
+  });
+
+  test('前の点の精度が良ければ、精度の悪い新しい測位の飛びは今までどおり捨てる', () {
+    final estimator = ConservativePositionEstimator();
+    estimator.update(fix: fix(seconds: 0, latitude: 36));
+    final result = estimator.update(
+      fix: ConservativeFix(
+        position: const LatLng(36.001, 140),
+        timestamp: DateTime.utc(2026, 8, 6, 12, 0, 1),
+        elapsed: const Duration(seconds: 1),
+        accuracyMeters: 121.5,
+        speedMetersPerSecond: 4,
+        headingDegrees: 0,
+      ),
+    );
+    expect(result.accepted, isFalse);
+  });
+
   test('航行中の集合はカプセルで、横方向に前方距離ほど膨らまない', () {
     final estimator = ConservativePositionEstimator();
     estimator.update(fix: fix(seconds: 0, latitude: 36));

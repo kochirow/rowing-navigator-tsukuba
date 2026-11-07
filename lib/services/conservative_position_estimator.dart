@@ -117,10 +117,18 @@ class ConservativePositionEstimator {
         ? 0.0
         : distanceMeters(_lastRawPosition!, fix.position);
     if (previous != null && dt > Duration.zero) {
+      // 比べる相手(前の点)の精度も許容に足す。前の点そのものがずれていれば、
+      // 正しい測位はその分だけ遠くに出る。足さないと、精度の悪い
+      // 1点(2026-11-07 実機: 開始直後に精度121m・実際から320m)に比べる相手が
+      // 固定され、8m/s×経過秒が距離を超えるまで(約40秒)正しい測位を捨て続けた。
+      // 棄却しても前の点は更新しないので、相手の精度で許すしかない。
+      // 新しい測位の精度は足さない。精度の悪い単発の飛びを通してしまう。
       final allowed = conservativeMaxBoatSpeedMetersPerSecond *
               dt.inMicroseconds /
               Duration.microsecondsPerSecond +
-          conservativeOutlierAllowanceMeters;
+          conservativeOutlierAllowanceMeters +
+          conservativeOutlierPreviousAccuracyFactor *
+              previous.uncertaintyMeters;
       if (displacement > allowed) {
         return ConservativeUpdateResult(output: previous, accepted: false);
       }

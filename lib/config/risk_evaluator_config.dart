@@ -56,7 +56,16 @@ const reachableMaxTurnRateRadPerSecond = 0.2;
 const conservativeMaxBoatSpeedMetersPerSecond = 8.0;
 
 /// 到達可能速度だけでは説明できないGNSSばらつきの固定余裕 [m]。
+/// 実際の許容には、これに前の点の精度×[conservativeOutlierPreviousAccuracyFactor]を足す。
 const conservativeOutlierAllowanceMeters = 15.0;
+
+/// 位置飛びの棄却で、前の点の精度に掛けて許容に足す倍率。
+///
+/// iOS の精度(horizontalAccuracy)は、おおむね7割の測位が入る円の半径である。
+/// 前の点が精度の2〜3倍ずれていることは珍しくない(2026-11-07 実機: 精度121mの点が
+/// 実際から317m。精度の2.6倍)。3倍なら、精度4mの普通の点では許容が12m増えるだけで、
+/// 50m級の単発の飛びは今までどおり捨てる。精度の悪い点だけが早く置き換わる。
+const conservativeOutlierPreviousAccuracyFactor = 3.0;
 
 // =====================================================
 // 静的危険区域への近接補助距離 [m](kind別)
