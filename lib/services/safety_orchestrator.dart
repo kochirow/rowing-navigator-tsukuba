@@ -3,21 +3,29 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/alert_presentation_config.dart';
 import '../config/warning_audio_config.dart';
 import '../models/alert_candidate.dart';
+import '../models/boat_model.dart';
 import '../models/safety_snapshot.dart';
 import '../models/static_obstacle_model.dart';
 import '../utils/winding_algorithm.dart';
 import 'alert_state_machine.dart';
 import 'collision_risk_evaluator_service.dart';
 import 'reverse_guidance_debouncer.dart';
+import 'side_by_side_detector.dart';
 import 'suppression_rule.dart';
 
 class SafetyOrchestratorResult {
   final SafetySnapshot snapshot;
   final AlertStateMachineOutput state;
 
+  /// この評価で並走が始まった艇・終わった艇(診断ログ用)。
+  final Set<String> sideBySideStarted;
+  final Set<String> sideBySideEnded;
+
   const SafetyOrchestratorResult({
     required this.snapshot,
     required this.state,
+    this.sideBySideStarted = const {},
+    this.sideBySideEnded = const {},
   });
 }
 
@@ -65,6 +73,11 @@ class SafetyOrchestrator {
   final Map<String, ReverseGuidanceDebouncer> _reverseGuidanceDebouncers = {};
   final Set<String> _reverseGuidanceAlertIds = {};
   final Set<String> _stableExistingThreatIds = {};
+
+  /// 並走している艇(2026-11-07 利用者決定)。その艇への他艇警告は表示だけにし、
+  /// 並走中は逆走注意を読み上げない。判定は [SideBySideDetector]。
+  final SideBySideDetector _sideBySideDetector = SideBySideDetector();
+  Set<String> _sideBySideBoatIds = const {};
 
   /// どちらかのチャンネルで処理済みの音声イベント。alertIdごとに最後の1件。
   ///
@@ -164,8 +177,16 @@ class SafetyOrchestrator {
     double? ownSpeedMetersPerSecond,
     LatLng? ownPosition,
     Map<String, double?> otherBoatSpeedById = const {},
+    Boat? ownBoat,
+    Iterable<Boat> otherBoats = const [],
   }) {
     final observationId = '$sessionId:${_revision + 1}';
+    // 並走の判定には、受信が新しい艇だけを使う。途絶えた艇を並走のまま残さない。
+    final previousSideBySide = _sideBySideBoatIds;
+    _sideBySideBoatIds = _sideBySideDetector.update(
+      own: ownBoat,
+      others: otherBoats.where((boat) => healthyBoatIds.contains(boat.boatId)),
+    );
     final byId = <String, AlertCandidate>{};
     // 直前まで警告対象だった艇は、freshな受信を確認できない限り
     // 「安全になった」とみなさない。受信層のTTLで一覧から一気に消えた
@@ -381,7 +402,12 @@ class SafetyOrchestrator {
         active.map((alert) => alert.candidate.alertId),
       ),
     );
-    return SafetyOrchestratorResult(snapshot: snapshot, state: state);
+    return SafetyOrchestratorResult(
+      snapshot: snapshot,
+      state: state,
+      sideBySideStarted: _sideBySideBoatIds.difference(previousSideBySide),
+      sideBySideEnded: previousSideBySide.difference(_sideBySideBoatIds),
+    );
   }
 
   /// system faultの画面表示を残し、音声だけを必ず外す。
@@ -548,6 +574,17 @@ class SafetyOrchestrator {
             knownInputs: knownInputs,
             currentUrgency: baseUrgency,
           );
+      if (candidate.category == SuppressionRules.otherBoat &&
+          _sideBySideBoatIds.contains(candidate.targetId) &&
+          permitted(SuppressionRules.sideBySide)) {
+        // 並走している相手は、少なくとも片方が見ている(2026-11-07 利用者決定)。
+        // オールが当たる距離でも鳴らさない。表示・記録は残す。
+        final before = behavior;
+        behavior = _quieter(behavior, AlertBehavior.visualOnly);
+        if (behavior != before) {
+          extraReasonCodes.add(SuppressionRules.sideBySide.reasonCode);
+        }
+      }
       if (_lowSpeedAudioMuted && permitted(SuppressionRules.lowSpeed)) {
         // 自艇が分速100mより遅い間は、種類を問わず音だけ止める
         // (2026-11-07 利用者決定)。漕手は周りを見て避けられる。他艇も止める。
@@ -861,11 +898,21 @@ class SafetyOrchestrator {
     final isConfirmedReverse =
         candidate.category == StaticObstacleKind.reverse.name &&
             candidate.reasonCodes.contains('reverse_direction_confirmed');
-    final reverseConfirmed = isConfirmedReverse
-        ? _reverseGuidanceDebouncers
-            .putIfAbsent(candidate.alertId, ReverseGuidanceDebouncer.new)
-            .update(isReverse: true, at: evaluatedAt)
-        : true;
+    // 並走中は逆走注意を読み上げない(横に並ぶと片方は必ず地図上の逆側を通る)。
+    // 並走が解けたら6秒の確認をやり直すため、確認の途中経過も消す。
+    final sideBySideSilenced =
+        candidate.category == StaticObstacleKind.reverse.name &&
+            _sideBySideBoatIds.isNotEmpty;
+    if (sideBySideSilenced) {
+      _reverseGuidanceDebouncers[candidate.alertId]?.reset();
+    }
+    final reverseConfirmed = sideBySideSilenced
+        ? false
+        : isConfirmedReverse
+            ? _reverseGuidanceDebouncers
+                .putIfAbsent(candidate.alertId, ReverseGuidanceDebouncer.new)
+                .update(isReverse: true, at: evaluatedAt)
+            : true;
     final reverseAudioDisabled =
         candidate.category == StaticObstacleKind.reverse.name &&
             !_reverseGuidanceAudioEnabled;
@@ -886,7 +933,9 @@ class SafetyOrchestrator {
       clearAudioEventId: !shouldPlay,
       reasonCodes: [
         ...candidate.reasonCodes,
-        if (!reverseConfirmed)
+        if (sideBySideSilenced)
+          SuppressionRules.sideBySide.reasonCode
+        else if (!reverseConfirmed)
           'REVERSE_CONFIRM_PENDING'
         else if (harborSilenced)
           SuppressionRules.harborGuidance.reasonCode

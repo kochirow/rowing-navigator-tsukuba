@@ -1,12 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rowing_navigator/models/alert_candidate.dart';
+import 'package:rowing_navigator/models/boat_model.dart';
 import 'package:rowing_navigator/models/safety_snapshot.dart';
 import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
 import 'package:rowing_navigator/services/continuous_collision_service.dart';
 import 'package:rowing_navigator/services/safety_orchestrator.dart';
+import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/types/collision_risk_level.dart';
+import 'package:rowing_navigator/utils/geo_math.dart';
 
 /// 実機ログ(2026-07-26)で判明した過剰警告・無発報への対策を固定する。
 ///
@@ -1876,6 +1879,108 @@ void main() {
         ownSpeedMetersPerSecond: 2.5,
         ownPosition: outsideHarbor,
       );
+      expect(
+          result.snapshot.audioDirective?.asset, 'audio/reverse_warning.mp3');
+    });
+  });
+
+  // ---- 並走(2026-11-07 利用者決定) ----
+
+  group('並走', () {
+    const start = LatLng(36.075, 140.21);
+    const heading = 115.0;
+
+    Boat boat(String id, int second, {double lateral = 0}) {
+      final forward = computeOffset(start, 3.5 * second, heading);
+      final position = computeOffset(forward, lateral, heading + 90);
+      return Boat(
+        boatId: id,
+        boatType: BoatType.r_4p,
+        lat: position.latitude,
+        lng: position.longitude,
+        heading: heading,
+        speed: 3.5,
+        timestamp: t0.add(Duration(seconds: second)),
+      );
+    }
+
+    SafetyOrchestratorResult step(
+      SafetyOrchestrator orchestrator,
+      int second,
+      List<RiskThreat> threats, {
+      bool sideBySide = true,
+    }) =>
+        orchestrator.processAssessment(
+          assessment: assessment(threats),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 3.5,
+          ownBoat: boat('own', second),
+          otherBoats: [boat('partner', second, lateral: sideBySide ? 8 : 60)],
+          healthyBoatIds: const {'partner', 'third'},
+        );
+
+    test('並走している相手への他艇警告は表示だけにする', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'side-by-side-partner',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult? result;
+      for (var second = 0; second <= 12; second++) {
+        result = step(orchestrator, second, [boatThreat(boatId: 'partner')]);
+      }
+      expect(result!.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_SIDE_BY_SIDE_SILENT'));
+    });
+
+    test('並走になる前(10秒未満)は今までどおり鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'side-by-side-before',
+        sessionGeneration: 1,
+      );
+      final result = step(orchestrator, 0, [boatThreat(boatId: 'partner')]);
+      expect(result.snapshot.audioDirective, isNotNull);
+    });
+
+    test('並走していない3艇目の他艇警告は鳴らす', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'side-by-side-third',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult? result;
+      for (var second = 0; second <= 12; second++) {
+        result = step(orchestrator, second, [boatThreat(boatId: 'third')]);
+      }
+      expect(result!.snapshot.audioDirective, isNotNull);
+    });
+
+    test('並走中は逆走注意を読み上げず、解けたら6秒の確認をやり直す', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'side-by-side-reverse',
+        sessionGeneration: 1,
+      );
+      final reverse = guidanceThreat(
+        StaticObstacleKind.reverse,
+        reverseDirectionConfirmed: true,
+      );
+      SafetyOrchestratorResult? result;
+      for (var second = 0; second <= 20; second++) {
+        result = step(orchestrator, second, [reverse]);
+      }
+      expect(result!.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_SIDE_BY_SIDE_SILENT'));
+
+      // 相手が離れて並走が解ける。6秒たつまでは鳴らさない。
+      final ended = step(orchestrator, 21, [reverse], sideBySide: false);
+      expect(ended.sideBySideEnded, {'partner'});
+      expect(ended.snapshot.audioDirective, isNull);
+      for (var second = 22; second <= 26; second++) {
+        result = step(orchestrator, second, [reverse], sideBySide: false);
+        expect(result.snapshot.audioDirective, isNull);
+      }
+      result = step(orchestrator, 27, [reverse], sideBySide: false);
       expect(
           result.snapshot.audioDirective?.asset, 'audio/reverse_warning.mp3');
     });

@@ -159,6 +159,7 @@ flutter run
 | `lib/services/collision_risk_evaluator_service.dart` | リスク評価の本体。静的区域・他艇・近接・区域進入を統合 |
 | `lib/services/static_obstacle_index.dart` | 固定危険区域の空間索引(グリッドハッシュ・純Dart) |
 | `lib/services/ship_domain_service.dart` | 船体領域/排他領域の生成。低速時は横方向を有界に拡張 |
+| `lib/services/side_by_side_detector.dart` | 並走している他艇を見つける(純Dart)。受け取った位置と、同じ時刻の自艇の位置から距離を求める。相手の速さは使わない |
 | `lib/services/safety_orchestrator.dart` | 全detectorの候補を1つのFSMへ集約する単一writer。提示ポリシー |
 | `lib/services/alert_state_machine.dart` | 警告のライフサイクル(candidate→alerting→clearing→safe) |
 | `lib/hooks/use_alert.dart` | 警告音の再生と、OS割込みからの自動復旧。**再生要求は直列キューで1本ずつ実行する**(並行実行すると、段階が上がる瞬間に古い要求が新しい音を止める)。2本目のプレイヤー(`playCue`)は現在未使用(読み上げを重ねると両方聞き取れないため) |
@@ -319,6 +320,13 @@ flutter run
 この規則が働かないので鳴る。自艇の速度が取れないときは低速とみなさず鳴らす。
 低速のまま岸へ2m近づいても、別の障害物が現れても、静音は巻き戻さない。
 きっかけは 2026-11-07 の実機ログ(止まって並んだ他艇に2分鳴り続け、漕手が端末の音量を0にした)。
+
+**並走している相手への他艇警告は表示だけにし、並走中は逆走注意を読み上げない**
+(2026-11-07 利用者決定。`SideBySideDetector`・`SuppressionRules.sideBySide`)。並走は
+向きの差45°以内・横30m以内・10秒間の距離の変化7m未満が10秒続いた状態で、
+相手が送ってきた速さは使わず受け取った位置だけで判定する。少なくとも片方が相手を見ているので、
+オールが当たる距離でも鳴らさない。3艇目の他艇・岸・橋・カーブは変えない。
+並走が解けたら逆走注意の6秒の確認をやり直す。根拠は DESIGN_PRINCIPLES 1.4・3.4.3。
 
 自艇が安定停止(0.4m/s未満が5秒継続)している間、**固定障害物**の反復音は抑える。
 この規則と下の重なり・桟橋エリア・港の中の規則は、低速が確定する前の3秒間と、
