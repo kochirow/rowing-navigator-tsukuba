@@ -549,7 +549,7 @@ class SafetyOrchestrator {
             currentUrgency: baseUrgency,
           );
       if (_lowSpeedAudioMuted && permitted(SuppressionRules.lowSpeed)) {
-        // 自艇が2.0m/sより遅い間は、種類を問わず音だけ止める
+        // 自艇が分速100mより遅い間は、種類を問わず音だけ止める
         // (2026-11-07 利用者決定)。漕手は周りを見て避けられる。他艇も止める。
         // 相手が速く近づくなら、相手の端末で鳴る。検知・表示・記録は残す。
         final before = behavior;
@@ -810,7 +810,7 @@ class SafetyOrchestrator {
     } else if (wasStableStopped && !_stableStopped) {
       // 再航行または有意な接近で安定停止を抜けた瞬間は、新しい危険変化として
       // 音声エピソードを作り直す。ただし**低速静音は巻き戻さない**。
-      // 2.0m/s未満が続く限り音は止めたままにする(2026-11-07 利用者決定。
+      // 分速100m未満が続く限り音は止めたままにする(2026-11-07 利用者決定。
       // 以前はここで3秒の確定待ちをやり直し、岸の2m接近のたびに鳴り直していた)。
       for (final context in _threatContexts.values) {
         context.startNewAudioEpisode();
