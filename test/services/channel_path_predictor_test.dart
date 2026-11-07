@@ -266,7 +266,7 @@ void main() {
     test('逆行が中心線の始端を割っても、予測の長さと時間を失わない', () {
       // 逆行を許容したことで along < 0(中心線の始端超え)が初めて到達可能に
       // なった。ここで区間を落とすと予測地平が黙って縮み、その先の危険が
-      // 見えなくなる(原則6: データ欠損は安全の根拠にならない)。
+      // 見えなくなる。
       final centerline = arcCenterline();
       final segments = predictor.predict(
         boat: boatAt(

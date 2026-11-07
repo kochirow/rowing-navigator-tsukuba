@@ -17,7 +17,7 @@ import 'stroke_speed_chart.dart';
 /// 購読も止まる。これが無料枠を守るための一番効く設計判断である。
 ///
 /// 表示は監視の補助であり、警告にも艇の描画にも影響しない。
-/// 受信できないことは隠さず、そのまま理由として出す(原則6)。
+/// 受信できないことは隠さず、そのまま理由として出す。
 class StrokeTraceSheet extends StatefulWidget {
   final String boatId;
   final String displayName;

@@ -4,7 +4,7 @@ import '../../../theme/app_theme.dart';
 
 /// 監視ログを保存できないときに、監視画面の上に常設で出す帯。
 ///
-/// 黙って失敗させない(原則6)。監視そのものは続いているので、画面には
+/// 黙って失敗させない。監視そのものは続いているので、画面には
 /// 絵+短い語だけを出し、理由の全文は読み上げに渡す。
 class PracticeLogFailureNotice extends StatelessWidget {
   const PracticeLogFailureNotice({super.key, required this.message});

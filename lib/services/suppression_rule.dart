@@ -20,8 +20,11 @@ import '../models/alert_candidate.dart';
 ///
 /// 各静音規則は [SuppressionRule] を宣言し、[SuppressionRule.permits] が
 /// true を返したときだけ `behavior` を下げる。判定に必要な入力が
-/// 欠けているときは permits が false になる(原則6: データ欠損は
-/// 静音の根拠にならない)。
+/// 欠けているときは permits が false になる(規則の条件を確かめられないため)。
+///
+/// **例外: 自艇の低速([lowSpeed])は他艇も含めて全部止める**(2026-11-07 利用者決定)。
+/// 自艇が分速100mより遅ければ漕手は周りを見て避けられ、相手が速く近づくときは
+/// 相手の端末で鳴るためである。相手の速度は要らない。
 enum SuppressionInput {
   /// 自艇の速度。低速静音・安定停止の判定に要る。
   ownSpeed,
@@ -48,16 +51,16 @@ class SuppressionRule {
 
   /// この規則を**決して**適用してはいけないカテゴリ。
   ///
-  /// `other_boat` は原則ここへ入れる。相手が接近してくる以上、
-  /// 自艇側の事情(停止・低速・桟橋)だけで消してよい理由にならない。
-  /// 例外的に許すときは [allowedCategories] へ明示的に載せ、
-  /// **相手の速度が取れていること**を [requiredInputs] で要求する。
+  /// 自艇が低速でないときに働く規則(安定停止など)では、`other_boat` を
+  /// ここへ入れる。自艇が動いている間に相手が近づけば、自艇の漕手が
+  /// 気づけないまま距離が縮まるためである。
+  /// 自艇の低速([SuppressionRules.lowSpeed])だけは他艇も止める。
   final Set<String> forbiddenCategories;
 
   /// この規則が下げてよい切迫度の上限。
   final SuppressibleUrgency maximumSuppressibleUrgency;
 
-  /// 適用に必要な入力。1つでも欠けていれば適用しない(原則6)。
+  /// 適用に必要な入力。1つでも欠けていれば適用しない。
   final Set<SuppressionInput> requiredInputs;
 
   /// 適用されたときに候補へ残す理由コード。
@@ -105,19 +108,22 @@ class SuppressionRules {
   static const shore = 'shore';
   static const reverse = 'reverse';
 
-  /// 低速時の固定物静音。3秒の確定待ちを持つ。
-  static const lowSpeedStatic = SuppressionRule(
-    id: 'low_speed_static',
+  /// 自艇の低速(分速100m未満が3秒続く)で、すべての警告の音を止める。
+  ///
+  /// 他艇も対象にする(2026-11-07 利用者決定)。自艇が遅ければ漕手は周りを見て
+  /// 避けられる。相手が速く近づくときは、相手の端末(相手は低速でない)で鳴る。
+  /// 自艇の速度が取れないときは適用しない。
+  static const lowSpeed = SuppressionRule(
+    id: 'low_speed',
     reasonCode: 'PRESENTATION_LOW_SPEED_SILENT',
-    forbiddenCategories: {otherBoat},
     maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
     requiredInputs: {SuppressionInput.ownSpeed},
   );
 
   /// 測位の不確かさでのみ重なっている候補の静音。
   ///
-  /// 他艇へも適用し得るが、**相手の速度が取れていること**を要求する。
-  /// 速度不明の相手は静音しない(原則6)。
+  /// 他艇へも適用し得るが、**相手の速度が取れていること**を要求する
+  /// (相手が止まっていると確かめる規則なので、速度が無いと条件を確かめられない)。
   static const uncertaintyOnly = SuppressionRule(
     id: 'uncertainty_only',
     reasonCode: 'PRESENTATION_UNCERTAINTY_ONLY_VISUAL',
@@ -187,7 +193,7 @@ class SuppressionRules {
   );
 
   /// 港の中の他艇: 自艇も相手も出し入れの速さ未満なら1回だけ読み上げる。
-  /// **相手の速度が取れていることを要求する**(原則6)。
+  /// **相手の速度が取れていることを要求する**(相手の速さを確かめる規則のため)。
   static const harborManeuver = SuppressionRule(
     id: 'harbor_maneuver',
     reasonCode: 'PRESENTATION_HARBOR_SINGLE',
@@ -210,7 +216,7 @@ class SuppressionRules {
   );
 
   static const all = <SuppressionRule>[
-    lowSpeedStatic,
+    lowSpeed,
     uncertaintyOnly,
     mooringArea,
     stableStop,

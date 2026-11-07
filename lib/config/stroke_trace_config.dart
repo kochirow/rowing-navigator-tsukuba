@@ -75,7 +75,7 @@ const sharedStrokeTraceMinimumIntervalMs = 1900;
 /// 監視端末が受信した波形を「今のストローク」として扱う上限 [秒]。
 ///
 /// 超えたら古い波形を描き続けず、途絶として表示する。
-/// 空白を「変動がなかった」と読ませない(原則6)。
+/// 空白を「変動がなかった」と読ませない。
 const sharedStrokeTraceFreshnessSeconds = 12;
 
 /// 監視端末が連結して保持する直近ストローク数。

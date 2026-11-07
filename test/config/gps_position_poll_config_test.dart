@@ -47,7 +47,7 @@ void main() {
   });
 
   test('ポーリングを入れてもGPS途絶の確定は遅くならない', () {
-    // `gps_unavailable` の確定はポーリングと独立。データ欠損を隠さない(原則6)。
+    // `gps_unavailable` の確定はポーリングと独立。データ欠損を隠さない。
     // ポーリングが成功すれば「本当に取れている」ので unusable にならないが、
     // 失敗し続ければ従来どおりの時刻で確定する。
     final unusableAfter = GpsHealthMonitor().unusableAfter;

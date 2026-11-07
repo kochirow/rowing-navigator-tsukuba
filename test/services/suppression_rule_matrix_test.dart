@@ -41,8 +41,10 @@ void main() {
     // 期待表。true = その規則がそのカテゴリを静音してよい。
     // 入力はすべて既知、切迫度は continuous(連続音が鳴る段階)とする。
     const expected = <String, Map<String, bool>>{
-      'low_speed_static': {
-        'other_boat': false, // 相手が接近してくるので消してはいけない
+      'low_speed': {
+        // 自艇が分速100mより遅ければ他艇も止める(2026-11-07 利用者決定)。
+        // 相手が速く近づくなら、相手の端末で鳴る。
+        'other_boat': true,
         'shore': true,
         'bridge': true,
         'bridgePier': true,
@@ -168,14 +170,16 @@ void main() {
     }
   });
 
-  group('入力欠損では静音しない(原則6)', () {
-    test('相手の速度が取れない他艇は、どの規則でも静音できない', () {
+  group('入力欠損では静音しない', () {
+    test('相手の速度が取れない他艇は、自艇の低速以外の規則では静音できない', () {
       final withoutOtherSpeed = {
         SuppressionInput.ownSpeed,
         SuppressionInput.ownPosition,
       };
       for (final rule in SuppressionRules.all) {
         if (rule.forbiddenCategories.contains('other_boat')) continue;
+        // 自艇の低速だけは、相手の速度によらず止める(2026-11-07 利用者決定)。
+        if (identical(rule, SuppressionRules.lowSpeed)) continue;
         // 他艇へ適用し得る規則は、相手速度を必須入力にしていること。
         expect(
           rule.requiredInputs.contains(SuppressionInput.otherBoatSpeed) ||
@@ -188,6 +192,17 @@ void main() {
           reason: '${rule.id} は他艇へ適用し得るのに、相手速度の欠損で止まらない',
         );
       }
+    });
+
+    test('自艇の低速は、相手の速度が取れなくても他艇を静音できる', () {
+      expect(
+        SuppressionRules.lowSpeed.permits(
+          candidateOf('other_boat'),
+          knownInputs: const {SuppressionInput.ownSpeed},
+          currentUrgency: SuppressibleUrgency.continuous,
+        ),
+        isTrue,
+      );
     });
 
     test('自艇の速度が取れなければ、速度を要求する規則は適用されない', () {

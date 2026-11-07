@@ -11,7 +11,7 @@ import 'stroke_speed_trace.dart';
 /// 受信は1ストローク(約2〜3秒)ごとなので、そのまま描くと2〜3秒に一度
 /// 画面が跳ねる。到着からの経過を右端へ足して時間軸を進めることで、
 /// 受信間隔よりも滑らかに流せる。**データが来なくなれば線は右端から
-/// 途切れる。** 空白を埋めて「変動がなかった」と読ませない(原則6)。
+/// 途切れる。** 空白を埋めて「変動がなかった」と読ませない。
 class StrokeTraceHistory {
   final List<SharedStrokeTrace> _traces = <SharedStrokeTrace>[];
   DateTime? _lastReceivedAt;

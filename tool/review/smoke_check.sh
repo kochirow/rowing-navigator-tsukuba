@@ -158,7 +158,7 @@ done
 # -------------------------------------------- 5. 無言 catch(fail-silent 候補)
 note "5. 無言 catch の候補(安全経路)"
 echo "  catch の直後3行に log / diagnostic / rethrow / 状態更新が見当たらないもの。"
-echo "  握りつぶしは「データ欠損を安全と読み替える」経路になりやすい(原則6・不変条件3)。"
+echo "  握りつぶしは「データ欠損を安全と読み替える」経路になりやすい(不変条件3)。"
 silent=$(for f in lib/services/*.dart lib/hooks/*.dart; do
   awk -v file="$f" '
     /catch[[:space:]]*\(/ { pending = 3; line = NR; found = 0; next }

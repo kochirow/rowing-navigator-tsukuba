@@ -7,7 +7,7 @@
 /// - 距離: 練習全体の距離(`UseNavigator.totalDistance`)から、リセット時点の値を引く。
 /// - chrono: **漕いでいる時間**。推定速度が [movingSpeedThreshold] 以上の間だけ
 ///   測位の間隔を積む。測位の空白が [maxFixGap] を超えた区間は積まない
-///   (データの欠けを「漕いでいた」ことにしない。原則6)。
+///   (データの欠けを「漕いでいた」ことにしない)。
 /// - count: 1本ごとの解析結果の区切り時刻(`latestStrokeBoundary`)が進んだ回数。
 ///   NK SpeedCoach の COUNT(リセットからの本数)と同じ意味。
 class LapMetricsTracker {

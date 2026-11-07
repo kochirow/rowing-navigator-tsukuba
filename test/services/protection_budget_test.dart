@@ -11,7 +11,7 @@ import 'package:rowing_navigator/types/boat_type.dart';
 /// 1. `pairGpsCenterDistanceGuardMeters` が上限2.5mで常に飽和し、
 ///    測位品質に関わらず定数だった(帯が情報を持っていなかった)。
 /// 2. 他艇の速度・方位が取れないとき、その成分を0として扱っていた
-///    (データ欠損を「動いていない」と読み替えていた。原則6違反)。
+///    (データ欠損を「動いていない」と読み替えていた。)。
 void main() {
   Boat boat({
     String boatId = 'b',

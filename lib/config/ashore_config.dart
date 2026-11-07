@@ -34,5 +34,5 @@ const ashoreConfirmationDuration = Duration(seconds: 30);
 ///
 /// 霞ヶ浦の沖のように基準線から大きく離れた場所では、基準線の
 /// 半平面を延長した判定は信頼できない。判定不能は**水上扱い**にして
-/// 警告を止めない(原則6「データ欠損は安全の根拠にならない」)。
+/// 警告を止めない。
 const ashoreBaselineRelevanceRadiusMeters = 200.0;
