@@ -811,6 +811,22 @@ UseNavigator useNavigator() {
   }
 
   void recordSafetyDiagnostics(SafetyOrchestratorResult result) {
+    // 並走の始まり・終わり(2026-11-07)。相手は他の記録と同じ別名で残す。
+    for (final (started, ids) in [
+      (true, result.sideBySideStarted),
+      (false, result.sideBySideEnded),
+    ]) {
+      for (final boatId in ids) {
+        appendDiagnosticEvent(SessionDiagnosticEvent(
+          t: result.snapshot.evaluatedAt,
+          type: started ? 'side_by_side_started' : 'side_by_side_ended',
+          details: {
+            'targetRef': diagnosticBoatAliases.value.putIfAbsent(
+                boatId, () => 'boat-${diagnosticBoatAliases.value.length + 1}'),
+          },
+        ));
+      }
+    }
     final candidateById = <String, AlertCandidate>{
       for (final state in result.state.alerts)
         state.candidate.alertId: state.candidate,
@@ -2732,6 +2748,8 @@ UseNavigator useNavigator() {
           : LatLng(myBoat.value!.lat, myBoat.value!.lng),
       // 桟橋での静音は「双方が低速」でだけ成立する。速度が取れない艇は
       // 抑制対象にしないため、取れたものだけを渡す。
+      ownBoat: myBoat.value,
+      otherBoats: otherBoats.value,
       otherBoatSpeedById: {
         for (final boat in otherBoats.value) boat.boatId: boat.speed,
       },

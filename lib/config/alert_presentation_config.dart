@@ -274,3 +274,30 @@ Duration harborShoreAudioStartDeadlineFor(BoatType type) => Duration(
 
 /// 艇種が分からないときの既定値。最も止まりにくい 8+ に合わせる(8.15 + 1 秒)。
 const defaultHarborShoreAudioStartDeadline = Duration(milliseconds: 9150);
+
+// ## 並走(2026-11-07 利用者決定)
+//
+// 同じ向きにほぼ同じ速さで並んで漕いでいる2艇は、少なくとも片方が相手を見ている
+// (コックスは前を、漕手は後ろを向いている)。互いの位置を知って距離を保っているので、
+// 「気づかないまま近づく」という警告の前提が成り立たない。並走中は、その相手への
+// 他艇の警告を表示だけにし、逆走注意を読み上げない(横に並ぶと片方は必ず地図上の
+// 逆側を通る)。オールが当たる距離(4〜5m)でも鳴らさない(どちらかは見えている)。
+// 2026-11-07 実機: 並走中に相手が送ってきた速さが実際より遅く(1.5〜2.0m/s。自艇は
+// 3〜4m/sで距離はほぼ一定)、追いついていると予測して「他艇に注意」が約88秒鳴った。
+// そのため判定は相手が送ってきた速さを使わず、受け取った位置だけで行う。
+
+/// 並走とみなす向きの差の上限 [度]。
+const sideBySideMaxHeadingDifferenceDegrees = 45.0;
+
+/// 並走とみなす横の距離(自艇の向きに直交する方向)の上限 [m]。
+const sideBySideMaxLateralMeters = 30.0;
+
+/// 距離の変化を見る時間。並走と判定するまでにも、この時間だけ条件が続く必要がある。
+const sideBySideWindow = Duration(seconds: 10);
+
+/// [sideBySideWindow] の間の距離の変化(最大−最小)の上限 [m]。
+const sideBySideMaxDistanceChangeMeters = 7.0;
+
+/// 相手の測位時刻と、同じ時刻の自艇の位置とのずれの許容。
+/// 自艇の位置の履歴にこれ以上近い点が無ければ、その受信は判定に使わない。
+const sideBySideMaxTimeOffset = Duration(milliseconds: 1500);
