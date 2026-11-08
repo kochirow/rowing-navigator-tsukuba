@@ -120,6 +120,19 @@ class SuppressionRules {
     requiredInputs: {SuppressionInput.ownSpeed},
   );
 
+  /// 並走している相手への他艇警告の静音(2026-11-07 利用者決定)。
+  ///
+  /// 並走は、向きの差45°以内・横30m以内・10秒間の距離の変化7m未満が10秒続いた
+  /// 状態([SideBySideDetector])。少なくとも片方が相手を見ているので、その相手への
+  /// 警告は表示だけにする。判定は受け取った位置だけで行い、相手の速さは使わない
+  /// (速さが実際より遅く届くことがある)。3艇目の他艇には働かない。
+  static const sideBySide = SuppressionRule(
+    id: 'side_by_side',
+    reasonCode: 'PRESENTATION_SIDE_BY_SIDE_SILENT',
+    allowedCategories: {otherBoat},
+    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
+  );
+
   /// 測位の不確かさでのみ重なっている候補の静音。
   ///
   /// 他艇へも適用し得るが、**相手の速度が取れていること**を要求する
@@ -217,6 +230,7 @@ class SuppressionRules {
 
   static const all = <SuppressionRule>[
     lowSpeed,
+    sideBySide,
     uncertaintyOnly,
     mooringArea,
     stableStop,
