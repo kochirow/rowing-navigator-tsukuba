@@ -811,21 +811,18 @@ UseNavigator useNavigator() {
   }
 
   void recordSafetyDiagnostics(SafetyOrchestratorResult result) {
-    // 並走の始まり・終わり(2026-11-07)。相手は他の記録と同じ別名で残す。
-    for (final (started, ids) in [
-      (true, result.sideBySideStarted),
-      (false, result.sideBySideEnded),
-    ]) {
-      for (final boatId in ids) {
-        appendDiagnosticEvent(SessionDiagnosticEvent(
-          t: result.snapshot.evaluatedAt,
-          type: started ? 'side_by_side_started' : 'side_by_side_ended',
-          details: {
-            'targetRef': diagnosticBoatAliases.value.putIfAbsent(
-                boatId, () => 'boat-${diagnosticBoatAliases.value.length + 1}'),
-          },
-        ));
-      }
+    // 同じ向きの関係(並走・追いつく・追いつかれる)の変化。相手は別名で残す。
+    for (final (boatId, from, to) in result.sameDirectionChanges) {
+      appendDiagnosticEvent(SessionDiagnosticEvent(
+        t: result.snapshot.evaluatedAt,
+        type: 'same_direction_relation_changed',
+        details: {
+          'targetRef': diagnosticBoatAliases.value.putIfAbsent(
+              boatId, () => 'boat-${diagnosticBoatAliases.value.length + 1}'),
+          'from': from?.name,
+          'to': to?.name,
+        },
+      ));
     }
     final candidateById = <String, AlertCandidate>{
       for (final state in result.state.alerts)

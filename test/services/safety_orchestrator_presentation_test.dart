@@ -70,6 +70,7 @@ void main() {
     required String boatId,
     bool overlap = true,
     double? distanceMeters,
+    double entrySeconds = 0,
   }) =>
       RiskThreat(
         level: CollisionRiskLevel.lv3,
@@ -81,8 +82,8 @@ void main() {
           continuousIntersection: ContinuousIntersection(
             intersects: true,
             currentOverlap: overlap,
-            firstEntryTimeSeconds: 0,
-            firstExitTimeSeconds: 2,
+            firstEntryTimeSeconds: entrySeconds,
+            firstExitTimeSeconds: entrySeconds + 2,
             minimumSeparationMeters: 0,
           ),
         ),
@@ -1890,8 +1891,15 @@ void main() {
     const start = LatLng(36.075, 140.21);
     const heading = 115.0;
 
-    Boat boat(String id, int second, {double lateral = 0}) {
-      final forward = computeOffset(start, 3.5 * second, heading);
+    Boat boat(
+      String id,
+      int second, {
+      double lateral = 0,
+      double along = 0,
+      double closing = 0,
+    }) {
+      final forward = computeOffset(
+          start, 3.5 * second + along - closing * second, heading);
       final position = computeOffset(forward, lateral, heading + 90);
       return Boat(
         boatId: id,
@@ -1974,7 +1982,8 @@ void main() {
 
       // 相手が離れて並走が解ける。6秒たつまでは鳴らさない。
       final ended = step(orchestrator, 21, [reverse], sideBySide: false);
-      expect(ended.sideBySideEnded, {'partner'});
+      expect(ended.sameDirectionChanges.single.$1, 'partner');
+      expect(ended.sameDirectionChanges.single.$3, isNull);
       expect(ended.snapshot.audioDirective, isNull);
       for (var second = 22; second <= 26; second++) {
         result = step(orchestrator, second, [reverse], sideBySide: false);
@@ -1983,6 +1992,101 @@ void main() {
       result = step(orchestrator, 27, [reverse], sideBySide: false);
       expect(
           result.snapshot.audioDirective?.asset, 'audio/reverse_warning.mp3');
+    });
+  });
+
+  // ---- 縦に並んで追いつく・追いつかれる(2026-11-08 利用者決定) ----
+
+  group('追いつく・追いつかれる', () {
+    const start = LatLng(36.075, 140.21);
+    const heading = 115.0;
+
+    Boat boat(String id, int second, {double along = 0, double lateral = 0}) {
+      final forward = computeOffset(start, 3.0 * second + along, heading);
+      final position = computeOffset(forward, lateral, heading + 90);
+      return Boat(
+        boatId: id,
+        boatType: BoatType.r_4p,
+        lat: position.latitude,
+        lng: position.longitude,
+        heading: heading,
+        speed: 3.0,
+        timestamp: t0.add(Duration(seconds: second)),
+      );
+    }
+
+    /// 自艇は3m/s。相手は [otherAlong] の位置から、1秒に [closing]m ずつ近づく。
+    SafetyOrchestratorResult run({
+      required double otherAlong,
+      required double closing,
+      double lateral = 0,
+      double entrySeconds = 8,
+      int seconds = 12,
+    }) {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'overtake-$otherAlong-$closing-$lateral-$entrySeconds',
+        sessionGeneration: 1,
+      );
+      SafetyOrchestratorResult? result;
+      for (var second = 0; second <= seconds; second++) {
+        final along = otherAlong > 0
+            ? otherAlong - closing * second
+            : otherAlong + closing * second;
+        final reported = second - second % 2;
+        final reportedAlong = otherAlong > 0
+            ? otherAlong - closing * reported
+            : otherAlong + closing * reported;
+        result = orchestrator.processAssessment(
+          assessment: assessment([
+            boatThreat(
+              boatId: 'other',
+              overlap: false,
+              entrySeconds: entrySeconds,
+              distanceMeters: along.abs(),
+            ),
+          ]),
+          evaluatedAt: t0.add(Duration(seconds: second)),
+          capabilities: capabilities,
+          ownSpeedMetersPerSecond: 3.0,
+          ownBoat: boat('own', second),
+          otherBoats: [
+            boat('other', reported, along: reportedAlong, lateral: lateral),
+          ],
+          healthyBoatIds: const {'other'},
+        );
+      }
+      return result!;
+    }
+
+    test('後ろから前の艇に追いつく側は、到達まで4秒より先なら表示だけ', () {
+      final result = run(otherAlong: 60, closing: 1.5, entrySeconds: 8);
+      expect(result.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_OVERTAKING_SILENT'));
+    });
+
+    test('追いつく側でも、相手が進路上で到達まで4秒以内なら鳴らす(安全網)', () {
+      final result = run(otherAlong: 60, closing: 1.5, entrySeconds: 3);
+      expect(result.snapshot.audioDirective, isNotNull);
+    });
+
+    test('到達まで4秒以内でも、相手が横に5mより離れていれば(よけていれば)鳴らさない', () {
+      final result =
+          run(otherAlong: 60, closing: 1.5, lateral: 8, entrySeconds: 3);
+      expect(result.snapshot.audioDirective, isNull);
+    });
+
+    test('追いつかれる側(前の遅い艇)は表示だけ', () {
+      final result = run(otherAlong: -60, closing: 1.5, entrySeconds: 2);
+      expect(result.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_OVERTAKEN_SILENT'));
+    });
+
+    test('判定が固まる前(10秒未満)は今までどおり鳴る', () {
+      final result =
+          run(otherAlong: 60, closing: 1.5, entrySeconds: 8, seconds: 4);
+      expect(result.snapshot.audioDirective, isNotNull);
     });
   });
 }
