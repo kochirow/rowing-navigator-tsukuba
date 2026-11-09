@@ -8,6 +8,7 @@ import '../models/boat_model.dart';
 import '../types/boat_type.dart';
 import '../utils/geo_math.dart';
 import '../utils/heading.dart';
+import 'channel_centerline.dart';
 import 'ship_domain_service.dart';
 
 /// 同じ向きに漕いでいる他艇との関係(診断ログ用の名前)。
@@ -34,11 +35,20 @@ class SameDirectionStatus {
   /// 追いつく側の安全網に当たっているか。
   final bool safetyNet;
 
+  /// 安全網の判定に使った値(記録・検証用)。判定まで進まなければ null。
+  /// 横の距離の平均 [m]、前後の距離が縮む速さ [m/s]、艇首が届くまでの時間 [秒]。
+  final double? meanLateralMeters;
+  final double? closingSpeedMetersPerSecond;
+  final double? secondsToContact;
+
   const SameDirectionStatus({
     required this.distanceMeters,
     required this.alongMeters,
     required this.lateralMeters,
     this.safetyNet = false,
+    this.meanLateralMeters,
+    this.closingSpeedMetersPerSecond,
+    this.secondsToContact,
   });
 
   SameDirectionRelation get relation => safetyNet
@@ -62,6 +72,9 @@ class SameDirectionStatus {
 /// - 艇首が前の艇の艇尾に届くまで(前後の距離 − 2艇の長さの平均)の時間が
 ///   [overtakingSafetyNetDeadline] 以内(測位の誤差 [overtakingPositionMarginMeters] の分
 ///   だけ短めに見る)
+/// - まだ横に並んでいない(艇首が前の艇の艇尾を過ぎたら終える)
+///
+/// 前後・横は、航路中心線があれば中心線に沿って測り、無ければ自艇の向きを基準にする。
 ///
 /// **相手が送ってきた速さは使わない。** 距離は、相手の位置が届くたびに、
 /// その測位時刻と同じ時刻の自艇の位置(直近の履歴)と比べて求める。
@@ -70,6 +83,26 @@ class SameDirectionStatus {
 /// 止まっている艇・向きが信頼できない艇へは今までどおり鳴る
 /// (自艇が遅い間は低速静音が受け持つ)。
 class SameDirectionDetector {
+  SameDirectionDetector({
+    this.centerlineFor,
+    this.inPathLateralMeters = overtakingInPathLateralMeters,
+    this.endWhenAlongside = true,
+  });
+
+  /// 艇首が前の艇の艇尾を過ぎて横に並んだ(前後の距離が当たる距離より短い)ら、
+  /// 安全網を終える。後ろから当たるのは艇首が艇尾に届く瞬間なので、そこを
+  /// 過ぎて当たっていなければ横を抜けている。
+  final bool endWhenAlongside;
+
+  /// 位置に対応する航路中心線(無ければ null)。あれば、前後・横を中心線に沿って
+  /// 測る。自艇の向きを基準にすると、舵のぶれ(数度)とカーブで、30m先の相手の
+  /// 横の距離が数mずれる。
+  final ChannelCenterline? Function(LatLng position)? centerlineFor;
+
+  /// 安全網で「相手が進路上にいる」とみなす横の距離 [m]。
+  final double inPathLateralMeters;
+
+  ChannelCenterline? Function(LatLng position)? _centerlineFor;
   final List<_OwnSample> _own = [];
   final Map<String, _PartnerTrack> _tracks = {};
 
@@ -80,10 +113,14 @@ class SameDirectionDetector {
       };
 
   /// 自艇と他艇の最新の状態を渡し、同じ向きの艇を返す。
+  /// [centerlineFor] を渡せば、コンストラクタの値の代わりに使う
+  /// (航路中心線は航行開始後に読み込まれるため)。
   Map<String, SameDirectionStatus> update({
     required Boat? own,
     required Iterable<Boat> others,
+    ChannelCenterline? Function(LatLng position)? centerlineFor,
   }) {
+    _centerlineFor = centerlineFor ?? this.centerlineFor;
     if (own == null) {
       reset();
       return const {};
@@ -128,11 +165,15 @@ class SameDirectionDetector {
       track.clear();
       return;
     }
-    final geometry = relativeGeometry(
-      ownPosition: ownAt.position,
-      ownHeading: ownAt.heading,
-      otherPosition: LatLng(other.lat, other.lng),
-    );
+    final otherPosition = LatLng(other.lat, other.lng);
+    final geometry = _riverGeometry(ownAt, otherPosition) ??
+        relativeGeometry(
+          ownPosition: ownAt.position,
+          ownHeading: ownAt.heading,
+          otherPosition: otherPosition,
+        );
+    track.inPathLateralMeters = inPathLateralMeters;
+    track.endWhenAlongside = endWhenAlongside;
     track.contactAlongMeters =
         (_hullLength(ownType) + _hullLength(other.boatType)) / 2;
     track.add(_PartnerSample(
@@ -141,6 +182,28 @@ class SameDirectionDetector {
       along: geometry.alongMeters,
       lateral: geometry.lateralMeters,
     ));
+  }
+
+  /// 航路中心線に沿った前後・横。中心線が無い・範囲外なら null。
+  ({double distanceMeters, double alongMeters, double lateralMeters})?
+      _riverGeometry(_OwnSample own, LatLng otherPosition) {
+    final centerline = _centerlineFor?.call(own.position);
+    if (centerline == null) return null;
+    final ownFrame = centerline.project(own.position);
+    final otherFrame = centerline.project(otherPosition);
+    if (!ownFrame.isInsideCoverage || !otherFrame.isInsideCoverage) return null;
+    // 中心線の向きに進んでいれば +1、逆向きなら -1。横は進行方向の右が正。
+    final travel = math.cos((own.heading - ownFrame.tangentBearingDegrees) *
+                math.pi /
+                180) >=
+            0
+        ? 1.0
+        : -1.0;
+    return (
+      distanceMeters: distanceMeters(own.position, otherPosition),
+      alongMeters: (otherFrame.alongMeters - ownFrame.alongMeters) * travel,
+      lateralMeters: (otherFrame.crossMeters - ownFrame.crossMeters) * travel,
+    );
   }
 
   /// [at] に最も近い自艇の位置。[sameDirectionMaxTimeOffset] より離れていれば null。
@@ -218,6 +281,8 @@ class _PartnerSample {
 class _PartnerTrack {
   DateTime? lastTimestamp;
   double contactAlongMeters = 0;
+  double inPathLateralMeters = overtakingInPathLateralMeters;
+  bool endWhenAlongside = false;
   final List<_PartnerSample> _samples = [];
 
   void add(_PartnerSample sample) {
@@ -233,36 +298,63 @@ class _PartnerTrack {
   SameDirectionStatus? get status {
     if (_samples.isEmpty) return null;
     final last = _samples.last;
+    final net = _safetyNet(last);
     return SameDirectionStatus(
       distanceMeters: last.distance,
       alongMeters: last.along,
       lateralMeters: last.lateral.abs(),
-      safetyNet: _safetyNet(last),
+      safetyNet: net.applies,
+      meanLateralMeters: net.meanLateral,
+      closingSpeedMetersPerSecond: net.closing,
+      secondsToContact: net.secondsToContact,
     );
   }
 
-  bool _safetyNet(_PartnerSample last) {
-    if (last.along <= 0) return false;
+  ({
+    bool applies,
+    double? meanLateral,
+    double? closing,
+    double? secondsToContact
+  }) _safetyNet(_PartnerSample last) {
+    const none = (
+      applies: false,
+      meanLateral: null,
+      closing: null,
+      secondsToContact: null
+    );
+    if (last.along <= 0) return none;
     final lateralFrom = last.at.subtract(overtakingLateralAveragingWindow);
     final recent = _samples.where((s) => !s.at.isBefore(lateralFrom));
     final meanLateral =
         recent.fold<double>(0, (sum, s) => sum + s.lateral) / recent.length;
-    if (meanLateral.abs() > overtakingInPathLateralMeters) return false;
     final span = last.at.difference(_samples.first.at);
-    if (span < overtakingClosingMinSpan) return false;
-    final fit = _alongFit();
-    if (fit == null) return false;
-    final closing = -fit.slope;
-    if (closing < overtakingMinClosingSpeedMetersPerSecond) return false;
-    // 前後の距離は直線に当てはめた今の値で見る(1点だけの誤差に振られない)。
-    // 測位の誤差の分だけ、当たるまでの距離を短めに見る。
-    final gap = math.max(
-      0.0,
-      fit.alongNow - contactAlongMeters - overtakingPositionMarginMeters,
+    final fit = span < overtakingClosingMinSpan ? null : _alongFit();
+    final closing = fit == null ? null : -fit.slope;
+    double? secondsToContact;
+    var alongside = false;
+    if (fit != null && closing! > 0) {
+      alongside =
+          fit.alongNow < contactAlongMeters - overtakingPositionMarginMeters;
+      // 前後の距離は直線に当てはめた今の値で見る(1点だけの誤差に振られない)。
+      // 測位の誤差の分だけ、当たるまでの距離を短めに見る。
+      final gap = math.max(
+        0.0,
+        fit.alongNow - contactAlongMeters - overtakingPositionMarginMeters,
+      );
+      secondsToContact = gap / closing;
+    }
+    final applies = meanLateral.abs() <= inPathLateralMeters &&
+        closing != null &&
+        closing >= overtakingMinClosingSpeedMetersPerSecond &&
+        secondsToContact != null &&
+        secondsToContact * 1000 <= overtakingSafetyNetDeadline.inMilliseconds &&
+        !(endWhenAlongside && alongside);
+    return (
+      applies: applies,
+      meanLateral: meanLateral,
+      closing: closing,
+      secondsToContact: secondsToContact,
     );
-    final secondsToContact = gap / closing;
-    return secondsToContact * 1000 <=
-        overtakingSafetyNetDeadline.inMilliseconds;
   }
 
   /// 前後の距離を時間の直線に当てはめた傾き [m/s] と、最新の時刻での値 [m]

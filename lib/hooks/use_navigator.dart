@@ -2753,6 +2753,8 @@ UseNavigator useNavigator() {
       // 抑制対象にしないため、取れたものだけを渡す。
       ownBoat: myBoat.value,
       otherBoats: otherBoats.value,
+      // 同じ向きの安全網は、前後・横を航路中心線に沿って測る。
+      centerlineFor: channelLaneResolver.value?.centerlineFor,
       otherBoatSpeedById: {
         for (final boat in otherBoats.value) boat.boatId: boat.speed,
       },
