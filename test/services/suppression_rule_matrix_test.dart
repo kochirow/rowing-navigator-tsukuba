@@ -54,32 +54,8 @@ void main() {
         'curve': true,
         'reverse': true,
       },
-      'side_by_side': {
-        // 並走している相手だけ。対象の艇は SameDirectionDetector が決める。
-        'other_boat': true,
-        'shore': false,
-        'bridge': false,
-        'bridgePier': false,
-        'island': false,
-        'driftwood': false,
-        'pile': false,
-        'curve': false,
-        'reverse': false,
-      },
-      'overtaking': {
-        // 追いつく相手だけ。安全網(4秒・横5m)は SafetyOrchestrator が外す。
-        'other_boat': true,
-        'shore': false,
-        'bridge': false,
-        'bridgePier': false,
-        'island': false,
-        'driftwood': false,
-        'pile': false,
-        'curve': false,
-        'reverse': false,
-      },
-      'overtaken': {
-        // 追いつかれる相手だけ。前の艇は後ろから来る艇が見えている。
+      'same_direction': {
+        // 向きの差30°以内の相手だけ。対象の艇と安全網は SameDirectionDetector が決める。
         'other_boat': true,
         'shore': false,
         'bridge': false,
@@ -216,12 +192,8 @@ void main() {
         if (rule.forbiddenCategories.contains('other_boat')) continue;
         // 自艇の低速だけは、相手の速度によらず止める(2026-11-07 利用者決定)。
         if (identical(rule, SuppressionRules.lowSpeed)) continue;
-        // 並走・追いつく・追いつかれるは相手の速さを使わず、受け取った位置で判定する。
-        if (identical(rule, SuppressionRules.sideBySide) ||
-            identical(rule, SuppressionRules.overtaking) ||
-            identical(rule, SuppressionRules.overtaken)) {
-          continue;
-        }
+        // 同じ向きは相手の速さを使わず、受け取った位置と向きで判定する。
+        if (identical(rule, SuppressionRules.sameDirection)) continue;
         // 他艇へ適用し得る規則は、相手速度を必須入力にしていること。
         expect(
           rule.requiredInputs.contains(SuppressionInput.otherBoatSpeed) ||

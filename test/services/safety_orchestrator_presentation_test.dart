@@ -7,6 +7,7 @@ import 'package:rowing_navigator/models/static_obstacle_model.dart';
 import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
 import 'package:rowing_navigator/services/continuous_collision_service.dart';
 import 'package:rowing_navigator/services/safety_orchestrator.dart';
+import 'package:rowing_navigator/services/same_direction_detector.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/types/collision_risk_level.dart';
 import 'package:rowing_navigator/utils/geo_math.dart';
@@ -1885,9 +1886,9 @@ void main() {
     });
   });
 
-  // ---- 並走(2026-11-07 利用者決定) ----
+  // ---- 同じ向きに漕ぐ艇(並走・縦列。2026-11-09 利用者決定) ----
 
-  group('並走', () {
+  group('同じ向きの他艇', () {
     const start = LatLng(36.075, 140.21);
     const heading = 115.0;
 
@@ -1896,17 +1897,16 @@ void main() {
       int second, {
       double lateral = 0,
       double along = 0,
-      double closing = 0,
+      double boatHeading = heading,
     }) {
-      final forward = computeOffset(
-          start, 3.5 * second + along - closing * second, heading);
+      final forward = computeOffset(start, 3.5 * second + along, heading);
       final position = computeOffset(forward, lateral, heading + 90);
       return Boat(
         boatId: id,
         boatType: BoatType.r_4p,
         lat: position.latitude,
         lng: position.longitude,
-        heading: heading,
+        heading: boatHeading,
         speed: 3.5,
         timestamp: t0.add(Duration(seconds: second)),
       );
@@ -1916,7 +1916,8 @@ void main() {
       SafetyOrchestrator orchestrator,
       int second,
       List<RiskThreat> threats, {
-      bool sideBySide = true,
+      double partnerLateral = 8,
+      double partnerHeading = heading,
     }) =>
         orchestrator.processAssessment(
           assessment: assessment(threats),
@@ -1924,48 +1925,48 @@ void main() {
           capabilities: capabilities,
           ownSpeedMetersPerSecond: 3.5,
           ownBoat: boat('own', second),
-          otherBoats: [boat('partner', second, lateral: sideBySide ? 8 : 60)],
+          otherBoats: [
+            boat('partner', second,
+                lateral: partnerLateral, boatHeading: partnerHeading),
+          ],
           healthyBoatIds: const {'partner', 'third'},
         );
 
-    test('並走している相手への他艇警告は表示だけにする', () {
+    test('並走している相手への他艇警告は、最初の評価から表示だけにする', () {
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'side-by-side-partner',
-        sessionGeneration: 1,
-      );
-      SafetyOrchestratorResult? result;
-      for (var second = 0; second <= 12; second++) {
-        result = step(orchestrator, second, [boatThreat(boatId: 'partner')]);
-      }
-      expect(result!.snapshot.audioDirective, isNull);
-      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
-          contains('PRESENTATION_SIDE_BY_SIDE_SILENT'));
-    });
-
-    test('並走になる前(10秒未満)は今までどおり鳴る', () {
-      final orchestrator = SafetyOrchestrator(
-        sessionId: 'side-by-side-before',
+        sessionId: 'same-direction-partner',
         sessionGeneration: 1,
       );
       final result = step(orchestrator, 0, [boatThreat(boatId: 'partner')]);
+      expect(result.snapshot.audioDirective, isNull);
+      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+          contains('PRESENTATION_SAME_DIRECTION_SILENT'));
+      expect(result.sameDirectionChanges.single,
+          ('partner', null, SameDirectionRelation.sameDirection));
+    });
+
+    test('向きの差が30°を超える相手(斜めに横切る艇)へは今までどおり鳴る', () {
+      final orchestrator = SafetyOrchestrator(
+        sessionId: 'same-direction-crossing',
+        sessionGeneration: 1,
+      );
+      final result = step(orchestrator, 0, [boatThreat(boatId: 'partner')],
+          partnerHeading: heading + 40);
       expect(result.snapshot.audioDirective, isNotNull);
     });
 
-    test('並走していない3艇目の他艇警告は鳴らす', () {
+    test('同じ向きでない3艇目の他艇警告は鳴らす', () {
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'side-by-side-third',
+        sessionId: 'same-direction-third',
         sessionGeneration: 1,
       );
-      SafetyOrchestratorResult? result;
-      for (var second = 0; second <= 12; second++) {
-        result = step(orchestrator, second, [boatThreat(boatId: 'third')]);
-      }
-      expect(result!.snapshot.audioDirective, isNotNull);
+      final result = step(orchestrator, 0, [boatThreat(boatId: 'third')]);
+      expect(result.snapshot.audioDirective, isNotNull);
     });
 
-    test('並走中は逆走注意を読み上げず、解けたら6秒の確認をやり直す', () {
+    test('同じ向きの艇が30m以内にいる間は逆走注意を読み上げず、離れたら6秒の確認をやり直す', () {
       final orchestrator = SafetyOrchestrator(
-        sessionId: 'side-by-side-reverse',
+        sessionId: 'same-direction-reverse',
         sessionGeneration: 1,
       );
       final reverse = guidanceThreat(
@@ -1978,115 +1979,87 @@ void main() {
       }
       expect(result!.snapshot.audioDirective, isNull);
       expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
-          contains('PRESENTATION_SIDE_BY_SIDE_SILENT'));
+          contains('PRESENTATION_SAME_DIRECTION_SILENT'));
 
-      // 相手が離れて並走が解ける。6秒たつまでは鳴らさない。
-      final ended = step(orchestrator, 21, [reverse], sideBySide: false);
-      expect(ended.sameDirectionChanges.single.$1, 'partner');
-      expect(ended.sameDirectionChanges.single.$3, isNull);
-      expect(ended.snapshot.audioDirective, isNull);
-      for (var second = 22; second <= 26; second++) {
-        result = step(orchestrator, second, [reverse], sideBySide: false);
+      // 相手が60m横へ離れる。6秒たつまでは鳴らさない。
+      for (var second = 21; second <= 26; second++) {
+        result = step(orchestrator, second, [reverse], partnerLateral: 60);
         expect(result.snapshot.audioDirective, isNull);
       }
-      result = step(orchestrator, 27, [reverse], sideBySide: false);
+      result = step(orchestrator, 27, [reverse], partnerLateral: 60);
       expect(
           result.snapshot.audioDirective?.asset, 'audio/reverse_warning.mp3');
     });
-  });
 
-  // ---- 縦に並んで追いつく・追いつかれる(2026-11-08 利用者決定) ----
-
-  group('追いつく・追いつかれる', () {
-    const start = LatLng(36.075, 140.21);
-    const heading = 115.0;
-
-    Boat boat(String id, int second, {double along = 0, double lateral = 0}) {
-      final forward = computeOffset(start, 3.0 * second + along, heading);
-      final position = computeOffset(forward, lateral, heading + 90);
-      return Boat(
-        boatId: id,
-        boatType: BoatType.r_4p,
-        lat: position.latitude,
-        lng: position.longitude,
-        heading: heading,
-        speed: 3.0,
-        timestamp: t0.add(Duration(seconds: second)),
-      );
-    }
-
-    /// 自艇は3m/s。相手は [otherAlong] の位置から、1秒に [closing]m ずつ近づく。
-    SafetyOrchestratorResult run({
-      required double otherAlong,
-      required double closing,
-      double lateral = 0,
-      double entrySeconds = 8,
-      int seconds = 12,
-    }) {
-      final orchestrator = SafetyOrchestrator(
-        sessionId: 'overtake-$otherAlong-$closing-$lateral-$entrySeconds',
-        sessionGeneration: 1,
-      );
-      SafetyOrchestratorResult? result;
-      for (var second = 0; second <= seconds; second++) {
-        final along = otherAlong > 0
+    group('縦列', () {
+      /// 自艇は3.5m/s。相手は [otherAlong] の位置から、1秒に [closing]m ずつ近づく。
+      /// 相手の位置は2秒おきに届く。
+      SafetyOrchestratorResult run({
+        required double otherAlong,
+        required double closing,
+        double lateral = 0,
+        int seconds = 12,
+      }) {
+        final orchestrator = SafetyOrchestrator(
+          sessionId: 'in-line-$otherAlong-$closing-$lateral',
+          sessionGeneration: 1,
+        );
+        double alongAt(int second) => otherAlong > 0
             ? otherAlong - closing * second
             : otherAlong + closing * second;
-        final reported = second - second % 2;
-        final reportedAlong = otherAlong > 0
-            ? otherAlong - closing * reported
-            : otherAlong + closing * reported;
-        result = orchestrator.processAssessment(
-          assessment: assessment([
-            boatThreat(
-              boatId: 'other',
-              overlap: false,
-              entrySeconds: entrySeconds,
-              distanceMeters: along.abs(),
-            ),
-          ]),
-          evaluatedAt: t0.add(Duration(seconds: second)),
-          capabilities: capabilities,
-          ownSpeedMetersPerSecond: 3.0,
-          ownBoat: boat('own', second),
-          otherBoats: [
-            boat('other', reported, along: reportedAlong, lateral: lateral),
-          ],
-          healthyBoatIds: const {'other'},
-        );
+        SafetyOrchestratorResult? result;
+        for (var second = 0; second <= seconds; second++) {
+          final reported = second - second % 2;
+          result = orchestrator.processAssessment(
+            assessment: assessment([
+              boatThreat(
+                boatId: 'other',
+                overlap: false,
+                entrySeconds: 3,
+                distanceMeters: alongAt(second).abs(),
+              ),
+            ]),
+            evaluatedAt: t0.add(Duration(seconds: second)),
+            capabilities: capabilities,
+            ownSpeedMetersPerSecond: 3.5,
+            ownBoat: boat('own', second),
+            otherBoats: [
+              boat('other', reported,
+                  along: alongAt(reported), lateral: lateral),
+            ],
+            healthyBoatIds: const {'other'},
+          );
+        }
+        return result!;
       }
-      return result!;
-    }
 
-    test('後ろから前の艇に追いつく側は、到達まで4秒より先なら表示だけ', () {
-      final result = run(otherAlong: 60, closing: 1.5, entrySeconds: 8);
-      expect(result.snapshot.audioDirective, isNull);
-      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
-          contains('PRESENTATION_OVERTAKING_SILENT'));
-    });
+      test('前の艇に追いついていても、当たるまで4秒より先なら表示だけ', () {
+        // 12秒目の前後の距離42m。艇首から艇尾まで約29m、1.5m/sで約19秒。
+        final result = run(otherAlong: 60, closing: 1.5);
+        expect(result.snapshot.audioDirective, isNull);
+        expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+            contains('PRESENTATION_SAME_DIRECTION_SILENT'));
+      });
 
-    test('追いつく側でも、相手が進路上で到達まで4秒以内なら鳴らす(安全網)', () {
-      final result = run(otherAlong: 60, closing: 1.5, entrySeconds: 3);
-      expect(result.snapshot.audioDirective, isNotNull);
-    });
+      test('前の艇が進路上に残り、4秒以内に当たるなら鳴らす(安全網)', () {
+        // 12秒目の前後の距離15m。艇首から艇尾まで約2m。
+        final result = run(otherAlong: 33, closing: 1.5);
+        expect(result.snapshot.audioDirective, isNotNull);
+        expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+            contains('SAME_DIRECTION_OVERTAKING_SAFETY_NET'));
+      });
 
-    test('到達まで4秒以内でも、相手が横に5mより離れていれば(よけていれば)鳴らさない', () {
-      final result =
-          run(otherAlong: 60, closing: 1.5, lateral: 8, entrySeconds: 3);
-      expect(result.snapshot.audioDirective, isNull);
-    });
+      test('横4mで抜いていくなら、近くても鳴らさない', () {
+        final result = run(otherAlong: 33, closing: 1.5, lateral: 4);
+        expect(result.snapshot.audioDirective, isNull);
+      });
 
-    test('追いつかれる側(前の遅い艇)は表示だけ', () {
-      final result = run(otherAlong: -60, closing: 1.5, entrySeconds: 2);
-      expect(result.snapshot.audioDirective, isNull);
-      expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
-          contains('PRESENTATION_OVERTAKEN_SILENT'));
-    });
-
-    test('判定が固まる前(10秒未満)は今までどおり鳴る', () {
-      final result =
-          run(otherAlong: 60, closing: 1.5, entrySeconds: 8, seconds: 4);
-      expect(result.snapshot.audioDirective, isNotNull);
+      test('追いつかれる側(前の遅い艇)は表示だけ', () {
+        final result = run(otherAlong: -33, closing: 1.5);
+        expect(result.snapshot.audioDirective, isNull);
+        expect(result.snapshot.activeAlerts.single.candidate.reasonCodes,
+            contains('PRESENTATION_SAME_DIRECTION_SILENT'));
+      });
     });
   });
 }

@@ -213,6 +213,14 @@ class AlertDiagnosticEvent {
   final double? targetSpeedMps;
   final bool? targetHeadingReliable;
 
+  /// 他艇の警告で、相手が送ってきた向き [度] と、自艇の向きを基準にした
+  /// 相手の位置(前後: 正なら前、横: 正なら右)[m]。同じ向きの判定(向きの差30°)と
+  /// 追いつく側の安全網(横2m)を、次のログで確かめるための記録専用の値
+  /// (2026-11-09 追加)。
+  final double? targetHeadingDeg;
+  final double? targetAlongMeters;
+  final double? targetLateralMeters;
+
   AlertDiagnosticEvent({
     this.sequence,
     this.elapsedMs,
@@ -238,6 +246,9 @@ class AlertDiagnosticEvent {
     this.audioAction,
     this.targetSpeedMps,
     this.targetHeadingReliable,
+    this.targetHeadingDeg,
+    this.targetAlongMeters,
+    this.targetLateralMeters,
   });
 
   Map<String, dynamic> toJson() => {
@@ -266,6 +277,10 @@ class AlertDiagnosticEvent {
         if (targetSpeedMps != null) 'targetSpeedMps': targetSpeedMps,
         if (targetHeadingReliable != null)
           'targetHeadingReliable': targetHeadingReliable,
+        if (targetHeadingDeg != null) 'targetHeadingDeg': targetHeadingDeg,
+        if (targetAlongMeters != null) 'targetAlongMeters': targetAlongMeters,
+        if (targetLateralMeters != null)
+          'targetLateralMeters': targetLateralMeters,
       };
 
   factory AlertDiagnosticEvent.fromJson(Map<String, dynamic> json) =>
@@ -296,6 +311,9 @@ class AlertDiagnosticEvent {
         audioAction: json['audioAction'] as String?,
         targetSpeedMps: (json['targetSpeedMps'] as num?)?.toDouble(),
         targetHeadingReliable: json['targetHeadingReliable'] as bool?,
+        targetHeadingDeg: (json['targetHeadingDeg'] as num?)?.toDouble(),
+        targetAlongMeters: (json['targetAlongMeters'] as num?)?.toDouble(),
+        targetLateralMeters: (json['targetLateralMeters'] as num?)?.toDouble(),
       );
 }
 

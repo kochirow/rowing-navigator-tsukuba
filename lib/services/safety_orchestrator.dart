@@ -17,7 +17,7 @@ class SafetyOrchestratorResult {
   final SafetySnapshot snapshot;
   final AlertStateMachineOutput state;
 
-  /// この評価で同じ向きの関係(並走・追いつく・追いつかれる)が変わった艇
+  /// この評価で同じ向きの関係(同じ向き・追いつく側の安全網)が変わった艇
   /// (診断ログ用)。null は関係なし。
   final List<
       (
@@ -78,14 +78,14 @@ class SafetyOrchestrator {
   final Set<String> _reverseGuidanceAlertIds = {};
   final Set<String> _stableExistingThreatIds = {};
 
-  /// 同じ向きに漕いでいる艇との関係(2026-11-07・08 利用者決定)。
-  /// 並走・追いつかれる相手への他艇警告は表示だけ、追いつく相手へは安全網だけ鳴らす。
-  /// 並走中は逆走注意を読み上げない。判定は [SameDirectionDetector]。
+  /// 同じ向きに漕いでいる艇(2026-11-09 利用者決定)。その相手への他艇警告は
+  /// 表示だけにし、追いつく側の安全網に当たったときだけ鳴らす。同じ向きの艇が
+  /// 近くにいる間は逆走注意を読み上げない。判定は [SameDirectionDetector]。
   final SameDirectionDetector _sameDirectionDetector = SameDirectionDetector();
   Map<String, SameDirectionStatus> _sameDirection = const {};
 
-  bool get _anySideBySide => _sameDirection.values
-      .any((status) => status.relation == SameDirectionRelation.sideBySide);
+  bool get _sameDirectionBoatNearby => _sameDirection.values.any((status) =>
+      status.distanceMeters <= sameDirectionReverseMuteDistanceMeters);
 
   /// どちらかのチャンネルで処理済みの音声イベント。alertIdごとに最後の1件。
   ///
@@ -596,21 +596,15 @@ class SafetyOrchestrator {
       final sameDirection = candidate.category == SuppressionRules.otherBoat
           ? _sameDirection[candidate.targetId]
           : null;
-      final sameDirectionRule = switch (sameDirection?.relation) {
-        // 並走している相手は、少なくとも片方が見ている(2026-11-07 利用者決定)。
-        // オールが当たる距離でも鳴らさない。
-        SameDirectionRelation.sideBySide => SuppressionRules.sideBySide,
-        // 追いつかれる側(前の遅い艇)は、後ろから来る艇が見えている。よけるのは
-        // こちらだが、鳴らさなくてよい(2026-11-08 利用者決定)。
-        SameDirectionRelation.overtaken => SuppressionRules.overtaken,
-        // 追いつく側(後ろの速い艇)は漕ぎに集中する。ただし相手が進路上に
-        // 残ったまま、速度差を入れた到達時間が4秒以内なら鳴らす(安全網)。
-        SameDirectionRelation.overtaking =>
-          _overtakingSafetyNetApplies(candidate, sameDirection!)
-              ? null
-              : SuppressionRules.overtaking,
-        null => null,
-      };
+      // 同じ向きの相手は、少なくとも片方が見ている(2026-11-09 利用者決定)。
+      // 並走でも縦列でも、オールが当たる距離でも鳴らさない。後ろの速い艇が
+      // 前の艇に4秒以内に当たるときだけ鳴らす(安全網)。
+      final sameDirectionRule = sameDirection == null || sameDirection.safetyNet
+          ? null
+          : SuppressionRules.sameDirection;
+      if (sameDirection != null && sameDirection.safetyNet) {
+        extraReasonCodes.add('SAME_DIRECTION_OVERTAKING_SAFETY_NET');
+      }
       if (sameDirectionRule != null && permitted(sameDirectionRule)) {
         final before = behavior;
         behavior = _quieter(behavior, AlertBehavior.visualOnly);
@@ -931,14 +925,15 @@ class SafetyOrchestrator {
     final isConfirmedReverse =
         candidate.category == StaticObstacleKind.reverse.name &&
             candidate.reasonCodes.contains('reverse_direction_confirmed');
-    // 並走中は逆走注意を読み上げない(横に並ぶと片方は必ず地図上の逆側を通る)。
-    // 並走が解けたら6秒の確認をやり直すため、確認の途中経過も消す。
-    final sideBySideSilenced =
-        candidate.category == StaticObstacleKind.reverse.name && _anySideBySide;
-    if (sideBySideSilenced) {
+    // 同じ向きの艇が近くにいる間は逆走注意を読み上げない(横に並ぶ・追い抜くと
+    // 片方は地図上の逆側を通る)。離れたら6秒の確認をやり直すため、途中経過も消す。
+    final sameDirectionSilenced =
+        candidate.category == StaticObstacleKind.reverse.name &&
+            _sameDirectionBoatNearby;
+    if (sameDirectionSilenced) {
       _reverseGuidanceDebouncers[candidate.alertId]?.reset();
     }
-    final reverseConfirmed = sideBySideSilenced
+    final reverseConfirmed = sameDirectionSilenced
         ? false
         : isConfirmedReverse
             ? _reverseGuidanceDebouncers
@@ -965,8 +960,8 @@ class SafetyOrchestrator {
       clearAudioEventId: !shouldPlay,
       reasonCodes: [
         ...candidate.reasonCodes,
-        if (sideBySideSilenced)
-          SuppressionRules.sideBySide.reasonCode
+        if (sameDirectionSilenced)
+          SuppressionRules.sameDirection.reasonCode
         else if (!reverseConfirmed)
           'REVERSE_CONFIRM_PENDING'
         else if (harborSilenced)
@@ -1171,19 +1166,6 @@ class SafetyOrchestrator {
         AlertBehavior.visualOnly => 0,
         AlertBehavior.persistentSystemFault => 0,
       };
-
-  /// 追いつく側の安全網: 相手が進路上(横 [overtakingInPathLateralMeters] 以内)に
-  /// 残ったまま、到達までの時間が [overtakingSafetyNetDeadline] 以内か。
-  /// 到達時間は他艇の掃引(相対速度)から来るので、速度差を入れた時間である。
-  static bool _overtakingSafetyNetApplies(
-    AlertCandidate candidate,
-    SameDirectionStatus status,
-  ) {
-    final deadline = candidate.actionDeadline;
-    return status.lateralMeters <= overtakingInPathLateralMeters &&
-        deadline != null &&
-        deadline <= overtakingSafetyNetDeadline;
-  }
 
   /// 静かなほうを返す。抑制規則は下げるだけで、上げてはいけない。
   static AlertBehavior _quieter(AlertBehavior a, AlertBehavior b) =>

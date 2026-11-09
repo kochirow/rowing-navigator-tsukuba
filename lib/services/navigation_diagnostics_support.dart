@@ -3,6 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import '../config/location_activity_config.dart';
 import '../models/boat_model.dart';
 import '../models/session_model.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import 'same_direction_detector.dart';
 import 'ship_domain_service.dart';
 
 /// 航行中の診断ログ(events.jsonl・alerts.jsonl)に残す値を作る補助。
@@ -32,18 +35,48 @@ Map<String, Object?> positionSharingErrorDetails(Object error) {
 String? sharingErrorCode(Object error) =>
     error is FirebaseException ? error.code : null;
 
-/// 他艇の警告の記録に添える、相手の速度と方位を信頼したか(R8-R1)。
+/// 他艇の警告の記録に添える相手の動き(R8-R1)。
+typedef OtherBoatTargetDiagnostics = ({
+  double? speedMps,
+  bool? headingReliable,
+  double? headingDeg,
+  double? alongMeters,
+  double? lateralMeters,
+});
+
+const OtherBoatTargetDiagnostics _noTargetDiagnostics = (
+  speedMps: null,
+  headingReliable: null,
+  headingDeg: null,
+  alongMeters: null,
+  lateralMeters: null,
+);
+
+/// 他艇の警告の記録に添える、相手の速度・向き・方位を信頼したか(R8-R1)と、
+/// 自艇の向きを基準にした相手の位置(前後・横。2026-11-09 追加)。
 ///
 /// 方位の信頼は評価と同じ規則([ShipDomainService.headingIsReliable])で決める。
 /// 相手が一覧に無い(受信が切れた)ときは null を返し、値を作らない。
-({double? speedMps, bool? headingReliable}) otherBoatTargetDiagnostics(
-  Boat? boat,
-) {
-  if (boat == null) return (speedMps: null, headingReliable: null);
+/// 自艇が無ければ前後・横は null。
+OtherBoatTargetDiagnostics otherBoatTargetDiagnostics(
+  Boat? boat, {
+  Boat? own,
+}) {
+  if (boat == null) return _noTargetDiagnostics;
   final speed = boat.speed;
+  final geometry = own == null
+      ? null
+      : SameDirectionDetector.relativeGeometry(
+          ownPosition: LatLng(own.lat, own.lng),
+          ownHeading: own.heading,
+          otherPosition: LatLng(boat.lat, boat.lng),
+        );
   return (
     speedMps: speed.isFinite ? speed : null,
     headingReliable: ShipDomainService.headingIsReliable(boat),
+    headingDeg: boat.heading.isFinite ? boat.heading : null,
+    alongMeters: geometry?.alongMeters,
+    lateralMeters: geometry?.lateralMeters,
   );
 }
 

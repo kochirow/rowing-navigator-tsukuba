@@ -798,20 +798,20 @@ UseNavigator useNavigator() {
   }
 
   /// 他艇の警告に添える相手の速度・方位の信頼(R8-R1)。記録専用。
-  ({double? speedMps, bool? headingReliable}) diagnosticTargetMotion(
+  OtherBoatTargetDiagnostics diagnosticTargetMotion(
     AlertCandidate candidate,
   ) {
     final targetId = candidate.targetId;
     if (targetId == null || !isOtherBoatAlert(candidate)) {
-      return (speedMps: null, headingReliable: null);
+      return otherBoatTargetDiagnostics(null);
     }
     final boat =
         otherBoats.value.where((boat) => boat.boatId == targetId).firstOrNull;
-    return otherBoatTargetDiagnostics(boat);
+    return otherBoatTargetDiagnostics(boat, own: myBoat.value);
   }
 
   void recordSafetyDiagnostics(SafetyOrchestratorResult result) {
-    // 同じ向きの関係(並走・追いつく・追いつかれる)の変化。相手は別名で残す。
+    // 同じ向きの関係(同じ向き・追いつく側の安全網)の変化。相手は別名で残す。
     for (final (boatId, from, to) in result.sameDirectionChanges) {
       appendDiagnosticEvent(SessionDiagnosticEvent(
         t: result.snapshot.evaluatedAt,
@@ -921,6 +921,9 @@ UseNavigator useNavigator() {
             : null,
         targetSpeedMps: targetMotion.speedMps,
         targetHeadingReliable: targetMotion.headingReliable,
+        targetHeadingDeg: targetMotion.headingDeg,
+        targetAlongMeters: targetMotion.alongMeters,
+        targetLateralMeters: targetMotion.lateralMeters,
       ));
     }
     for (final transition in result.state.transitions) {
@@ -983,6 +986,9 @@ UseNavigator useNavigator() {
         reasonCodes: candidate.reasonCodes,
         targetSpeedMps: targetMotion.speedMps,
         targetHeadingReliable: targetMotion.headingReliable,
+        targetHeadingDeg: targetMotion.headingDeg,
+        targetAlongMeters: targetMotion.alongMeters,
+        targetLateralMeters: targetMotion.lateralMeters,
       ));
       if (transition.to == AlertPhase.safe) {
         diagnosticCandidates.value.remove(transition.alertId);

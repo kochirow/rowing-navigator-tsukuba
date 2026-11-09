@@ -341,7 +341,7 @@ const diagnosticEventCatalog = <String, dynamic>{
     'setting_changed_during_navigation': '航行中に警告・表示等の設定が変更された。',
     'shared_safety_cache_unavailable': '共有安全設定のローカルキャッシュを使用できない。',
     'same_direction_relation_changed':
-        '同じ向きの他艇との関係(並走・追いつく・追いつかれる・なし)が変わった。並走・追いつかれる相手への他艇警告は音を出さず、追いつく相手へは安全網だけ鳴らす。',
+        '同じ向き(向きの差30°以内)の他艇との関係(sameDirection・overtakingSafetyNet・なし)が変わった。同じ向きの相手への他艇警告は音を出さず、後ろから4秒以内に当たる安全網(overtakingSafetyNet)のときだけ鳴らす。',
     'shared_safety_calibration_applied': '受信した共有安全校正値を航行中の判定へ適用した。',
     'shared_safety_calibration_apply_failed': '受信した共有安全校正値を適用できなかった。',
     'shared_safety_calibration_pending':

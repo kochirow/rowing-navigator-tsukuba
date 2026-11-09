@@ -120,36 +120,16 @@ class SuppressionRules {
     requiredInputs: {SuppressionInput.ownSpeed},
   );
 
-  /// 並走している相手への他艇警告の静音(2026-11-07 利用者決定)。
+  /// 同じ向きに漕いでいる相手への他艇警告の静音(2026-11-09 利用者決定)。
   ///
-  /// 並走は、向きの差45°以内・横30m以内・10秒間の距離の変化7m未満が10秒続いた
-  /// 状態([SameDirectionDetector])。少なくとも片方が相手を見ているので、その相手への
-  /// 警告は表示だけにする。判定は受け取った位置だけで行い、相手の速さは使わない
-  /// (速さが実際より遅く届くことがある)。3艇目の他艇には働かない。
-  static const sideBySide = SuppressionRule(
-    id: 'side_by_side',
-    reasonCode: 'PRESENTATION_SIDE_BY_SIDE_SILENT',
-    allowedCategories: {otherBoat},
-    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
-  );
-
-  /// 追いつく側(後ろの速い艇)の、その相手への他艇警告の静音(2026-11-08 利用者決定)。
-  ///
-  /// よけるのは前の遅い艇なので、速い艇は漕ぎに集中する。相手が進路上(横5m以内)に
-  /// 残ったまま、速度差を入れた到達時間が4秒以内になったら、この規則を適用しない
-  /// (安全網。`SafetyOrchestrator._overtakingSafetyNetApplies`)。
-  static const overtaking = SuppressionRule(
-    id: 'overtaking',
-    reasonCode: 'PRESENTATION_OVERTAKING_SILENT',
-    allowedCategories: {otherBoat},
-    maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
-  );
-
-  /// 追いつかれる側(前の遅い艇)の、その相手への他艇警告の静音(2026-11-08 利用者決定)。
-  /// 前の艇の漕手は後ろ(追いついてくる艇の側)を向いていて見えている。
-  static const overtaken = SuppressionRule(
-    id: 'overtaken',
-    reasonCode: 'PRESENTATION_OVERTAKEN_SILENT',
+  /// 向きの差30°以内で、どちらの向きも信頼できる相手([SameDirectionDetector])。
+  /// 並走でも縦列でも、少なくとも片方が相手を見ているので、その相手への警告は
+  /// 表示だけにする。判定は受け取った位置と向きで行い、相手の速さは使わない
+  /// (速さが実際より遅く届くことがある)。追いつく側の安全網に当たっている間は
+  /// 適用しない。3艇目の他艇には働かない。
+  static const sameDirection = SuppressionRule(
+    id: 'same_direction',
+    reasonCode: 'PRESENTATION_SAME_DIRECTION_SILENT',
     allowedCategories: {otherBoat},
     maximumSuppressibleUrgency: SuppressibleUrgency.continuous,
   );
@@ -251,9 +231,7 @@ class SuppressionRules {
 
   static const all = <SuppressionRule>[
     lowSpeed,
-    sideBySide,
-    overtaking,
-    overtaken,
+    sameDirection,
     uncertaintyOnly,
     mooringArea,
     stableStop,
