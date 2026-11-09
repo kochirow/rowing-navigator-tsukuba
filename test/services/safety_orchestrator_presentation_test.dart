@@ -2049,8 +2049,15 @@ void main() {
             contains('SAME_DIRECTION_OVERTAKING_SAFETY_NET'));
       });
 
-      test('横4mで抜いていくなら、近くても鳴らさない', () {
-        final result = run(otherAlong: 33, closing: 1.5, lateral: 4);
+      test('横に8mより離れて抜くなら、近くても鳴らさない', () {
+        final result = run(otherAlong: 33, closing: 1.5, lateral: 10);
+        expect(result.snapshot.audioDirective, isNull);
+      });
+
+      test('艇首が前の艇の艇尾を過ぎて横に並んだら、安全網を終える', () {
+        // 14秒目の前後の距離は5m(艇の長さ13.4mより短い)。
+        final result =
+            run(otherAlong: 26, closing: 1.5, lateral: 4, seconds: 14);
         expect(result.snapshot.audioDirective, isNull);
       });
 

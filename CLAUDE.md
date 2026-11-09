@@ -159,7 +159,7 @@ flutter run
 | `lib/services/collision_risk_evaluator_service.dart` | リスク評価の本体。静的区域・他艇・近接・区域進入を統合 |
 | `lib/services/static_obstacle_index.dart` | 固定危険区域の空間索引(グリッドハッシュ・純Dart) |
 | `lib/services/ship_domain_service.dart` | 船体領域/排他領域の生成。低速時は横方向を有界に拡張 |
-| `lib/services/same_direction_detector.dart` | 同じ向き(向きの差30°以内)の他艇と、追いつく側の安全網を見る(純Dart)。受け取った位置と、同じ時刻の自艇の位置から前後・横を求める。相手の速さは使わない |
+| `lib/services/same_direction_detector.dart` | 同じ向き(向きの差30°以内)の他艇と、追いつく側の安全網を見る(純Dart)。受け取った位置と、同じ時刻の自艇の位置から前後・横を(航路中心線があれば中心線に沿って)求める。相手の速さは使わない |
 | `lib/services/safety_orchestrator.dart` | 全detectorの候補を1つのFSMへ集約する単一writer。提示ポリシー |
 | `lib/services/alert_state_machine.dart` | 警告のライフサイクル(candidate→alerting→clearing→safe) |
 | `lib/hooks/use_alert.dart` | 警告音の再生と、OS割込みからの自動復旧。**再生要求は直列キューで1本ずつ実行する**(並行実行すると、段階が上がる瞬間に古い要求が新しい音を止める)。2本目のプレイヤー(`playCue`)は現在未使用(読み上げを重ねると両方聞き取れないため) |
@@ -327,9 +327,12 @@ flutter run
 相手が送ってきた速さは使わず、受け取った位置と向きで判定する。自艇・相手のどちらかの向きが
 信頼できない(0.5m/s未満)ときは対象にしない。3艇目の他艇・岸・橋・カーブは変えない。
 同じ向きの艇が30m以内にいる間は逆走注意を読み上げず、離れたら6秒の確認をやり直す。
-安全網として、後ろの速い艇には、前の艇が横2m以内(直近6秒の平均)に残ったまま、位置から求めた
-近づく速さ(0.5m/s以上)で4秒以内に艇首が前の艇の艇尾に届くときだけ鳴らす
-(`overtakingSafetyNetDeadline` ほか。測位誤差の分2m短めに見る)。根拠は DESIGN_PRINCIPLES 1.4・3.4.3。
+安全網として、後ろの速い艇には、前の艇が横8m以内(直近6秒の平均)にいて、位置から求めた
+近づく速さ(0.5m/s以上)で4秒以内に艇首が前の艇の艇尾に届くときだけ鳴らし、横に並んだら終える
+(`overtakingSafetyNetDeadline` ほか。測位誤差の分2m短めに見る)。前後・横は航路中心線に沿って測る
+(`processAssessment` の `centerlineFor`)。横を船体の幅(2m)で絞らないのは、2台の端末の相対誤差
+(約2.5m・ゆっくり変わる)で同じレーンの追突の35〜60%を逃したため(2026-11-09 練習日シミュレーション)。
+根拠は DESIGN_PRINCIPLES 1.4・3.4.3。
 
 自艇が安定停止(0.4m/s未満が5秒継続)している間、**固定障害物**の反復音は抑える。
 この規則と下の重なり・桟橋エリア・港の中の規則は、低速が確定する前の3秒間と、

@@ -17,6 +17,9 @@
 //     --dart-define=SIM=practice --dart-define=OUT=/tmp/practice.json
 //   flutter test tool/simulate_alert_timing.dart \
 //     --dart-define=SIM=conflict --dart-define=OUT=/tmp/conflict.json
+//   flutter test tool/simulate_alert_timing.dart \
+//     --dart-define=SIM=fleet --dart-define=OUT=/tmp/fleet.json
+//     (4+×2の並走・2x×2の鬼ごっこ・1x×2の自由練習と逆側漕ぎ。同じ向きの規則の有無を比べる)
 //
 // 追加の指定: SEED(既定 20261023)、MINUTES(練習の長さ、既定 60)、
 // RUNS(危ない場面1種類あたりの試行数、既定 120)、WATERS(カンマ区切り)。
@@ -53,6 +56,7 @@ import 'package:rowing_navigator/services/channel_lane_resolver.dart';
 import 'package:rowing_navigator/services/collision_risk_evaluator_service.dart';
 import 'package:rowing_navigator/services/preset_obstacle_service.dart';
 import 'package:rowing_navigator/services/safety_orchestrator.dart';
+import 'package:rowing_navigator/services/same_direction_detector.dart';
 import 'package:rowing_navigator/services/ship_domain_service.dart';
 import 'package:rowing_navigator/types/boat_type.dart';
 import 'package:rowing_navigator/utils/sat_algorithm.dart';
@@ -64,6 +68,7 @@ const _seed = int.fromEnvironment('SEED', defaultValue: 20261023);
 const _minutes = int.fromEnvironment('MINUTES', defaultValue: 60);
 const _runs = int.fromEnvironment('RUNS', defaultValue: 120);
 const _watersArg = String.fromEnvironment('WATERS');
+const _fleetRuns = int.fromEnvironment('FLEET_RUNS', defaultValue: 3);
 
 /// 比べる「鳴り始め」(確実な当たり予測)[秒]。予測地平も同じ値にする。
 const _deadlines = <double>[9, 10, 11, 12, 13, 14, 16, 18, 20];
@@ -99,7 +104,8 @@ void main() {
       'calibrate' => _calibrate(world),
       'practice' => _runPractice(world),
       'conflict' => _runConflicts(world),
-      _ => throw ArgumentError('SIM は calibrate / practice / conflict'),
+      'fleet' => _runFleet(world),
+      _ => throw ArgumentError('SIM は calibrate / practice / conflict / fleet'),
     };
     final json = const JsonEncoder.withIndent('  ').convert(summary);
     if (_outPath.isNotEmpty) File(_outPath).writeAsStringSync(json);
@@ -317,12 +323,26 @@ class _Ou {
 
 enum _Phase { rowing, stopping, resting, turning }
 
+enum _Drill { none, sideBySide, chase }
+
 class _Plan {
   /// 練習らしい漕ぎ方を繰り返す。false なら場面で決めた動きだけをする。
   bool practice = true;
   double? fixedSpeed;
   double? fixedCross;
   bool holdStill = false;
+
+  /// 組んで漕ぐ練習(SIM=fleet)。[leader] に合わせて漕ぐ。
+  _Drill drill = _Drill.none;
+  _Boat? leader;
+
+  /// 並走の横の間隔 [m](相手の左側=中心線側)と、休憩で並んで止まる間隔 [m]。
+  double drillLateral = 6;
+  double restLateral = 14;
+
+  /// 往路ごとに逆側(進行方向の左のレーン)を漕ぐ確率と、いま逆側か。
+  double wrongSideChance = 0;
+  bool wrongSide = false;
 }
 
 class _Boat {
@@ -382,6 +402,17 @@ class _Boat {
 
   /// 同じ水域の艇(見張りの対象)。
   List<_Boat> fleet = const [];
+
+  /// 組んで漕ぐ練習で決めた目標(null なら通常の練習の値)。
+  double? drillSpeed;
+  double? drillCross;
+
+  /// 並走の前後のずれ(±数m・ゆっくり)と、鬼ごっこで横を抜いている最中か。
+  _Ou? _drillAlong;
+  bool passing = false;
+
+  bool isPartnerOf(_Boat o) =>
+      identical(plan.leader, o) || identical(o.plan.leader, this);
   double t = 0;
 
   _Phase phase = _Phase.rowing;
@@ -419,6 +450,8 @@ class _Boat {
     if (!plan.practice) return;
     for (final o in fleet) {
       if (identical(o, this)) continue;
+      // 組んで漕いでいる相手との間合いは _followDrill が決める。
+      if (isPartnerOf(o)) continue;
       final gap = (o.s - s) * dir; // 前方が正
       final lateral = (o.c - c) * dir; // 自艇の右が正
       if (o.dir != dir && o.phase == _Phase.rowing) {
@@ -445,6 +478,79 @@ class _Boat {
         // 横並び: 片方(IDの大きい方)が下がって間を空ける。
         matchSpeed = math.max(0.6, o.v - 0.6);
       }
+    }
+  }
+
+  /// 組んで漕ぐ練習(SIM=fleet)。リーダーの漕ぎ方(ピース・流し・休憩・回頭)に
+  /// 合わせ、並走なら横に並び、鬼ごっこなら真後ろから追いついて横を抜く。
+  /// 抜き終えたら役を入れ替える(抜いた艇が前で漕ぎ、抜かれた艇が追う)。
+  void _followDrill(_Rng rng, double dt) {
+    drillSpeed = null;
+    drillCross = null;
+    final leader = plan.leader;
+    if (leader == null || plan.drill == _Drill.none) return;
+    if (phase == _Phase.turning) return;
+    final gap = (leader.s - s) * dir; // リーダーが前なら正
+    // リーダーが近くで回頭を始めたら、一緒に回る。
+    if (leader.phase == _Phase.turning && leader.dir == dir && gap.abs() < 80) {
+      phase = _Phase.turning;
+      turnAngle = 0;
+      phaseUntil = t + rng.uniform(35, 50);
+      passing = false;
+      return;
+    }
+    // 違う向き(片方だけ回頭した後など)の間は、それぞれ通常の練習をする。
+    if (leader.dir != dir || leader.phase == _Phase.turning) return;
+    phase = leader.phase;
+    phaseUntil = leader.phaseUntil;
+    cruise = leader.cruise;
+    spm = leader.spm;
+    inPiece = leader.inPiece;
+    final resting = leader.phase != _Phase.rowing;
+    final wobble = (_drillAlong ??= _Ou(3, 20, rng))..step(dt, rng);
+    switch (plan.drill) {
+      case _Drill.none:
+        return;
+      case _Drill.sideBySide:
+        final lateral = resting ? plan.restLateral : plan.drillLateral;
+        drillCross = leader.c - dir * lateral;
+        drillSpeed = leader.v + ((gap - wobble.value) * 0.25).clamp(-0.8, 0.8);
+      case _Drill.chase:
+        if (resting) {
+          // 休憩は真後ろ15mで止まる。
+          drillCross = leader.c;
+          drillSpeed = leader.v + ((gap - 15) * 0.2).clamp(-0.8, 0.8);
+          passing = false;
+          return;
+        }
+        final oncoming = fleet.any((x) =>
+            x.dir != dir && ((x.s - s) * dir) > 0 && ((x.s - s) * dir) < 150);
+        // 抜くときは早めに(後ろ45m)横へ出始める。横の動きは遅い(周期約60秒)。
+        if (!passing && gap < 45 && !oncoming) passing = true;
+        if (passing) {
+          // 中心線側へ5m出て抜く。
+          drillCross = leader.c - dir * 5;
+          drillSpeed = leader.v + 0.5;
+          if (gap < -15) {
+            // 抜き終えた。役を入れ替える。
+            passing = false;
+            plan.leader = null;
+            leader.plan
+              ..leader = this
+              ..drill = _Drill.chase;
+            leader.passing = false;
+            drillCross = null;
+            drillSpeed = null;
+          }
+        } else if (gap < 45) {
+          // 反対から艇が来ているので、後ろ20mで待つ。
+          drillCross = leader.c + wobble.value * 0.3;
+          drillSpeed = leader.v + ((gap - 20) * 0.2).clamp(-0.8, 0.3);
+        } else {
+          // 真後ろから0.4m/s速く追う。
+          drillCross = leader.c + wobble.value * 0.3;
+          drillSpeed = leader.v + 0.4 + ((gap - 60) * 0.01).clamp(0, 0.4);
+        }
     }
   }
 
@@ -481,8 +587,9 @@ class _Boat {
 
   void step(double dt, _Rng rng) {
     t += dt;
-    _schedule(rng);
+    if (plan.leader == null || plan.leader!.dir != dir) _schedule(rng);
     _lookout();
+    _followDrill(rng, dt);
     final tangentSign = dir.toDouble();
     final lane = water.laneAt(s, dir);
 
@@ -510,9 +617,18 @@ class _Boat {
     double targetCross;
     switch (phase) {
       case _Phase.rowing:
-        targetSpeed = plan.fixedSpeed ?? matchSpeed ?? cruise;
+        targetSpeed = plan.fixedSpeed ?? drillSpeed ?? matchSpeed ?? cruise;
         targetCross = plan.fixedCross ??
-            _clampToLane(dir * (rightOffset + avoidShift), s, dir);
+            drillCross ??
+            (plan.wrongSide
+                ? _clampToLane(-dir * rightOffset + dir * avoidShift, s, -dir)
+                : _clampToLane(dir * (rightOffset + avoidShift), s, dir));
+      case _Phase.stopping when drillCross != null:
+        targetSpeed = drillSpeed ?? 1.2;
+        targetCross = drillCross!;
+      case _Phase.resting when drillCross != null:
+        targetSpeed = math.max(0, drillSpeed ?? 0);
+        targetCross = drillCross!;
       case _Phase.stopping:
         targetSpeed = 1.2;
         // 進行方向の右へ寄せて止まる(レーンの外側の端から4m内側まで)。
@@ -536,7 +652,17 @@ class _Boat {
       v = math.max(0, v - 0.5 * dt);
       turnAngle = math.min(math.pi, turnAngle + math.pi * dt / duration);
       if (turnAngle == math.pi * dt / duration) rightOffset = _drawOffset(rng);
-      final next = _clampToLane(-dir * rightOffset, s, -dir);
+      var next = _clampToLane(-dir * rightOffset, s, -dir);
+      final leader = plan.leader;
+      if (leader != null &&
+          plan.drill != _Drill.none &&
+          leader.phase == _Phase.turning) {
+        // 一緒に回るときは、回り終えた後もリーダーとの並び(横・真後ろ)を保つ。
+        final leaderNext = _clampToLane(-dir * leader.rightOffset, s, -dir);
+        next = plan.drill == _Drill.sideBySide
+            ? leaderNext + dir * plan.drillLateral
+            : leaderNext;
+      }
       c += (next - c) * math.min(1, dt / 30) * 0.5;
       u = 0;
       if (turnAngle >= math.pi - 1e-6 || t >= phaseUntil) {
@@ -544,6 +670,8 @@ class _Boat {
         turnAngle = 0;
         phase = _Phase.rowing;
         inPiece = false;
+        plan.wrongSide =
+            plan.wrongSideChance > 0 && rng.chance(plan.wrongSideChance);
         cruise = rng.normal(2.55, 0.25) + _typeBonus;
         phaseUntil = t + rng.uniform(60, 200);
       }
@@ -560,8 +688,10 @@ class _Boat {
     v = math.max(0, v + dv);
 
     // 横: レーン中央へ戻ろうとする減衰振動 + 乱れ(周期約60秒)。
-    const omega = 2 * math.pi / 60;
-    const zeta = 0.55;
+    // 組んで漕いでいる艇は、相手との横の間隔を積極的に保つ(周期約15秒)。
+    final drilling = drillCross != null;
+    final omega = 2 * math.pi / (drilling ? 15 : 60);
+    final zeta = drilling ? 0.8 : 0.55;
     final noise = v > 0.5 ? _lateralNoise : 0.01;
     final a = -omega * omega * (c - targetCross) -
         2 * zeta * omega * u +
@@ -739,19 +869,30 @@ double _round(double x) => (x * 10).roundToDouble() / 10;
 
 /// 比べる設定1つ。鳴り始め [deadline] と、確度が低いときの鳴り始め [lowConfidence]。
 class _Variant {
-  const _Variant(this.deadline, this.lowConfidence);
+  const _Variant(this.deadline, this.lowConfidence,
+      {this.sameDirection = true});
   final double deadline;
   final double lowConfidence;
-  String get key => 'D${_fmt(deadline)}_L${_fmt(lowConfidence)}';
+
+  /// 同じ向きの判定(SameDirectionDetector)へ自艇・他艇を渡すか。
+  /// false なら同じ向きの規則が働かない(比較用)。
+  final bool sameDirection;
+  String get key =>
+      'D${_fmt(deadline)}_L${_fmt(lowConfidence)}${sameDirection ? '' : '_noSameDir'}';
   static String _fmt(double x) =>
       x == x.roundToDouble() ? x.toStringAsFixed(0) : x.toStringAsFixed(1);
 }
 
-List<_Variant> _variants() => [
-      for (final d in _deadlines) _Variant(d, math.min(10, d - 0.5)),
-      for (final l in _lowConfidenceDeadlines)
-        if (l != 10) _Variant(13, l),
-    ];
+/// VARIANT_SET=current なら、今の設定(13秒・10秒)を同じ向きの規則の有無で比べる。
+const _variantSet = String.fromEnvironment('VARIANT_SET');
+
+List<_Variant> _variants() => _variantSet == 'current'
+    ? const [_Variant(13, 10), _Variant(13, 10, sameDirection: false)]
+    : [
+        for (final d in _deadlines) _Variant(d, math.min(10, d - 0.5)),
+        for (final l in _lowConfidenceDeadlines)
+          if (l != 10) _Variant(13, l),
+      ];
 
 class _Message {
   _Message(this.boat, this.sentAt, this.arrivesAt);
@@ -762,7 +903,7 @@ class _Message {
 
 /// 1艇ぶんの判定器(設定ごとに提示の状態を持つ)。
 class _Judge {
-  _Judge(this.boat, List<_Variant> variants, _World world)
+  _Judge(this.boat, List<_Variant> variants, this.world)
       : orchestrators = {
           for (final v in variants)
             v.key: SafetyOrchestrator(
@@ -782,6 +923,23 @@ class _Judge {
 
   /// 受信した他艇の最新メッセージ。
   final inbox = <String, _Message>{};
+
+  /// 検証用: 同じ入力を渡す同じ向きの判定(提示には使わない)。
+  /// 安全網の「横の距離」の測り方と閾値を比べる。H=自艇の向き基準、R=航路中心線基準。
+  late final probes = <String, SameDirectionDetector>{
+    // 2026-11-09 の最初の案(自艇の向き基準・横2m・横に並んでも続ける)。
+    'H2':
+        SameDirectionDetector(inPathLateralMeters: 2, endWhenAlongside: false),
+    'R5': SameDirectionDetector(
+      centerlineFor: world.resolver.centerlineFor,
+      inPathLateralMeters: 5,
+      endWhenAlongside: false,
+    ),
+    // 今の設定(中心線基準・横8m・横に並んだら終える)。
+    'W8': SameDirectionDetector(centerlineFor: world.resolver.centerlineFor),
+  };
+  Map<String, Map<String, SameDirectionStatus>> probeStatus = const {};
+  final _World world;
 }
 
 /// ある設定で、ある時刻に鳴っていた音。
@@ -858,9 +1016,33 @@ class _Simulation {
       // アプリと同じく、6秒より古い艇を落としてから現在まで外挿する。
       final others = <Boat>[];
       final speedById = <String, double?>{};
+      // 同じ向きの判定へ渡す値。アプリと同じく、他艇は受信した生の値(相手の
+      // 測位時刻つき)、自艇は今の推定値。時刻はシミュレーションの時刻にそろえる
+      // (assessRisk は実時計を使うので、評価用の値とは別に作る)。
+      final simOwn = Boat(
+        boatId: own.boatId,
+        boatType: own.boatType,
+        lat: own.lat,
+        lng: own.lng,
+        heading: own.heading,
+        speed: own.speed,
+        timestamp: evaluatedAt,
+        accuracy: own.accuracy,
+      );
+      final simOthers = <Boat>[];
       for (final m in judge.inbox.values) {
         final age = now - m.sentAt;
         if (age >= boatPredictionTimeoutSeconds) continue;
+        simOthers.add(Boat(
+          boatId: m.boat.boatId,
+          boatType: m.boat.boatType,
+          lat: m.boat.lat,
+          lng: m.boat.lng,
+          heading: m.boat.heading,
+          speed: m.boat.speed,
+          timestamp: m.boat.timestamp,
+          accuracy: m.boat.accuracy,
+        ));
         final stamped = Boat(
           boatId: m.boat.boatId,
           boatType: m.boat.boatType,
@@ -875,6 +1057,10 @@ class _Simulation {
         others.add(evaluator.extrapolateToNow(stamped, now: wallNow));
         speedById[m.boat.boatId] = m.boat.speed;
       }
+      judge.probeStatus = {
+        for (final e in judge.probes.entries)
+          e.key: e.value.update(own: simOwn, others: simOthers),
+      };
       final assessments = <double, RiskAssessment>{};
       for (final v in variants) {
         final assessment = assessments.putIfAbsent(
@@ -899,6 +1085,9 @@ class _Simulation {
           ownPosition: LatLng(own.lat, own.lng),
           otherBoatSpeedById: speedById,
           healthyBoatIds: speedById.keys.toSet(),
+          ownBoat: v.sameDirection ? simOwn : null,
+          otherBoats: v.sameDirection ? simOthers : const [],
+          centerlineFor: world.resolver.centerlineFor,
         );
         (audibleTargets[v.key] ??= {})[judge.boat.id] = {
           for (final alert in r.snapshot.activeAlerts)
@@ -1205,6 +1394,12 @@ Map<String, dynamic> _runConflicts(_World world) {
 
       var dangerRuns = 0;
       var runs = 0;
+      var noHullRuns = 0;
+      final lateralsAtDanger = <double>[];
+      final hullLeads = {for (final v in variants) v.key: <double>[]};
+      final hullMissed = {for (final v in variants) v.key: 0};
+      final netLeads = <String, List<double>>{};
+      final netMissed = <String, int>{};
       final rng = _Rng(_seed + entry.key.hashCode % 10000 + water.key.length);
       final stopwatch = Stopwatch()..start();
       for (var k = 0; k < _runs; k++) {
@@ -1217,6 +1412,9 @@ Map<String, dynamic> _runConflicts(_World world) {
             ? null
             : world.obstacles.firstWhere((o) => o.id == hazardId);
         double? firstDanger;
+        double? firstHull;
+        final firstNet = <String, double>{};
+        double? lateralAtDanger;
         final firstSound = <String, double>{};
         final firstAnySound = <String, double>{};
         final firstAlert = <String, double>{};
@@ -1255,12 +1453,51 @@ Map<String, dynamic> _runConflicts(_World world) {
           final danger = hazard == null
               ? sim.trueConflict(a, boats[1]).$1
               : sim.trueHazardContact(a, hazard);
-          if (danger) {
+          if (danger && firstDanger == null) {
             firstDanger = now;
+            if (hazard == null) lateralAtDanger = (a.c - boats[1].c).abs();
+            // 艇どうしの場面は、船体が当たるまで(最大40秒)続けて見る。
+            if (hazard != null) break;
+          }
+          if (hazard == null) {
+            final ps = sim.judges[a.id]!.probeStatus;
+            for (final e in ps.entries) {
+              if (e.value[boats[1].id]?.safetyNet ?? false) {
+                firstNet[e.key] ??= now;
+              }
+            }
+          }
+          if (hazard == null && _hullHit(a, boats[1])) {
+            firstHull = now;
             break;
           }
+          if (firstDanger != null && now - firstDanger > 40) break;
         }
         if (firstDanger == null) continue;
+        if (hazard == null) {
+          lateralsAtDanger.add(lateralAtDanger!);
+          if (firstHull == null) {
+            noHullRuns++;
+          } else {
+            for (final v in variants) {
+              final s = firstSound[v.key];
+              if (s == null || s > firstHull) {
+                hullMissed[v.key] = hullMissed[v.key]! + 1;
+              } else {
+                hullLeads[v.key]!.add(firstHull - s);
+              }
+            }
+            for (final p in const ['H2', 'R5', 'W8']) {
+              final n = firstNet[p];
+              final leadsP = netLeads.putIfAbsent(p, () => []);
+              if (n == null || n > firstHull) {
+                netMissed[p] = (netMissed[p] ?? 0) + 1;
+              } else {
+                leadsP.add(firstHull - n);
+              }
+            }
+          }
+        }
         dangerRuns++;
         if (straightPredictionTicks > 0) straightRuns++;
         for (final v in variants) {
@@ -1296,6 +1533,24 @@ Map<String, dynamic> _runConflicts(_World world) {
         'water': water.label,
         'runs': runs,
         'dangerRuns': dangerRuns,
+        // 艇どうしの場面: 危険接近のときの横の距離、船体が当たらずに済んだ数、
+        // 船体が当たる何秒前に鳴ったか(鳴らなかった数)。
+        'lateralAtDanger': _percentiles(lateralsAtDanger),
+        'noHullContactRuns': noHullRuns,
+        'safetyNetProbe': {
+          for (final p in netLeads.keys)
+            p: {
+              'lead': _percentiles(netLeads[p]!),
+              'notBeforeHull': netMissed[p] ?? 0,
+            },
+        },
+        'hull': {
+          for (final v in variants)
+            v.key: {
+              'lead': _percentiles(hullLeads[v.key]!),
+              'notAlertedBeforeHull': hullMissed[v.key],
+            },
+        },
         'wallSeconds': stopwatch.elapsed.inSeconds,
         'variants': {
           for (final v in variants)
@@ -1440,4 +1695,294 @@ _Boat _scenarioBoat(String id, _Water w, _Rng r,
   final a = _scenarioBoat('a', w, r,
       s: sa, dir: dirA, speed: va, cross: f.crossMeters + r.uniform(-1.5, 1.5));
   return ([a], pier.id);
+}
+
+// =====================================================================
+// 練習日(SIM=fleet): 4〜6艇が組んで漕ぐ練習で、同じ向きの規則の有無を比べる
+// =====================================================================
+//
+// 実機ログ(2026-11-07 桜川・11/03 霞ヶ浦)の練習に合わせた組み:
+// - 4+ ×2: 並走でピース(横4〜8m)。休憩は横12〜17mで並んで止まる
+//   (11/07 学園大橋の上流で2艇が止まって並んだ)。回頭も一緒にする。
+// - 2x ×2: 鬼ごっこ。真後ろから0.4〜0.8m/s速く追い、追いついたら中心線側へ
+//   5m出て抜き、役を入れ替える。反対から艇が来ていれば後ろ20mで待つ。
+// - 1x ×2: 通常の練習。1艇は往路ごとに35%で逆側(左)を漕ぐ
+//   (11/07 の1回目の下りは95〜100%の時間を左側で漕いでいた)。
+// 4艇のときは 4+ ×2・2x(通常)・1x(逆側あり)。
+// 艇は見張りで正面の艇とは右へよけ、遅い艇は追い越す(_Boat._lookout)。
+
+String _trueRelation(_Boat a, _Boat b) {
+  if (a.phase == _Phase.turning || b.phase == _Phase.turning) return 'turning';
+  if (b.v < 0.5) return 'stopped';
+  final d = ((a.trueHeading - b.trueHeading) % 360 + 360) % 360;
+  final diff = d > 180 ? 360 - d : d;
+  if (diff <= 30) {
+    if (!a.isPartnerOf(b)) return 'same_dir';
+    return a.plan.drill == _Drill.chase || b.plan.drill == _Drill.chase
+        ? 'same_dir_chase'
+        : 'same_dir_side_by_side';
+  }
+  if (diff >= 150) return 'oncoming';
+  return 'crossing';
+}
+
+double _hullLength(BoatType t) => switch (t) {
+      BoatType.r_8p => 19.9,
+      BoatType.r_4x || BoatType.r_4m || BoatType.r_4p => 13.4,
+      BoatType.r_2x || BoatType.r_2m || BoatType.r_2p => 10.4,
+      _ => 8.2,
+    };
+
+/// 船体どうしが当たっているか(川に沿う座標で、横1.2m以内・前後が艇の長さの平均以内)。
+bool _hullHit(_Boat a, _Boat b) {
+  if (a.phase == _Phase.turning || b.phase == _Phase.turning) return false;
+  return (a.c - b.c).abs() < 1.2 &&
+      (a.s - b.s).abs() < (_hullLength(a.type) + _hullLength(b.type)) / 2;
+}
+
+List<_Boat> _fleetBoats(_Water w, _Rng r, int n) {
+  final starts = <double>[];
+  while (starts.length < 4) {
+    final x = r.uniform(150, w.length - 150);
+    if (starts.every((y) => (x - y).abs() >= 200)) starts.add(x);
+    if (starts.isEmpty && w.length < 900) starts.add(x);
+  }
+  int dirAt() => r.chance(.5) ? 1 : -1;
+  _Boat boat(String id, BoatType type, double s, int dir) =>
+      _Boat(id: id, type: type, water: w, s: s, dir: dir, rng: r);
+  final d0 = dirAt(), d1 = dirAt();
+  final fourA = boat('4+A', BoatType.r_4p, starts[0], d0);
+  final fourB = boat('4+B', BoatType.r_4p, starts[0] - d0 * 3, d0)
+    ..plan.drill = _Drill.sideBySide
+    ..plan.leader = fourA
+    ..plan.drillLateral = r.uniform(4, 8)
+    ..plan.restLateral = r.uniform(12, 17);
+  fourB.c = fourA.c - d0 * fourB.plan.drillLateral;
+  final boats = [fourA, fourB];
+  if (n >= 6) {
+    final twoA = boat('2xA', BoatType.r_2x, starts[1], d1);
+    final twoB = boat('2xB', BoatType.r_2x, starts[1] - d1 * 40, d1)
+      ..plan.drill = _Drill.chase
+      ..plan.leader = twoA;
+    twoB.c = twoA.c;
+    boats
+      ..add(twoA)
+      ..add(twoB)
+      ..add(boat('1xA', BoatType.r_1x, starts[2], dirAt()));
+  } else {
+    boats.add(boat('2xA', BoatType.r_2x, starts[1], d1));
+  }
+  final wrong = boat('1xB', BoatType.r_1x, starts[3], dirAt())
+    ..plan.wrongSideChance = 0.35;
+  wrong.plan.wrongSide = r.chance(0.35);
+  boats.add(wrong);
+  return boats;
+}
+
+Map<String, dynamic> _runFleet(_World world) => _runFleetImpl(world);
+
+Map<String, dynamic> _runFleetImpl(_World world) {
+  const variants = [
+    _Variant(13, 10),
+    _Variant(13, 10, sameDirection: false),
+  ];
+  final out = <String, dynamic>{};
+  for (final water in world.selectedWaters()) {
+    for (final n in const [6, 4]) {
+      // 設定ごと: カテゴリ → 音のある秒、他艇の音の真の関係 → 秒、読み上げ回数
+      final soundSec = {for (final v in variants) v.key: <String, int>{}};
+      final relationSec = {for (final v in variants) v.key: <String, int>{}};
+      final utterances = {for (final v in variants) v.key: <String, int>{}};
+      final drillSec = <String, int>{};
+      // 検証用の安全網: 案ごとに「安全網に当たっていた秒」(端末 a・相手 b の真の関係別)。
+      final probeNetSec = <String, Map<String, int>>{};
+      final probeHitLead = <String, List<double?>>{};
+      final drillAudible = {for (final v in variants) v.key: <String, int>{}};
+      final events = <Map<String, dynamic>>[];
+      var boatSeconds = 0;
+      final stopwatch = Stopwatch()..start();
+      for (var run = 0; run < _fleetRuns; run++) {
+        final rng = _Rng(_seed + run * 101 + n * 7 + water.key.length * 13);
+        final boats = _fleetBoats(water, rng, n);
+        final sim = _Simulation(world, boats, variants, rng);
+        final lastEventId = {
+          for (final v in variants) v.key: <String, String?>{}
+        };
+        // 直近の「a が b へ鳴らし始めた時刻」(設定 → 'a>b' → 時刻)。
+        final soundingSince = {
+          for (final v in variants) v.key: <String, double>{}
+        };
+        final lastSoundAt = {
+          for (final v in variants) v.key: <String, double>{}
+        };
+        final lastEventAtPair = <String, double>{};
+        final probeLastNet = <String, double>{};
+        final probeNetPrev = <String, double>{};
+        final probeNetSince = <String, double>{};
+        for (var sec = 0; sec < _minutes * 60; sec++) {
+          final sounds = sim.tick();
+          final now = boats.first.t;
+          boatSeconds += boats.length;
+          for (final a in boats) {
+            final ps = sim.judges[a.id]!.probeStatus;
+            for (final e in ps.entries) {
+              for (final st in e.value.entries) {
+                if (!st.value.safetyNet) continue;
+                final b = boats.firstWhere((o) => o.id == st.key);
+                final rel = _trueRelation(a, b);
+                final m = probeNetSec.putIfAbsent(e.key, () => {});
+                m[rel] = (m[rel] ?? 0) + 1;
+                final key = '${e.key}:${a.id}>${b.id}';
+                probeLastNet[key] = now;
+                final last = probeNetPrev[key];
+                if (last == null || now - last > 3) probeNetSince[key] = now;
+                probeNetPrev[key] = now;
+              }
+            }
+          }
+          // 組んで漕いでいる時間(同じ向き・両方漕いでいる)
+          for (final a in boats) {
+            final leader = a.plan.leader;
+            if (leader == null) continue;
+            final rel = _trueRelation(a, leader);
+            if (rel.startsWith('same_dir_') &&
+                a.phase == _Phase.rowing &&
+                leader.phase == _Phase.rowing) {
+              drillSec[rel] = (drillSec[rel] ?? 0) + 2; // 2艇ぶん
+            }
+          }
+          for (final v in variants) {
+            for (final a in boats) {
+              final snd = sounds[v.key]![a.id];
+              if (snd == null) {
+                lastEventId[v.key]![a.id] = null;
+                continue;
+              }
+              final sec0 = soundSec[v.key]!;
+              sec0[snd.category] = (sec0[snd.category] ?? 0) + 1;
+              if (snd.eventId != lastEventId[v.key]![a.id]) {
+                final u = utterances[v.key]!;
+                u[snd.category] = (u[snd.category] ?? 0) + 1;
+              }
+              lastEventId[v.key]![a.id] = snd.eventId;
+              if (snd.category == 'other_boat') {
+                final b = boats.where((o) => o.id == snd.targetId).firstOrNull;
+                final rel = b == null ? 'unknown' : _trueRelation(a, b);
+                final rs = relationSec[v.key]!;
+                rs[rel] = (rs[rel] ?? 0) + 1;
+                if (b != null &&
+                    a.isPartnerOf(b) &&
+                    rel.startsWith('same_dir_')) {
+                  final da = drillAudible[v.key]!;
+                  da[rel] = (da[rel] ?? 0) + 1;
+                }
+                if (b != null) {
+                  final key = '${a.id}>${b.id}';
+                  final last = lastSoundAt[v.key]![key];
+                  if (last == null || now - last > 3) {
+                    soundingSince[v.key]![key] = now;
+                  }
+                  lastSoundAt[v.key]![key] = now;
+                }
+              }
+            }
+          }
+          // 本当に当たった場面: 船体どうし(向きによらず)、正面・横切りはオールの接触も。
+          for (var i = 0; i < boats.length; i++) {
+            for (var j = i + 1; j < boats.length; j++) {
+              final a = boats[i], b = boats[j];
+              if (_distance(a.truePosition, b.truePosition) > 30) continue;
+              final rel = _trueRelation(a, b);
+              final hull = _hullHit(a, b);
+              final oar = !rel.startsWith('same_dir') &&
+                  rel != 'stopped' &&
+                  sim.trueConflict(a, b).$2;
+              if (!hull && !oar) continue;
+              final pair = '${a.id}|${b.id}';
+              final lastAt = lastEventAtPair[pair];
+              lastEventAtPair[pair] = now;
+              if (lastAt != null && now - lastAt < 60) continue;
+              // 鳴るべき端末: 同じ向きなら後ろの艇、それ以外は両方。
+              final aBehind = (b.s - a.s) * a.dir > 0;
+              final should =
+                  rel.startsWith('same_dir') ? [aBehind ? a : b] : [a, b];
+              double? lead(String vk, _Boat x, _Boat y) {
+                final key = '${x.id}>${y.id}';
+                final last = lastSoundAt[vk]![key];
+                if (last == null || now - last > 15) return null;
+                return now - soundingSince[vk]![key]!;
+              }
+
+              if (hull && rel.startsWith('same_dir')) {
+                final rear0 = aBehind ? a : b, front0 = aBehind ? b : a;
+                for (final p in const ['H2', 'R5', 'W8']) {
+                  final key = '$p:${rear0.id}>${front0.id}';
+                  final last = probeLastNet[key];
+                  probeHitLead.putIfAbsent(p, () => []).add(
+                      last == null || now - last > 15
+                          ? null
+                          : now - probeNetSince[key]!);
+                }
+              }
+              events.add({
+                'run': run,
+                't': now.round(),
+                'pair': '${a.id}-${b.id}',
+                'kind': hull ? 'hull' : 'oar',
+                'relation': rel,
+                'wrongSide': a.plan.wrongSide || b.plan.wrongSide,
+                for (final v in variants)
+                  v.key: {
+                    for (final x in should)
+                      x.id: lead(v.key, x, identical(x, a) ? b : a),
+                  },
+              });
+            }
+          }
+        }
+      }
+      final boatHours = boatSeconds / 3600;
+      Map<String, double> perHour(Map<String, int> m) => {
+            for (final e
+                in (m.entries.toList()
+                  ..sort((x, y) => y.value.compareTo(x.value))))
+              e.key: _round(e.value / boatHours),
+          };
+      out['${water.key}_n$n'] = {
+        'water': water.label,
+        'boats': n,
+        'runs': _fleetRuns,
+        'minutes': _minutes,
+        'boatHours': _round(boatHours),
+        'wallSeconds': stopwatch.elapsed.inSeconds,
+        'drillSeconds': drillSec,
+        'safetyNetProbeSecondsPerBoatHour': {
+          for (final e in probeNetSec.entries) e.key: perHour(e.value),
+        },
+        'safetyNetProbeSameDirHullHits': {
+          for (final e in probeHitLead.entries)
+            e.key: {
+              'hits': e.value.length,
+              'netBefore3s': e.value.where((x) => x != null && x >= 3).length,
+              'netBefore': e.value.where((x) => x != null).length,
+            },
+        },
+        'variants': {
+          for (final v in variants)
+            v.key: {
+              'soundSecondsPerBoatHour': perHour(soundSec[v.key]!),
+              'utterancesPerBoatHour': perHour(utterances[v.key]!),
+              'otherBoatSoundSecondsByTrueRelationPerBoatHour':
+                  perHour(relationSec[v.key]!),
+              'drillPartnerSoundSeconds': drillAudible[v.key],
+            },
+        },
+        'contacts': events,
+      };
+      // ignore: avoid_print
+      print('done fleet ${water.label} n=$n runs=$_fleetRuns '
+          'in ${stopwatch.elapsed.inSeconds}s, contacts ${events.length}');
+    }
+  }
+  return out;
 }

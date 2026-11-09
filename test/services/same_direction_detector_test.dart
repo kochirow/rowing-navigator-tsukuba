@@ -142,13 +142,36 @@ void main() {
       expect(relations[26], net);
     });
 
-    test('横4mで抜いていく途中は安全網にならない', () {
-      expect(
-        run(SameDirectionDetector(),
-            seconds: 30,
-            other: (s) => boat('b', s, along: 40 - s * 1.0, lateral: 4)),
-        {'b': same},
-      );
+    test('横4mで抜くときは、横に並ぶ手前の数秒だけ安全網になり、並んだら終える', () {
+      // 測位の誤差(相対約2.5m)では、真後ろと横4mを見分けられない(2026-11-09)。
+      final detector = SameDirectionDetector();
+      final relations = <int, SameDirectionRelation?>{};
+      for (var second = 0; second <= 36; second++) {
+        final reported = second - second % 2;
+        relations[second] = detector.update(
+          own: boat('own', second),
+          others: [boat('b', reported, along: 40 - reported * 1.0, lateral: 4)],
+        )['b']?.relation;
+      }
+      expect(relations[18], same); // 前後22m: まだ先
+      expect(relations[24], net); // 前後16m: 艇首が艇尾に届く手前
+      expect(relations[30], same); // 前後10m: 横に並んだので終える
+      // 1m/s差なら、4秒前 + 測位の誤差の分(2m) + 受信間隔(2秒)で約8秒。
+      expect(relations.values.where((r) => r == net).length, lessThan(10));
+    });
+
+    test('横に8mより離れて抜くなら安全網にならない', () {
+      final detector = SameDirectionDetector();
+      for (var second = 0; second <= 36; second++) {
+        final reported = second - second % 2;
+        final status = detector.update(
+          own: boat('own', second),
+          others: [
+            boat('b', reported, along: 40 - reported * 1.0, lateral: 10)
+          ],
+        )['b'];
+        expect(status?.relation, same, reason: '$second秒');
+      }
     });
 
     test('同じ速さで後ろを追いかけているだけなら安全網にならない', () {

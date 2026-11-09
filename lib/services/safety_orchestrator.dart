@@ -8,6 +8,7 @@ import '../models/safety_snapshot.dart';
 import '../models/static_obstacle_model.dart';
 import '../utils/winding_algorithm.dart';
 import 'alert_state_machine.dart';
+import 'channel_centerline.dart';
 import 'collision_risk_evaluator_service.dart';
 import 'reverse_guidance_debouncer.dart';
 import 'same_direction_detector.dart';
@@ -187,6 +188,7 @@ class SafetyOrchestrator {
     Map<String, double?> otherBoatSpeedById = const {},
     Boat? ownBoat,
     Iterable<Boat> otherBoats = const [],
+    ChannelCenterline? Function(LatLng position)? centerlineFor,
   }) {
     final observationId = '$sessionId:${_revision + 1}';
     // 同じ向きの判定には、受信が新しい艇だけを使う。途絶えた艇を関係ありのまま残さない。
@@ -194,6 +196,7 @@ class SafetyOrchestrator {
     _sameDirection = _sameDirectionDetector.update(
       own: ownBoat,
       others: otherBoats.where((boat) => healthyBoatIds.contains(boat.boatId)),
+      centerlineFor: centerlineFor,
     );
     final byId = <String, AlertCandidate>{};
     // 直前まで警告対象だった艇は、freshな受信を確認できない限り
