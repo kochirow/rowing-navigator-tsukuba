@@ -10,22 +10,26 @@ import '../utils/winding_algorithm.dart';
 import 'alert_state_machine.dart';
 import 'collision_risk_evaluator_service.dart';
 import 'reverse_guidance_debouncer.dart';
-import 'side_by_side_detector.dart';
+import 'same_direction_detector.dart';
 import 'suppression_rule.dart';
 
 class SafetyOrchestratorResult {
   final SafetySnapshot snapshot;
   final AlertStateMachineOutput state;
 
-  /// この評価で並走が始まった艇・終わった艇(診断ログ用)。
-  final Set<String> sideBySideStarted;
-  final Set<String> sideBySideEnded;
+  /// この評価で同じ向きの関係(同じ向き・追いつく側の安全網)が変わった艇
+  /// (診断ログ用)。null は関係なし。
+  final List<
+      (
+        String boatId,
+        SameDirectionRelation? from,
+        SameDirectionRelation? to
+      )> sameDirectionChanges;
 
   const SafetyOrchestratorResult({
     required this.snapshot,
     required this.state,
-    this.sideBySideStarted = const {},
-    this.sideBySideEnded = const {},
+    this.sameDirectionChanges = const [],
   });
 }
 
@@ -74,10 +78,14 @@ class SafetyOrchestrator {
   final Set<String> _reverseGuidanceAlertIds = {};
   final Set<String> _stableExistingThreatIds = {};
 
-  /// 並走している艇(2026-11-07 利用者決定)。その艇への他艇警告は表示だけにし、
-  /// 並走中は逆走注意を読み上げない。判定は [SideBySideDetector]。
-  final SideBySideDetector _sideBySideDetector = SideBySideDetector();
-  Set<String> _sideBySideBoatIds = const {};
+  /// 同じ向きに漕いでいる艇(2026-11-09 利用者決定)。その相手への他艇警告は
+  /// 表示だけにし、追いつく側の安全網に当たったときだけ鳴らす。同じ向きの艇が
+  /// 近くにいる間は逆走注意を読み上げない。判定は [SameDirectionDetector]。
+  final SameDirectionDetector _sameDirectionDetector = SameDirectionDetector();
+  Map<String, SameDirectionStatus> _sameDirection = const {};
+
+  bool get _sameDirectionBoatNearby => _sameDirection.values.any((status) =>
+      status.distanceMeters <= sameDirectionReverseMuteDistanceMeters);
 
   /// どちらかのチャンネルで処理済みの音声イベント。alertIdごとに最後の1件。
   ///
@@ -181,9 +189,9 @@ class SafetyOrchestrator {
     Iterable<Boat> otherBoats = const [],
   }) {
     final observationId = '$sessionId:${_revision + 1}';
-    // 並走の判定には、受信が新しい艇だけを使う。途絶えた艇を並走のまま残さない。
-    final previousSideBySide = _sideBySideBoatIds;
-    _sideBySideBoatIds = _sideBySideDetector.update(
+    // 同じ向きの判定には、受信が新しい艇だけを使う。途絶えた艇を関係ありのまま残さない。
+    final previousSameDirection = _sameDirection;
+    _sameDirection = _sameDirectionDetector.update(
       own: ownBoat,
       others: otherBoats.where((boat) => healthyBoatIds.contains(boat.boatId)),
     );
@@ -405,8 +413,19 @@ class SafetyOrchestrator {
     return SafetyOrchestratorResult(
       snapshot: snapshot,
       state: state,
-      sideBySideStarted: _sideBySideBoatIds.difference(previousSideBySide),
-      sideBySideEnded: previousSideBySide.difference(_sideBySideBoatIds),
+      sameDirectionChanges: [
+        for (final boatId in {
+          ...previousSameDirection.keys,
+          ..._sameDirection.keys,
+        })
+          if (previousSameDirection[boatId]?.relation !=
+              _sameDirection[boatId]?.relation)
+            (
+              boatId,
+              previousSameDirection[boatId]?.relation,
+              _sameDirection[boatId]?.relation,
+            ),
+      ],
     );
   }
 
@@ -574,15 +593,23 @@ class SafetyOrchestrator {
             knownInputs: knownInputs,
             currentUrgency: baseUrgency,
           );
-      if (candidate.category == SuppressionRules.otherBoat &&
-          _sideBySideBoatIds.contains(candidate.targetId) &&
-          permitted(SuppressionRules.sideBySide)) {
-        // 並走している相手は、少なくとも片方が見ている(2026-11-07 利用者決定)。
-        // オールが当たる距離でも鳴らさない。表示・記録は残す。
+      final sameDirection = candidate.category == SuppressionRules.otherBoat
+          ? _sameDirection[candidate.targetId]
+          : null;
+      // 同じ向きの相手は、少なくとも片方が見ている(2026-11-09 利用者決定)。
+      // 並走でも縦列でも、オールが当たる距離でも鳴らさない。後ろの速い艇が
+      // 前の艇に4秒以内に当たるときだけ鳴らす(安全網)。
+      final sameDirectionRule = sameDirection == null || sameDirection.safetyNet
+          ? null
+          : SuppressionRules.sameDirection;
+      if (sameDirection != null && sameDirection.safetyNet) {
+        extraReasonCodes.add('SAME_DIRECTION_OVERTAKING_SAFETY_NET');
+      }
+      if (sameDirectionRule != null && permitted(sameDirectionRule)) {
         final before = behavior;
         behavior = _quieter(behavior, AlertBehavior.visualOnly);
         if (behavior != before) {
-          extraReasonCodes.add(SuppressionRules.sideBySide.reasonCode);
+          extraReasonCodes.add(sameDirectionRule.reasonCode);
         }
       }
       if (_lowSpeedAudioMuted && permitted(SuppressionRules.lowSpeed)) {
@@ -898,15 +925,15 @@ class SafetyOrchestrator {
     final isConfirmedReverse =
         candidate.category == StaticObstacleKind.reverse.name &&
             candidate.reasonCodes.contains('reverse_direction_confirmed');
-    // 並走中は逆走注意を読み上げない(横に並ぶと片方は必ず地図上の逆側を通る)。
-    // 並走が解けたら6秒の確認をやり直すため、確認の途中経過も消す。
-    final sideBySideSilenced =
+    // 同じ向きの艇が近くにいる間は逆走注意を読み上げない(横に並ぶ・追い抜くと
+    // 片方は地図上の逆側を通る)。離れたら6秒の確認をやり直すため、途中経過も消す。
+    final sameDirectionSilenced =
         candidate.category == StaticObstacleKind.reverse.name &&
-            _sideBySideBoatIds.isNotEmpty;
-    if (sideBySideSilenced) {
+            _sameDirectionBoatNearby;
+    if (sameDirectionSilenced) {
       _reverseGuidanceDebouncers[candidate.alertId]?.reset();
     }
-    final reverseConfirmed = sideBySideSilenced
+    final reverseConfirmed = sameDirectionSilenced
         ? false
         : isConfirmedReverse
             ? _reverseGuidanceDebouncers
@@ -933,8 +960,8 @@ class SafetyOrchestrator {
       clearAudioEventId: !shouldPlay,
       reasonCodes: [
         ...candidate.reasonCodes,
-        if (sideBySideSilenced)
-          SuppressionRules.sideBySide.reasonCode
+        if (sameDirectionSilenced)
+          SuppressionRules.sameDirection.reasonCode
         else if (!reverseConfirmed)
           'REVERSE_CONFIRM_PENDING'
         else if (harborSilenced)

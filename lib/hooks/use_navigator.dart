@@ -798,34 +798,31 @@ UseNavigator useNavigator() {
   }
 
   /// 他艇の警告に添える相手の速度・方位の信頼(R8-R1)。記録専用。
-  ({double? speedMps, bool? headingReliable}) diagnosticTargetMotion(
+  OtherBoatTargetDiagnostics diagnosticTargetMotion(
     AlertCandidate candidate,
   ) {
     final targetId = candidate.targetId;
     if (targetId == null || !isOtherBoatAlert(candidate)) {
-      return (speedMps: null, headingReliable: null);
+      return otherBoatTargetDiagnostics(null);
     }
     final boat =
         otherBoats.value.where((boat) => boat.boatId == targetId).firstOrNull;
-    return otherBoatTargetDiagnostics(boat);
+    return otherBoatTargetDiagnostics(boat, own: myBoat.value);
   }
 
   void recordSafetyDiagnostics(SafetyOrchestratorResult result) {
-    // 並走の始まり・終わり(2026-11-07)。相手は他の記録と同じ別名で残す。
-    for (final (started, ids) in [
-      (true, result.sideBySideStarted),
-      (false, result.sideBySideEnded),
-    ]) {
-      for (final boatId in ids) {
-        appendDiagnosticEvent(SessionDiagnosticEvent(
-          t: result.snapshot.evaluatedAt,
-          type: started ? 'side_by_side_started' : 'side_by_side_ended',
-          details: {
-            'targetRef': diagnosticBoatAliases.value.putIfAbsent(
-                boatId, () => 'boat-${diagnosticBoatAliases.value.length + 1}'),
-          },
-        ));
-      }
+    // 同じ向きの関係(同じ向き・追いつく側の安全網)の変化。相手は別名で残す。
+    for (final (boatId, from, to) in result.sameDirectionChanges) {
+      appendDiagnosticEvent(SessionDiagnosticEvent(
+        t: result.snapshot.evaluatedAt,
+        type: 'same_direction_relation_changed',
+        details: {
+          'targetRef': diagnosticBoatAliases.value.putIfAbsent(
+              boatId, () => 'boat-${diagnosticBoatAliases.value.length + 1}'),
+          'from': from?.name,
+          'to': to?.name,
+        },
+      ));
     }
     final candidateById = <String, AlertCandidate>{
       for (final state in result.state.alerts)
@@ -924,6 +921,9 @@ UseNavigator useNavigator() {
             : null,
         targetSpeedMps: targetMotion.speedMps,
         targetHeadingReliable: targetMotion.headingReliable,
+        targetHeadingDeg: targetMotion.headingDeg,
+        targetAlongMeters: targetMotion.alongMeters,
+        targetLateralMeters: targetMotion.lateralMeters,
       ));
     }
     for (final transition in result.state.transitions) {
@@ -986,6 +986,9 @@ UseNavigator useNavigator() {
         reasonCodes: candidate.reasonCodes,
         targetSpeedMps: targetMotion.speedMps,
         targetHeadingReliable: targetMotion.headingReliable,
+        targetHeadingDeg: targetMotion.headingDeg,
+        targetAlongMeters: targetMotion.alongMeters,
+        targetLateralMeters: targetMotion.lateralMeters,
       ));
       if (transition.to == AlertPhase.safe) {
         diagnosticCandidates.value.remove(transition.alertId);

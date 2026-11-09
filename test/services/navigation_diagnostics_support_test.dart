@@ -50,6 +50,24 @@ void main() {
       expect(fast.speedMps, shipDomainReliableHeadingSpeedMetersPerSecond);
     });
 
+    test('自艇の向きを基準にした相手の前後・横と、相手の向きを残す', () {
+      final own = _boat(3.5); // 東向き(90°)
+      final other = Boat(
+        boatId: 'o',
+        boatType: BoatType.r_1x,
+        lat: 36 - 0.00003, // 南へ約3.3m = 右
+        lng: 140 + 0.0001, // 東へ約9m = 前
+        heading: 100,
+        speed: 3.5,
+        timestamp: DateTime.utc(2026, 11, 4),
+      );
+      final result = otherBoatTargetDiagnostics(other, own: own);
+      expect(result.headingDeg, 100);
+      expect(result.alongMeters, closeTo(9.0, 0.3));
+      expect(result.lateralMeters, closeTo(3.3, 0.3));
+      expect(otherBoatTargetDiagnostics(other).alongMeters, isNull);
+    });
+
     test('相手が一覧に無ければ値を作らない', () {
       final none = otherBoatTargetDiagnostics(null);
       expect(none.speedMps, isNull);
