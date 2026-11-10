@@ -3,9 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
+import '../config/log_upload_config.dart';
 import '../config/store_config.dart';
 import '../services/account_data_deletion_service.dart';
 import 'app_entry_gate.dart';
+
+/// 「プライバシーとデータ」の冒頭に出す、何をどこへ送るかの説明。
+const String privacyDataSummary =
+    '航行中は、入力した名前、正確な位置、進行方向、速度、艇種、電池残量等を、接近警告と監視のためFirebaseへ送信します。航行終了時にリアルタイム位置を削除します。'
+    '監視中は、受信したチーム艇の位置と警告状態、監視者の位置をこの端末に一括ログとして保存します。'
+    '航行・監視が${autoLogUploadMinDurationSec ~/ 60}分以上だったときは、終わった後にその記録の診断ログ(航跡、警告、端末とアプリの情報、入力した名前・評価・ひとこと)を、アプリの改善のため開発者のGoogleドライブへ自動で送ります。'
+    'チームのメンバーであることを確かめてから保存し、見られるのは開発者だけです。'
+    'ドライブに送った記録と他の監視端末に保存された記録は、この画面からは削除できません。削除は下の「通報・お問い合わせ」から依頼できます。'
+    '「ログを送る」「まとめて送る」で、共有先を選んで送ることもできます。広告や追跡には使用しません。';
 
 class PrivacyDataScreen extends StatefulWidget {
   const PrivacyDataScreen({super.key});
@@ -85,9 +95,7 @@ class _PrivacyDataScreenState extends State<PrivacyDataScreen> {
           const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text(
-                '航行中は、入力した名前、正確な位置、進行方向、速度、艇種、電池残量等を、接近警告と監視のためFirebaseへ送信します。航行終了時にリアルタイム位置を削除します。監視中は、受信したチーム艇の位置と警告状態、監視者の位置をこの端末だけに一括ログとして保存します。自動アップロードはしませんが、他の監視端末に保存された記録はこの画面から削除できません。練習記録の診断ログは、あなたが「ログを送る」「まとめて送る」で共有先を選んだときだけ書き出します。どれを送ったかはこの端末にだけ記録します。広告や追跡には使用しません。',
-              ),
+              child: Text(privacyDataSummary),
             ),
           ),
           ListTile(
