@@ -12,6 +12,7 @@ import 'package:rowing_navigator/screens/app_entry_gate.dart';
 import 'package:rowing_navigator/theme/app_theme.dart';
 import 'package:rowing_navigator/widgets/app_state_views.dart';
 import 'package:rowing_navigator/widgets/startup_motto_view.dart';
+import 'package:rowing_navigator/services/auto_log_upload_bootstrap.dart';
 import 'package:rowing_navigator/services/safety_defaults_migration_service.dart';
 import 'package:rowing_navigator/services/uncaught_error_journal.dart';
 
@@ -78,6 +79,9 @@ class _FirebaseBootstrapState extends State<FirebaseBootstrap> {
     );
     if (!kIsWeb) {
       await _activateAppCheckWithoutBlockingLocalUse();
+      // 航行・監視を終えたら、診断ZIPを開発者のドライブへ自動で送る。
+      // 受け口が未設定なら何もしない。失敗しても起動や航行は止めない。
+      appAutoLogUpload.start();
     }
   }
 

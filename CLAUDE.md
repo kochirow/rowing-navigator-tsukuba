@@ -185,7 +185,8 @@ flutter run
 | `lib/services/session_store_service.dart` | セッションの端末内JSON保存 |
 | `lib/services/gpx_export_service.dart` | GPX/CSV/診断ZIP出力 |
 | `lib/features/home_map/map_menu_layout.dart` | 地図のメニューの並び(純Dart)。姿勢ごとに、何をどの順・どの見出しで出すかをここだけで決める。見出しは中身を名詞で言う(練習・警告と危険区域・チーム・使い方と情報)。**航行中の6項目の順番は変えない**(漕ぎながら覚えた位置)。導線はこのメニュー1本で、出艇前のタブは戻さない(`bba5711`) |
-| `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(練習記録は15分・2km以上)と監視ログ(完了済みで10分以上、その間に1艇以上が航行したもの)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` / `PracticeLog.diagnosticsSharedAt` に端末内でだけ記録する(記録中・未完了の監視ログは対象外)。送った時に自動で付くほか、練習記録・監視ログの一覧の札(押す・右へスワイプ)と長押しの選択で手でも切り替えられる(`lib/widgets/log_sent_status.dart`。対象はまとめて送る条件を満たす記録だけ)。自動送信はしない。条件は `lib/config/log_export_config.dart` |
+| `lib/services/diagnostic_bundle_service.dart` | 未送信の診断ログ(練習記録は15分・2km以上)と監視ログ(完了済みで10分以上、その間に1艇以上が航行したもの)を記録ごとのフォルダに分けて1つのZIPにまとめ、共有シートへ渡す。送信済みは `Session.diagnosticsSharedAt` / `PracticeLog.diagnosticsSharedAt` に端末内でだけ記録する(記録中・未完了の監視ログは対象外)。送った時に自動で付くほか、練習記録・監視ログの一覧の札(押す・右へスワイプ)と長押しの選択で手でも切り替えられる(`lib/widgets/log_sent_status.dart`。対象はまとめて送る条件を満たす記録だけ)。自動送信は下の auto_log_upload_service が行う。条件は `lib/config/log_export_config.dart` |
+| `lib/services/auto_log_upload_service.dart` | 5分以上の航行・監視を終えたら、記録ごとの診断ZIPを Google Apps Script の受け口(`tool/gas/log_upload/Code.gs`)へ送り、開発者の Google ドライブに保存する。送れたら `diagnosticsSharedAt` を付ける。送れない分は端末内の列に残して再送。受け口は Firebase ID トークンで Firestore のメンバーを確かめる。設定は `lib/config/log_upload_config.dart`(URL が空なら動かない)。起動は `main.dart`、設計は `docs/実装計画_2026-11-10_ログの自動回収.md` |
 | `lib/services/preset_obstacle_service.dart` | 同梱プリセットの読み込み・検証・中心線導出 |
 | `lib/theme/map_layer_spec.dart` | 地図の層(中央線＝白い破線／危険区域＝塗り／予測＝線)の配色と `zIndex` を集約。**実線＝実在するもの、破線＝越えない取り決め。** 航路は中央線1本だけを描き、レーンの外側の辺は描かない(往路・復路の帯を廃止した経緯も同ファイル) |
 | `lib/theme/boat_palette.dart` | 艇の表示色。航行中は自艇＝赤・他艇＝濃い青みグレーで**艇ごとに色分けしない**(色の暗記を要求しない・赤の特別扱いを守る)。監視中だけ `assignBoatTrackColors` が艇IDから識別色を決め、航跡・艇印・艇一覧で同じ色を使う。**表示専用**(純Dartに近い割当ロジック) |

@@ -764,7 +764,8 @@ class _FakeBundleService extends DiagnosticBundleService {
   @override
   Future<List<DiagnosticBundle>> buildBundlesInBackground(
       List<Session> sessions,
-      {List<PracticeLogBundleInput> practiceLogs = const []}) async {
+      {List<PracticeLogBundleInput> practiceLogs = const [],
+      bool automaticUpload = false}) async {
     sessionIds = [for (final s in sessions) s.id];
     practiceLogIds = [for (final p in practiceLogs) p.log.id];
     practiceFiles = [for (final p in practiceLogs) p.files];

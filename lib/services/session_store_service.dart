@@ -215,6 +215,14 @@ class SessionStoreService {
     return compute(_countPendingInDirectory, dir.path);
   }
 
+  /// [test] を満たす記録のID。記録を全部読むので別 isolate で判定する
+  /// (自動回収が起動時に送っていない記録を拾うのに使う)。
+  /// [test] は別 isolate へ渡すので top-level の関数にすること。読めない記録は除く。
+  Future<List<String>> idsMatching(bool Function(Session) test) async {
+    final dir = await _sessionsDir();
+    return compute(_idsMatchingInDirectory, (dir.path, test));
+  }
+
   /// アカウント・データ削除用に、端末内の全練習記録を削除する。
   Future<void> deleteAllSessions() async {
     final docs = await _documentsDirectoryProvider();
@@ -238,4 +246,21 @@ Future<int> _countPendingInDirectory(String path) async {
     }
   }
   return count;
+}
+
+Future<List<String>> _idsMatchingInDirectory(
+    (String, bool Function(Session)) request) async {
+  final (path, test) = request;
+  final ids = <String>[];
+  await for (final entity in Directory(path).list()) {
+    if (entity is! File || !entity.path.endsWith('.json')) continue;
+    try {
+      final data = json.decode(await entity.readAsString());
+      final session = Session.fromJson(Map<String, dynamic>.from(data));
+      if (test(session)) ids.add(session.id);
+    } catch (_) {
+      // 壊れた記録は一覧でも出さないので、ここでも拾わない。
+    }
+  }
+  return ids;
 }

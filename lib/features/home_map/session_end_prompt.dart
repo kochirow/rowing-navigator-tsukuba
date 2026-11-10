@@ -5,6 +5,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 
 import '../../models/practice_log_model.dart';
 import '../../models/session_model.dart';
+import '../../services/auto_log_upload_bootstrap.dart';
+import '../../services/auto_log_upload_service.dart';
 import '../../services/diagnostic_bundle_service.dart';
 import '../../services/gpx_export_service.dart';
 import '../../services/practice_log_store_service.dart';
@@ -182,6 +184,9 @@ Future<void> _promptSession(
           },
         ),
       ]));
+  await controller.flush();
+  // 評価・ひとことを書いた後の内容でドライブのファイルを置き換える。
+  unawaited(appAutoLogUpload.requestReupload(AutoLogUploadTarget.session(id)));
 }
 
 int _nextSequence(Session session) =>
@@ -328,6 +333,9 @@ Future<void> _promptPracticeLog(
       'dismissed';
   await _appendPracticeEvent(
       store, shown, DateTime.now(), 'end_prompt_closed', {'action': action});
+  // ひとことを書いた後の内容でドライブのファイルを置き換える。
+  unawaited(
+      appAutoLogUpload.requestReupload(AutoLogUploadTarget.practiceLog(id)));
 }
 
 Future<void> _appendPracticeEvent(

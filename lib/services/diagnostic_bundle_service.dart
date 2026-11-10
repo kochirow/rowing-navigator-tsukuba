@@ -116,6 +116,7 @@ class DiagnosticBundleService {
     int maxZipBytes = bulkLogExportMaxZipBytes,
     String exportPlatform = 'unknown',
     String exportPlatformVersion = 'unknown',
+    bool automaticUpload = false,
   }) {
     if (sessions.isEmpty && practiceLogs.isEmpty) return const [];
     final exporter = GpxExportService();
@@ -164,18 +165,21 @@ class DiagnosticBundleService {
                 : 'rowing_diagnostics_bundle_${stamp}_part${i + 1}of${groups.length}.zip',
             createdAt: createdAt,
             part: i + 1,
-            partCount: groups.length),
+            partCount: groups.length,
+            automaticUpload: automaticUpload),
     ];
   }
 
   /// [buildBundles] を別 isolate で行う(記録が多いと数秒かかり、画面が固まるため)。
   Future<List<DiagnosticBundle>> buildBundlesInBackground(
           List<Session> sessions,
-          {List<PracticeLogBundleInput> practiceLogs = const []}) =>
+          {List<PracticeLogBundleInput> practiceLogs = const [],
+          bool automaticUpload = false}) =>
       compute(
           _buildInIsolate,
           _BuildRequest(sessions, practiceLogs, DateTime.now(),
-              Platform.operatingSystem, Platform.operatingSystemVersion));
+              Platform.operatingSystem, Platform.operatingSystemVersion,
+              automaticUpload: automaticUpload));
 
   /// 作ったZIPを一時フォルダへ書き、共有シートへまとめて渡す。
   Future<ShareResult> share(
@@ -215,6 +219,7 @@ class DiagnosticBundleService {
     required DateTime createdAt,
     required int part,
     required int partCount,
+    bool automaticUpload = false,
   }) {
     final manifest = {
       'bundleSchemaVersion': 1,
@@ -261,7 +266,8 @@ class DiagnosticBundleService {
       'privacy': {
         'containsPreciseRoute': true,
         'containsDeviceInformation': true,
-        'automaticUpload': false,
+        // 練習の後に自動でドライブへ送ったZIPは true(auto_log_upload_service.dart)。
+        'automaticUpload': automaticUpload,
       },
     };
     final files = <String, List<int>>{
@@ -320,8 +326,10 @@ class _BuildRequest {
   final DateTime createdAt;
   final String platform;
   final String platformVersion;
+  final bool automaticUpload;
   _BuildRequest(this.sessions, this.practiceLogs, this.createdAt, this.platform,
-      this.platformVersion);
+      this.platformVersion,
+      {this.automaticUpload = false});
 }
 
 List<DiagnosticBundle> _buildInIsolate(_BuildRequest r) =>
@@ -329,4 +337,5 @@ List<DiagnosticBundle> _buildInIsolate(_BuildRequest r) =>
         practiceLogs: r.practiceLogs,
         createdAt: r.createdAt,
         exportPlatform: r.platform,
-        exportPlatformVersion: r.platformVersion);
+        exportPlatformVersion: r.platformVersion,
+        automaticUpload: r.automaticUpload);
