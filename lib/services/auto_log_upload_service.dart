@@ -25,7 +25,10 @@ import 'session_store_service.dart';
 // - 送れなかった記録は端末内の送信待ちの列に残し、少し待って・アプリを前面に
 //   戻したとき・次の起動で送り直す。
 // - 「今日の記録」シートで評価やひとことを書いたら、もう一度送る。
-//   受け口は同じ記録のファイルを置き換える。
+//   受け口は同じ記録のファイルを置き換える。送っている最中に依頼が来たら、
+//   送り終えた後にもう一度送る(古い版だけが届いて終わらないように)。
+// - 監視ログは、記録したチームといま入っているチームが同じときだけ送る
+//   (他艇の航跡と名前が入るので、前に入っていたチームの記録を今のチームへ出さない)。
 // - 安全経路(判定・警告・位置共有)は何も参照しない。送信の失敗で
 //   地図や次の航行を止めない。
 
@@ -144,6 +147,7 @@ class AutoLogUploadService {
   final LogUploadTokenProvider _idToken;
   final LogUploadTokenProvider _appCheckToken;
   final LogUploadTokenProvider _displayName;
+  final LogUploadTokenProvider _currentTeamId;
   final SessionBundleBuilder _buildBundles;
   final Future<SharedPreferences> Function() _prefs;
   final DateTime Function() _now;
@@ -159,6 +163,7 @@ class AutoLogUploadService {
     LogUploadTokenProvider? idToken,
     LogUploadTokenProvider? appCheckToken,
     LogUploadTokenProvider? displayName,
+    LogUploadTokenProvider? currentTeamId,
     SessionBundleBuilder? buildBundles,
     Future<SharedPreferences> Function()? prefs,
     DateTime Function()? now,
@@ -171,6 +176,7 @@ class AutoLogUploadService {
         _idToken = idToken ?? (() async => null),
         _appCheckToken = appCheckToken ?? (() async => null),
         _displayName = displayName ?? (() async => null),
+        _currentTeamId = currentTeamId ?? (() async => null),
         _buildBundles = buildBundles ??
             ((sessions, practiceLogs) => DiagnosticBundleService()
                 .buildBundlesInBackground(sessions,
@@ -187,6 +193,16 @@ class AutoLogUploadService {
   Future<void>? _draining;
   bool _drainAgain = false;
   bool _started = false;
+
+  /// 列の読み書きを1本ずつ順に行うための鎖。読んでから書くまでの間に
+  /// 別の追加が割り込むと、片方の追加が消えるため。
+  Future<void> _queueLock = Future.value();
+
+  /// いま送っている記録。
+  AutoLogUploadTarget? _inFlight;
+
+  /// 送っている最中に送り直しを頼まれた記録。送り終えても列から外さず、もう一度送る。
+  final Set<AutoLogUploadTarget> _resendAfterInFlight = {};
 
   /// 航行・監視の終わりを待ち受け、まだ送っていない記録を拾って送る。
   /// 何度呼んでも1回だけ動く。受け口が未設定なら何もしない。
@@ -226,10 +242,10 @@ class AutoLogUploadService {
   Future<void> enqueue(AutoLogUploadTarget target) async {
     if (!enabled) return;
     try {
-      final queue = await _readQueue();
-      if (!queue.contains(target)) {
-        await _writeQueue([...queue, target]);
-      }
+      await _withQueue((queue) {
+        if (target == _inFlight) _resendAfterInFlight.add(target);
+        return queue.contains(target) ? null : [...queue, target];
+      });
     } catch (error) {
       debugPrint('自動回収の列に足せませんでした: $error');
       return;
@@ -256,8 +272,12 @@ class AutoLogUploadService {
       debugPrint('自動回収: 練習記録を読めませんでした: $error');
     }
     try {
+      // チームが分からないうちは監視ログを拾わない(次の起動で拾う)。
+      final teamId = await _currentTeamIdOrNull();
       for (final log in await _practiceLogs.list()) {
-        if (!log.isDiagnosticsShared &&
+        if (teamId != null &&
+            log.teamId == teamId &&
+            !log.isDiagnosticsShared &&
             isAutoLogUploadPracticeLog(log, minDurationSec: minDurationSec)) {
           found.add(AutoLogUploadTarget.practiceLog(log.id));
         }
@@ -266,12 +286,13 @@ class AutoLogUploadService {
       debugPrint('自動回収: 監視ログを読めませんでした: $error');
     }
     try {
-      final queue = await _readQueue();
-      final added = [
-        for (final t in found)
-          if (!queue.contains(t)) t
-      ];
-      if (added.isNotEmpty) await _writeQueue([...queue, ...added]);
+      await _withQueue((queue) {
+        final added = [
+          for (final t in found)
+            if (!queue.contains(t)) t
+        ];
+        return added.isEmpty ? null : [...queue, ...added];
+      });
     } catch (error) {
       debugPrint('自動回収の列に足せませんでした: $error');
       return;
@@ -298,13 +319,25 @@ class AutoLogUploadService {
       final queue = await _readQueueOrEmpty();
       var failed = false;
       for (final target in queue) {
-        final outcome = await uploadOne(target);
+        _inFlight = target;
+        final AutoLogUploadOutcome outcome;
+        try {
+          outcome = await uploadOne(target);
+        } finally {
+          _inFlight = null;
+        }
         if (outcome == AutoLogUploadOutcome.failed) {
           // 圏外のときは残りも送れないので、ここで止めて待つ。
           // 失敗した記録は列の最後へ回し、1件の不具合で他の記録が止まらないようにする。
+          _resendAfterInFlight.remove(target);
           await _moveToEnd(target);
           failed = true;
           break;
+        }
+        if (_resendAfterInFlight.remove(target)) {
+          // 送っている間に内容が変わった。列に残し、この後もう一度送る。
+          _drainAgain = true;
+          continue;
         }
         await _remove(target);
       }
@@ -360,11 +393,18 @@ class AutoLogUploadService {
         'durationSec': prepared.durationSec.round(),
         'displayName': displayName,
         'boatType': prepared.boatType,
+        if (prepared.recordTeamId != null)
+          'recordTeamId': prepared.recordTeamId,
         'appVersion': Message.currentAppVersion,
         'platform': Platform.operatingSystem,
         'fileName': prepared.bundle.fileName,
         'zipBase64': base64Encode(prepared.bundle.bytes),
       });
+      if (!response.ok && response.error == 'team_mismatch') {
+        // 受け口が「記録したチームが今のチームと違う」と断った。送り直しても通らない。
+        debugPrint('自動回収: ${target.key} は今のチームの記録ではないので送りません');
+        return AutoLogUploadOutcome.skipped;
+      }
       if (!response.ok) {
         debugPrint('自動回収: ${target.key} を送れませんでした: ${response.error}');
         return AutoLogUploadOutcome.failed;
@@ -410,6 +450,11 @@ class AutoLogUploadService {
     if (!isAutoLogUploadPracticeLog(meta, minDurationSec: minDurationSec)) {
       return null;
     }
+    final teamId = await _currentTeamIdOrNull();
+    if (teamId == null) {
+      throw const _NotReady('チームが分かりません');
+    }
+    if (meta.teamId != teamId) return null; // 前に入っていたチームの記録
     final bundles = await _buildBundles(const [], [
       PracticeLogBundleInput(
           log: meta,
@@ -421,6 +466,7 @@ class AutoLogUploadService {
       startedAt: meta.startedAt,
       durationSec: practiceLogSecOf(meta),
       boatType: null,
+      recordTeamId: meta.teamId,
     );
   }
 
@@ -473,13 +519,26 @@ class AutoLogUploadService {
     await prefs.setStringList(queueKey, [for (final t in queue) t.key]);
   }
 
+  /// 列を読み、[change] の結果で書き換える(null なら書かない)。
+  /// 読んでから書くまでを他の書き換えと重ねない。
+  Future<void> _withQueue(
+      List<AutoLogUploadTarget>? Function(List<AutoLogUploadTarget> queue)
+          change) {
+    final run = _queueLock.then((_) async {
+      final next = change(await _readQueue());
+      if (next != null) await _writeQueue(next);
+    });
+    // 失敗しても鎖は切らない(次の書き換えは動かす)。失敗は呼び出し側へ返す。
+    _queueLock = run.catchError((_) {});
+    return run;
+  }
+
   Future<void> _remove(AutoLogUploadTarget target) async {
     try {
-      final queue = await _readQueue();
-      await _writeQueue([
-        for (final t in queue)
-          if (t != target) t
-      ]);
+      await _withQueue((queue) => [
+            for (final t in queue)
+              if (t != target) t
+          ]);
     } catch (error) {
       debugPrint('自動回収の列を更新できませんでした: $error');
     }
@@ -487,15 +546,24 @@ class AutoLogUploadService {
 
   Future<void> _moveToEnd(AutoLogUploadTarget target) async {
     try {
-      final queue = await _readQueue();
-      if (!queue.contains(target)) return;
-      await _writeQueue([
-        for (final t in queue)
-          if (t != target) t,
-        target,
-      ]);
+      await _withQueue((queue) => !queue.contains(target)
+          ? null
+          : [
+              for (final t in queue)
+                if (t != target) t,
+              target,
+            ]);
     } catch (error) {
       debugPrint('自動回収の列を更新できませんでした: $error');
+    }
+  }
+
+  Future<String?> _currentTeamIdOrNull() async {
+    try {
+      final id = await _currentTeamId();
+      return id == null || id.isEmpty ? null : id;
+    } catch (_) {
+      return null;
     }
   }
 }
@@ -506,12 +574,24 @@ class _PreparedUpload {
   final double durationSec;
   final String? boatType;
 
+  /// 記録したチーム。監視ログだけ(練習記録はチームを持たない)。
+  final String? recordTeamId;
+
   const _PreparedUpload({
     required this.bundle,
     required this.startedAt,
     required this.durationSec,
     required this.boatType,
+    this.recordTeamId,
   });
+}
+
+/// まだ送れない(チームが分からない等)。列に残して後で送る。
+class _NotReady implements Exception {
+  final String reason;
+  const _NotReady(this.reason);
+  @override
+  String toString() => reason;
 }
 
 /// 受け口へ JSON を POST する。

@@ -7,7 +7,8 @@
  *   <保存先フォルダ>/<練習の日付>/<HHmm>_<名前>_<航行|監視>_<記録ID>.zip
  *
  * 同じ記録をもう一度受け取ったら(評価・ひとことを書いた後の送り直し)、
- * 古いファイルをゴミ箱へ移して置き換える。
+ * 古いファイルをゴミ箱へ移して置き換える。「同じ記録」は、ファイルの説明の1行目
+ * `key=<チームID>/<UID>/<種類>/<記録ID>` が完全に一致するもの(名前を変えても置き換わる)。
  *
  * 送れるのはチームのメンバーだけ。アプリが添える Firebase の ID トークンで
  * Firestore の users/{uid} と teams/{teamId}/members/{uid} を読み、読めたときだけ保存する。
@@ -16,6 +17,7 @@
  * スクリプト プロパティ(すべて任意):
  *   ROOT_FOLDER_ID    保存先フォルダのID。無ければ「rowing_navigator_logs」を作って記録する
  *   ALLOWED_TEAM_IDS  受け付けるチームIDをカンマ区切りで。空なら、どのチームのメンバーでも受け付ける
+ *                     (取りこぼしを避けるため既定は空。2026-11-11 利用者決定)
  *   FIREBASE_PROJECT_ID  既定は rowing-navigator-tsukuba
  *
  * 手順: docs/実装計画_2026-11-10_ログの自動回収.md の「受け口の用意」
@@ -39,6 +41,12 @@ function doPost(e) {
     if (allowed.length > 0 && allowed.indexOf(member.teamId) < 0) {
       console.warn('team_not_allowed teamId=' + member.teamId + ' uid=' + member.uid);
       return json_({ ok: false, error: 'team_not_allowed' });
+    }
+    // 監視ログは記録したチームを持つ。前に入っていたチームの記録(他艇の航跡と名前が入る)を
+    // 今のチームの記録として保存しない。
+    if (request.recordTeamId !== null && request.recordTeamId !== member.teamId) {
+      console.warn('team_mismatch recordTeamId=' + request.recordTeamId + ' teamId=' + member.teamId);
+      return json_({ ok: false, error: 'team_mismatch' });
     }
     var saved = saveZip_(request, member);
     console.log('saved ' + saved.path + ' uid=' + member.uid + ' teamId=' + member.teamId);
@@ -74,9 +82,17 @@ function validateRequest_(body) {
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
     throw fail_('bad_request', 'not a zip');
   }
+  var recordTeamId = null;
+  if (body.kind === 'practiceLog') {
+    if (typeof body.recordTeamId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(body.recordTeamId)) {
+      throw fail_('bad_request', 'recordTeamId');
+    }
+    recordTeamId = body.recordTeamId;
+  }
   return {
     kind: body.kind,
     recordId: body.recordId,
+    recordTeamId: recordTeamId,
     startedAt: startedAt,
     displayName: safeName_(body.displayName),
     bytes: bytes,
@@ -133,13 +149,21 @@ function saveZip_(request, member) {
     var name = [time, request.displayName || member.uid.substring(0, 6), label, request.recordId]
         .join('_') + '.zip';
 
+    // Drive の検索(title contains)は前方一致なので、末尾の記録IDでは探せない。
+    // 日付のフォルダの中身(1日数十件)を説明の key で完全一致させる。
+    var key = 'key=' + [member.teamId, member.uid, request.kind, request.recordId].join('/');
     var old = [];
-    var existing = folder.searchFiles('title contains "' + request.recordId + '" and trashed = false');
-    while (existing.hasNext()) old.push(existing.next());
+    var files = folder.getFiles();
+    while (files.hasNext()) {
+      var candidate = files.next();
+      if (!candidate.isTrashed() && (candidate.getDescription() || '').split('\n')[0] === key) {
+        old.push(candidate);
+      }
+    }
 
     var blob = Utilities.newBlob(request.bytes, 'application/zip', name);
     var file = folder.createFile(blob);
-    file.setDescription('uid=' + member.uid + ' teamId=' + member.teamId +
+    file.setDescription(key + '\nuid=' + member.uid + ' teamId=' + member.teamId +
         ' kind=' + request.kind + ' recordId=' + request.recordId);
     for (var i = 0; i < old.length; i++) old[i].setTrashed(true);
     return { path: day + '/' + name, replaced: old.length };

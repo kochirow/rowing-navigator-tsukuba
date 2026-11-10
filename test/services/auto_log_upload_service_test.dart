@@ -50,12 +50,13 @@ Session _session(
   );
 }
 
-PracticeLog _practiceLog(String id, {int minutes = 20, DateTime? sharedAt}) {
+PracticeLog _practiceLog(String id,
+    {int minutes = 20, DateTime? sharedAt, String teamId = 'team'}) {
   final start = DateTime.utc(2026, 11, 10, 6);
   return PracticeLog(
     id: id,
     livePointCount: 1,
-    teamId: 'team',
+    teamId: teamId,
     recordedBy: 'observer',
     startedAt: start,
     endedAt: start.add(Duration(minutes: minutes)),
@@ -82,6 +83,7 @@ void main() {
   late PracticeLogStoreService practiceLogs;
   late _FakePoster poster;
   String? idToken;
+  String? teamId;
 
   AutoLogUploadService service(
           {String endpoint = 'https://example.test/exec'}) =>
@@ -93,6 +95,7 @@ void main() {
         idToken: () async => idToken,
         appCheckToken: () async => 'app-check',
         displayName: () async => '後藤',
+        currentTeamId: () async => teamId,
         buildBundles: (s, p) async => DiagnosticBundleService.buildBundles(s,
             practiceLogs: p,
             createdAt: DateTime.utc(2026, 11, 10, 7),
@@ -111,6 +114,7 @@ void main() {
         PracticeLogStoreService(documentsDirectoryProvider: () async => docs);
     poster = _FakePoster();
     idToken = 'id-token-for-test';
+    teamId = 'team';
   });
 
   tearDown(() async {
@@ -250,6 +254,7 @@ void main() {
 
     expect(poster.requests, hasLength(1));
     expect(poster.requests.single['kind'], 'practiceLog');
+    expect(poster.requests.single['recordTeamId'], 'team');
     expect(poster.requests.single['durationSec'], 1200);
     expect(poster.requests.single.containsKey('boatType'), isTrue);
     final saved = (await practiceLogs.list()).single;
@@ -271,6 +276,79 @@ void main() {
     expect(poster.requests.map((b) => b['recordId']).toSet(),
         {'new', 'practice_20261110_150000'});
     expect(await uploader.pending(), isEmpty);
+  });
+
+  test('送っている最中に送り直しを頼まれたら、送り終えた後にもう一度送る', () async {
+    await sessions.saveSession(_session('a'));
+    final uploader = service();
+    final comments = <Object?>[];
+    poster.respond = (body) {
+      comments.add(body['zipBase64']);
+      if (comments.length == 1) {
+        // 1回目を送っている間に、評価を書いて送り直しを頼む。
+        uploader.enqueue(const AutoLogUploadTarget.session('a'));
+      }
+      return const LogUploadResponse.success();
+    };
+
+    await uploader.enqueue(const AutoLogUploadTarget.session('a'));
+    await uploader.drain();
+
+    expect(poster.requests, hasLength(2));
+    expect(await uploader.pending(), isEmpty);
+  });
+
+  test('同時に足した2件はどちらも列に入り、両方送る', () async {
+    await sessions.saveSession(_session('a'));
+    await sessions.saveSession(_session('b'));
+    final uploader = service();
+
+    await Future.wait([
+      uploader.enqueue(const AutoLogUploadTarget.session('a')),
+      uploader.enqueue(const AutoLogUploadTarget.session('b')),
+    ]);
+    await uploader.drain();
+
+    expect(poster.requests.map((b) => b['recordId']).toSet(), {'a', 'b'});
+    expect(await uploader.pending(), isEmpty);
+  });
+
+  test('前に入っていたチームの監視ログは送らない', () async {
+    await practiceLogs
+        .create(_practiceLog('practice_20261110_150000', teamId: 'old-team'));
+    final uploader = service();
+
+    await uploader.enqueue(
+        const AutoLogUploadTarget.practiceLog('practice_20261110_150000'));
+    await uploader.enqueueBacklog();
+
+    expect(poster.requests, isEmpty);
+    expect(await uploader.pending(), isEmpty);
+    expect((await practiceLogs.list()).single.diagnosticsSharedAt, isNull);
+  });
+
+  test('チームが分からないうちは監視ログを列に残して待つ', () async {
+    await practiceLogs.create(_practiceLog('practice_20261110_150000'));
+    teamId = null;
+    final uploader = service();
+
+    await uploader.enqueue(
+        const AutoLogUploadTarget.practiceLog('practice_20261110_150000'));
+
+    expect(poster.requests, isEmpty);
+    expect(await uploader.pending(),
+        [const AutoLogUploadTarget.practiceLog('practice_20261110_150000')]);
+  });
+
+  test('受け口がチーム違いで断った記録は、印を付けずに列から外す', () async {
+    await sessions.saveSession(_session('a'));
+    final uploader = service();
+    poster.respond = (_) => const LogUploadResponse.failure('team_mismatch');
+
+    await uploader.enqueue(const AutoLogUploadTarget.session('a'));
+
+    expect(await uploader.pending(), isEmpty);
+    expect((await sessions.loadSession('a'))!.diagnosticsSharedAt, isNull);
   });
 
   test('受け口が未設定なら何もしない', () async {
