@@ -218,7 +218,8 @@ class MessageService {
       await _ensureDisconnectRemovalArmed(message.boatId);
       final profileFingerprint = '${message.displayName}\u0000'
           '${message.boatType.name}\u0000${message.protocolVersion}\u0000'
-          '${message.appVersion}\u0000${message.profileVersion}';
+          '${message.appVersion}\u0000${message.appBuild ?? ''}\u0000'
+          '${message.profileVersion}';
       final includeProfile = _publishedProfileFingerprint != profileFingerprint;
       final publishEpoch = _publisherConnectionEpoch;
       await _rtdbApi.publishBoatData(

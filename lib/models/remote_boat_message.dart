@@ -32,6 +32,10 @@ class RemoteBoatMessage {
 
   final int protocolVersion;
   final String appVersion;
+
+  /// 送信側のビルド番号。旧版・読めない版では null。
+  /// 不正な値は捨てるだけで、その艇の位置レコードは捨てない。
+  final String? appBuild;
   final String profileVersion;
   final String boatId;
   final String displayName;
@@ -65,6 +69,7 @@ class RemoteBoatMessage {
   const RemoteBoatMessage._({
     required this.protocolVersion,
     required this.appVersion,
+    required this.appBuild,
     required this.profileVersion,
     required this.boatId,
     required this.displayName,
@@ -321,6 +326,7 @@ class RemoteBoatMessage {
       RemoteBoatMessage._(
         protocolVersion: protocolVersion,
         appVersion: appVersionResult,
+        appBuild: normalizeAppBuild(json['appBuild']),
         profileVersion: profileVersionResult,
         boatId: boatIdResult,
         displayName: displayNameResult,
@@ -351,6 +357,7 @@ class RemoteBoatMessage {
   Map<String, Object?> toJson() => {
         'protocolVersion': protocolVersion,
         'appVersion': appVersion,
+        if (appBuild != null) 'appBuild': appBuild,
         'profileVersion': profileVersion,
         'boatId': boatId,
         'displayName': displayName,
@@ -392,6 +399,15 @@ class RemoteBoatMessage {
 
   static double? _optionalFiniteDouble(Object? value) =>
       value == null ? null : _finiteDouble(value);
+
+  /// ビルド番号として扱える値(数字だけ・1〜12桁)を返す。それ以外は null。
+  /// 通信上の任意項目なので、壊れていても例外にせず落とす。
+  static String? normalizeAppBuild(Object? value) {
+    if (value is! String || !RegExp(r'^[0-9]{1,12}$').hasMatch(value)) {
+      return null;
+    }
+    return value;
+  }
 
   static String? _validatedString(Object? value, {required int maxLength}) {
     if (value is! String ||
