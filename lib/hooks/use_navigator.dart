@@ -27,6 +27,7 @@ import '../models/boat_model.dart';
 import '../models/danger_zone_settings.dart';
 import '../models/fix_envelope.dart';
 import '../models/message_model.dart';
+import '../models/remote_boat_message.dart';
 import '../models/nav_config_model.dart';
 import '../models/navigation_warning.dart';
 import '../models/protection_budget.dart';
@@ -372,7 +373,10 @@ UseNavigator useNavigator() {
   final sessionDiagnosticMetadata = useRef<SessionDiagnosticMetadata?>(null);
   // 航行開始時にPackageInfoから読んだ実際のプロダクト版。取得不能時だけ
   // pubspecとの一致テストで固定した既定値へ縮退する。
-  final positionAppVersion = useRef(Message.currentAppVersion);
+  // 版(version)とビルド番号(build)は別に持つ。buildは読めなければnull(送らない)。
+  final positionAppVersion = useRef<({String version, String? build})>(
+    (version: Message.currentAppVersion, build: null),
+  );
   final diagnosticBoatAliases = useRef(<String, String>{});
   final diagnosticAlertAliases = useRef(<String, String>{});
   final diagnosticCandidates = useRef(<String, AlertCandidate>{});
@@ -1450,7 +1454,10 @@ UseNavigator useNavigator() {
       // package infoが読めない場合も、pubspec同期済みの既定値で航行を継続する。
       debugPrint('Failed to capture runtime app version: $error');
     }
-    positionAppVersion.value = appVersion;
+    positionAppVersion.value = (
+      version: appVersion,
+      build: RemoteBoatMessage.normalizeAppBuild(buildNumber),
+    );
     var operatingSystemVersion = 'unknown';
     try {
       final device = await deviceRuntimeDiagnostics
@@ -3551,7 +3558,8 @@ UseNavigator useNavigator() {
       recordBatteryLevelIfChanged(batteryLevel);
       if (!isCurrentNavigation(generation)) return;
       final message = Message(
-        appVersion: positionAppVersion.value,
+        appVersion: positionAppVersion.value.version,
+        appBuild: positionAppVersion.value.build,
         sessionId: messageSessionId.value ?? 'unavailable-session',
         sequence: messageSequence.value++,
         boatId: latestMyBoat.boatId,

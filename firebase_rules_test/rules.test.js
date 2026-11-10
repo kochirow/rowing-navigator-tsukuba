@@ -577,6 +577,18 @@ async function run() {
           {...livePosition({updatedAt, sequence: 20, session: "future"}), futureFlag: true},
         ),
       );
+      // ビルド番号(appBuild)は任意のスカラーとして profile に載せられる。
+      await assertSucceeds(
+        set(ref(u2.database(), `teams/${teamA}/boat_profiles/u2`), {
+          displayName: "u2",
+          boatType: "r_1x",
+          protocolVersion: 1,
+          appVersion: "1.2.1",
+          appBuild: "23",
+          profileVersion: "sakuragawa-v3",
+          updatedAt: Date.now(),
+        }),
+      );
       // 文字列としての妥当性は残す(空文字・65文字以上・非文字列は拒否)。
       for (const appVersion of ["", "x".repeat(65), 101]) {
         await assertFails(

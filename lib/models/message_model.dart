@@ -12,6 +12,7 @@ class Message {
 
   int _protocolVersion;
   String _appVersion;
+  String? _appBuild;
   String _profileVersion;
   String _boatId;
   String _displayName;
@@ -43,6 +44,7 @@ class Message {
     required DateTime timestamp,
     int protocolVersion = currentProtocolVersion,
     String appVersion = currentAppVersion,
+    String? appBuild,
     String profileVersion = currentProfileVersion,
     String sessionId = 'legacy-session',
     int sequence = 0,
@@ -56,6 +58,7 @@ class Message {
     bool audioSuppressedAshore = false,
   })  : _protocolVersion = protocolVersion,
         _appVersion = appVersion,
+        _appBuild = RemoteBoatMessage.normalizeAppBuild(appBuild),
         _profileVersion = profileVersion,
         _boatId = boatId,
         _displayName = displayName,
@@ -78,6 +81,10 @@ class Message {
 
   int get protocolVersion => _protocolVersion;
   String get appVersion => _appVersion;
+
+  /// ストアのビルド番号(`pubspec.yaml` の `+` の後ろ)。読めない版は null。
+  /// [appVersion] とは別に持つ(版は互換性メタデータで、ビルド番号を混ぜない)。
+  String? get appBuild => _appBuild;
   String get profileVersion => _profileVersion;
   String get boatId => _boatId;
   String get displayName => _displayName;
@@ -196,6 +203,7 @@ class Message {
       'displayName': _displayName,
       'protocolVersion': _protocolVersion,
       'appVersion': _appVersion,
+      if (_appBuild != null) 'appBuild': _appBuild,
       'profileVersion': _profileVersion,
       'sessionId': _sessionId,
       'sequence': _sequence,
@@ -225,6 +233,7 @@ class Message {
       protocolVersion:
           (json['protocolVersion'] as num?)?.toInt() ?? currentProtocolVersion,
       appVersion: json['appVersion'] as String? ?? currentAppVersion,
+      appBuild: json['appBuild'] as String?,
       profileVersion:
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
@@ -253,6 +262,7 @@ class Message {
     return {
       'protocolVersion': _protocolVersion,
       'appVersion': _appVersion,
+      if (_appBuild != null) 'appBuild': _appBuild,
       'profileVersion': _profileVersion,
       'boatId': _boatId,
       'displayName': _displayName,
@@ -321,6 +331,8 @@ class Message {
         'boatClass': _boatType.name,
         'protocolVersion': _protocolVersion,
         'appVersion': _appVersion,
+        if (_appBuild != null) 'appBuild': _appBuild,
+      if (_appBuild != null) 'appBuild': _appBuild,
         'profileVersion': _profileVersion,
         if (updatedAt != null) 'updatedAt': updatedAt,
       };
@@ -335,6 +347,7 @@ class Message {
     return {
       'protocolVersion': profile['protocolVersion'],
       'appVersion': profile['appVersion'],
+      if (profile['appBuild'] != null) 'appBuild': profile['appBuild'],
       'profileVersion': profile['profileVersion'],
       'boatId': boatId,
       'displayName': profile['displayName'],
@@ -375,6 +388,7 @@ class Message {
       protocolVersion:
           (json['protocolVersion'] as num?)?.toInt() ?? currentProtocolVersion,
       appVersion: json['appVersion'] as String? ?? currentAppVersion,
+      appBuild: json['appBuild'] as String?,
       profileVersion:
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
