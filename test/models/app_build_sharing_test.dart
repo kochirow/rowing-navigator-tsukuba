@@ -18,8 +18,8 @@ Message _message({String? appBuild}) => Message(
     );
 
 Map<Object?, Object?> _parseInput(Map<String, dynamic> profile, DateTime now) {
-  final compact = _message()
-      .toCompactRtdbJson(serverUpdatedAt: now.millisecondsSinceEpoch);
+  final compact =
+      _message().toCompactRtdbJson(serverUpdatedAt: now.millisecondsSinceEpoch);
   return Message.expandCompactRtdbJson(
     boatId: 'boat-a',
     compact: compact,
