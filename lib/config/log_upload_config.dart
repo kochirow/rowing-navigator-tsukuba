@@ -10,7 +10,8 @@
 /// 前提: URL を知っていても、Firebase のログインとチームのメンバーかを
 /// 受け口が確かめるので、送れるのはチームのメンバーだけ(2026-11-10 利用者決定)。
 /// URL を変えたら、新しい版を配布するまで古い版は古い URL へ送る。
-const String autoLogUploadEndpoint = '';
+const String autoLogUploadEndpoint =
+    'https://script.google.com/macros/s/AKfycbzKGzZuo9N9DwTYkx5wpHMMc-VXwybArrdZ1ap-dNFRL6H6MxwKs09tzZWfyZdMt-q5jA/exec';
 
 /// 自動で送る航行・監視の長さの下限 [秒]。
 ///
