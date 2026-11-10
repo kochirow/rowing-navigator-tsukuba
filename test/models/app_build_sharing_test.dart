@@ -70,4 +70,14 @@ void main() {
       expect(result.message!.appBuild, isNull, reason: '$bad');
     }
   });
+
+  test('型の違う appBuild が来ても Message への変換で例外にならない', () {
+    final json = <String, dynamic>{
+      ..._message().toRtdbJson(),
+      'appBuild': 23, // 数値(Rulesは数値も通す)
+    };
+    expect(Message.fromRtdbJson(json).appBuild, isNull);
+    json['appBuild'] = '23';
+    expect(Message.fromRtdbJson(json).appBuild, '23');
+  });
 }

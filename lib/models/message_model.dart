@@ -233,7 +233,7 @@ class Message {
       protocolVersion:
           (json['protocolVersion'] as num?)?.toInt() ?? currentProtocolVersion,
       appVersion: json['appVersion'] as String? ?? currentAppVersion,
-      appBuild: json['appBuild'] as String?,
+      appBuild: RemoteBoatMessage.normalizeAppBuild(json['appBuild']),
       profileVersion:
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
@@ -332,7 +332,6 @@ class Message {
         'protocolVersion': _protocolVersion,
         'appVersion': _appVersion,
         if (_appBuild != null) 'appBuild': _appBuild,
-      if (_appBuild != null) 'appBuild': _appBuild,
         'profileVersion': _profileVersion,
         if (updatedAt != null) 'updatedAt': updatedAt,
       };
@@ -388,7 +387,7 @@ class Message {
       protocolVersion:
           (json['protocolVersion'] as num?)?.toInt() ?? currentProtocolVersion,
       appVersion: json['appVersion'] as String? ?? currentAppVersion,
-      appBuild: json['appBuild'] as String?,
+      appBuild: RemoteBoatMessage.normalizeAppBuild(json['appBuild']),
       profileVersion:
           json['profileVersion'] as String? ?? currentProfileVersion,
       sessionId: json['sessionId'] as String? ?? 'legacy-session',
