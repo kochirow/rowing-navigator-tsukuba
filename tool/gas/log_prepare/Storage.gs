@@ -23,6 +23,9 @@ function objectKey_(parent, name, role) {
 }
 
 function object_(parent, name, role, blob, config) {
+  if (!config.outputFolders.has(parent) || parent === config.source) {
+    throw new Error('Write target is outside the output tree');
+  }
   const checksum = blob ? sha_(blob.getBytes()) : null;
   const key = objectKey_(parent, name, role);
   const fields = 'id,name,parents,trashed,sha256Checksum,mimeType,appProperties';
@@ -34,9 +37,10 @@ function object_(parent, name, role, blob, config) {
   const expectedType = blob ? blob.getContentType() : FOLDER_MIME;
   const verify = item => {
     if (item.trashed || item.name !== name || item.mimeType !== expectedType ||
-        !item.parents?.includes(parent) || item.appProperties?.rowingLogObject !== key ||
+        (item.parents?.length !== 1 || item.parents[0] !== parent) || item.appProperties?.rowingLogObject !== key ||
         (checksum && item.sha256Checksum !== checksum)) throw new Error('Output verification failed');
     if (reserved && item.id !== reserved) throw new Error('Output ID conflict');
+    if (!blob) config.outputFolders.set(item.id, {parent, key});
     return item.id;
   };
   if (matches.files.length) {
@@ -45,6 +49,7 @@ function object_(parent, name, role, blob, config) {
     return id;
   }
   if (!config.deadline || Date.now() >= config.deadline) throw new Error('Run time budget reached');
+  verifyWriteParent_(config, parent);
   const id = reserved || Drive.Files.generateIds({count: 1, space: 'drive'}).ids[0];
   driveId_(id);
   if (!reserved) config.props.setProperty(reservation, id);
@@ -60,6 +65,26 @@ function object_(parent, name, role, blob, config) {
   return result;
 }
 
+function verifyWriteParent_(config, id) {
+  const seen = new Set();
+  while (id !== config.output) {
+    const expected = config.outputFolders.get(id);
+    if (id === config.source || !expected || seen.has(id)) throw new Error('Unexpected output ancestry');
+    seen.add(id);
+    const item = Drive.Files.get(id, {fields: 'mimeType,parents,trashed,appProperties'});
+    if (item.trashed || item.mimeType !== FOLDER_MIME || item.parents?.length !== 1 ||
+        item.parents[0] !== expected.parent || item.appProperties?.rowingLogObject !== expected.key) {
+      throw new Error('Output folder moved or changed during preparation');
+    }
+    id = expected.parent;
+  }
+  const root = Drive.Files.get(id, {fields: 'mimeType,parents,trashed,appProperties'});
+  if (root.trashed || root.mimeType !== FOLDER_MIME || root.appProperties?.rowingLogRole !== 'output-v1') {
+    throw new Error('Output root changed during preparation');
+  }
+  ensureSeparateTree_(root, config.source);
+}
+
 function named_(parent, name, fields) {
   // Callers use generated ASCII names.
   if (!/^[a-z0-9._-]+$/.test(name)) throw new Error('Invalid generated name');
@@ -73,7 +98,6 @@ function named_(parent, name, fields) {
 
 function prepareOne_(config, folder, sourceId) {
   const source = Drive.Files.get(sourceId, {supportsAllDrives: true, fields: FILE_FIELDS});
-  requireViewer_(source);
   if (source.trashed || !source.parents?.includes(folder.id) || source.mimeType !== 'application/zip') {
     throw new Error('Source changed during scan');
   }
@@ -87,8 +111,7 @@ function prepareOne_(config, folder, sourceId) {
   // The archive itself is identified by the hash of the bytes.
   const day = folder.name;
   const dayFolder = object_(config.output, day, 'day', null, config);
-  const versionFolder = object_(dayFolder, 'zip-' + driveId_(source.id).toLowerCase() + '-' +
-    sha_(Utilities.newBlob(source.id).getBytes()).slice(0, 16) + '-' + version, 'version', null, config);
+  const versionFolder = object_(dayFolder, versionName_(source.id, version), 'version', null, config);
   const commit = named_(versionFolder, 'ready.json', 'id,appProperties');
   if (commit) {
     if (commit.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'ready.json', 'commit')) throw new Error('Unexpected ready marker');
@@ -116,8 +139,7 @@ function prepareOne_(config, folder, sourceId) {
   const archive = original ? download_(original.id) : download_(source.id);
   archive.setContentType('application/zip');
   const bytes = archive.getBytes();
-  const after = Drive.Files.get(source.id, {supportsAllDrives: true, fields: 'version,parents,trashed,capabilities(canEdit,canTrash,canDelete)'});
-  requireViewer_(after);
+  const after = Drive.Files.get(source.id, {supportsAllDrives: true, fields: 'version,parents,trashed'});
   if (after.trashed || String(after.version) !== version || !after.parents?.includes(folder.id) ||
       bytes.length !== size || (source.sha256Checksum && sha_(bytes) !== source.sha256Checksum)) {
     throw new Error('Source changed during download');
@@ -130,8 +152,35 @@ function prepareOne_(config, folder, sourceId) {
   return finishOne_(config, pending, work, archive);
 }
 
+function versionName_(id, version) {
+  if (!/^\d+$/.test(version)) throw new Error('Invalid source version');
+  return 'zip-' + driveId_(id).toLowerCase() + '-' +
+    sha_(Utilities.newBlob(id).getBytes()).slice(0, 16) + '-' + version;
+}
+
+function verifyOutputVersion_(config, versionFolder, meta) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.day)) throw new Error('Invalid output day');
+  const fields = 'id,name,parents,mimeType,trashed,appProperties';
+  const version = Drive.Files.get(driveId_(versionFolder), {fields});
+  const dayId = driveId_(version.parents?.[0]);
+  const day = Drive.Files.get(dayId, {fields});
+  for (const [item, parent, name, role] of [
+    [day, config.output, meta.day, 'day'],
+    [version, dayId, versionName_(meta.sourceId, meta.sourceVersion), 'version']
+  ]) {
+    if (item.id === config.source || item.trashed || item.mimeType !== FOLDER_MIME ||
+        item.parents?.length !== 1 || item.parents[0] !== parent || item.name !== name ||
+        item.appProperties?.rowingLogObject !== objectKey_(parent, name, role)) {
+      throw new Error('Saved version is outside the expected output tree');
+    }
+  }
+  config.outputFolders.set(dayId, {parent: config.output, key: day.appProperties.rowingLogObject});
+  config.outputFolders.set(versionFolder, {parent: dayId, key: version.appProperties.rowingLogObject});
+}
+
 function finishOne_(config, pending, work, archive) {
   const {meta, versionFolder, zipId, hash} = work;
+  verifyOutputVersion_(config, versionFolder, meta);
   const existing = named_(versionFolder, 'ready.json', 'id,appProperties');
   if (existing) {
     if (existing.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'ready.json', 'commit')) {

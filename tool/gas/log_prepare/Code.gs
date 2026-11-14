@@ -1,5 +1,5 @@
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
-const FILE_FIELDS = 'id,name,mimeType,parents,trashed,createdTime,version,size,sha256Checksum,description,capabilities(canEdit,canTrash,canDelete,canAddChildren)';
+const FILE_FIELDS = 'id,name,mimeType,parents,trashed,createdTime,version,size,sha256Checksum,description,capabilities(canAddChildren)';
 const DAILY_HANDLER = 'prepareLogsDaily';
 const MAX_ZIP = 12 * 1024 * 1024;
 const DRIVE_LIST_OPTIONS = {supportsAllDrives: true, includeItemsFromAllDrives: true};
@@ -75,11 +75,10 @@ function prepareLogsDaily() {
       }
       while (state.folderIndex < state.folders.length && Date.now() < deadline) {
         const folderId = state.folders[state.folderIndex];
-        const folder = Drive.Files.get(folderId, {supportsAllDrives: true, fields: 'id,name,parents,trashed,capabilities(canEdit,canTrash,canDelete)'});
+        const folder = Drive.Files.get(folderId, {supportsAllDrives: true, fields: 'id,name,parents,trashed'});
         if (folder.trashed || !folder.parents?.includes(config.source) || !/^\d{4}-\d{2}-\d{2}$/.test(folder.name)) {
           throw new Error('Source date folder moved or changed during scan');
         }
-        requireViewer_(folder);
         if (!state.files) {
           const page = list_({
             q: "'" + folderId + "' in parents and trashed = false and mimeType = 'application/zip'",
@@ -173,41 +172,39 @@ function driveId_(id) {
   return id;
 }
 
-function requireViewer_(file) {
-  const caps = file.capabilities || {};
-  if (caps.canEdit !== false || caps.canTrash !== false || caps.canDelete !== false) {
-    throw new Error('Run as a dedicated Viewer of the source logs');
-  }
-}
-
 function sourceRoot_(props) {
   const source = driveId_(props.getProperty('LOG_SOURCE_ID'));
   const root = Drive.Files.get(source, {supportsAllDrives: true, fields: FILE_FIELDS});
   if (root.trashed || root.mimeType !== FOLDER_MIME) throw new Error('Source folder unavailable');
-  requireViewer_(root);
-  return source;
+  return root;
 }
 
 function config_() {
   const props = PropertiesService.getScriptProperties();
-  const source = sourceRoot_(props);
+  const sourceItem = sourceRoot_(props);
+  const source = sourceItem.id;
   const output = driveId_(props.getProperty('LOG_OUTPUT_ID'));
   const item = Drive.Files.get(output, {fields: FILE_FIELDS + ',appProperties'});
   if (output === source || item.trashed || item.mimeType !== FOLDER_MIME ||
       !item.capabilities?.canAddChildren || item.appProperties?.rowingLogRole !== 'output-v1') {
     throw new Error('Invalid output folder. Run initializeLogOutput in this project.');
   }
+  ensureSeparateTree_(item, source);
+  ensureSeparateTree_(sourceItem, output);
+  return {props, source, output, outputFolders: new Map([[output, null]])};
+}
+
+function ensureSeparateTree_(item, forbiddenAncestor) {
   const pending = [...(item.parents || [])];
   const visited = new Set();
   while (pending.length) {
     const id = pending.pop();
-    if (id === source) throw new Error('Output is inside the source folder');
+    if (id === forbiddenAncestor) throw new Error('Source and output folders must be separate');
     if (visited.has(id)) continue;
     visited.add(id);
-    if (visited.size > 100) throw new Error('Unable to verify output ancestry');
-    const parent = Drive.Files.get(id, {fields: 'parents,trashed'});
-    if (parent.trashed) throw new Error('Output ancestor is in trash');
+    if (visited.size > 100) throw new Error('Unable to verify folder ancestry');
+    const parent = Drive.Files.get(id, {supportsAllDrives: true, fields: 'parents,trashed'});
+    if (parent.trashed) throw new Error('Folder ancestor is in trash');
     pending.push(...(parent.parents || []));
   }
-  return {props, source, output};
 }
