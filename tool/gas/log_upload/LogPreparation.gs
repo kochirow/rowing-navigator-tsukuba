@@ -86,7 +86,7 @@ function prepareLogsDaily() {
         counts[finishOne_(config, key, JSON.parse(config.props.getProperty(key)))]++;
       } catch (error) {
         counts.retry++;
-        console.warn(JSON.stringify({pending: key, failure: 'resume_failed'}));
+        console.warn(JSON.stringify({pending: key, failure: logFailureCode_(error)}));
       }
     }
     let complete = false;
@@ -122,7 +122,7 @@ function prepareLogsDaily() {
             counts[prepareOne_(config, folder, fileId)]++;
           } catch (error) {
             counts.retry++;
-            console.warn(JSON.stringify({sourceId: fileId, failure: error instanceof ArchiveError ? error.message : 'processing_failed'}));
+            console.warn(JSON.stringify({sourceId: fileId, failure: logFailureCode_(error)}));
           }
           state.fileIndex++;
           checkpoint_(config, state);
@@ -183,13 +183,24 @@ function restartLogScan() {
   }
 }
 
+class LogPreparationError extends Error {}
+
+function logFailureCode_(error) {
+  if (error instanceof LogPreparationError || error instanceof ArchiveError) return error.message;
+  const message = String(error?.message || '');
+  if (/quota|service invoked too many times|limit exceeded/i.test(message)) return 'google_service_limit';
+  if (/not found|file not found/i.test(message)) return 'drive_object_not_found';
+  if (/permission|forbidden|unauthorized/i.test(message)) return 'drive_permission_denied';
+  return 'unexpected_preparation_error';
+}
+
 function checkpoint_(config, state) {
   config.props.setProperty('LOG_SCAN_STATE', JSON.stringify(state));
 }
 
 function list_(options) {
   const page = Drive.Files.list({...DRIVE_LIST_OPTIONS, ...options});
-  if (page.incompleteSearch) throw new Error('Drive returned incomplete search');
+  if (page.incompleteSearch) throw new LogPreparationError('drive_incomplete_search');
   return {...page, files: page.files || []};
 }
 
@@ -253,7 +264,8 @@ function download_(id) {
     muteHttpExceptions: true,
     followRedirects: false
   });
-  if (response.getResponseCode() !== 200) throw new Error('Drive media read failed');
+  const status = response.getResponseCode();
+  if (status !== 200) throw new LogPreparationError('drive_media_http_' + status);
   return response.getBlob();
 }
 
@@ -270,15 +282,25 @@ function object_(parent, name, role, blob, config) {
   const fields = 'id,name,parents,trashed,sha256Checksum,mimeType,appProperties';
   const q = "'" + driveId_(parent) + "' in parents and trashed = false and appProperties has { key='rowingLogObject' and value='" + key + "' }";
   const matches = list_({q, fields: 'nextPageToken,incompleteSearch,files(' + fields + ')', pageSize: 2});
-  if (matches.files.length > 1 || matches.nextPageToken) throw new Error('Duplicate output object');
+  if (matches.files.length > 1 || matches.nextPageToken) throw new LogPreparationError('duplicate_output_object');
   const reservation = 'LOG_OBJECT_' + key;
   const reserved = config.props.getProperty(reservation);
   const expectedType = blob ? blob.getContentType() : FOLDER_MIME;
   const verify = item => {
-    if (item.trashed || item.name !== name || item.mimeType !== expectedType ||
-        (item.parents?.length !== 1 || item.parents[0] !== parent) || item.appProperties?.rowingLogObject !== key ||
-        (checksum && item.sha256Checksum !== checksum)) throw new Error('Output verification failed');
-    if (reserved && item.id !== reserved) throw new Error('Output ID conflict');
+    if (item.trashed || item.name !== name || item.parents?.length !== 1 ||
+        item.parents[0] !== parent || item.appProperties?.rowingLogObject !== key) {
+      throw new LogPreparationError('output_identity_mismatch');
+    }
+    // Drive can infer a different MIME type from a filename or the bytes.
+    // Require exact bytes and reject Workspace conversions and shortcuts.
+    if (blob ? (!item.mimeType || item.mimeType.startsWith('application/vnd.google-apps.')) :
+      item.mimeType !== FOLDER_MIME) {
+      throw new LogPreparationError('output_type_mismatch');
+    }
+    if (blob && (item.sha256Checksum || sha_(download_(item.id).getBytes())) !== checksum) {
+      throw new LogPreparationError('output_checksum_mismatch');
+    }
+    if (reserved && item.id !== reserved) throw new LogPreparationError('output_id_conflict');
     if (!blob) config.outputFolders.set(item.id, {parent, key});
     return item.id;
   };
@@ -287,7 +309,7 @@ function object_(parent, name, role, blob, config) {
     if (reserved) config.props.deleteProperty(reservation);
     return id;
   }
-  if (!config.deadline || Date.now() >= config.deadline) throw new Error('Run time budget reached');
+  if (!config.deadline || Date.now() >= config.deadline) throw new LogPreparationError('run_time_budget_reached');
   verifyWriteParent_(config, parent);
   const id = reserved || Drive.Files.generateIds({count: 1, space: 'drive'}).ids[0];
   driveId_(id);
@@ -313,7 +335,7 @@ function verifyWriteParent_(config, id) {
     const item = Drive.Files.get(id, {fields: 'mimeType,parents,trashed,appProperties'});
     if (item.trashed || item.mimeType !== FOLDER_MIME || item.parents?.length !== 1 ||
         item.parents[0] !== expected.parent || item.appProperties?.rowingLogObject !== expected.key) {
-      throw new Error('Output folder moved or changed during preparation');
+      throw new LogPreparationError('output_folder_moved');
     }
     id = expected.parent;
   }
@@ -338,7 +360,7 @@ function named_(parent, name, fields) {
 function prepareOne_(config, folder, sourceId) {
   const source = Drive.Files.get(sourceId, {supportsAllDrives: true, fields: FILE_FIELDS});
   if (source.trashed || !source.parents?.includes(folder.id) || source.mimeType !== 'application/zip') {
-    throw new Error('Source changed during scan');
+    throw new LogPreparationError('source_changed_during_scan');
   }
   const match = /^key=([A-Za-z0-9_-]{1,128})\/([A-Za-z0-9]{1,128})\/(session|practiceLog)\/([A-Za-z0-9_-]{1,64})$/
     .exec((source.description || '').split('\n')[0]);
@@ -353,12 +375,12 @@ function prepareOne_(config, folder, sourceId) {
   const versionFolder = object_(dayFolder, versionName_(source.id, version), 'version', null, config);
   const commit = named_(versionFolder, 'ready.json', 'id,appProperties');
   if (commit) {
-    if (commit.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'ready.json', 'commit')) throw new Error('Unexpected ready marker');
+    if (commit.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'ready.json', 'commit')) throw new LogPreparationError('unexpected_ready_marker');
     return 'existing';
   }
   const rejected = named_(versionFolder, 'rejected.json', 'id,appProperties');
   if (rejected) {
-    if (rejected.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'rejected.json', 'rejected')) throw new Error('Unexpected rejected marker');
+    if (rejected.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'rejected.json', 'rejected')) throw new LogPreparationError('unexpected_rejected_marker');
     console.warn(JSON.stringify({sourceId: source.id, rejectedId: rejected.id}));
     return 'rejected';
   }
@@ -381,7 +403,7 @@ function prepareOne_(config, folder, sourceId) {
   const after = Drive.Files.get(source.id, {supportsAllDrives: true, fields: 'version,parents,trashed'});
   if (after.trashed || String(after.version) !== version || !after.parents?.includes(folder.id) ||
       bytes.length !== size || (source.sha256Checksum && sha_(bytes) !== source.sha256Checksum)) {
-    throw new Error('Source changed during download');
+    throw new LogPreparationError('source_changed_during_download');
   }
   const zipId = object_(versionFolder, 'source.zip', 'zip', archive, config);
   if (!match) return 'waitingMetadata';
@@ -423,18 +445,21 @@ function finishOne_(config, pending, work, archive) {
   const existing = named_(versionFolder, 'ready.json', 'id,appProperties');
   if (existing) {
     if (existing.appProperties?.rowingLogObject !== objectKey_(versionFolder, 'ready.json', 'commit')) {
-      throw new Error('Unexpected ready marker');
+      throw new LogPreparationError('unexpected_ready_marker');
     }
     config.props.deleteProperty(pending);
     return 'existing';
   }
   const archived = Drive.Files.get(zipId, {fields: 'parents,trashed,sha256Checksum'});
-  if (archived.trashed || !archived.parents?.includes(versionFolder) || archived.sha256Checksum !== hash) {
-    throw new Error('Archived ZIP location or checksum changed');
+  if (archived.trashed || !archived.parents?.includes(versionFolder)) {
+    throw new LogPreparationError('archived_zip_location_changed');
   }
-  const zip = archive || download_(zipId);
+  if (archived.sha256Checksum && archived.sha256Checksum !== hash) {
+    throw new LogPreparationError('archived_zip_checksum_mismatch');
+  }
+  const zip = archive && archived.sha256Checksum ? archive : download_(zipId);
   const bytes = zip.getBytes();
-  if (sha_(bytes) !== hash) throw new Error('Archived ZIP verification failed');
+  if (sha_(bytes) !== hash) throw new LogPreparationError('archived_zip_checksum_mismatch');
   let entries, files;
   try {
     entries = zipEntries_(bytes);
@@ -576,7 +601,7 @@ function expandVerified_(archive, entries) {
     blobs = Utilities.unzip(archive);
   } catch (error) {
     // Runtime and quota failures also surface here. Keep the version retryable.
-    throw new Error('unzip_failed');
+    throw new LogPreparationError('unzip_failed');
   }
   const files = new Map();
   for (const blob of blobs) {
